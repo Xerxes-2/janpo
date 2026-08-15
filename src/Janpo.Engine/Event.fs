@@ -25,6 +25,29 @@ type StartKyoku =
         Tehais: Tile list list
     }
 
+/// 流局的形态，mjai `ryukyoku` 的 `reason` 字段。04 只做荒牌流局，12 票补齐其余五种
+/// （九种九牌、四风连打、四杠散了、四家立直、三家和了）与流し満貫。
+type RyuukyokuReason =
+    /// 荒牌流局：可摸区摸完，按听牌家数授受听牌料。
+    /// mjai wire 上写作 `fanpai`（荒牌的音读），不是「翻牌 / 飜牌」。
+    | Fanpai
+
+/// mjai `ryukyoku` 的载荷：一局在无人和了的情况下结束时公开的全部事实。
+///
+/// mjai 原始规格里还有一个 `tehais`（听牌家亮手、其余家写 `?`）。本项目不带它：
+/// `Tile` 表示不了「未知牌」，而听牌与否已经由 `Tenpais` 说清楚了。
+type Ryuukyoku =
+    {
+        /// 流局的形态。
+        Reason: RyuukyokuReason
+        /// 各家是否听牌，按座位升序。听牌料的授受与 05 的连庄判定都读它。
+        Tenpais: bool list
+        /// 本次授受的点数增减，按座位升序，和为 0。
+        Deltas: int list
+        /// 授受后的各家点数，按座位升序。
+        Scores: int list
+    }
+
 /// 引擎产出的**既成事实**，必然合法（CONTEXT.md）。case 名与字段贴 mjai wire 事件 1:1，
 /// 与 `Action`（Player 提交的意图，可以非法）是两个类型，允许 case 同名。
 ///
@@ -46,6 +69,43 @@ type Event =
     | StartKyoku of startKyoku: StartKyoku
     /// mjai `tsumo`：某家从牌山摸进一张。
     | Tsumo of actor: Seat * pai: Tile
+    /// mjai `dahai`：某家打出一张。`tsumogiri` 为真表示打的就是刚摸进的那张（摸切）。
+    | Dahai of actor: Seat * pai: Tile * tsumogiri: bool
+    /// mjai `ryukyoku`：一局在无人和了的情况下结束。
+    ///
+    /// F# 这侧的标识符按 CONTEXT.md 的术语表拼作 `Ryuukyoku`，wire 上仍是 mjai 的
+    /// `ryukyoku`——与 `Kaze` 同一处理（记法/拼法归 ADR-0001 与术语表，wire 归 mjai）。
+    | Ryuukyoku of ryuukyoku: Ryuukyoku
+
+/// 流局形态的 mjai 记法与 JSON 编解码。
+[<RequireQualifiedAccess>]
+module RyuukyokuReason =
+
+    // ---- mjai 记法 ----
+
+    /// 全部形态。12 票加 case 时这里跟着加，`parse` 不必改。
+    let all: RyuukyokuReason list = [ Fanpai ]
+
+    /// mjai `reason` 字段的取值。
+    let toMjai (reason: RyuukyokuReason) : string =
+        match reason with
+        | Fanpai -> "fanpai"
+
+    /// 解析 mjai `reason`；不认识的形态返回 None。
+    let parse (text: string) : RyuukyokuReason option =
+        all |> List.tryFind (fun reason -> toMjai reason = text)
+
+    // ---- JSON（mjai wire） ----
+
+    let encoder: Encoder<RyuukyokuReason> = fun reason -> Encode.string (toMjai reason)
+
+    /// 解码失败是 Decoder 的错误值，不抛异常。诊断文案用英文（ADR-0001）。
+    let decoder: Decoder<RyuukyokuReason> =
+        Decode.string
+        |> Decode.andThen (fun text ->
+            match parse text with
+            | Some reason -> Decode.succeed reason
+            | None -> Decode.fail ("unknown mjai ryukyoku reason: " + text))
 
 /// 事件的 JSON 编解码（mjai wire）。
 [<RequireQualifiedAccess>]
@@ -78,6 +138,23 @@ module Event =
                         "tehais", fields.Tehais |> List.map encodeTiles |> Encode.list
                     ]
             | Tsumo(actor, pai) -> mjaiEvent "tsumo" [ "actor", Encode.int actor; "pai", Tile.encoder pai ]
+            | Dahai(actor, pai, tsumogiri) ->
+                mjaiEvent
+                    "dahai"
+                    [
+                        "actor", Encode.int actor
+                        "pai", Tile.encoder pai
+                        "tsumogiri", Encode.bool tsumogiri
+                    ]
+            | Ryuukyoku fields ->
+                mjaiEvent
+                    "ryukyoku"
+                    [
+                        "reason", RyuukyokuReason.encoder fields.Reason
+                        "tenpais", fields.Tenpais |> List.map Encode.bool |> Encode.list
+                        "deltas", fields.Deltas |> List.map Encode.int |> Encode.list
+                        "scores", fields.Scores |> List.map Encode.int |> Encode.list
+                    ]
 
     let private tilesDecoder: Decoder<Tile list> = Decode.list Tile.decoder
 
@@ -95,6 +172,16 @@ module Event =
                     Tehais = get.Required.Field "tehais" (Decode.list tilesDecoder)
                 })
 
+    let private ryuukyokuDecoder: Decoder<Event> =
+        Decode.object (fun get ->
+            Ryuukyoku
+                {
+                    Reason = get.Required.Field "reason" RyuukyokuReason.decoder
+                    Tenpais = get.Required.Field "tenpais" (Decode.list Decode.bool)
+                    Deltas = get.Required.Field "deltas" (Decode.list Decode.int)
+                    Scores = get.Required.Field "scores" (Decode.list Decode.int)
+                })
+
     /// 解码失败是 Decoder 的错误值，不抛异常。诊断文案用英文（ADR-0001）。
     let decoder: Decoder<Event> =
         Decode.field "type" Decode.string
@@ -107,4 +194,11 @@ module Event =
                     (fun actor pai -> Tsumo(actor, pai))
                     (Decode.field "actor" Decode.int)
                     (Decode.field "pai" Tile.decoder)
+            | "dahai" ->
+                Decode.map3
+                    (fun actor pai tsumogiri -> Dahai(actor, pai, tsumogiri))
+                    (Decode.field "actor" Decode.int)
+                    (Decode.field "pai" Tile.decoder)
+                    (Decode.field "tsumogiri" Decode.bool)
+            | "ryukyoku" -> ryuukyokuDecoder
             | other -> Decode.fail ("unknown mjai event type: " + other))

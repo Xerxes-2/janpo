@@ -52,4 +52,29 @@ type EventArbitraries =
                 return Tsumo(actor, pai)
             }
 
-        Gen.oneof [ startGame; startKyoku; tsumo ] |> Arb.fromGen
+        let dahai =
+            gen {
+                let! actor = seat
+                let! pai = tile
+                let! tsumogiri = Gen.elements [ true; false ]
+                return Dahai(actor, pai, tsumogiri)
+            }
+
+        let ryuukyoku =
+            gen {
+                let! reason = Gen.elements RyuukyokuReason.all
+                let! tenpais = Gen.listOfLength 4 (Gen.elements [ true; false ])
+                let! deltas = Gen.listOfLength 4 (Gen.choose (-3000, 3000))
+                let! scores = Gen.listOfLength 4 (Gen.choose (-30000, 80000))
+
+                return
+                    Ryuukyoku
+                        {
+                            Reason = reason
+                            Tenpais = tenpais
+                            Deltas = deltas
+                            Scores = scores
+                        }
+            }
+
+        Gen.oneof [ startGame; startKyoku; tsumo; dahai; ryuukyoku ] |> Arb.fromGen

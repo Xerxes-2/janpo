@@ -25,6 +25,10 @@ type Ruleset =
         RinshanCount: int
         /// 每家的起始点数。
         StartingScore: int
+        /// ノーテン罰符（听牌料）：荒牌流局时不听牌的家合计付出的点数，听牌的家平分。
+        /// 全听或全不听时不授受。它应当能被 `1 .. SeatCount - 1` 整除，否则授受不平：
+        /// 3000 对四麣（1/2/3 家听）与三麣（1/2 家听）都成立，这也是 mjai 的算法。
+        NotenBappu: int
     }
 
 /// 规则集的预设与推导量。
@@ -34,7 +38,7 @@ module Ruleset =
     // ---- 构造 ----
 
     /// 四麻默认规则集：34 种正牌各 4 张（136 张），红 5 各一张，
-    /// 配牌 13 张，王牌 14 张（4 张岭上 + 5 叠表里宝牌指示牌），起手 25000。
+    /// 配牌 13 张，王牌 14 张（4 张岭上 + 5 叠表里宝牌指示牌），起手 25000，听牌料 3000。
     let yonma: Ruleset =
         {
             SeatCount = 4
@@ -45,6 +49,7 @@ module Ruleset =
             DeadWallSize = 14
             RinshanCount = 4
             StartingScore = 25000
+            NotenBappu = 3000
         }
 
     /// 关掉红宝牌（SPEC 的「红宝牌有无」开关）。开着的形态就是各预设本身。

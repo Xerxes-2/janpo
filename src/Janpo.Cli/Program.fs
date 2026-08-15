@@ -12,6 +12,8 @@ let private usage =
   janpo tile <记法>...           读入一串 mjai 牌记法，打印规范形、牌数与人类可读形式
   janpo deal <种子> [--no-akadora]
                                  用给定种子开一局，每行打印一个 mjai JSON 事件
+  janpo kyoku <种子> [--no-akadora]
+                                 用给定种子让四个随机选手打完一局，打印完整事件流与结算后点数
   janpo shanten [--naki N] <记法>...  打印向听数、和了型与有效牌（四麻全 34 牌种）
   janpo shanten --batch               从 stdin 逐行读「<副露数> <记法>...」，每行打印一个向听数
   janpo --help                        打印本帮助
@@ -21,6 +23,7 @@ let private usage =
   janpo tile 1z 5sr 5s 9s 3m
   janpo deal 42
   janpo deal 42 --no-akadora
+  janpo kyoku 42
   janpo shanten "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
   janpo shanten --naki 1 "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p"
   echo "0 1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z" | janpo shanten --batch"""
@@ -38,19 +41,37 @@ let private runTile (arguments: string list) : int =
         printfn "display: %s" (sorted |> List.map Tile.toDisplay |> String.concat " ")
         0
 
-/// `janpo deal <种子> [--no-akadora]`：同一种子必然开出同一局。
-/// 输出是每行一个 mjai JSON 事件：`start_game`、`start_kyoku`、Oya 的 `tsumo`。
-let private runDeal (arguments: string list) : int =
+/// `<种子> [--no-akadora]`：deal 与 kyoku 共用的参数形态。
+let private parseSeedArguments (arguments: string list) : Result<int option * bool, string> =
     let rec parse (seed: int option) (akadora: bool) (rest: string list) =
         match rest with
         | [] -> Ok(seed, akadora)
-        | "--no-akadora" :: tail -> parse seed akadora tail |> Result.map (fun (seed, _) -> seed, false)
+        | "--no-akadora" :: tail -> parse seed false tail
         | token :: tail ->
             match System.Int32.TryParse token, seed with
             | (true, value), None -> parse (Some value) akadora tail
             | _ -> Error token
 
-    match parse None true arguments with
+    parse None true arguments
+
+let private rulesetOf (akadora: bool) : Ruleset =
+    if akadora then
+        Ruleset.yonma
+    else
+        Ruleset.withoutAkadora Ruleset.yonma
+
+/// 一场对局开始的 `start_game`：`names` 来自配桌，不是引擎算出来的（02 票的决定）。
+let private startGame (ruleset: Ruleset) : Event =
+    StartGame(Seat.all ruleset |> List.map (fun seat -> "p" + string seat))
+
+let private printEvents (events: Event list) : unit =
+    for event in events do
+        printfn "%s" (Encode.toString 0 (Event.encoder event))
+
+/// `janpo deal <种子> [--no-akadora]`：同一种子必然开出同一局。
+/// 输出是每行一个 mjai JSON 事件：`start_game`、`start_kyoku`、Oya 的 `tsumo`。
+let private runDeal (arguments: string list) : int =
+    match parseSeedArguments arguments with
     | Error token ->
         eprintfn "deal 只认一个整数种子与可选的 --no-akadora，不认「%s」" token
         2
@@ -58,23 +79,38 @@ let private runDeal (arguments: string list) : int =
         eprintfn "deal 需要一个整数种子，例如: janpo deal 42"
         2
     | Ok(Some seed, akadora) ->
-        let ruleset =
-            if akadora then
-                Ruleset.yonma
-            else
-                Ruleset.withoutAkadora Ruleset.yonma
-
+        let ruleset = rulesetOf akadora
         let context = KyokuContext.initial ruleset
-        let names = Seat.all ruleset |> List.map (fun seat -> "p" + string seat)
 
         match KyokuStart.create ruleset context (Rng.ofSeed seed) with
         | Error error ->
             eprintfn "%s" (KyokuStartError.toDisplay error)
             1
         | Ok(start, _) ->
-            for event in StartGame names :: start.Events do
-                printfn "%s" (Encode.toString 0 (Event.encoder event))
+            printEvents (startGame ruleset :: start.Events)
+            0
 
+/// `janpo kyoku <种子> [--no-akadora]`：四个随机选手把一局打到终（04 票里必然是荒牌流局）。
+/// 输出是每行一个 mjai JSON 事件，最后一行是结算后的点数。同一种子必然跑出同一局。
+let private runKyoku (arguments: string list) : int =
+    match parseSeedArguments arguments with
+    | Error token ->
+        eprintfn "kyoku 只认一个整数种子与可选的 --no-akadora，不认「%s」" token
+        2
+    | Ok(None, _) ->
+        eprintfn "kyoku 需要一个整数种子，例如: janpo kyoku 42"
+        2
+    | Ok(Some seed, akadora) ->
+        let ruleset = rulesetOf akadora
+        let context = KyokuContext.initial ruleset
+
+        match Kyoku.runRandom ruleset context (Rng.ofSeed seed) with
+        | Error error ->
+            eprintfn "%s" (KyokuError.toDisplay error)
+            1
+        | Ok(state, _) ->
+            printEvents (startGame ruleset :: GameState.events state)
+            printfn "scores: %s" (GameState.scores state |> List.map string |> String.concat " ")
             0
 
 /// 四麻：全 34 牌种。三麻的牌种集合是另一张票的事，这里只把接缝留出来。
@@ -164,6 +200,7 @@ let main argv =
         0
     | "tile" :: arguments -> runTile arguments
     | "deal" :: arguments -> runDeal arguments
+    | "kyoku" :: arguments -> runKyoku arguments
     | [ "shanten"; "--batch" ] -> runShantenBatch ()
     | "shanten" :: "--naki" :: naki :: arguments ->
         match System.Int32.TryParse naki with

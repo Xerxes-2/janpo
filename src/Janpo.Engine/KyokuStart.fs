@@ -28,6 +28,9 @@ type KyokuStart =
         /// 各家手牌，按座位升序，每手已按 mjai 顺序排序。
         /// Oya 的那手**已含**摸进的第一张（14 张），其余各家 13 张。
         Hands: Tile list list
+        /// Oya 摸进的第一张，也就是 `Events` 里那条 `tsumo` 的 `pai`。
+        /// 摸切判定要知道「刚摸进的是哪张」，手牌已排序反推不出来。
+        Tsumo: Tile
     }
 
 /// 开不了局的原因。是值，不是异常（与 IllegalAction 同一方针）。
@@ -92,6 +95,7 @@ module KyokuStart =
                             Events = [ startKyoku; Event.Tsumo(context.Oya, drawn) ]
                             Wall = afterTsumo
                             Hands = hands
+                            Tsumo = drawn
                         },
                         advanced
                     )

@@ -57,6 +57,42 @@ module EventTests =
         Assert.Equal(expected, encode event)
 
     [<Fact>]
+    let ``dahai 编码为 mjai 事件对象`` () =
+        Assert.Equal("""{"type":"dahai","actor":1,"pai":"7s","tsumogiri":true}""", encode (Dahai(1, tile "7s", true)))
+
+        Assert.Equal(
+            """{"type":"dahai","actor":3,"pai":"5pr","tsumogiri":false}""",
+            encode (Dahai(3, tile "5pr", false))
+        )
+
+    [<Fact>]
+    let ``ryukyoku 编码为 mjai 事件对象，荒牌流局的 reason 写作 fanpai`` () =
+        let event =
+            Ryuukyoku
+                {
+                    Reason = Fanpai
+                    Tenpais = [ true; false; true; false ]
+                    Deltas = [ 1500; -1500; 1500; -1500 ]
+                    Scores = [ 26500; 23500; 26500; 23500 ]
+                }
+
+        let expected =
+            """{"type":"ryukyoku","reason":"fanpai","tenpais":[true,false,true,false],"""
+            + """"deltas":[1500,-1500,1500,-1500],"scores":[26500,23500,26500,23500]}"""
+
+        Assert.Equal(expected, encode event)
+
+    [<Fact>]
+    let ``不认识的流局形态解码为错误值`` () =
+        let json =
+            """{"type":"ryukyoku","reason":"nagashimangan","tenpais":[true,true,true,true],"""
+            + """"deltas":[0,0,0,0],"scores":[25000,25000,25000,25000]}"""
+
+        match decode json with
+        | Ok event -> failwith $"12 票才会加流し満貫，现在不该解码成功，却得到 {event}"
+        | Error _ -> ()
+
+    [<Fact>]
     let ``事件编码成一行，不含换行`` () =
         let events =
             [

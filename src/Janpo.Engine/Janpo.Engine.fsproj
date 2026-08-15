@@ -22,6 +22,10 @@
     <Compile Include="Wall.fs" />
     <Compile Include="Event.fs" />
     <Compile Include="KyokuStart.fs" />
+    <Compile Include="Action.fs" />
+    <Compile Include="PlayerState.fs" />
+    <Compile Include="GameState.fs" />
+    <Compile Include="Kyoku.fs" />
   </ItemGroup>
 
   <ItemGroup>

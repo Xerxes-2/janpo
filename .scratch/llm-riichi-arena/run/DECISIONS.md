@@ -288,6 +288,88 @@ ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下�
 
 早上可考虑：让 `Ruleset` 直接携带 `TileKindSet`（编译顺序已经为此留好——03 的模块排在 `Ruleset.fs` 之前）。
 
+---
+
+### 04 / `Ryuukyoku` 的拼法：标识符照术语表，wire 照 mjai
+
+F# 标识符（`Event.Ryuukyoku`、载荷记录 `Ryuukyoku`、`GameState.ryuukyoku`）用 CONTEXT.md 的拼法
+`Ryuukyoku`，JSON wire 上仍写 mjai 的 `"ryukyoku"`；荒牌流局的 `reason` 取 mjai 的 `"fanpai"`
+（对应 DU case `Fanpai`）。
+否决：case 名照 mjai 事件名逐字转 PascalCase（`Ryukyoku`）——那会让仓库里同时出现两种罗马字拼法。
+理由：RUNBOOK 把 CONTEXT.md 定为「标识符命名的唯一权威」，而 mjai 只约束 wire；`Kaze` 已有先例
+（wire 是 `1z`-`4z`，标识符是 `Ton`/`Nan`/…）。见提案 04-B。
+
+### 04 / `Action` 与 `Event` 允许同名 case，靠 `[<RequireQualifiedAccess>]` 分开
+
+`Action` 类型加 `[<RequireQualifiedAccess>]`：意图写 `Action.Dahai`，事实写 `Dahai`。
+否决：给其中一边改名（`DahaiIntent`）——CONTEXT.md 明确「允许 case 同名」。
+理由：不限定名的话后定义的那个会静默遮住先定义的，读代码时分不出「意图」还是「事实」。
+
+### 04 / 摸切与手切是两个不同的动作，且会被校验
+
+`Action.Dahai` 与 `Event.Dahai` 都带 `tsumogiri`（mjai 1:1）。合法动作集里，摸切一条（打刚摸进
+那张）、手切每种牌各一条；`tsumogiri` 与实际不符返回 `TsumogiriMismatch`。
+否决：由引擎从「打的牌是否等于摸进的牌」推断——两张同样的 5m 时推不出来，且 09 的「立直后只能
+摸切」与 12 的 Nagashi Mangan 都要这个区分是**声明**而不是猜测。
+
+### 04 / 合法动作集是 `LegalActions` 的列表，空列表 ⟺ Kyoku 已终
+
+`LegalActions = { Seat: Seat; Actions: Action list }`，`GameState.legalActions : GameState ->
+LegalActions list`（响应阶段会同时等多家，所以是列表）。每项的 `Actions` 非空；整个列表为空
+当且仅当这一局已终（属性钉住）。
+否决：`GameState -> Seat -> Action list`（调用方得先猜该问谁）。
+
+### 04 / 阶段是类型，且自带自己的合法动作集
+
+`Phase = AwaitingDahai | AwaitingResponse | Ended of Ryuukyoku`，前两者各带自己的动作集，
+只能由 `GameState` 内部的私有构造器产出（算动作集与建阶段是同一处代码，不会漂移）。
+**响应阶段本票恒为空**：`responsesTo` 返回 `[]`，引擎打完牌直接推进，不会停在那里；
+06 / 10 / 11 往 `responsesTo` 里填东西，引擎自然就停得下来。
+否决：本票干脆不建响应阶段的类型（票明确要求两个阶段用不同类型区分）。
+
+### 04 / 海底 / 河底是 `GameState` 上的 `KyokuFlags`，不是阶段字段
+
+`KyokuFlags = { Haitei: bool; Houtei: bool }`：摸到可摸区最后一张后 `Haitei`，把那之后的最后
+一张打出去后 `Houtei`（也就是终局那一步）。09 的一发、11 的岭上与抢杠加在同一个记录里。
+否决：挂在阶段上（每个阶段都要抄一份，且 07 判役时要按阶段分情况取）。
+
+### 04 / 听牌料是规则集字段 `NotenBappu = 3000`，算法照 mjai
+
+不听的家平摊付 `NotenBappu`，听牌的家平分收；全听或全不听不授受。整数除法与 gimite/mjai 的
+`3000 / tenpai_ids.size` 一致（3000 对四麻的 1/2/3 与三麻的 1/2 都整除）。
+否决：把 3000 写死在结算函数里（02 已立「规则开关进 `Ruleset`」）。
+
+### 04 / 家状态叫 `PlayerState`，河叫 `Kawa`；`GameState` 自己带事件流
+
+`PlayerState`（CONTEXT.md 的词）= 手牌 + 河 + 点数 + 「刚摸进的那张」；副露与立直 / 振听标志由
+10 / 09 加字段。河用罗马字 `Kawa`（Genbutsu / Furiten / Nagashi Mangan 都以它为准，是规则性概念）。
+`GameState` 内部保存本局事件流（倒序），`GameState.events` 取正序——它就是这一局的 Paifu，
+回放确定性的属性直接比它。见提案 04-A。
+
+### 04 / 选手抽象与随机选手放引擎，不放 CLI
+
+`Player<'player> = 'player -> GameState -> LegalActions -> Action * 'player`（纯函数，选手状态显式
+穿过去）、`Kyoku.run`、`Kyoku.randomPlayer` 都在引擎里。
+否决：随机 bot 只写在 CLI（14 票的 soak 与本票的属性测试都要它，写 CLI 里就得抄第二份）。
+LLM 与真人坐席是 Agent 层的事（它们的决策要 await），引擎侧只有这个同步形态。
+
+### 04 / `KyokuStart` 加一个 `Tsumo` 字段
+
+`GameState.start` 需要知道「Oya 摸进的是哪张」才能建摸牌后阶段；从 `Events` 里反解要多一条
+不可能分支。否决：从 14 张手牌里减去 13 张配牌反推（更绕，且 `Hands` 已排序）。
+
+### 提案 04-A：把摸打循环的几个词补进 CONTEXT.md
+
+本票落地、术语表里没有的词：`Kawa`（河）、`NotenBappu`（听牌料 / ノーテン罰符）、
+`Haitei` / `Houtei`（海底 / 河底，术语表只在 Ippatsu 条目里顺带提过）、`Phase`（阶段）、
+`Tsumogiri`（摸切）/ `Tedashi`（手切）。建议分别补进「牌与牌河」与「引擎接缝」两节。
+
+### 提案 04-B：把「标识符照术语表、wire 照 mjai」写进 ADR-0001
+
+ADR-0001 只说了记法（`1z` vs `E`）。罗马字**拼法**同样会分叉：mjai 写 `ryukyoku`，术语表写
+`Ryuukyoku`。建议在 Consequences 补一句：wire 上的字符串一律照抄 mjai，F# 标识符一律照 CONTEXT.md，
+两者不一致时由编码器承担映射（`Kaze`、`Ryuukyoku` 已经是这样）。
+
 ### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
 
 02 与 03 并行开发，各自独立造了「这个规则集里存在哪些牌种」的表示：

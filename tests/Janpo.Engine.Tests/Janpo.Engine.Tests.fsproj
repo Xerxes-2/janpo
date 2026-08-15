@@ -35,6 +35,10 @@
     <Compile Include="KyokuStartGenerators.fs" />
     <Compile Include="KyokuStartTests.fs" />
     <Compile Include="KyokuStartProperties.fs" />
+    <Compile Include="GameStateGenerators.fs" />
+    <Compile Include="GameStateTests.fs" />
+    <Compile Include="GameStateProperties.fs" />
+    <Compile Include="KyokuTests.fs" />
   </ItemGroup>
 
   <!-- oracle 对拍固件：由 scripts/oracle/refresh-fixture.sh 生成，让 dotnet test 能离线对拍。 -->
