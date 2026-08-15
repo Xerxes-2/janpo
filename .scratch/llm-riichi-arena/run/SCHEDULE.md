@@ -31,9 +31,9 @@
 
 | 票 | 状态 | change | 备注 |
 |---|---|---|---|
-| 01 | dispatched | | |
-| 02 | pending | | |
-| 03 | pending | | |
+| 01 | **done** | szpzyvsk | 9 条自主决策，2 条提案待审（提案 01-A/01-B） |
+| 02 | dispatched | | ws-a |
+| 03 | dispatched | | ws-b |
 | 04 | pending | | |
 | 05 | pending | | |
 | 06 | pending | | |
@@ -45,6 +45,12 @@
 | 12 | pending | | |
 | 13 | pending | | |
 | 14 | pending | | |
+
+## 中途插入的调研（用户给了牌谱屋链接与三麻 bonus）
+
+未派工的 8 张票已打补丁：02 03 05 08 10 11 小改，12 13 重写。
+两条提案进了 `DECISIONS.md`：**S-A Ruleset 与 ADR-0004**（早上必看）、**S-B 三麻的门缝**。
+关键发现：spec 漏了 **Nagashi Mangan** 与 **三家和了**，且头跳默认值与两大平台相反。
 
 ## 早上先看哪里
 
