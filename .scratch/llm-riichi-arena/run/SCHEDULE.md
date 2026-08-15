@@ -43,7 +43,7 @@
 | 10 | dispatched | | ws-a（D-5 换序）|
 | 11 | pending | | |
 | 12 | pending | | |
-| 13 | pending | | |
+| 13 | pending | | 数据与固件已就位（D-7 前置），票已按缺口清单重写 |
 | 14 | pending | | |
 
 ## 中途插入的调研（用户给了牌谱屋链接与三麻 bonus）
