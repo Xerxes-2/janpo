@@ -32,7 +32,7 @@
 | 票 | 状态 | change | 备注 |
 |---|---|---|---|
 | 01 | **done** | szpzyvsk | 9 条自主决策，2 条提案待审（提案 01-A/01-B） |
-| 02 | dispatched | | ws-a |
+| 02 | **done** | wmnqytql | 10 条决策，提案 02-A + 3 条待裁 |
 | 03 | dispatched | | ws-b |
 | 04 | pending | | |
 | 05 | pending | | |
