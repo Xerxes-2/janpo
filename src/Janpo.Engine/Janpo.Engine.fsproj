@@ -30,6 +30,7 @@
     <Compile Include="Rng.fs" />
     <Compile Include="Wall.fs" />
     <Compile Include="Furiten.fs" />
+    <Compile Include="RiichiState.fs" />
     <Compile Include="Event.fs" />
     <Compile Include="KyokuStart.fs" />
     <Compile Include="Action.fs" />

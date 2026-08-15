@@ -103,11 +103,12 @@ module EventTests =
                     HoraPoints = 0
                     Deltas = [ 0; 0; 0; 0 ]
                     Scores = [ 25000; 25000; 25000; 25000 ]
+                    UraDoraMarkers = []
                 }
 
         let expected =
             """{"type":"hora","actor":2,"target":0,"pai":"4p","fu":0,"fan":0,"hora_points":0,"""
-            + """"deltas":[0,0,0,0],"scores":[25000,25000,25000,25000]}"""
+            + """"deltas":[0,0,0,0],"scores":[25000,25000,25000,25000],"uradora_markers":[]}"""
 
         Assert.Equal(expected, encode event)
 

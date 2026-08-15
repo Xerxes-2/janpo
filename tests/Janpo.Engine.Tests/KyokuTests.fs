@@ -25,6 +25,8 @@ module KyokuTests =
         | Chi _
         | Hora _
         | Ryuukyoku _
+        | Riichi _
+        | RiichiAccepted _
         | EndKyoku
         | EndGame -> false
 
@@ -38,6 +40,8 @@ module KyokuTests =
         | Chi _
         | Hora _
         | Ryuukyoku _
+        | Riichi _
+        | RiichiAccepted _
         | EndKyoku
         | EndGame -> false
 
@@ -51,6 +55,8 @@ module KyokuTests =
         | Dahai _
         | Hora _
         | Ryuukyoku _
+        | Riichi _
+        | RiichiAccepted _
         | EndKyoku
         | EndGame -> false
 

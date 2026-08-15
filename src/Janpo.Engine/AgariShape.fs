@@ -38,6 +38,18 @@ module AgariShape =
     let isAgari (kindSet: TileKindSet) (hand: HandShape) : bool =
         not (List.isEmpty (classify kindSet hand))
 
+    /// 这手**等摸**的牌听什么：补上它就成和了型的那些牌种，按 mjai 顺序升序。
+    /// 张数不对（已经摸进那张）时是空表。
+    ///
+    /// **听什么只有这一份**：振听（06 经 `PlayerState.waits`）与立直后的暗杠判据
+    /// （09 的 `RiichiState`）读的都是它。
+    let waits (kindSet: TileKindSet) (hand: HandShape) : Tile list =
+        TileKindSet.kinds kindSet
+        |> List.filter (fun kind ->
+            match HandShape.add kind hand with
+            | Ok drawn -> isAgari kindSet drawn
+            | Error _ -> false)
+
     // ---- 渲染层出口（ADR-0001） ----
 
     /// **渲染层的单向出口**：给人和 LLM 看的中文形式。

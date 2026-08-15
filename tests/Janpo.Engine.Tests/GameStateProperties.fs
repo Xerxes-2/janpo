@@ -131,6 +131,7 @@ module GameStateProperties =
                         | Action.Pon _
                         | Action.Chi _ -> true
                         | Action.Dahai _
+                        | Action.Riichi _
                         | Action.None _ -> false)
 
                 choice.Seat <> phase.Target
@@ -162,6 +163,7 @@ module GameStateProperties =
                     && Wall.remaining (GameState.wall state) > 0
                 | Action.Hora _
                 | Action.Dahai _
+                | Action.Riichi _
                 | Action.None _ -> true)
         | AwaitingDahai _
         | Ended _ -> true
@@ -180,6 +182,7 @@ module GameStateProperties =
                    | Action.Hora _
                    | Action.Pon _
                    | Action.Chi _
+                   | Action.Riichi _
                    | Action.None _ -> false)
         | _ -> true
 
@@ -202,13 +205,15 @@ module GameStateProperties =
         match GameState.horas state with
         | [] -> true
         | horas ->
-            let kyotaku = context.Kyotaku * ruleset.RiichiBou
+            // 和了者收走的是局初的供托**加上这一局里成立的立直棒**（含立直者自己那一根）。
+            let kyotaku = (context.Kyotaku + acceptedRiichiCount state) * ruleset.RiichiBou
 
             // 一次和了的增减之和 = 它收走的供托；全部和了加起来正好把供托收干净。
             (horas |> List.sumBy (fun hora -> List.sum hora.Deltas)) = kyotaku
             // 逐条累加：最后一条就是这一局的最终点数。
             && (List.last horas).Scores = GameState.scores state
-            && List.sum (GameState.scores state) = List.sum context.Scores + kyotaku
+            // 立直棒从立直者手里扣出去又进了和了者手里，四家点数之和因此只多出局初的供托。
+            && List.sum (GameState.scores state) = List.sum context.Scores + context.Kyotaku * ruleset.RiichiBou
             // 和了者收、放铳者（或付家）付；自摸时其余三家都付。
             && horas
                |> List.forall (fun hora ->

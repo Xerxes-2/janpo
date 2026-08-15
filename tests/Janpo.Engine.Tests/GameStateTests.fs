@@ -46,6 +46,7 @@ module GameStateTests =
         | Action.Hora(_, _, pai) -> pai
         | Action.Pon(_, _, pai, _) -> pai
         | Action.Chi(_, _, pai, _) -> pai
+        | Action.Riichi actor -> failwith $"座位 {actor} 的立直宣言没有牌"
         | Action.None actor -> failwith $"座位 {actor} 的「过」没有牌"
 
     [<Fact>]
@@ -81,7 +82,8 @@ module GameStateTests =
                 | Action.Hora _
                 | Action.Pon _
                 | Action.Chi _
-                | Action.None _ -> failwith $"这一手不该有和了、鸣牌或「过」：{action}")
+                | Action.Riichi _
+                | Action.None _ -> failwith $"这一手不该有和了、鸣牌、立直或「过」：{action}")
         )
 
     [<Fact>]

@@ -307,6 +307,8 @@ module GameTests =
                 | Chi _
                 | Hora _
                 | Ryuukyoku _
+                | Riichi _
+                | RiichiAccepted _
                 | EndKyoku
                 | EndGame -> false)
             |> List.length

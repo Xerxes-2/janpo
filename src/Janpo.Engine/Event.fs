@@ -27,8 +27,7 @@ type StartKyoku =
 
 /// mjai `hora` 的载荷：一次和了公开的全部事实。
 ///
-/// 役种（`yakus`）与里宝牌指示牌（`uradora_markers`）分别是 07 与 09 的事，
-/// 那两票给这个记录加字段。
+/// 役种（`yakus`）仍然没有：它是 07 的事，那票没加。
 type Hora =
     {
         /// 和了的座位。
@@ -48,6 +47,10 @@ type Hora =
         Deltas: int list
         /// 授受后的各家点数，按座位升序。双响时逐条累加，最后一条就是这一局的最终点数。
         Scores: int list
+        /// 里宝牌指示牌，含杠里宝牌。**只有和了者立直时才翻**，否则是空表
+        /// （与 mjai 的做法一致）。里宝牌的番数已经算进 `Fan`，这里只是把翻开的
+        /// 那几张写进牌谱。
+        UraDoraMarkers: Tile list
     }
 
 /// 流局的形态，mjai `ryukyoku` 的 `reason` 字段。04 只做荒牌流局，12 票补齐其余五种
@@ -100,6 +103,17 @@ type Event =
     | Pon of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
     /// mjai `chi`：某家吃了上家 `target` 打出的 `pai`，`consumed` 是它亮出的两张。
     | Chi of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
+    /// mjai `reach`：某家**宣言**立直。紧接着的那条 `dahai` 就是宣言牌；
+    /// 立直棒还没出，要等宣言牌落定（`RiichiAccepted`）。
+    ///
+    /// F# 这侧的标识符按 CONTEXT.md 的术语表拼作 `Riichi`，wire 上仍是 mjai 的
+    /// `reach`——与 `Ryuukyoku` / `ryukyoku` 同一处理（裁决 D-1）。
+    | Riichi of actor: Seat
+    /// mjai `reach_accepted`：宣言牌落定，立直**成立**——立直棒这时才出、一发这时才亮。
+    /// 宣言牌被荣和时只会有前一条 `reach`，**没有这一条**（真实牌谱就是这个形状）。
+    ///
+    /// 不带 deltas / scores：上游牌谱里它也只有 `actor`，扣的那 1000 点是约定而非字段。
+    | RiichiAccepted of actor: Seat
     /// mjai `hora`：某家和了。同巡双响时会有两条（头跳关掉时才可能出现）。
     | Hora of hora: Hora
     /// mjai `ryukyoku`：一局在无人和了的情况下结束。
@@ -213,7 +227,10 @@ module Event =
                         "hora_points", Encode.int fields.HoraPoints
                         "deltas", fields.Deltas |> List.map Encode.int |> Encode.list
                         "scores", fields.Scores |> List.map Encode.int |> Encode.list
+                        "uradora_markers", encodeTiles fields.UraDoraMarkers
                     ]
+            | Riichi actor -> mjaiEvent "reach" [ "actor", Encode.int actor ]
+            | RiichiAccepted actor -> mjaiEvent "reach_accepted" [ "actor", Encode.int actor ]
             | EndKyoku -> mjaiEvent "end_kyoku" []
             | EndGame -> mjaiEvent "end_game" []
             | Ryuukyoku fields ->
@@ -263,6 +280,7 @@ module Event =
                     HoraPoints = get.Required.Field "hora_points" Decode.int
                     Deltas = get.Required.Field "deltas" (Decode.list Decode.int)
                     Scores = get.Required.Field "scores" (Decode.list Decode.int)
+                    UraDoraMarkers = get.Required.Field "uradora_markers" tilesDecoder
                 })
 
     let private ryuukyokuDecoder: Decoder<Event> =
@@ -295,6 +313,8 @@ module Event =
                     (Decode.field "tsumogiri" Decode.bool)
             | "pon" -> nakiDecoder (fun actor target pai consumed -> Pon(actor, target, pai, consumed))
             | "chi" -> nakiDecoder (fun actor target pai consumed -> Chi(actor, target, pai, consumed))
+            | "reach" -> Decode.field "actor" Decode.int |> Decode.map Riichi
+            | "reach_accepted" -> Decode.field "actor" Decode.int |> Decode.map RiichiAccepted
             | "hora" -> horaDecoder
             | "ryukyoku" -> ryuukyokuDecoder
             | "end_kyoku" -> Decode.succeed EndKyoku

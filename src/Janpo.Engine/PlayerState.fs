@@ -1,8 +1,6 @@
 namespace Janpo
 
 /// 引擎内某座位的牌局状态（CONTEXT.md）：手牌、河、副露、点数……与占这个座位的 Player 是谁无关。
-///
-/// 立直标志（09）由后续票加字段。
 type PlayerState =
     private
         {
@@ -24,6 +22,11 @@ type PlayerState =
             Drawn: Tile option
             /// 振听：永久与同巡分别维护（见 `Furiten`）。只挡荣和。
             Furiten: Furiten
+            /// 立直：没立直 / 宣言了还没落定 / 已成立（见 `RiichiState`）。
+            Riichi: RiichiState
+            /// 一发：立直成立后一巡内有效。三条解除各自有入口：自家再打一张（`discard`）、
+            /// 任何人鸣牌（`clearIppatsu`，由 `GameState` 统一打断），以及这一局终了。
+            Ippatsu: bool
         }
 
 /// 家状态的构造、拆解与迁移。
@@ -43,6 +46,8 @@ module PlayerState =
             Score = score
             Drawn = drawn
             Furiten = Furiten.none
+            Riichi = RiichiState.none
+            Ippatsu = false
         }
 
     // ---- 拆解 ----
@@ -70,6 +75,12 @@ module PlayerState =
 
     /// 振听的两种状态。振听只挡荣和，不挡自摸。
     let furiten (player: PlayerState) : Furiten = player.Furiten
+
+    /// 立直状态。判役读的是它的 `RiichiState.declaration`（只有成立了的才算）。
+    let riichi (player: PlayerState) : RiichiState = player.Riichi
+
+    /// 一发是不是还亮着。没立直时恒为 false。
+    let ippatsu (player: PlayerState) : bool = player.Ippatsu
 
     /// 从牌列里拿掉**一张**给定的牌；没有这张则返回 None。
     /// 红宝牌与正牌是不同的牌（`5m` 与 `5mr` 各算各的）。
@@ -124,8 +135,9 @@ module PlayerState =
     /// 和了牌的牌种（听什么）：暗牌加上它就成和了型的那些牌种，按 mjai 顺序升序。
     /// 永久振听用它与自己的河对。张数不对时得空列表。
     let waits (kindSet: TileKindSet) (player: PlayerState) : Tile list =
-        TileKindSet.kinds kindSet
-        |> List.filter (fun kind -> isAgariWith kindSet kind player)
+        match HandShape.create (nakiCount player) player.Hand with
+        | Error _ -> []
+        | Ok shape -> AgariShape.waits kindSet shape
 
     // ---- 迁移 ----
 
@@ -157,10 +169,17 @@ module PlayerState =
         }
 
     /// 见逃：本巡放过了一张可以荣和的牌——同巡振听成立，到自己下次摸牌为止不能荣和。
-    /// 它不永久：放过的那张在他家的河里，不在自己的河里（立直后见逃变永久是 09 的事）。
+    /// 放过的那张在他家的河里而不在自己的河里，因此平时它不永久。
+    ///
+    /// **立直中的见逃是永久振听**：立直后手牌不再变，这一位从此闩死
+    /// （`refreshFuriten` 对立直中的座位只置位不清除）。
     let minogashi (player: PlayerState) : PlayerState =
         { player with
-            Furiten = { player.Furiten with Doujun = true }
+            Furiten =
+                {
+                    Permanent = player.Furiten.Permanent || RiichiState.isActive player.Riichi
+                    Doujun = true
+                }
         }
 
     /// 重算永久振听：自己的河里只要有一张是自己现在的和了牌，就振听。
@@ -174,11 +193,20 @@ module PlayerState =
             player.Kawa |> List.exists (fun tile -> List.contains (Tile.deaka tile) waiting)
 
         { player with
-            Furiten = { player.Furiten with Permanent = hit }
+            Furiten =
+                { player.Furiten with
+                    // 立直中只置位不清除：立直后手牌不再变，重算只会把「立直后见逃」
+                    // 那一位（放过的牌不在自家河里，重算看不到）冲掉。
+                    Permanent = hit || (RiichiState.isActive player.Riichi && player.Furiten.Permanent)
+                }
         }
 
     /// 打出一张：出手牌、进河，「刚摸进的那张」归 None。
     /// 牌不在手里时原样返回——合法性由 `GameState.step` 在此之前判掉（不在这里重复一份）。
+    ///
+    /// **自家再打一张，一发就到头了**：一发的窗口是「立直成立到自己下一手打牌为止」，
+    /// 包含自己下次自摸（一发自摸）。宣言牌那一手打时一发还没亮（要等 `acceptRiichi`），
+    /// 因此这里清它不会把刚立的直那一发清掉。
     let discard (tile: Tile) (player: PlayerState) : PlayerState =
         match removeOne tile player.Hand with
         | None -> player
@@ -187,6 +215,7 @@ module PlayerState =
                 Hand = hand
                 Kawa = player.Kawa @ [ tile ]
                 Drawn = None
+                Ippatsu = false
             }
 
     /// 点数增减。
@@ -194,3 +223,29 @@ module PlayerState =
         { player with
             Score = player.Score + delta
         }
+
+    /// 宣言立直：进「宣言了还没落定」。**立直棒还没出**（它在 `acceptRiichi` 那一步）。
+    let declareRiichi (declaration: RiichiDeclaration) (player: PlayerState) : PlayerState =
+        { player with
+            Riichi = RiichiState.declare declaration
+        }
+
+    /// 立直成立：宣言牌没被荣和。**一发到此亮起**；立直棒的扣点走 `addScore`，
+    /// 进供托是 `GameState` 那一层的事。
+    let acceptRiichi (player: PlayerState) : PlayerState =
+        if RiichiState.isDeclared player.Riichi then
+            { player with
+                Riichi = RiichiState.accept player.Riichi
+                Ippatsu = true
+            }
+        else
+            player
+
+    /// 宣言牌被荣和：立直不成立，退回没立直（立直棒也就不出）。
+    let cancelRiichi (player: PlayerState) : PlayerState =
+        { player with
+            Riichi = RiichiState.cancel player.Riichi
+        }
+
+    /// 一发被打断。全场统一打断的入口在 `GameState.interruptIppatsu`。
+    let clearIppatsu (player: PlayerState) : PlayerState = { player with Ippatsu = false }

@@ -68,6 +68,7 @@ module HoraTests =
                    | Action.Dahai _
                    | Action.Pon _
                    | Action.Chi _
+                   | Action.Riichi _
                    | Action.None _ -> false))
 
     let private horasOf (state: GameState) : Hora list = GameState.horas state
@@ -122,6 +123,7 @@ module HoraTests =
                 HoraPoints = 6000
                 Deltas = [ 6000; -2000; -2000; -2000 ]
                 Scores = [ 31000; 23000; 23000; 23000 ]
+                UraDoraMarkers = []
             }
 
         Assert.Equal<Event list>([ Hora expected ], events)
@@ -240,6 +242,7 @@ module HoraTests =
                 HoraPoints = 1000
                 Deltas = [ -1000; 0; 1000; 0 ]
                 Scores = [ 24000; 25000; 26000; 25000 ]
+                UraDoraMarkers = []
             }
 
         Assert.Equal<Event list>([ Hora expected ], events)
@@ -442,6 +445,7 @@ module HoraTests =
                         | Action.Dahai _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Riichi _
                         | Action.None _ -> false)
 
                 if offersRon then
@@ -518,6 +522,7 @@ module HoraTests =
                     HoraPoints = 1100
                     Deltas = [ -500; -300; 1100; -300 ]
                     Scores = [ 24500; 24700; 26100; 24700 ]
+                    UraDoraMarkers = []
                 }
             ],
             horasOf ended
@@ -553,6 +558,7 @@ module HoraTests =
                     HoraPoints = 6000
                     Deltas = [ 8900; -2300; -2300; -2300 ]
                     Scores = [ 33900; 22700; 22700; 22700 ]
+                    UraDoraMarkers = []
                 }
             ],
             horasOf ended
@@ -583,6 +589,7 @@ module HoraTests =
                     HoraPoints = 1000
                     Deltas = [ -1600; 0; 2600; 0 ]
                     Scores = [ 23400; 25000; 27600; 25000 ]
+                    UraDoraMarkers = []
                 }
             ],
             horasOf ended
@@ -615,6 +622,7 @@ module HoraTests =
                     HoraPoints = 1000
                     Deltas = [ -1300; 0; 2300; 0 ]
                     Scores = [ 23700; 25000; 27300; 25000 ]
+                    UraDoraMarkers = []
                 }
                 {
                     Actor = 3
@@ -625,6 +633,7 @@ module HoraTests =
                     HoraPoints = 2000
                     Deltas = [ -2000; 0; 0; 2000 ]
                     Scores = [ 21700; 25000; 27300; 27000 ]
+                    UraDoraMarkers = []
                 }
             ],
             horasOf ended

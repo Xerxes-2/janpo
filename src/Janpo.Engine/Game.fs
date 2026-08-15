@@ -95,9 +95,9 @@ module Game =
     /// `scores` 是这一局终了时的各家点数（`GameState.scores`）。和了的点数授受、本场与供托的
     /// 计入都是 08 票的事，本层只把结果原样搬进下一局的场况。
     ///
-    /// **09 票注意**：立直棒是**局内**产生的，而这里结转的是 `context.Kyotaku`（局初的供托）。
-    /// 09 落地时要把供托的来源换成「这一局终了时场上实际还剩几根」（届时 `GameState` 会有它），
-    /// 本函数的其余规则一条不变。
+    /// **传进来的 `context.Kyotaku` 必须是「这一局终了时场上还剩几根」**（`GameState.kyotaku`），
+    /// 而不是局初那几根：立直棒是局内产生的，两者在有人立直的局里不相等。
+    /// 正常路径是 `Game.advance`，它已经接好了。
     let after (ruleset: Ruleset) (context: KyokuContext) (kyokuEnd: KyokuEnd) (scores: int list) : GameProgress =
         let renchan = KyokuEnd.isRenchan context.Oya kyokuEnd
 
@@ -206,7 +206,15 @@ module Game =
         | GameProgress.NextKyoku _, Some kyokuEnd ->
             { game with
                 Played = state :: game.Played
-                Progress = after game.Ruleset (GameState.context state) kyokuEnd (GameState.scores state)
+                Progress =
+                    after
+                        game.Ruleset
+                        // 结转的是这一局**终了时**场上剩的供托：局初那几根不含局内打出去的立直棒。
+                        { GameState.context state with
+                            Kyotaku = GameState.kyotaku state
+                        }
+                        kyokuEnd
+                        (GameState.scores state)
             }
 
     // ---- 驱动 ----

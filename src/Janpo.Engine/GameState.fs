@@ -1,7 +1,10 @@
 namespace Janpo
 
 /// 上下文标志：需要「在某个时机置位、由判役时读取」的那几个标志（spec 的规则清单）。
-/// **本票只置位，不判役**——役是 07 的事。一发（09）、岭上与抢杠（11）由后续票加字段。
+/// **本票只置位，不判役**——役是 07 的事。岭上与抢杠（11）由后续票加字段。
+///
+/// 一发**不在这里**：它是**逐座位**的（只有立直的那家有一发），因此记在 `PlayerState.Ippatsu`；
+/// 这里只放全场共享的那几个。
 type KyokuFlags =
     {
         /// 海底：刚摸进的是可摸区的最后一张（海底摸月）。
@@ -10,7 +13,7 @@ type KyokuFlags =
         Houtei: bool
     }
 
-/// 摸牌后阶段：`Actor` 刚摸进一张，等它打牌（后续票里还可以自摸和、立直、暗杠）。
+/// 摸牌后阶段：`Actor` 刚摸进一张，等它打牌（也可以自摸和、宣言立直，11 的暗杠也在这里）。
 /// **鸣牌之后也是这个阶段**：鸣牌跳过摸牌，直接由鸣的那家打牌。
 type AwaitingDahai =
     {
@@ -76,6 +79,9 @@ type GameState =
             Wall: Wall
             /// 各家状态，按座位升序。
             Players: PlayerState list
+            /// 场上堆着的立直棒**根数**：局初的供托加上这一局里成立的立直。
+            /// 和了那一步归零（它进了和了者的 `Deltas`），流局时原样留着由 05 结转。
+            Kyotaku: int
             Flags: KyokuFlags
             Phase: Phase
             /// 本局已产出的事件流，**倒序**（最新的在头）。对外经 `GameState.events` 取正序。
@@ -118,6 +124,15 @@ type IllegalAction =
     /// 这几张牌此刻鸣不成：手里没这几张、凑不成刻子 / 顺子、吃的不是上家打的、
     /// 河底牌不能鸣，或者鸣完之后没牌可打（禁食替把唯一的那几张都封了）。
     | CannotNaki of actor: Seat * kind: NakiKind * pai: Tile * consumed: Tile list
+    /// 此刻立直不了：不门清、没听牌（打不出保持听牌的那张）、点数不够一根立直棒、
+    /// 牌山剩的牌不够再摸一圈，或者已经立过直了。四条判据见 `RiichiState.canDeclare`。
+    | CannotRiichi of actor: Seat
+    /// 立直把这一手封住了，三条各封一面：**立直后只能摸切**；宣言牌那一手只能打
+    /// 「打完仍听牌」的那几张；而宣言与打出宣言牌之间**连自摸和也不许**（要和就别宣言）。
+    ///
+    /// 与 `Kuikae` 分开：两者都是「牌就在手里却动不得」，但原因不同，
+    /// 合成一条会把立直报成食替。
+    | RiichiRestricted of actor: Seat * pai: Tile
     /// 现在没有可响应的牌，「过」无从谈起。
     | NothingToRespond of actor: Seat
     /// 一局已终，不再接受任何动作。
@@ -143,40 +158,55 @@ module GameState =
 
     // ---- 判役与算点的上下文 ----
 
+    /// 这家还没打过牌、且此前无人鸣牌。**两处读它**：天和 / 地和（`yakuContextOf`）
+    /// 与两立直（`applyRiichi`）——「无人鸣牌的第一巡」是同一条判据，不写两份。
+    /// （事件流的顺序与这个判断无关，因此传倒序的也行。）
+    let private firstTurnFor (seat: Seat) (log: Event list) : bool =
+        log
+        |> List.forall (fun event ->
+            match event with
+            | Dahai(actor, _, _) -> actor <> seat
+            // 任何人鸣牌都把天和 / 地和与两立直打掉：它们要求「无人鸣牌的第一巡」。
+            | Pon _
+            | Chi _ -> false
+            // 别家宣言立直不打断第一巡（它自己的那条 `dahai` 才打断它自己的）。
+            | Riichi _
+            | RiichiAccepted _
+            | StartGame _
+            | StartKyoku _
+            | Tsumo _
+            | Hora _
+            | Ryuukyoku _
+            | EndKyoku
+            | EndGame -> true)
+
     /// 判役要的上下文，由局面自己填：场风取自开局条件，自风由座位与亲推出，
-    /// 宝牌指示牌取自牌山，海底 / 河底取自标志，天和 / 地和由「这家还没打过牌」推出——
-    /// 都是牌局历史的产物，因此**调用方不必也不该自己拼一份**。
+    /// 宝牌指示牌取自牌山，海底 / 河底取自标志，立直与一发取自那一家的 `PlayerState`，
+    /// 天和 / 地和由「这家还没打过牌」推出——都是牌局历史的产物，
+    /// 因此**调用方不必也不该自己拼一份**。
     ///
     /// 这里填的标志都还要过判役那关：海底只对自摸生效、河底只对荣和生效、
-    /// 天和地和还要门清自摸（`Yaku` 自己会判），所以这里不按自摸 / 荣和分两套。
-    /// 立直与一发（09）、岭上与抢杠（11）是那两票的标志，**在这里接上**。
+    /// 一发要门清且真立了直、天和地和还要门清自摸（`Yaku` 自己会判），
+    /// 所以这里不按自摸 / 荣和分两套。岭上与抢杠（11）是那票的标志，**在这里接上**。
     let private yakuContextOf
         (ruleset: Ruleset)
         (kyokuContext: KyokuContext)
         (wall: Wall)
         (flags: KyokuFlags)
+        (players: PlayerState list)
         (log: Event list)
         (seat: Seat)
         : YakuContext =
-        // 这家还没打过牌、且此前无人鸣牌 ⟺ 天和 / 地和还有指望。
-        // （事件流的顺序与这个判断无关，因此传倒序的也行。）
-        let firstTurn =
-            log
-            |> List.forall (fun event ->
-                match event with
-                | Dahai(actor, _, _) -> actor <> seat
-                // 任何人鸣牌都把天和 / 地和打掉：它们要求「无人鸣牌的第一巡」。
-                | Pon _
-                | Chi _ -> false
-                | StartGame _
-                | StartKyoku _
-                | Tsumo _
-                | Hora _
-                | Ryuukyoku _
-                | EndKyoku
-                | EndGame -> true)
+        let firstTurn = firstTurnFor seat log
+        let player = List.tryItem seat players
 
         { YakuContext.create kyokuContext.Bakaze (Seat.jikaze ruleset kyokuContext.Oya seat) with
+            // 立直与一发都是那一家自己的状态（`PlayerState`），局面照搬，不复算。
+            Riichi =
+                player
+                |> Option.map (PlayerState.riichi >> RiichiState.declaration)
+                |> Option.defaultValue RiichiDeclaration.None
+            Ippatsu = player |> Option.map PlayerState.ippatsu |> Option.defaultValue false
             Haitei = flags.Haitei
             Houtei = flags.Houtei
             Tenhou = firstTurn && seat = kyokuContext.Oya
@@ -186,7 +216,7 @@ module GameState =
         }
 
     let private yakuContext (state: GameState) (seat: Seat) : YakuContext =
-        yakuContextOf state.Ruleset state.Context state.Wall state.Flags state.Log seat
+        yakuContextOf state.Ruleset state.Context state.Wall state.Flags state.Players state.Log seat
 
     /// 某家拿这张牌和了的话能得到什么：选中的读法与它的符番（`Score.best` 的高点法）。
     ///
@@ -245,37 +275,82 @@ module GameState =
 
     // ---- 合法动作集 ----
 
-    /// 摸牌后阶段的合法动作集：自摸和（和了型成立**且有役**时）在最前，随后是手切每一种牌各一条
-    /// （同种牌只出现一次，但 `5m` 与 `5mr` 各算各的），最后是摸切那一条。
-    /// 手切按 mjai 顺序升序。09 的立直、11 的暗杠与加杠也加在这里。
+    /// 摸牌后阶段的合法动作集：自摸和（和了型成立**且有役**时）在最前，接着是立直宣言，
+    /// 随后是手切每一种牌各一条（同种牌只出现一次，但 `5m` 与 `5mr` 各算各的），
+    /// 最后是摸切那一条。手切按 mjai 顺序升序。11 的暗杠与加杠也加在这里。
     ///
     /// `forbidden` 是食替封住的牌种（`kuikaeKinds`），**只有鸣完的那一手非空**；
     /// 鸣牌不摸牌，因此那一手既没有摸切也没有自摸和。
     ///
     /// **自摸和不看振听**（振听只挡荣和），但**看役**：无役不可和。
+    ///
+    /// **立直把这份收窄两次**：
+    /// - 宣言了还没落定（`Declared`）：只剩「打完仍听牌」的那几张，自摸和与再宣言都没了；
+    /// - 立直已成立（`Accepted`）：**只能摸切**，只剩自摸和与摸切那一条。
+    ///   暗杠是那唯一的例外，但**动作本身是 11 票的事**，判据在 `RiichiState.allowsAnkan`（裁决 D-8）。
+    ///   立直中的座位鸣不了牌（`responsesTo`），因此那两支里 `drawn` 恒非 None。
     let private awaitingDahaiActions
         (ruleset: Ruleset)
+        (kindSet: TileKindSet)
         (context: YakuContext)
+        (remaining: int)
         (actor: Seat)
         (forbidden: Tile list)
         (player: PlayerState)
         : Action list =
-        let tedashi =
-            PlayerState.tedashi player
-            |> allowedDahai forbidden
-            |> Tile.sort
-            |> List.distinct
-            |> List.map (fun pai -> Action.Dahai(actor, pai, false))
+        /// 打得出去的那几条：手切各牌种一条在前，摸切那一条在后，`allowed` 再筛一遍。
+        let dahai (allowed: Tile -> bool) : Action list * Action list =
+            let tedashi =
+                PlayerState.tedashi player
+                |> allowedDahai forbidden
+                |> List.filter allowed
+                |> Tile.sort
+                |> List.distinct
+                |> List.map (fun pai -> Action.Dahai(actor, pai, false))
 
-        match PlayerState.drawn player with
-        | None -> tedashi
-        | Some drawn ->
-            let hora =
+            let tsumogiri =
+                match PlayerState.drawn player with
+                | Some drawn when allowed drawn -> [ Action.Dahai(actor, drawn, true) ]
+                | Some _
+                | None -> []
+
+            tedashi, tsumogiri
+
+        let hora =
+            match PlayerState.drawn player with
+            | None -> []
+            | Some drawn ->
                 match horaWith ruleset context player drawn true with
                 | Ok _ -> [ Action.Hora(actor, actor, drawn) ]
                 | Error _ -> []
 
-            hora @ tedashi @ [ Action.Dahai(actor, drawn, true) ]
+        match PlayerState.riichi player with
+        | RiichiState.Declared _ ->
+            let keeps =
+                RiichiState.tenpaiDahai kindSet (PlayerState.nakiCount player) (PlayerState.hand player)
+
+            let tedashi, tsumogiri = dahai (fun pai -> List.contains (Tile.deaka pai) keeps)
+            tedashi @ tsumogiri
+        | RiichiState.Accepted _ ->
+            let _, tsumogiri = dahai (fun _ -> true)
+            hora @ tsumogiri
+        | RiichiState.None ->
+            let riichi =
+                if
+                    RiichiState.canDeclare
+                        ruleset
+                        kindSet
+                        remaining
+                        (PlayerState.score player)
+                        (PlayerState.naki player)
+                        (PlayerState.hand player)
+                then
+                    [ Action.Riichi actor ]
+                else
+                    []
+
+            let tedashi, tsumogiri = dahai (fun _ -> true)
+            hora @ riichi @ tedashi @ tsumogiri
 
     /// 从一堆牌里取两张的全部拿法（按实例，不去重）。
     let rec private pairsOf (tiles: Tile list) : Tile list list =
@@ -371,7 +446,7 @@ module GameState =
     /// 3. **河底牌不能鸣**：可摸区空了之后只剩荣和（鸣完无牌可摸，这一局到此为止）；
     /// 4. **有任何响应就必须同时给一条「过」**，否则响应阶段停在那里没人推得走。
     ///
-    /// 09 落地后还要在这里把**立直中的座位**的鸣牌挡掉（立直后不能碰不能吃）。
+    /// **立直中的座位鸣不了牌**（立直后不能碰不能吃；11 的大明杠同理），但它仍然能荣和。
     let private responsesTo (state: GameState) (target: Seat) (pai: Tile) : LegalActions list =
         // 河底牌（可摸区已空）只能荣和，鸣不得。
         let canNaki = Wall.remaining state.Wall > 0
@@ -391,7 +466,7 @@ module GameState =
                 let ron = if canRon then [ Action.Hora(seat, target, pai) ] else []
 
                 let naki =
-                    if canNaki then
+                    if canNaki && not (RiichiState.isActive (PlayerState.riichi player)) then
                         nakiActionsFor state.Ruleset target pai seat player
                     else
                         []
@@ -440,6 +515,13 @@ module GameState =
     let scores (state: GameState) : int list =
         state.Players |> List.map PlayerState.score
 
+    /// 场上堆着的立直棒**根数**（点数要乘 `Ruleset.RiichiBou`）：
+    /// 局初的供托加上这一局里成立的立直，和了后为 0（都归了和了者）。
+    ///
+    /// **跨局结转读的是它**（`Game.advance`）：局初的 `KyokuContext.Kyotaku` 不含
+    /// 这一局里打出去的立直棒。
+    let kyotaku (state: GameState) : int = state.Kyotaku
+
     /// 当前阶段。
     let phase (state: GameState) : Phase = state.Phase
 
@@ -464,6 +546,8 @@ module GameState =
             | Dahai _
             | Pon _
             | Chi _
+            | Riichi _
+            | RiichiAccepted _
             | Hora _
             | Ryuukyoku _
             | EndKyoku
@@ -497,6 +581,7 @@ module GameState =
     ///
     /// 型不成或无役时是 `YakuError`。**合法动作集读的就是它**——这个函数给 Error 的座位，
     /// Hora 压根不在它的动作集里（振听另算，那是荣和才有的事）。
+    /// 反过来不恒成立：立直宣言了还没打宣言牌的那一手，这里照算，但 Hora 不在动作集里。
     let horaOf (seat: Seat) (state: GameState) : Result<HoraReading, YakuError> =
         match List.tryItem seat state.Players, state.Phase with
         | Some player, AwaitingDahai phase when phase.Actor = seat ->
@@ -522,18 +607,22 @@ module GameState =
 
     /// 构造摸牌后阶段。`drawn` 为 None 就是鸣牌后那一手（不摸牌），
     /// `forbidden` 是那一手被食替封住的牌种，其余时候恒为空。
-    let private awaitDahai
-        (ruleset: Ruleset)
-        (context: YakuContext)
-        (actor: Seat)
-        (drawn: Tile option)
-        (forbidden: Tile list)
-        (players: PlayerState list)
-        : Phase =
+    ///
+    /// 它读的是**已经立起来的局面**：合法动作集要看点数（立直得起 1000）、
+    /// 牌山剩多少（立直要够再摸一圈）与立直状态，散着传参早晚漏一项。
+    let private awaitDahaiIn (state: GameState) (actor: Seat) (drawn: Tile option) (forbidden: Tile list) : Phase =
         let actions =
-            match List.tryItem actor players with
+            match List.tryItem actor state.Players with
             | None -> []
-            | Some player -> awaitingDahaiActions ruleset context actor forbidden player
+            | Some player ->
+                awaitingDahaiActions
+                    state.Ruleset
+                    state.KindSet
+                    (yakuContext state actor)
+                    (Wall.remaining state.Wall)
+                    actor
+                    forbidden
+                    player
 
         AwaitingDahai
             {
@@ -561,22 +650,29 @@ module GameState =
                 Houtei = false
             }
 
-        {
-            Ruleset = ruleset
-            KindSet = kindSet
-            Context = context
-            Wall = started.Wall
-            Players = players
-            Flags = flags
-            Phase =
-                awaitDahai
-                    ruleset
-                    (yakuContextOf ruleset context started.Wall flags started.Events context.Oya)
-                    context.Oya
-                    (Some started.Tsumo)
-                    []
-                    players
-            Log = List.rev started.Events
+        // 先摆一个空动作集的同形阶段，再由 `awaitDahaiIn` 用完整的局面把它算出来——
+        // 合法动作集要读点数、牌山与立直状态，非得等局面立起来不可。
+        let opening =
+            {
+                Ruleset = ruleset
+                KindSet = kindSet
+                Context = context
+                Wall = started.Wall
+                Players = players
+                Kyotaku = context.Kyotaku
+                Flags = flags
+                Phase =
+                    AwaitingDahai
+                        {
+                            Actor = context.Oya
+                            Tsumo = Some started.Tsumo
+                            Actions = []
+                        }
+                Log = List.rev started.Events
+            }
+
+        { opening with
+            Phase = awaitDahaiIn opening context.Oya (Some started.Tsumo) []
         }
 
     /// 开一局：洗牌、配牌、Oya 摸第一张，得到一个等 Oya 打牌的局面。
@@ -635,7 +731,7 @@ module GameState =
     /// 双响时两条 `Hora` 的 `Scores` 是**逐条累加**的，最后一条就是这一局的最终点数。
     ///
     /// 供托进了和了者的 `Deltas`，因此一次和了的增减之和 = 供托点数而不是 0；
-    /// 局与局之间把 Kyotaku 归零是 05 的事（本票只管一局之内的授受）。
+    /// 收走的是**此刻场上的**供托（`state.Kyotaku`），含这一局里刚打出去的立直棒。
     let private applyHora (state: GameState) (target: Seat) (wins: (Seat * Tile) list) : GameState * Event list =
         let settle (players: PlayerState list, horas: Hora list) (index: int, (actor: Seat, pai: Tile)) =
             let value =
@@ -652,11 +748,18 @@ module GameState =
                         Target = target
                         Oya = state.Context.Oya
                         Honba = if index = 0 then state.Context.Honba else 0
-                        Kyotaku = if index = 0 then state.Context.Kyotaku else 0
+                        Kyotaku = if index = 0 then state.Kyotaku else 0
                     }
                     value
 
             let settled = List.map2 PlayerState.addScore score.Deltas players
+
+            // 里宝牌只在和了者立了直时翻（`Yaku` 也只在那时计它的番）。
+            let uradora =
+                match List.tryItem actor state.Players with
+                | Some player when RiichiState.isAccepted (PlayerState.riichi player) -> Wall.uraIndicators state.Wall
+                | Some _
+                | None -> []
 
             settled,
             horas
@@ -670,24 +773,57 @@ module GameState =
                     HoraPoints = score.HoraPoints
                     Deltas = score.Deltas
                     Scores = settled |> List.map PlayerState.score
+                    UraDoraMarkers = uradora
                 }
             ]
 
         let settled, horas = List.indexed wins |> List.fold settle (state.Players, [])
 
         { state with
-            Players = settled
+            // 宣言牌被荣和的那家立直不成立（立直棒不出）：这里把还没落定的宣言作废。
+            Players = settled |> List.map PlayerState.cancelRiichi
+            // 供托已经进了和了者的 `Deltas`，场上不再剩立直棒。
+            Kyotaku = 0
             Phase = Ended(KyokuEnd.Hora horas)
         },
         horas |> List.map Event.Hora
 
     /// **一发的打断入口，全局只有这一处**：任何鸣牌（碰 / 吃，以及 11 的三种杠）
-    /// 都把全场的一发打掉。
+    /// 都把全场的一发打掉。鸣的那家自己也算在内（它既然能鸣就没立直，本来也没一发）。
     ///
-    /// 立直与一发是 09 票的事，此刻还没有标志可清（`YakuContext.Ippatsu` 恒为 false，
-    /// 没人置位），因此这里是恒等变换。**09 只需在这个函数里把各家的一发标志置 false**，
-    /// 不必再去找别的调用点；11 的杠也走 `applyNaki`，自然接上。
-    let private interruptIppatsu (state: GameState) : GameState = state
+    /// 时机在**鸣牌成立**而不是宣言：没鸣成的宣言（被优先级刷掉的那几家）不打断一发。
+    /// 立直宣言牌被碰的那一手也在这里：先 `acceptRiichi` 亮起一发，再被这一手打掉。
+    let private interruptIppatsu (state: GameState) : GameState =
+        { state with
+            Players = state.Players |> List.map PlayerState.clearIppatsu
+        }
+
+    /// **立直宣言牌落定**：没人荣和它，立直这时才成立——立直棒出、供托 +1、一发亮起，
+    /// 产出 mjai 的 `reach_accepted`。
+    ///
+    /// 宣言牌被荣和时走不到这里（那条路是 `applyHora`）：立直不成立、立直棒不出，
+    /// 与真实牌谱里「只有 `reach` 没有 `reach_accepted`」的那几局同形。
+    let private acceptRiichi (state: GameState) : GameState * Event list =
+        let declared =
+            state.Players
+            |> List.indexed
+            |> List.filter (fun (_, player) -> RiichiState.isDeclared (PlayerState.riichi player))
+            |> List.map fst
+
+        if List.isEmpty declared then
+            state, []
+        else
+            let settled =
+                (state.Players, declared)
+                ||> List.fold (fun players seat ->
+                    players
+                    |> updatePlayer seat (PlayerState.acceptRiichi >> PlayerState.addScore (-state.Ruleset.RiichiBou)))
+
+            { state with
+                Players = settled
+                Kyotaku = state.Kyotaku + List.length declared
+            },
+            declared |> List.map Event.RiichiAccepted
 
     /// 打完牌之后：下家摸一张进入摸牌后阶段；可摸区空了就是荒牌流局。
     let private drawNext (state: GameState) (from: Seat) : GameState * Event list =
@@ -709,7 +845,7 @@ module GameState =
                 }
 
             { advanced with
-                Phase = awaitDahai advanced.Ruleset (yakuContext advanced next) next (Some drawn) [] players
+                Phase = awaitDahaiIn advanced next (Some drawn) []
             },
             [ Event.Tsumo(next, drawn) ]
 
@@ -730,7 +866,12 @@ module GameState =
 
         let advanced, events =
             match responsesTo discarded actor pai with
-            | [] -> drawNext discarded actor
+            // 没人可响应 ⟹ 也不可能有人荣和这张：宣言牌当场落定，事件顺序是
+            // `dahai` → `reach_accepted` → `tsumo`（真实牌谱就是这个顺序）。
+            | [] ->
+                let accepted, accepting = acceptRiichi discarded
+                let advanced, drawing = drawNext accepted actor
+                advanced, accepting @ drawing
             | responses ->
                 { discarded with
                     Phase =
@@ -766,6 +907,7 @@ module GameState =
         | Action.Chi _ -> Some 1
         | Action.Dahai _
         | Action.Hora _
+        | Action.Riichi _
         | Action.None _ -> Option.None
 
     /// 多家响应的裁决顺序：**打牌者的下家优先**，与「先被问到」无关。
@@ -780,6 +922,7 @@ module GameState =
                 | Action.Dahai _
                 | Action.Pon _
                 | Action.Chi _
+                | Action.Riichi _
                 | Action.None _ -> Option.None)
 
         let ordered =
@@ -821,6 +964,7 @@ module GameState =
                 Some(actor, Naki.chi target pai consumed, Chi(actor, target, pai, consumed))
             | Action.Dahai _
             | Action.Hora _
+            | Action.Riichi _
             | Action.None _ -> Option.None
 
         match built with
@@ -856,7 +1000,7 @@ module GameState =
                     }
 
             { called with
-                Phase = awaitDahai called.Ruleset (yakuContext called actor) actor Option.None forbidden players
+                Phase = awaitDahaiIn called actor Option.None forbidden
             },
             [ event ])
 
@@ -876,6 +1020,7 @@ module GameState =
                 | Action.Dahai _
                 | Action.Pon _
                 | Action.Chi _
+                | Action.Riichi _
                 | Action.None _ -> false)
 
         // 宣言了荣和以外的任何东西（「过」或鸣牌），都是把这张能荣和的牌放过了。
@@ -885,6 +1030,7 @@ module GameState =
             | Some(Action.Dahai _)
             | Some(Action.Pon _)
             | Some(Action.Chi _)
+            | Some(Action.Riichi _)
             | Some(Action.None _)
             | Option.None -> couldRon
 
@@ -905,10 +1051,17 @@ module GameState =
         if List.isEmpty remaining then
             match ronWinners answered waiting.Target declared with
             | [] ->
+                // 没人荣和：立直宣言牌就此落定（`reach_accepted` 排在鸣牌与下一条 `tsumo` 之前，
+                // 与真实牌谱同形）。宣言牌被碰时一发先亮后灭：`applyNaki` 里那一步把它打断。
+                let accepted, accepting = acceptRiichi answered
+
                 // 没人荣和才轮得到鸣牌（Ron > Pon / Kan > Chi）；也没人鸣就轮下家摸牌。
-                nakiWinner answered waiting.Target declared
-                |> Option.bind (applyNaki answered waiting.Target)
-                |> Option.defaultWith (fun () -> drawNext answered waiting.Target)
+                let advanced, events =
+                    nakiWinner accepted waiting.Target declared
+                    |> Option.bind (applyNaki accepted waiting.Target)
+                    |> Option.defaultWith (fun () -> drawNext accepted waiting.Target)
+
+                advanced, accepting @ events
             | wins -> applyHora answered waiting.Target wins
         else
             { answered with
@@ -936,7 +1089,31 @@ module GameState =
         else
             Some(NotInHand(actor, pai))
 
-    /// 摸牌后阶段的一步：打牌、自摸和；「过」在这里无从谈起。
+    /// 立直宣言：这一步只改状态与动作集（宣言牌还没打），产出 mjai 的 `reach`。
+    /// 阶段仍是同一家的摸牌后阶段，只是合法动作集收窄成「打完仍听牌的那几张」。
+    ///
+    /// **立直棒不在这时出**：要等宣言牌落定（`acceptRiichi`）。
+    /// 第一巡且此前无人鸣牌就是两立直，与天和 / 地和共用 `firstTurnFor` 那一条判据。
+    let private applyRiichi (state: GameState) (actor: Seat) : GameState * Event list =
+        let declaration =
+            if firstTurnFor actor state.Log then
+                RiichiDeclaration.DoubleRiichi
+            else
+                RiichiDeclaration.Riichi
+
+        let players =
+            updatePlayer actor (PlayerState.declareRiichi declaration) state.Players
+
+        let drawn = List.tryItem actor players |> Option.bind PlayerState.drawn
+
+        let declared = { state with Players = players }
+
+        { declared with
+            Phase = awaitDahaiIn declared actor drawn []
+        },
+        [ Event.Riichi actor ]
+
+    /// 摸牌后阶段的一步：打牌、自摸和、宣言立直；「过」在这里无从谈起。
     let private stepAwaitingDahai
         (state: GameState)
         (waiting: AwaitingDahai)
@@ -957,20 +1134,33 @@ module GameState =
                     match rejectDahai actor player pai tsumogiri with
                     | Some illegal -> Error illegal
                     | Option.None ->
-                        // 牌在手里、摸切标志也对，却不在合法动作集里：只可能是食替封住了它。
+                        // 牌在手里、摸切标志也对，却不在合法动作集里：不是食替封住了它，
+                        // 就是立直封住了它（只能摸切 / 宣言牌要保持听牌）。
                         if List.contains action waiting.Actions then
                             Ok(applyDahai state actor pai tsumogiri)
+                        elif RiichiState.isActive (PlayerState.riichi player) then
+                            Error(RiichiRestricted(actor, pai))
                         else
                             Error(Kuikae(actor, pai))
                 | Action.Hora(_, target, pai) ->
                     // 自摸和：来源是自己，和的是刚摸进的那张，且型成立、有役。
                     if target <> actor || PlayerState.drawn player <> Some pai then
                         Error(HoraTileMismatch(actor, target, pai))
+                    elif RiichiState.isDeclared (PlayerState.riichi player) then
+                        // 宣言了立直又回头自摸和：那一手只能打宣言牌（型成不成立都一样）。
+                        Error(RiichiRestricted(actor, pai))
                     else
                         match horaOf actor state with
                         | Error YakuError.NotAgari -> Error(IllegalAction.NotAgari(actor, pai))
                         | Error YakuError.NoYaku -> Error(IllegalAction.NoYaku(actor, pai))
                         | Ok _ -> Ok(applyHora state actor [ actor, pai ])
+                | Action.Riichi _ ->
+                    // 不在合法动作集里只能是宣言合法性不过（不门清 / 没听牌 / 点数不够 /
+                    // 牌山不够 / 已经立过直）。
+                    if List.contains action waiting.Actions then
+                        Ok(applyRiichi state actor)
+                    else
+                        Error(CannotRiichi actor)
                 // 摸牌后阶段没有「刚打出的那张」，鸣与「过」都无从谈起。
                 | Action.Pon _
                 | Action.Chi _
@@ -1000,6 +1190,7 @@ module GameState =
                      | Action.Dahai _
                      | Action.Pon _
                      | Action.Chi _
+                     | Action.Riichi _
                      | Action.Hora _ -> Some action)
             )
         else
@@ -1022,7 +1213,9 @@ module GameState =
                     | Ok _ -> Error(RonWhileFuriten(actor, pai))
             | Action.Pon(_, target, pai, consumed) -> rejectNaki NakiKind.Pon target pai consumed
             | Action.Chi(_, target, pai, consumed) -> rejectNaki NakiKind.Chi target pai consumed
+            // 打牌与立直宣言都不是响应：现在等的是别家对那张牌的答复。
             | Action.Dahai _
+            | Action.Riichi _
             | Action.None _ -> Error(NotYourTurn(actor, pendingSeats waiting))
 
     /// 引擎的唯一入口：给局面提交一个动作，得到新局面与本步产出的事件。
@@ -1080,5 +1273,7 @@ module IllegalAction =
         | CannotNaki(actor, kind, pai, consumed) ->
             let tiles = consumed |> List.map Tile.toDisplay |> String.concat ""
             $"座位 {actor} 用 {tiles} {NakiKind.toDisplay kind}不了 {Tile.toDisplay pai}"
+        | CannotRiichi actor -> $"座位 {actor} 此刻立直不了（不门清、没听牌、点数不够或牌山不够再摸一圈）"
+        | RiichiRestricted(actor, pai) -> $"座位 {actor} 立直中，这一手动不了 {Tile.toDisplay pai}"
         | NothingToRespond actor -> $"现在没有可响应的牌，座位 {actor} 无从响应起"
         | KyokuAlreadyEnded -> "这一局已经结束了，不再接受任何动作"

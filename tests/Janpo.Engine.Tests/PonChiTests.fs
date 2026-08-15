@@ -45,6 +45,7 @@ module PonChiTests =
             | Action.Hora _
             | Action.Pon _
             | Action.Chi _
+            | Action.Riichi _
             | Action.None _ -> None)
 
     let private handOf (seat: Seat) (state: GameState) : Tile list =

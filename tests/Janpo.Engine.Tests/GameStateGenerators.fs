@@ -185,6 +185,28 @@ module GameStateFixtures =
             | Chi _
             | Hora _
             | Ryuukyoku _
+            | Riichi _
+            | RiichiAccepted _
+            | EndKyoku
+            | EndGame -> false)
+        |> List.length
+
+    /// 这一局里成立的立直根数：`reach_accepted` 的条数。一根立直棒对应一条事件，
+    /// 真实牌谱重建点数用的也是这条式子（上一局点数 − 1000 × reach_accepted + Σdeltas）。
+    let acceptedRiichiCount (state: GameState) : int =
+        GameState.events state
+        |> List.filter (fun event ->
+            match event with
+            | RiichiAccepted _ -> true
+            | StartGame _
+            | StartKyoku _
+            | Tsumo _
+            | Dahai _
+            | Pon _
+            | Chi _
+            | Riichi _
+            | Hora _
+            | Ryuukyoku _
             | EndKyoku
             | EndGame -> false)
         |> List.length
@@ -219,6 +241,7 @@ module GameStateFixtures =
                     | Action.Hora _
                     | Action.Pon _
                     | Action.Chi _
+                    | Action.Riichi _
                     | Action.None _ -> None)
 
             let chosen =
@@ -242,6 +265,7 @@ module GameStateFixtures =
                     | Action.Dahai _
                     | Action.Pon _
                     | Action.Chi _
+                    | Action.Riichi _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -250,6 +274,7 @@ module GameStateFixtures =
                         | Action.Hora _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Riichi _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -258,6 +283,7 @@ module GameStateFixtures =
                         | Action.Dahai _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Riichi _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -278,6 +304,7 @@ module GameStateFixtures =
                     | Action.Hora _
                     | Action.Pon _
                     | Action.Chi _
+                    | Action.Riichi _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -286,6 +313,65 @@ module GameStateFixtures =
                         | Action.Dahai _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Hora _ -> false))
+                |> Option.defaultValue (List.head choice.Actions)
+
+            chosen, rng
+
+    /// 能立直就立直的选手：能和先和，否则能立直就宣言，接下来优先摸切（宣言牌只能从
+    /// 听牌形里挑，摸切不在其中时取第一条手切），响应一律「过」。
+    ///
+    /// 随机与听牌选手都从不宣言立直，而一发、立直棒与供托守恒这几条不变量非得有立直的轨迹不可。
+    let riichiSeeking: Player<Rng> =
+        fun rng _ choice ->
+            let pick (predicate: Action -> bool) =
+                choice.Actions |> List.tryFind predicate
+
+            let chosen =
+                pick (fun action ->
+                    match action with
+                    | Action.Hora _ -> true
+                    | Action.Dahai _
+                    | Action.Pon _
+                    | Action.Chi _
+                    | Action.Riichi _
+                    | Action.None _ -> false)
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Riichi _ -> true
+                        | Action.Dahai _
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai(_, _, tsumogiri) -> tsumogiri
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai _ -> true
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.None _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -305,6 +391,7 @@ module GameStateFixtures =
                     | Action.Chi _
                     | Action.Dahai _
                     | Action.Hora _
+                    | Action.Riichi _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -313,6 +400,7 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Dahai _
                         | Action.Hora _
+                        | Action.Riichi _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -321,6 +409,7 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Hora _
+                        | Action.Riichi _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -329,6 +418,7 @@ module GameStateFixtures =
                         | Action.Dahai _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Riichi _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -426,6 +516,8 @@ type GameStateArbitraries =
                         4, Gen.constant (GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed)
                         // 副露密集的一局：鸣牌的不变量（牌数守恒、手牌张数、河被鸣走的记号）靠它验。
                         4, Gen.constant (GameStateFixtures.trace GameStateFixtures.nakiSeeking seed)
+                        // 立直密集的一局：立直棒、供托守恒与「立直后只能摸切」靠它验。
+                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.riichiSeeking seed)
                         // 摊好的两局：一局自摸和收尾、一局荣和收尾。
                         1, Gen.constant (GameStateFixtures.horaTrace GameStateFixtures.tsumoHoraScript)
                         1, Gen.constant (GameStateFixtures.horaTrace GameStateFixtures.doubleRonScript)
@@ -473,6 +565,7 @@ type GameStateArbitraries =
                         Action.Chi(actor, target, pai, consumed)
             }
 
+        let riichi = seat |> Gen.map Action.Riichi
         let pass = seat |> Gen.map Action.None
 
-        Gen.oneof [ dahai; hora; naki; pass ] |> Arb.fromGen
+        Gen.oneof [ dahai; hora; naki; riichi; pass ] |> Arb.fromGen

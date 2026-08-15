@@ -32,6 +32,7 @@ module GameFixtures =
                     HoraPoints = 0
                     Deltas = scores |> List.map (fun _ -> 0)
                     Scores = scores
+                    UraDoraMarkers = []
                 }
             ]
 

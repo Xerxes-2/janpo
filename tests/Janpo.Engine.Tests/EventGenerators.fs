@@ -95,6 +95,7 @@ type EventArbitraries =
                             HoraPoints = 0
                             Deltas = deltas
                             Scores = scores
+                            UraDoraMarkers = []
                         }
             }
 

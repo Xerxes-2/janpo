@@ -70,12 +70,9 @@ module ScoreProperties =
 
     [<Property>]
     let ``任一步之后，四家点数与场上供托之和不变`` (state: GameState) =
-        // 供托在和了那一步被和了者收走，此后它不再「在场上」——两种写法加起来恒等于局初。
-        let onTable =
-            if List.isEmpty (GameState.horas state) then
-                context.Kyotaku * engine.RiichiBou
-            else
-                0
+        // 场上的供托是动的：立直成立时 +1（那家的点数同时 -1000），和了时归零
+        // （那几根进了和了者的 `Deltas`）。两边加起来恒等于局初。
+        let onTable = Ruleset.kyotakuScore engine (GameState.kyotaku state)
 
         List.sum (GameState.scores state) + onTable = List.sum context.Scores + context.Kyotaku * engine.RiichiBou
 
@@ -93,23 +90,33 @@ module ScoreProperties =
         let sticks = kyotaku * engine.RiichiBou
 
         [ tsumoHoraScript; ronFuritenScript; doubleRonScript; noYakuRonScript ]
-        |> List.collect (fun script -> startScriptedIn engine opening script |> traceFrom horaSeeking (Rng.ofSeed 1))
+        |> List.collect (fun script ->
+            [ horaSeeking; riichiSeeking ]
+            |> List.collect (fun player -> startScriptedIn engine opening script |> traceFrom player (Rng.ofSeed 1)))
         |> List.forall (fun state ->
-            let onTable = if List.isEmpty (GameState.horas state) then sticks else 0
+            let onTable = Ruleset.kyotakuScore engine (GameState.kyotaku state)
 
             List.sum (GameState.scores state) + onTable = List.sum opening.Scores + sticks)
 
     [<Property>]
     let ``和了事件里的点数与授受自洽`` (state: GameState) =
+        // 和了者收走的供托含**这一局里成立的立直**：每条 `reach_accepted` 就是一根立直棒
+        // （真实牌谱重建点数用的也是这条式子）。
+        let sticks = context.Kyotaku + acceptedRiichiCount state
+
         GameState.horas state
-        |> List.forall (fun hora ->
+        |> List.indexed
+        |> List.forall (fun (index, hora) ->
             let paid =
                 hora.Deltas
                 |> List.mapi (fun seat delta -> if seat = hora.Actor then 0 else -delta)
                 |> List.sum
 
+            // 供托只归排在最前的那一家（双响时靠后的那家一根也拿不到）。
+            let taken = if index = 0 then Ruleset.kyotakuScore engine sticks else 0
+
             // 收到的 = 付出去的 + 供托；和了点是其中不含本场与供托的那部分。
-            List.item hora.Actor hora.Deltas = paid + context.Kyotaku * engine.RiichiBou
+            List.item hora.Actor hora.Deltas = paid + taken
             && hora.HoraPoints <= paid
             && hora.Fu % 5 = 0
             && hora.Fan > 0)
