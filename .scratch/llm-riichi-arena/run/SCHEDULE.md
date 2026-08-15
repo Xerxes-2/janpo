@@ -38,9 +38,9 @@
 | 05 | dispatched | | ws-b（D-4，测试用不变量）|
 | 06 | **done** | pstowroz | 334 测试；Hora/Ron/「过」、Furiten 两态、多家裁决 |
 | 07 | **done** | zsxqxsly | 269→305 测试；Mentsu/Naki 表示 + 多分解取最高番；提案 07-A |
-| 08 | dispatched | | ws-a（D-4）|
+| 08 | **done** | lolyuwrx | 383 测试；Fu/Score + 接上无役不可和；修了 06 两个无役剧本 |
 | 09 | pending | | |
-| 10 | pending | | |
+| 10 | dispatched | | ws-a（D-5 换序）|
 | 11 | pending | | |
 | 12 | pending | | |
 | 13 | pending | | |
