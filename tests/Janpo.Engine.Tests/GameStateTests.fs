@@ -43,6 +43,8 @@ module GameStateTests =
     let private paiOf (action: Action) =
         match action with
         | Action.Dahai(_, pai, _) -> pai
+        | Action.Hora(_, _, pai) -> pai
+        | Action.None actor -> failwith $"座位 {actor} 的「过」没有牌"
 
     [<Fact>]
     let ``开局后只等 Oya 打牌`` () =
@@ -73,7 +75,9 @@ module GameStateTests =
             choice.Actions
             |> List.map (fun action ->
                 match action with
-                | Action.Dahai(_, _, tsumogiri) -> tsumogiri)
+                | Action.Dahai(_, _, tsumogiri) -> tsumogiri
+                | Action.Hora _
+                | Action.None _ -> failwith $"这一手不该有和了或「过」：{action}")
         )
 
     [<Fact>]

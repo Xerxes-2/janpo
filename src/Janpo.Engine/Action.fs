@@ -4,9 +4,9 @@ namespace Janpo
 /// 类型，允许 case 同名——未验证的意图不应当能被误当成事实写进 Paifu。
 /// case 名与字段贴 mjai 的动作消息，不自创。
 ///
-/// **这个 DU 会被后续的票反复加 case**：`Hora`（06）、`Reach`（09）、`Pon` / `Chi`（10）、
-/// `Ankan` / `Kakan` / `Daiminkan`（11）、`Ryuukyoku`（九种九牌，12），以及响应阶段的
-/// 「过」（mjai 的 `none`，06 起需要）。加一个 case 的代价固定为三处，漏掉哪处编译器都会
+/// **这个 DU 会被后续的票反复加 case**：`Reach`（09）、`Pon` / `Chi`（10）、
+/// `Ankan` / `Kakan` / `Daiminkan`（11）、`Ryuukyoku`（九种九牌，12）。
+/// 加一个 case 的代价固定为三处，漏掉哪处编译器都会
 /// 指出来（`--warnaserror` 下不完整 match 是错误）：
 ///
 /// 1. 这里加一个 case；
@@ -20,6 +20,15 @@ type Action =
     /// mjai `dahai`：打出一张。`tsumogiri` 为真表示打的就是刚摸进的那张（摸切）。
     /// 摸切与手切是两个不同的动作，即使打出去的牌一样——牌河的手切信息是公开信息。
     | Dahai of actor: Seat * pai: Tile * tsumogiri: bool
+    /// mjai `hora`：宣言和了。自摸和时 `target` 等于 `actor`、`pai` 是刚摸进的那张；
+    /// 荣和时 `target` 是打出这张的座位、`pai` 是刚打出的那张（mjai 的约定）。
+    | Hora of actor: Seat * target: Seat * pai: Tile
+    /// mjai `none`：响应阶段的「过」——他家打出的这张我不要。
+    ///
+    /// **响应阶段一定有它**：合法动作集里只要出现了 Ron（06）或 Pon / Chi / Kan（10 / 11），
+    /// 就必须同时有一条「过」，否则响应阶段停在那里没人推得走。mjai 的 `none` 消息没有
+    /// `actor` 字段（服务端知道在等谁），这里带上是因为引擎的每个动作都要能说出是谁提交的。
+    | None of actor: Seat
 
 /// 合法动作集（CONTEXT.md）：当前阶段某座位可提交的全部 Action。
 /// 真人 UI 的按钮与 LLM 的工具 schema 都由它驱动，两边都不自己判断合法性。
@@ -44,3 +53,5 @@ module Action =
     let actor (action: Action) : Seat =
         match action with
         | Action.Dahai(actor, _, _) -> actor
+        | Action.Hora(actor, _, _) -> actor
+        | Action.None actor -> actor

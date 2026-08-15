@@ -595,7 +595,7 @@ module YakuTests =
     [<Fact>]
     let ``不成和了型与无役是两回事`` () =
         let notAgari = ron [] "1m 3m 5m 7m 9m 1p 3p 5p 7p 9p 1s 3s 5s 7s" "7s"
-        Assert.Equal(Error NotAgari, Yaku.detect ruleset context notAgari)
+        Assert.Equal(Error YakuError.NotAgari, Yaku.detect ruleset context notAgari)
 
         let noYaku =
             ron [ AgariFixture.pon 1 "3z" "3z 3z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 5m 5m" "4m"

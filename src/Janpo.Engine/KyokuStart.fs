@@ -52,14 +52,19 @@ module KyokuStart =
 
     // ---- 构造 ----
 
-    /// 同一种子、同一规则集、同一条件必然开出同一局：牌山、配牌与事件流逐字节相同。
-    let create (ruleset: Ruleset) (context: KyokuContext) (rng: Rng) : Result<KyokuStart * Rng, KyokuStartError> =
+    /// 从一座**已经摊好的**牌山开局。`create` 洗完牌就调它，因此发牌手顺与开局事件只有这一份。
+    /// 库外拿不到（`internal`）：它是黄金用例摊牌山的入口（配 `Wall.ofOrdered`），
+    /// 生产代码只能经 `create` 用种子开局。
+    let internal createFrom
+        (ruleset: Ruleset)
+        (context: KyokuContext)
+        (wall: Wall)
+        : Result<KyokuStart, KyokuStartError> =
         if not (Seat.isValid ruleset context.Oya) then
             Error(OyaOutOfRange(context.Oya, ruleset.SeatCount))
         elif List.length context.Scores <> ruleset.SeatCount then
             Error(ScoreCountMismatch(ruleset.SeatCount, List.length context.Scores))
         else
-            let wall, advanced = Wall.build ruleset rng
             let required = Ruleset.haipaiTotal ruleset + 1
 
             match Wall.deal ruleset context.Oya wall with
@@ -90,15 +95,18 @@ module KyokuStart =
                             else
                                 hand)
 
-                    Ok(
+                    Ok
                         {
                             Events = [ startKyoku; Event.Tsumo(context.Oya, drawn) ]
                             Wall = afterTsumo
                             Hands = hands
                             Tsumo = drawn
-                        },
-                        advanced
-                    )
+                        }
+
+    /// 同一种子、同一规则集、同一条件必然开出同一局：牌山、配牌与事件流逐字节相同。
+    let create (ruleset: Ruleset) (context: KyokuContext) (rng: Rng) : Result<KyokuStart * Rng, KyokuStartError> =
+        let wall, advanced = Wall.build ruleset rng
+        createFrom ruleset context wall |> Result.map (fun started -> started, advanced)
 
 /// 开局条件的构造。
 [<RequireQualifiedAccess>]

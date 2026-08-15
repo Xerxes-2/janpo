@@ -32,24 +32,29 @@ module Wall =
             | [ dora; ura ] -> Some(dora, ura)
             | _ -> None)
 
+    /// 把一列已经排好序的牌摊成一座牌山：开头是可摸区（首元素就是下一张），
+    /// 末尾 `DeadWallSize` 张是王牌。张数与构成由调用方负责，这里不校验。
+    ///
+    /// 库外拿不到（`internal`）：它是测试用的牌山构造入口（黄金用例要「指定和了在指定
+    /// Junme 发生」），生产代码只能经 `build` 洗出牌山。
+    let internal ofOrdered (ruleset: Ruleset) (tiles: Tile list) : Wall =
+        let deadSize = tiles |> List.length |> min (max 0 ruleset.DeadWallSize)
+        let liveSize = List.length tiles - deadSize
+        let dead = List.skip liveSize tiles
+        let rinshanCount = min (max 0 ruleset.RinshanCount) deadSize
+
+        {
+            Live = List.truncate liveSize tiles
+            Rinshan = List.truncate rinshanCount dead
+            Indicators = dead |> List.skip rinshanCount |> pairUp
+            Revealed = 1
+        }
+
     /// 按规则集构成牌山、用发生器洗牌、留出王牌，并翻开第一张表宝牌指示牌。
     /// 张数一律取自规则集，这里没有 136 / 14 之类的字面量。
     let build (ruleset: Ruleset) (rng: Rng) : Wall * Rng =
         let shuffled, advanced = Rng.shuffle (Ruleset.wallTiles ruleset) rng
-        let deadSize = shuffled |> List.length |> min (max 0 ruleset.DeadWallSize)
-        let liveSize = List.length shuffled - deadSize
-        let dead = List.skip liveSize shuffled
-        let rinshanCount = min (max 0 ruleset.RinshanCount) deadSize
-
-        let wall =
-            {
-                Live = List.truncate liveSize shuffled
-                Rinshan = List.truncate rinshanCount dead
-                Indicators = dead |> List.skip rinshanCount |> pairUp
-                Revealed = 1
-            }
-
-        wall, advanced
+        ofOrdered ruleset shuffled, advanced
 
     // ---- 拆解 ----
 

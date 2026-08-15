@@ -21,6 +21,7 @@ module KyokuTests =
         | StartGame _
         | StartKyoku _
         | Dahai _
+        | Hora _
         | Ryuukyoku _ -> false
 
     let private isDahai (event: Event) =
@@ -29,6 +30,7 @@ module KyokuTests =
         | StartGame _
         | StartKyoku _
         | Tsumo _
+        | Hora _
         | Ryuukyoku _ -> false
 
     [<Fact>]

@@ -34,17 +34,21 @@ module GameStateProperties =
         && Tile.sort everything = Tile.sort (Ruleset.wallTiles ruleset)
 
     [<Property>]
-    let ``等着打牌的那家 14 张，其余各家 13 张`` (state: GameState) =
-        let awaiting =
+    let ``等着打牌的那家 14 张，自摸和了的那家 14 张，其余各家 13 张`` (state: GameState) =
+        let holdingFourteen =
             match GameState.phase state with
             | AwaitingDahai phase -> Some phase.Actor
+            // 荣和的那张留在放铳者的河里，和了的那家仍是 13 张（牌数守恒也靠这条）。
+            | Ended(KyokuEnd.Hora horas) ->
+                horas
+                |> List.tryPick (fun hora -> if hora.Actor = hora.Target then Some hora.Actor else None)
             | AwaitingResponse _
-            | Ended _ -> None
+            | Ended(KyokuEnd.Ryuukyoku _) -> None
 
         GameState.players state
         |> List.mapi (fun seat player ->
             let expected =
-                if Some seat = awaiting then
+                if Some seat = holdingFourteen then
                     ruleset.HaipaiSize + 1
                 else
                     ruleset.HaipaiSize
@@ -66,9 +70,50 @@ module GameStateProperties =
         |> List.forall (fun action ->
             match GameState.step state action with
             | Ok(next, events) ->
-                not (List.isEmpty events)
-                && GameState.events next = GameState.events state @ events
+                let movedOn =
+                    next <> state && GameState.events next = GameState.events state @ events
+
+                // 响应阶段的答复（宣言荣和或「过」）本身都不是既成事实：还有别家没答复时
+                // 一个事件都不产出，**收齐最后一份答复的那一步**才裁决、才产出事件。
+                let resolvesNow =
+                    match GameState.phase state with
+                    | AwaitingResponse phase -> List.length phase.Responses = 1
+                    | AwaitingDahai _
+                    | Ended _ -> true
+
+                movedOn && (not (List.isEmpty events)) = resolvesNow
             | Error _ -> false)
+
+    [<Property>]
+    let ``响应阶段等的每一家都不振听、和了型成立，且都能「过」`` (state: GameState) =
+        match GameState.phase state with
+        | AwaitingResponse phase ->
+            phase.Responses
+            |> List.forall (fun choice ->
+                let canRon =
+                    match GameState.player choice.Seat state with
+                    | Some player ->
+                        not (Furiten.blocksRon (PlayerState.furiten player))
+                        && PlayerState.isAgariWith kindSet phase.Pai player
+                    | None -> false
+
+                canRon
+                && choice.Seat <> phase.Target
+                && List.contains (Action.Hora(choice.Seat, phase.Target, phase.Pai)) choice.Actions
+                && List.contains (Action.None choice.Seat) choice.Actions)
+        | AwaitingDahai _
+        | Ended _ -> true
+
+    [<Property>]
+    let ``和了收尾时点数一张不动，符与番与和了点都记 0`` (state: GameState) =
+        GameState.horas state
+        |> List.forall (fun hora ->
+            hora.Fu = 0
+            && hora.Fan = 0
+            && hora.HoraPoints = 0
+            && hora.Deltas = List.replicate ruleset.SeatCount 0
+            && hora.Scores = GameState.scores state
+            && hora.Scores = context.Scores)
 
     [<Property>]
     let ``回放确定性：同一串动作重放出同一局面与同一事件流`` (seed: int) =

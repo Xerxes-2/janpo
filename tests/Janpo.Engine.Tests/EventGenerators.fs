@@ -60,6 +60,29 @@ type EventArbitraries =
                 return Dahai(actor, pai, tsumogiri)
             }
 
+        let hora =
+            gen {
+                let! actor = seat
+                let! target = seat
+                let! pai = tile
+                let! deltas = Gen.listOfLength 4 (Gen.choose (-12000, 12000))
+                let! scores = Gen.listOfLength 4 (Gen.choose (-30000, 80000))
+
+                return
+                    Hora
+                        {
+                            Actor = actor
+                            Target = target
+                            Pai = pai
+                            // 06 票记 0，08 票起才是真值——生成器不替它们设限。
+                            Fu = 0
+                            Fan = 0
+                            HoraPoints = 0
+                            Deltas = deltas
+                            Scores = scores
+                        }
+            }
+
         let ryuukyoku =
             gen {
                 let! reason = Gen.elements RyuukyokuReason.all
@@ -77,4 +100,5 @@ type EventArbitraries =
                         }
             }
 
-        Gen.oneof [ startGame; startKyoku; tsumo; dahai; ryuukyoku ] |> Arb.fromGen
+        Gen.oneof [ startGame; startKyoku; tsumo; dahai; hora; ryuukyoku ]
+        |> Arb.fromGen

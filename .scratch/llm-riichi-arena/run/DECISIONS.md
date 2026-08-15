@@ -464,3 +464,83 @@ SPEC 的规则开关只有「红宝牌有无、食断有无」，02 的决策也
 「`Ruleset.TileKinds` 是配置面，`TileKindSet` 是计算面」这一分工。二选一，别放着不管。
 
 这条是并行开发的可预期产物：无人值守下两个 agent 看不见对方，语义重复只能在集成时发现。
+
+---
+
+### 06 / 头跳裁决的是**实际宣言**，不是「谁有资格宣言」
+
+Ron 进入**每一个**够格座位（不振听 + 和了型成立）的合法动作集；`Atamahane` 在**收齐全部答复之后**
+才裁决，取打牌者下家优先的第一个**宣言者**。因此优先的那家见逃时，靠后的那家照样成立。
+否决：只把 Ron 放进头跳赢家的动作集（那会把「见逃」这条真实规则做没了——真实牌桌上四家同时宣言，
+头跳只在已宣言者之间裁决）。
+出处：gimite/mjai `lib/mjai/active_game.rb` 的 `process_hora(actions)` 同样是
+`actions.sort_by { distance(a.actor, a.target) }`，且遍历全部 hora 动作（双响 / 三响）。
+
+### 06 / 响应阶段逐家答复、收齐再裁决；「过」是一个动作，且不产出事件
+
+`AwaitingResponse` 多了两个字段：`Responses`（**还没答复**的座位，答一家少一项）与
+`Declared`（已宣言的动作，按答复顺序）。`Responses` 空了才裁决。`Kyoku.run` 因此不必改：
+它每次问第一个待答座位，答复累积在局面里。**先被问到不等于优先**。
+`Action.None`（mjai 的 `none`）不产出任何事件——mjai 的 wire 上没有 `none` 事件，它只是一次答复；
+收齐最后一份答复的那一步才由裁决产出事件（`hora` / `tsumo` / `ryukyoku`）。
+04 的属性「合法动作集里的每个动作都推得动局面」相应改成「局面必变 + 事件流按返回值增长 +
+**当且仅当这一步收齐了答复**才产出事件」——比原来强（原来只要求事件非空，没要求局面真的变）。
+
+### 06 / 振听：永久是**重算**的，同巡是**置位 / 摸牌解除**的
+
+`Furiten = { Permanent: bool; Doujun: bool }` 挂在 `PlayerState` 上。
+`Permanent` 在每次自家打牌后按「当前听牌 × 自己的河」**重算**（换听到不含自己打过的牌上就解除，
+这是通行规则）；`Doujun` 在见逃一次可以荣和的牌时置位，在自己下次摸牌时解除。
+两者都只挡荣和，从不挡自摸。否决：合成一个 bool（两条解除条件完全不同）。
+09 的立直振听（立直后见逃 = 闩死，不可被重算解除）由 09 自己决定是加一位还是让重算跳过立直座位——
+06 不替它预设。
+
+### 06 / 振听座位的 Ron 不进合法动作集，因此没有「振听」这个拒绝理由
+
+振听在 `responsesTo` 里就被滤掉（票的明文要求）。于是振听座位提交 Ron 得到的是 `NotYourTurn`
+（引擎确实不在等它答复），而不是一个专门的 `FuritenRon`。
+否决：加一个 `FuritenRon` 的 `IllegalAction`——它在 `step` 里永远不可达，是死代码。
+
+### 06 / 终局形态换成 `KyokuEnd` DU，连庄判定是它的一个函数
+
+`Phase.Ended of KyokuEnd`，`KyokuEnd = Hora of Hora list | Ryuukyoku of Ryuukyoku`（限定名）。
+`GameState.ryuukyoku` 语义不变（不是流局收尾就是 None），新增 `GameState.kyokuEnd` / `GameState.horas`。
+连庄判定落成 `KyokuEnd.isRenchan : Seat -> KyokuEnd -> bool`（Oya 和了 / 流局时 Oya 听牌），
+05 读这一个布尔值；Honba 递增、Kyotaku 结转、局数序列仍归 05。
+否决：`GameState.isRenchan`（要多传一个 Oya，且与 `kyokuEnd` 是两个入口）。
+
+### 06 / 荣和的那张牌留在放铳者的河里，不进和了者的手牌
+
+牌数守恒（04 的属性）要求每张牌只在一处。因此荣和后和了者仍是 13 张，自摸和了者是 14 张；
+04 的属性「等着打牌的那家 14 张」相应扩成「等着打牌的那家 + 自摸和了的那家 14 张」。
+mjai 的 `hora_tehais`（亮手，含和了牌）是渲染 / 牌谱字段，07 / 08 要时再加。
+
+### 06 / `hora` 事件带符 / 番 / 和了点三个字段，本票一律记 0
+
+wire 形态照 gimite/mjai 的 `hora`：`actor` / `target` / `pai` / `fu` / `fan` / `hora_points` /
+`deltas` / `scores`。**没有**带 `yakus`（07）、`uradora_markers`（09）、`hora_tehais`。
+本票 `Fu = Fan = HoraPoints = 0`、`Deltas` 全 0、`Scores` = 和了前的点数；本场与供托的计入同属 08。
+注：Mortal / libriichi 的 `hora` 事件更瘦（只有 actor / target / deltas / ura_markers），
+13 票对拍时比对的是「役种集合 / 符 / 点数」而不是事件逐字段相等，不受影响。
+
+### 06 / 黄金用例摊牌山：引擎给测试留两个 `internal` 构造器
+
+`Wall.ofOrdered : Ruleset -> Tile list -> Wall`（不洗牌，按给定顺序摆）与
+`GameState.startFrom : Ruleset -> KyokuContext -> Wall -> Result<GameState, KyokuStartError>`，
+都是 `internal`，经 fsproj 的 `InternalsVisibleTo` 给测试工程。测试固件按 `Wall.deal` 的
+4-4-4-1 手顺**反推**牌山，因此黄金用例走的仍是生产的发牌与开局路径。
+否决：公开一个 `GameState.ofHands`（生产 API 从此多一个只有测试用的入口）；
+碰运气找种子（构造不出「指定和了在指定 Junme 发生」）。
+
+### 06 / 三响：头跳关掉时三家都成立
+
+`ronWinners` 对宣言者数目不设上限，头跳关掉时几家宣言就成立几家（票的验收「关闭时双响/三响都成立」）。
+天凤把三家和了判成途中流局——那是 12 票的规则集字段（提案 S-A 已记），06 不提前替它决定。
+
+### 提案 06-A：把和了与振听的几个词补进 CONTEXT.md
+
+本票落地、术语表里没有的词：`Hora`（和了，术语表只有 Yaku / Fu，没有和了本身）、
+`Minogashi`（见逃，`PlayerState.minogashi`）、`Doujun`（同巡，术语表在 Furiten 与 Junme 条目里
+提过「同巡」但没给罗马字）、`KyokuEnd`（终局形态）、`Renchan`（连庄，术语表在 Oya 条目里
+提过中文「连庄」没给词）。另：振听「永久」那一位现在叫 `Furiten.Permanent`（英文），
+因为「永久振听」没有通行的罗马字短词——若术语表想统一，请一并裁。

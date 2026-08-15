@@ -697,7 +697,7 @@ module Yaku =
             let kindSet = TileKindSet.ofKinds ruleset.TileKinds
 
             if List.isEmpty (AgariShape.classify kindSet (AgariHand.toHandShape hand)) then
-                Error NotAgari
+                Error YakuError.NotAgari
             else
                 Error NoYaku
 
@@ -875,5 +875,5 @@ module YakuError =
     /// **渲染层的单向出口**：错误原因的中文说明，只供 CLI 与 UI 提示使用。
     let toDisplay (error: YakuError) : string =
         match error with
-        | NotAgari -> "牌型不成和了"
+        | YakuError.NotAgari -> "牌型不成和了"
         | NoYaku -> "无役，不能和"

@@ -25,6 +25,31 @@ type StartKyoku =
         Tehais: Tile list list
     }
 
+/// mjai `hora` 的载荷：一次和了公开的全部事实。
+///
+/// **06 票不算点数**：`Fu` / `Fan` / `HoraPoints` 一律记 0，`Deltas` 全 0，`Scores` 就是和了前的
+/// 各家点数——字段在这里立好，08 票把值填正确。役种（`yakus`）与里宝牌指示牌
+/// （`uradora_markers`）分别是 07 与 09 的事，那两票给这个记录加字段。
+type Hora =
+    {
+        /// 和了的座位。
+        Actor: Seat
+        /// 放铳的座位；自摸时等于 `Actor`（mjai 的约定）。
+        Target: Seat
+        /// 和了的那张牌：自摸是刚摸进那张，荣和是 `Target` 刚打出那张。
+        Pai: Tile
+        /// 符。06 记 0，08 填。
+        Fu: int
+        /// 番。06 记 0，07 判役、08 填。
+        Fan: int
+        /// 和了点（不含本场与供托）。06 记 0，08 填。
+        HoraPoints: int
+        /// 本次授受的点数增减，按座位升序，和为 0。06 全记 0。
+        Deltas: int list
+        /// 授受后的各家点数，按座位升序。06 就是和了前的点数。
+        Scores: int list
+    }
+
 /// 流局的形态，mjai `ryukyoku` 的 `reason` 字段。04 只做荒牌流局，12 票补齐其余五种
 /// （九种九牌、四风连打、四杠散了、四家立直、三家和了）与流し満貫。
 type RyuukyokuReason =
@@ -71,6 +96,8 @@ type Event =
     | Tsumo of actor: Seat * pai: Tile
     /// mjai `dahai`：某家打出一张。`tsumogiri` 为真表示打的就是刚摸进的那张（摸切）。
     | Dahai of actor: Seat * pai: Tile * tsumogiri: bool
+    /// mjai `hora`：某家和了。同巡双响时会有两条（头跳关掉时才可能出现）。
+    | Hora of hora: Hora
     /// mjai `ryukyoku`：一局在无人和了的情况下结束。
     ///
     /// F# 这侧的标识符按 CONTEXT.md 的术语表拼作 `Ryuukyoku`，wire 上仍是 mjai 的
@@ -146,6 +173,19 @@ module Event =
                         "pai", Tile.encoder pai
                         "tsumogiri", Encode.bool tsumogiri
                     ]
+            | Hora fields ->
+                mjaiEvent
+                    "hora"
+                    [
+                        "actor", Encode.int fields.Actor
+                        "target", Encode.int fields.Target
+                        "pai", Tile.encoder fields.Pai
+                        "fu", Encode.int fields.Fu
+                        "fan", Encode.int fields.Fan
+                        "hora_points", Encode.int fields.HoraPoints
+                        "deltas", fields.Deltas |> List.map Encode.int |> Encode.list
+                        "scores", fields.Scores |> List.map Encode.int |> Encode.list
+                    ]
             | Ryuukyoku fields ->
                 mjaiEvent
                     "ryukyoku"
@@ -170,6 +210,20 @@ module Event =
                     DoraMarker = get.Required.Field "dora_marker" Tile.decoder
                     Scores = get.Required.Field "scores" (Decode.list Decode.int)
                     Tehais = get.Required.Field "tehais" (Decode.list tilesDecoder)
+                })
+
+    let private horaDecoder: Decoder<Event> =
+        Decode.object (fun get ->
+            Hora
+                {
+                    Actor = get.Required.Field "actor" Decode.int
+                    Target = get.Required.Field "target" Decode.int
+                    Pai = get.Required.Field "pai" Tile.decoder
+                    Fu = get.Required.Field "fu" Decode.int
+                    Fan = get.Required.Field "fan" Decode.int
+                    HoraPoints = get.Required.Field "hora_points" Decode.int
+                    Deltas = get.Required.Field "deltas" (Decode.list Decode.int)
+                    Scores = get.Required.Field "scores" (Decode.list Decode.int)
                 })
 
     let private ryuukyokuDecoder: Decoder<Event> =
@@ -200,5 +254,6 @@ module Event =
                     (Decode.field "actor" Decode.int)
                     (Decode.field "pai" Tile.decoder)
                     (Decode.field "tsumogiri" Decode.bool)
+            | "hora" -> horaDecoder
             | "ryukyoku" -> ryuukyokuDecoder
             | other -> Decode.fail ("unknown mjai event type: " + other))

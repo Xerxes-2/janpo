@@ -4,12 +4,14 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Tsumo 后和了型成立时，Hora 进入合法动作集
-- [ ] 他家 Dahai 后和了型成立时，Ron 进入对应座位的合法动作集
-- [ ] Furiten 的永久与同巡两种分别维护；振听座位的 Ron 不出现在合法动作集
-- [ ] 同巡多家可 Ron 时按 Atamahane（默认开）只成立打牌者下家优先的一家；开关关闭时双响/三响都成立
-- [ ] 和了产出 Hora 事件并正确进局或连庄（Oya 和了连庄）
-- [ ] 事件结构已含点数字段，此票填 0
-- [ ] 黄金用例：构造牌山使指定和了在指定 Junme 发生；同巡双响的两种开关取值各一条
+- [x] Tsumo 后和了型成立时，Hora 进入合法动作集
+- [x] 他家 Dahai 后和了型成立时，Ron 进入对应座位的合法动作集
+- [x] Furiten 的永久与同巡两种分别维护；振听座位的 Ron 不出现在合法动作集
+- [x] 同巡多家可 Ron 时按 Atamahane（默认开）只成立打牌者下家优先的一家；开关关闭时双响/三响都成立
+- [x] 和了产出 Hora 事件并正确进局或连庄（Oya 和了连庄）
+- [x] 事件结构已含点数字段，此票填 0
+- [x] 黄金用例：构造牌山使指定和了在指定 Junme 发生；同巡双响的两种开关取值各一条
+
+实现报告：`.scratch/llm-riichi-arena/run/reports/06-hora-legality-furiten-atamahane.md`

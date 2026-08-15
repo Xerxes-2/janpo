@@ -35,10 +35,10 @@
 | 02 | **done** | wmnqytql | 10 条决策，提案 02-A + 3 条待裁 |
 | 03 | **done** | szxmlrtu | 对拍 100 万手差异 0，逼出 3 个真 bug；7 条决策 + 提案 03-A |
 | 04 | **done** | vzoymsox | 223 测试；GameState/step/LegalActions 立起，事件流可回放 |
-| 05 | pending | | |
-| 06 | dispatched | | ws-a（裁决 D-2 提前并行）|
+| 05 | dispatched | | ws-b（D-4，测试用不变量）|
+| 06 | **done** | pstowroz | 334 测试；Hora/Ron/「过」、Furiten 两态、多家裁决 |
 | 07 | **done** | zsxqxsly | 269→305 测试；Mentsu/Naki 表示 + 多分解取最高番；提案 07-A |
-| 08 | pending | | |
+| 08 | dispatched | | ws-a（D-4）|
 | 09 | pending | | |
 | 10 | pending | | |
 | 11 | pending | | |

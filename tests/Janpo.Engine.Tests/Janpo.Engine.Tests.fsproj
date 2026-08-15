@@ -44,6 +44,7 @@
     <Compile Include="GameStateGenerators.fs" />
     <Compile Include="GameStateTests.fs" />
     <Compile Include="GameStateProperties.fs" />
+    <Compile Include="HoraTests.fs" />
     <Compile Include="KyokuTests.fs" />
   </ItemGroup>
 

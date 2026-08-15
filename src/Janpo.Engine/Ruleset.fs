@@ -31,6 +31,10 @@ type Ruleset =
         /// 全听或全不听时不授受。它应当能被 `1 .. SeatCount - 1` 整除，否则授受不平：
         /// 3000 对四麣（1/2/3 家听）与三麣（1/2 家听）都成立，这也是 mjai 的算法。
         NotenBappu: int
+        /// Atamahane（头跳）：同巡多家荣和时只成立打牌者下家优先的那一家。
+        /// 关掉则双响 / 三响都成立。**默认开**（spec 的规则清单）——
+        /// 天凤与雀魂实际都是双响，默认值该不该翻是待人裁决的事（DECISIONS 提案 S-A）。
+        Atamahane: bool
     }
 
 /// 规则集的预设与推导量。
@@ -53,6 +57,7 @@ module Ruleset =
             RinshanCount = 4
             StartingScore = 25000
             NotenBappu = 3000
+            Atamahane = true
         }
 
     /// 关掉红宝牌（SPEC 的「红宝牌有无」开关）。开着的形态就是各预设本身。
@@ -60,6 +65,9 @@ module Ruleset =
 
     /// 关掉食断（SPEC 的「食断有无」开关）：副露后断幺九不成立。
     let withoutKuitan (ruleset: Ruleset) : Ruleset = { ruleset with Kuitan = false }
+
+    /// 关掉头跳：同巡多家荣和时双响 / 三响都成立。
+    let withoutAtamahane (ruleset: Ruleset) : Ruleset = { ruleset with Atamahane = false }
 
     // ---- 拆解 ----
 

@@ -109,7 +109,8 @@ let private runDeal (arguments: string list) : int =
             printEvents (startGame ruleset :: start.Events)
             0
 
-/// `janpo kyoku <种子> [--no-akadora]`：四个随机选手把一局打到终（04 票里必然是荒牌流局）。
+/// `janpo kyoku <种子> [--no-akadora]`：四个随机选手把一局打到终
+/// （随机选手几乎总是打成荒牌流局，和了也是一种终局形态）。
 /// 输出是每行一个 mjai JSON 事件，最后一行是结算后的点数。同一种子必然跑出同一局。
 let private runKyoku (arguments: string list) : int =
     match parseSeedArguments arguments with

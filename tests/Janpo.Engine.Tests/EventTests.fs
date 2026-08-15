@@ -66,6 +66,27 @@ module EventTests =
         )
 
     [<Fact>]
+    let ``hora 编码为 mjai 事件对象，符与番与和了点是独立字段`` () =
+        let event =
+            Hora
+                {
+                    Actor = 2
+                    Target = 0
+                    Pai = tile "4p"
+                    Fu = 0
+                    Fan = 0
+                    HoraPoints = 0
+                    Deltas = [ 0; 0; 0; 0 ]
+                    Scores = [ 25000; 25000; 25000; 25000 ]
+                }
+
+        let expected =
+            """{"type":"hora","actor":2,"target":0,"pai":"4p","fu":0,"fan":0,"hora_points":0,"""
+            + """"deltas":[0,0,0,0],"scores":[25000,25000,25000,25000]}"""
+
+        Assert.Equal(expected, encode event)
+
+    [<Fact>]
     let ``ryukyoku 编码为 mjai 事件对象，荒牌流局的 reason 写作 fanpai`` () =
         let event =
             Ryuukyoku

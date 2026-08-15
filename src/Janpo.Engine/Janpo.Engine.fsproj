@@ -26,6 +26,7 @@
     <Compile Include="Yaku.fs" />
     <Compile Include="Rng.fs" />
     <Compile Include="Wall.fs" />
+    <Compile Include="Furiten.fs" />
     <Compile Include="Event.fs" />
     <Compile Include="KyokuStart.fs" />
     <Compile Include="Action.fs" />
@@ -36,6 +37,12 @@
 
   <ItemGroup>
     <PackageReference Include="Thoth.Json.Core" />
+  </ItemGroup>
+
+  <!-- 黄金用例要「让指定的和了在指定 Junme 发生」，为此引擎给测试留了两个 internal 的
+       构造入口（`Wall.ofOrdered` / `GameState.startFrom`）。生产 API 不受影响。 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Janpo.Engine.Tests" />
   </ItemGroup>
 
 </Project>
