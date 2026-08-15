@@ -6,14 +6,14 @@ oracle 可直接用现成实现，不必自写；Python 生态里有现成的向
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Shanten 支持一般型、七对子、国士无双，取三者最小值
-- [ ] Ukeire 返回能让 Shanten 下降的牌种与各自剩余枚数（枚数基于可见信息）
-- [ ] 和了型判定覆盖一般型、七对子、国士（只判型，不含役与点数）
-- [ ] 含 Naki 组合的手牌 Shanten 正确
-- [ ] 与 oracle 实现随机对拍大批量手牌，Shanten 差异为 0；oracle 的获取与调用方式可从零复现
-- [ ] 属性：打 X 摸 X 后 Shanten 不变
-- [ ] 属性：任意单次摸打后 Shanten 变化幅度 ≤ 1
-- [ ] Tenpai 的数值约定（0 表示 Tenpai）在 CONTEXT.md 已定，实现与之一致
-- [ ] **合法牌种集合作为显式入参**（四麻传全 34 种），不要把「34 种全存在」写进算法内部假设。理由：三麻缺 2-8m，`1m3m` 这种嵌张永远补不上，向听在 corner case 下与四麻不同（见 `smly/RiichiEnv` issue #30）。本票只做四麻，但这个入参是唯一正确的接缝——内部仍可用 34 长计数数组跟速度
+- [x] Shanten 支持一般型、七对子、国士无双，取三者最小值
+- [x] Ukeire 返回能让 Shanten 下降的牌种与各自剩余枚数（枚数基于可见信息）
+- [x] 和了型判定覆盖一般型、七对子、国士（只判型，不含役与点数）
+- [x] 含 Naki 组合的手牌 Shanten 正确
+- [x] 与 oracle 实现随机对拍大批量手牌，Shanten 差异为 0；oracle 的获取与调用方式可从零复现
+- [x] 属性：打 X 摸 X 后 Shanten 不变
+- [x] 属性：任意单次摸打后 Shanten 变化幅度 ≤ 1
+- [x] Tenpai 的数值约定（0 表示 Tenpai）在 CONTEXT.md 已定，实现与之一致
+- [x] **合法牌种集合作为显式入参**（四麻传全 34 种），不要把「34 种全存在」写进算法内部假设。理由：三麻缺 2-8m，`1m3m` 这种嵌张永远补不上，向听在 corner case 下与四麻不同（见 `smly/RiichiEnv` issue #30）。本票只做四麻，但这个入参是唯一正确的接缝——内部仍可用 34 长计数数组跟速度

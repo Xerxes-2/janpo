@@ -155,6 +155,77 @@ GameState 单独记，不靠手牌顺序。
 
 01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
 `Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
+### 03 / 形态判定的输入类型叫 `HandShape`（暗牌 + 副露数）
+
+Shanten / Ukeire / 和了型共用一个输入：`HandShape`（34 长计数 + `nakiCount` 0-4，构造时验张数与
+「每种 ≤ 4」）。副露只贡献「已成面子数」，牌面不进形态判定（役与符是别的票）；杠也算一个面子。
+否决：直接传 `Tile list * int`（两个参数容易传反，且 12 张这种非法手牌会漏进算法）；叫它 `Hand`
+（CONTEXT.md 的 `Hand` 专指暗牌，不含副露，占了名字）。见末尾提案 03-A。
+
+### 03 / 合法牌种集合做成 `TileKindSet` 显式入参
+
+票要求「34 种全存在」不写死。落地为 `TileKindSet`（34 长存在标志），四麻传 `TileKindSet.fourPlayer`。
+它在三处真正生效：搭子补不补得上（`1m3m` 缺 2m 就不是搭子）、七对子要求牌种 ≥ 7、
+国士要求 13 种幺九牌齐全；另加「死张」判定（见下）也要读它。
+内部仍走 34 长数组，`TileKindSet.legalFlags` 是 `internal` 快路径。
+
+### 03 / `Shanten` 是私有 struct DU，-1 表示和了
+
+`[<Struct>] type Shanten = private Shanten of int`，配 `value` / `isTenpai` / `isAgari` / `agari` / `tenpai`。
+0 = Tenpai 由 CONTEXT.md 定死；-1 = 和了型是通行约定（与对拍用的 oracle 一致），CONTEXT.md 没写。
+否决：裸 `int`（下游极易写成 `shanten <= 0` 把和了当听牌）。
+
+### 03 / 「摸不到第 5 张」的两条修正
+
+纯组合的向听公式会把两类手牌算少一向听，两条都落进了实现（并被 oracle 对拍与具名用例锁住）：
+1. **孤张全是「四张全在手里」的牌种且无雀头** → +1。例：4 面子 + 第 4 张 6s 单骑，第 5 张 6s 不存在，
+   要先打掉它才谈得上听牌，是一向听不是听牌。
+2. **死张下界**：手里握满 4 张、且在该规则集下进不了顺子的牌种（四麻即字牌），每种至少吃掉一次替换；
+   3n+2 的手牌本来就要打一张，白送一次。
+两条都不是「实现细节」而是向听数的定义问题（「还需几次替换才能听牌」），oracle 同样这么算。
+另外，「对子搭子」要求该牌种手里不足 4 张——4 张全在手里就永远变不成刻子。
+
+### 03 / Ukeire 保留剩余 0 枚的牌种
+
+`Ukeire.Tiles` 列出**形态上**能让向听下降的全部牌种，含已经全部可见（剩余 0 枚）的；
+另给 `Ukeire.live` 过滤、`Ukeire.total` 求和。
+否决：直接滤掉 0 枚（形态信息丢了，Assisted 档想说「你听的牌已经绝张」就说不出口）。
+`visible` 参数是**手牌之外**的可见牌（牌河、副露、宝牌指示牌），手牌自己的张数由 `HandShape` 扣。
+
+### 03 / 一般型的 case 名叫 `Standard`
+
+`AgariShape = Standard | Chiitoitsu | Kokushi`。七对子与国士有罗马字原词，「一般型 / 四面子一雀头」
+没有通行的罗马字短词（`Mentsute` / `Futsuu` 都不通用），取英文 `Standard`。
+`classify` 返回**一组**型而不是一个：二盃口的手同时是一般型与七对子，07 票判役要用得上这个区分。
+
+### 03 / oracle 对拍：固件提交进仓库，大批量对拍走脚本
+
+oracle 是 PyPI 的 `mahjong==2.0.0`，`uv run scripts/oracle/shanten_oracle.py` 从零可复现。
+`dotnet test` 读的是提交进仓库的 `tests/Janpo.Engine.Tests/fixtures/shanten-oracle.tsv`（4000 手，
+`refresh-fixture.sh` 生成），所以 CI 不需要 Python，引擎依赖白名单也不受影响；
+十万量级的现跑对拍走 `scripts/oracle/differential.sh`（经 `janpo shanten --batch` 管道）。
+否决：测试里直接 shell 出去调 Python（`dotnet test` 从此要联网 + 装包，CI 不可重现）。
+
+## 提案（需人裁决，勿自行落地）
+
+<!-- 涉及 CONTEXT.md / ADR 变更的提案写在这里 -->
+
+### 提案 01-A：把牌相关的几个罗马字词补进 CONTEXT.md
+
+01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
+`Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
+`deaka`（去红）、`kindIndex`（0-33 的牌种索引）。建议在「牌与手牌」一节补齐，
+否则后续票各写各的（`Honor` / `Red` / `tileId`）就会散掉。
+
+### 提案 01-B：渲染出口的统一命名 `toDisplay`
+## 提案（需人裁决，勿自行落地）
+
+<!-- 涉及 CONTEXT.md / ADR 变更的提案写在这里 -->
+
+### 提案 01-A：把牌相关的几个罗马字词补进 CONTEXT.md
+
+01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
+`Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
 `deaka`（去红）、`kindIndex`（0-33 的牌种索引）。建议在「牌与手牌」一节补齐，
 否则后续票各写各的（`Honor` / `Red` / `tileId`）就会散掉。
 
@@ -205,11 +276,3 @@ ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下�
 会把所有 match 点找出来，那是优点，提前抽象反而是投机性泛化。
 
 若早上决定把三麻纳入范围，CONTEXT.md 的 `Seat`（现定义为固定索引 0-3）需要改。
-
-### 提案 02-A：把开局这几个词补进 CONTEXT.md
-
-02 票落地时用到、术语表里没有的词：`Ruleset`（规则集，提案 S-A 已在提它）、
-`Wall`（牌山）与 `DeadWall`（王牌）、`Rinshan`（岭上牌）、`Haipai`（配牌）、
-`Kaze`（风，含 `Ton`/`Nan`/`Shaa`/`Pei`）、`DoraIndicator`（宝牌指示牌，术语表现在只有 Dora）、
-`Seed`/`Rng`（种子化发生器）。建议在「牌与手牌」与「引擎接缝」两节补齐。
-另：CONTEXT.md 的 Seat 条目写死「0-3」，若将来纳入三麻需要改成「0 起的固定索引，上界由规则集给」。

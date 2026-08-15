@@ -14,6 +14,13 @@
     <Compile Include="TileNotationTests.fs" />
     <Compile Include="TileProperties.fs" />
     <Compile Include="TileJsonTests.fs" />
+    <Compile Include="HandShapeGenerators.fs" />
+    <Compile Include="HandShapeTests.fs" />
+    <Compile Include="ShantenTests.fs" />
+    <Compile Include="ShantenProperties.fs" />
+    <Compile Include="AgariShapeTests.fs" />
+    <Compile Include="UkeireTests.fs" />
+    <Compile Include="ShantenOracleTests.fs" />
     <Compile Include="KazeTests.fs" />
     <Compile Include="RulesetTests.fs" />
     <Compile Include="SeatTests.fs" />
@@ -28,6 +35,11 @@
     <Compile Include="KyokuStartGenerators.fs" />
     <Compile Include="KyokuStartTests.fs" />
     <Compile Include="KyokuStartProperties.fs" />
+  </ItemGroup>
+
+  <!-- oracle 对拍固件：由 scripts/oracle/refresh-fixture.sh 生成，让 dotnet test 能离线对拍。 -->
+  <ItemGroup>
+    <Content Include="fixtures/shanten-oracle.tsv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

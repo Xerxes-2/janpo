@@ -10,6 +10,11 @@
 
   <ItemGroup>
     <Compile Include="Tile.fs" />
+    <Compile Include="TileKindSet.fs" />
+    <Compile Include="HandShape.fs" />
+    <Compile Include="Shanten.fs" />
+    <Compile Include="AgariShape.fs" />
+    <Compile Include="Ukeire.fs" />
     <Compile Include="Kaze.fs" />
     <Compile Include="Ruleset.fs" />
     <Compile Include="Seat.fs" />
