@@ -1,0 +1,29 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- 所有 NuGet 版本集中在这里。新增依赖时：先在这里加 PackageVersion，
+       再在工程里加不带 Version 的 PackageReference。 -->
+  <ItemGroup>
+    <PackageVersion Include="FSharp.Core" Version="10.1.303" />
+  </ItemGroup>
+
+  <!-- 引擎侧（必须 Fable 兼容） -->
+  <ItemGroup>
+    <PackageVersion Include="Thoth.Json.Core" Version="0.9.1" />
+  </ItemGroup>
+
+  <!-- dotnet 侧运行时后端与测试工具（不进引擎工程） -->
+  <ItemGroup>
+    <PackageVersion Include="Thoth.Json.Newtonsoft" Version="0.4.0" />
+    <PackageVersion Include="FsCheck" Version="3.3.4" />
+    <PackageVersion Include="FsCheck.Xunit" Version="3.3.4" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>

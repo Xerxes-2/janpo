@@ -1,0 +1,23 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,nix,md,slnx,fsproj,props,targets}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# Fantomas —— F# 格式规则的唯一权威。CI 跑 `dotnet fantomas --check .`。
+[*.{fs,fsi,fsx}]
+indent_size = 4
+max_line_length = 120
+fsharp_bar_before_discriminated_union_declaration = true
+fsharp_multiline_bracket_style = aligned
+fsharp_keep_max_number_of_blank_lines = 2

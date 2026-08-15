@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Janpo.Cli/Janpo.Cli.fsproj" />
+    <Project Path="src/Janpo.Engine/Janpo.Engine.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Janpo.Engine.Tests/Janpo.Engine.Tests.fsproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 规则引擎。M1 要经 Fable 编译进浏览器，因此**只允许** Fable 兼容的
+       F# 子集与核心库：不用反射、不用 System.Text.Json、不用 printf 以外的
+       格式化技巧、不引入任何 dotnet-only 的 NuGet 包。JSON 一律走 Thoth.Json.Core。 -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Tile.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Thoth.Json.Core" />
+  </ItemGroup>
+
+</Project>

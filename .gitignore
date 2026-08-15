@@ -1,0 +1,21 @@
+# dotnet
+bin/
+obj/
+*.user
+.dotnet-tools/
+TestResults/
+artifacts/
+
+# nix
+result
+result-*
+
+# Fable（M1 起）
+.fable/
+fable_modules/
+node_modules/
+
+# 编辑器
+.vscode/
+.idea/
+.ionide/

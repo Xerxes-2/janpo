@@ -1,0 +1,20 @@
+name: CI
+
+# 仓库目前没有远端，这份 workflow 是与本地同一条关卡的声明：
+# CI 与本地跑的都是 `scripts/ci.sh`，唯一区别是 CI 把它放进 nix dev shell 里跑，
+# 工具版本因此以 flake.lock 为准，而不是跑批机器上装了什么。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: fantomas --check、构建三个工程、跑测试
+        run: nix develop --command ./scripts/ci.sh

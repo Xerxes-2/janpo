@@ -6,14 +6,25 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Tile 覆盖 34 种正牌与 3 种红宝牌（`5mr` / `5pr` / `5sr`），记法为 ADR-0001 规定的 mjai 记法
-- [ ] 解析非法记法返回错误值，不抛异常
-- [ ] FsCheck 属性：任意 Tile 打印后再解析得回自身（往返不变）
-- [ ] FsCheck 属性：任意合法记法字符串解析再打印得回规范形（幂等）
-- [ ] CLI 能接收一串手牌记法，打印规范形与牌数
-- [ ] 仓库提供 nix dev shell，`nix develop` 后 dotnet 与 uv 可用；版本以 flake 为准而非依赖宿主机
-- [ ] Fantomas 以 dotnet local tool 引入（`dotnet tool restore` 即可用），仓库带 `.editorconfig` 定义 F# 格式规则
-- [ ] CI 在同一个 dev shell 里跑 `fantomas --check`、构建三个工程、跑测试；引擎工程不引入 Fable 不兼容的依赖
-- [ ] 标识符遵循 CONTEXT.md 与 ADR-0001 的罗马字约定；人类可读形式（「东」「白」）只出现在渲染函数里，不进入 Tile 本身
+- [x] Tile 覆盖 34 种正牌与 3 种红宝牌（`5mr` / `5pr` / `5sr`），记法为 ADR-0001 规定的 mjai 记法
+- [x] 解析非法记法返回错误值，不抛异常
+- [x] FsCheck 属性：任意 Tile 打印后再解析得回自身（往返不变）
+- [x] FsCheck 属性：任意合法记法字符串解析再打印得回规范形（幂等）
+- [x] CLI 能接收一串手牌记法，打印规范形与牌数
+- [x] 仓库提供 nix dev shell，`nix develop` 后 dotnet 与 uv 可用；版本以 flake 为准而非依赖宿主机
+- [x] Fantomas 以 dotnet local tool 引入（`dotnet tool restore` 即可用），仓库带 `.editorconfig` 定义 F# 格式规则
+- [x] CI 在同一个 dev shell 里跑 `fantomas --check`、构建三个工程、跑测试；引擎工程不引入 Fable 不兼容的依赖
+- [x] 标识符遵循 CONTEXT.md 与 ADR-0001 的罗马字约定；人类可读形式（「东」「白」）只出现在渲染函数里，不进入 Tile 本身
+
+## Comments
+
+**夜间跑批 agent（2026-08-16）**：已实现并验证，完整报告在
+`.scratch/llm-riichi-arena/run/reports/01-tile-mjai-notation.md`，自主决策在 `run/DECISIONS.md`。
+
+验证方式：`nix develop --command ./scripts/ci.sh` 全绿（dotnet 10.0.302 / uv 0.12.1 均来自 flake，
+26 个测试通过，fantomas --check 干净）。留给人的待审项：
+
+- 仓库无远端，`.github/workflows/ci.yml` 只能写好但没在 GitHub 上真跑过；关卡本身已在本地 dev shell 验过。
+- DECISIONS.md 里两条提案（补术语表、`toDisplay` 写进 ADR-0001）待裁决。

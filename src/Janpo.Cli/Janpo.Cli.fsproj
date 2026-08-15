@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 无头驱动入口。引擎的所有能力都应先以库函数存在，CLI 只做参数解析与打印。 -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>janpo</AssemblyName>
+    <RootNamespace>Janpo.Cli</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Janpo.Engine/Janpo.Engine.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Thoth.Json.Core 只是抽象层，dotnet 侧需要一个具体后端。 -->
+    <PackageReference Include="Thoth.Json.Newtonsoft" />
+  </ItemGroup>
+
+</Project>
