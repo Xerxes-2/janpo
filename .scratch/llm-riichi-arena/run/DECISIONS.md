@@ -287,3 +287,21 @@ ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下�
 已在派工时要求 04 用 `TileKindSet.ofTiles ruleset.TileKinds` 派生，**不许造第三份**。
 
 早上可考虑：让 `Ruleset` 直接携带 `TileKindSet`（编译顺序已经为此留好——03 的模块排在 `Ruleset.fs` 之前）。
+
+### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
+
+02 与 03 并行开发，各自独立造了「这个规则集里存在哪些牌种」的表示：
+
+- 02：`Ruleset.TileKinds : Tile list`（记录字段）
+- 03：`TileKindSet`（私有类型，内部 34 长存在标志数组，`internal` 快路径；`ofTiles` / `fourPlayer`）
+
+编译器不会抗议，两者也不冲突——但它们是同一个领域概念。集成时**没有合并**，因为
+重新设计不是集成该做的事，且 04/07 票正在并行开发，接口不能变。
+
+已给 04 票的指令：用 `TileKindSet.ofTiles ruleset.TileKinds` 派生，**不许造第三份**。
+
+**提案**：把 `Ruleset` 的字段直接改成 `TileKindSet`（编译顺序已在集成时安排好——
+`TileKindSet.fs` 排在 `Ruleset.fs` 之前，正是为这个可能性留的），或明确记录
+「`Ruleset.TileKinds` 是配置面，`TileKindSet` 是计算面」这一分工。二选一，别放着不管。
+
+这条是并行开发的可预期产物：无人值守下两个 agent 看不见对方，语义重复只能在集成时发现。
