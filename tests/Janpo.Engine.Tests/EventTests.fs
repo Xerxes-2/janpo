@@ -104,6 +104,14 @@ module EventTests =
         Assert.Equal(expected, encode event)
 
     [<Fact>]
+    let ``end_kyoku 与 end_game 编码为只带 type 的 mjai 事件对象`` () =
+        Assert.Equal("""{"type":"end_kyoku"}""", encode EndKyoku)
+        Assert.Equal("""{"type":"end_game"}""", encode EndGame)
+
+        Assert.Equal<Result<Event, string>>(Ok EndKyoku, decode """{"type":"end_kyoku"}""")
+        Assert.Equal<Result<Event, string>>(Ok EndGame, decode """{"type":"end_game"}""")
+
+    [<Fact>]
     let ``不认识的流局形态解码为错误值`` () =
         let json =
             """{"type":"ryukyoku","reason":"nagashimangan","tenpais":[true,true,true,true],"""

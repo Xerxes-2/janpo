@@ -14,6 +14,9 @@ let private usage =
                                  用给定种子开一局，每行打印一个 mjai JSON 事件
   janpo kyoku <种子> [--no-akadora]
                                  用给定种子让四个随机选手打完一局，打印完整事件流与结算后点数
+  janpo game <种子> [--no-akadora] [--hanchan]
+                                 用给定种子让四个随机选手打完一整场（默认东风战），
+                                 打印完整事件流、终局点数与顺位
   janpo shanten [--naki N] <记法>...  打印向听数、和了型与有效牌（四麻全 34 牌种）
   janpo shanten --batch               从 stdin 逐行读「<副露数> <记法>...」，每行打印一个向听数
   janpo yaku --win <记法> [选项] <暗牌记法>...
@@ -46,6 +49,8 @@ yaku 的选项:
   janpo deal 42
   janpo deal 42 --no-akadora
   janpo kyoku 42
+  janpo game 42
+  janpo game 42 --hanchan
   janpo shanten "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
   janpo shanten --naki 1 "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p"
   echo "0 1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z" | janpo shanten --batch
@@ -137,6 +142,52 @@ let private runKyoku (arguments: string list) : int =
         | Ok(state, _) ->
             printEvents (startGame ruleset :: GameState.events state)
             printfn "scores: %s" (GameState.scores state |> List.map string |> String.concat " ")
+            0
+
+/// `<种子> [--no-akadora] [--hanchan]`：game 的参数形态，比 deal / kyoku 多一个对局长度。
+let private parseGameArguments (arguments: string list) : Result<int option * bool * GameLength, string> =
+    let rec parse (seed: int option) (akadora: bool) (length: GameLength) (rest: string list) =
+        match rest with
+        | [] -> Ok(seed, akadora, length)
+        | "--no-akadora" :: tail -> parse seed false length tail
+        | "--hanchan" :: tail -> parse seed akadora Hanchan tail
+        | "--tonpuusen" :: tail -> parse seed akadora Tonpuusen tail
+        | token :: tail ->
+            match System.Int32.TryParse token, seed with
+            | (true, value), None -> parse (Some value) akadora length tail
+            | _ -> Error token
+
+    parse None true Ruleset.yonma.Length arguments
+
+/// `janpo game <种子> [--no-akadora] [--hanchan]`：四个随机选手把一整场对局打到终局精算。
+/// 输出是每行一个 mjai JSON 事件（每局之间有 `end_kyoku`，最后是 `end_game`），
+/// 随后是终局点数与顺位。同一种子必然跑出同一场对局——**14 票的 soak 从这里进**。
+let private runGame (arguments: string list) : int =
+    match parseGameArguments arguments with
+    | Error token ->
+        eprintfn "game 只认一个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen，不认「%s」" token
+        2
+    | Ok(None, _, _) ->
+        eprintfn "game 需要一个整数种子，例如: janpo game 42"
+        2
+    | Ok(Some seed, akadora, length) ->
+        let ruleset = rulesetOf akadora |> Ruleset.withLength length
+
+        match Game.runRandom ruleset (Rng.ofSeed seed) with
+        | Error error ->
+            eprintfn "%s" (KyokuError.toDisplay error)
+            1
+        | Ok(game, _) ->
+            printEvents (startGame ruleset :: Game.events game)
+            printfn "kyokus: %d" (Game.played game |> List.length)
+            printfn "scores: %s" (Game.scores game |> List.map string |> String.concat " ")
+
+            match Game.result game with
+            | Some result ->
+                printfn "juni: %s" (result.Juni |> List.map string |> String.concat " ")
+                printfn "display: %s（%s）" (GameResult.toDisplay result) (GameLength.toDisplay length)
+            | None -> ()
+
             0
 
 /// 四麻：全 34 牌种。三麻的牌种集合是另一张票的事，这里只把接缝留出来。
@@ -434,6 +485,7 @@ let main argv =
     | "tile" :: arguments -> runTile arguments
     | "deal" :: arguments -> runDeal arguments
     | "kyoku" :: arguments -> runKyoku arguments
+    | "game" :: arguments -> runGame arguments
     | [ "shanten"; "--batch" ] -> runShantenBatch ()
     | "shanten" :: "--naki" :: naki :: arguments ->
         match System.Int32.TryParse naki with

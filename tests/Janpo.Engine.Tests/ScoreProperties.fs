@@ -18,7 +18,7 @@ module ScoreProperties =
     let ``一次授受的增减之和恒等于收走的供托`` (HoraCase(transfer, value)) =
         let score = Score.hora engine transfer value
 
-        List.sum score.Deltas = transfer.Kyotaku * engine.RiichiStick
+        List.sum score.Deltas = transfer.Kyotaku * engine.RiichiBou
 
     [<Property>]
     let ``和了者收、付家付，旁人分文不动`` (HoraCase(transfer, value)) =
@@ -73,11 +73,11 @@ module ScoreProperties =
         // 供托在和了那一步被和了者收走，此后它不再「在场上」——两种写法加起来恒等于局初。
         let onTable =
             if List.isEmpty (GameState.horas state) then
-                context.Kyotaku * engine.RiichiStick
+                context.Kyotaku * engine.RiichiBou
             else
                 0
 
-        List.sum (GameState.scores state) + onTable = List.sum context.Scores + context.Kyotaku * engine.RiichiStick
+        List.sum (GameState.scores state) + onTable = List.sum context.Scores + context.Kyotaku * engine.RiichiBou
 
     [<Property>]
     let ``带本场与供托开局时，一整局的每一步都守恒`` (honba: int) (kyotaku: int) =
@@ -90,7 +90,7 @@ module ScoreProperties =
                 Kyotaku = kyotaku
             }
 
-        let sticks = kyotaku * engine.RiichiStick
+        let sticks = kyotaku * engine.RiichiBou
 
         [ tsumoHoraScript; ronFuritenScript; doubleRonScript; noYakuRonScript ]
         |> List.collect (fun script -> startScriptedIn engine opening script |> traceFrom horaSeeking (Rng.ofSeed 1))
@@ -109,7 +109,7 @@ module ScoreProperties =
                 |> List.sum
 
             // 收到的 = 付出去的 + 供托；和了点是其中不含本场与供托的那部分。
-            List.item hora.Actor hora.Deltas = paid + context.Kyotaku * engine.RiichiStick
+            List.item hora.Actor hora.Deltas = paid + context.Kyotaku * engine.RiichiBou
             && hora.HoraPoints <= paid
             && hora.Fu % 5 = 0
             && hora.Fan > 0)

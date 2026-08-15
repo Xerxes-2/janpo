@@ -51,6 +51,9 @@
     <Compile Include="HoraTests.fs" />
     <Compile Include="ScoreProperties.fs" />
     <Compile Include="KyokuTests.fs" />
+    <Compile Include="GameGenerators.fs" />
+    <Compile Include="GameTests.fs" />
+    <Compile Include="GameProperties.fs" />
   </ItemGroup>
 
   <!-- oracle 对拍固件：由 scripts/oracle/refresh-fixture.sh 生成，让 dotnet test 能离线对拍。 -->

@@ -116,7 +116,7 @@ module GameStateProperties =
         match GameState.horas state with
         | [] -> true
         | horas ->
-            let kyotaku = context.Kyotaku * ruleset.RiichiStick
+            let kyotaku = context.Kyotaku * ruleset.RiichiBou
 
             // 一次和了的增减之和 = 它收走的供托；全部和了加起来正好把供托收干净。
             (horas |> List.sumBy (fun hora -> List.sum hora.Deltas)) = kyotaku

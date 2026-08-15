@@ -193,7 +193,7 @@ module Score =
 
         let horaPoints = payers |> List.sumBy payment
         let received = horaPoints + honba * List.length payers
-        let kyotaku = max 0 ruleset.RiichiStick * max 0 transfer.Kyotaku
+        let kyotaku = max 0 ruleset.RiichiBou * max 0 transfer.Kyotaku
 
         let deltas =
             seats

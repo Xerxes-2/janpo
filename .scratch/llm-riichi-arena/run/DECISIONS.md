@@ -649,3 +649,82 @@ mjai 的 `fan` 是个 int，役满没有番。记 13（数え役满同值，点�
 另外两个**英汉混拼**的字段名请一并裁：`DoubleKazeJantouFu`（连风牌雀头符）与
 `RiichiStick`（立直棒点数）。「連風牌」没有通行且无歧义的罗马字短词，
 「立直棒」的罗马字 `RiichiBou` 又不像这仓库里别的名字。
+
+### 05 / 一整场对局是 `GameState` **之上**的一层：`Game`
+
+`Game = private { Ruleset; Played: GameState list; Progress: GameProgress }`，
+`GameProgress = NextKyoku of KyokuContext | Ended of GameResult`（限定名，`Phase` 里已有一个 `Ended`）。
+`GameState` 一字未改语义，仍然只管一局。
+否决：让 `GameState` 跨局（会毁掉「一局」这条清晰的边界，票明文禁止）；
+在驱动里就地推进而不立类型（那样 M1 的 Host UI 与 14 的 soak 各要自己拼一份局与局之间的规则）。
+
+### 05 / 「一局的结局 → 下一局的场况」做成纯函数 `Game.after`
+
+`Game.after : Ruleset -> KyokuContext -> KyokuEnd -> int list -> GameProgress`，
+`Game.advance : GameState -> Game -> Game` 只是它加一次记账。
+理由：推进规则（连庄 / Honba / Kyotaku / 局数序列 / 终局）的黄金用例可以拿**合成的** `KyokuEnd`
+直接验，不必去碰运气找「亲刚好听牌的种子」。`scores` 显式传（取 `GameState.scores`，
+不取 `Hora.Scores`）：局面才是点数的权威，事件字段的填法归 08。
+
+### 05 / 连庄判定不重写，收敛在 06 的 `KyokuEnd.isRenchan`（备注 N-2）
+
+本层从头到尾没碰 `Ryuukyoku.Tenpais`，也没再比一次 Hora 的 `Actor` 与 Oya。
+判定留在 `GameState.fs`（它只需要「结局 + 亲」，是 `KyokuEnd` 的拆解）；
+消费它的规则（Honba/Kyotaku/序列/精算，都要 `Ruleset` 与跨局上下文）落在 `Game`。
+否决：把 `isRenchan` 搬进 `Game`（会让 06 的 `HoraTests` 反过来依赖 05 的文件）。
+
+### 05 / Honba：连庄 +1、流局 +1、**只有「和了进局」才归零**
+
+东1局0本场荒牌流局且亲不听 ⇒ 东2局**1**本场，这是通行规则；票里「进局且非连庄时归零」
+按此读作「Ko 和了才归零」。否决：流局进局也归零（与通行规则不符，13 票对拍必红）。
+
+### 05 / Kyotaku：流局原样结转、和了清零；**把点数加给和了者是 08**
+
+本层只管「场上还剩几根」。08 的授受把 `Kyotaku × RiichiBou` 计入和了者的 `Deltas`，
+两边合起来总点数才守恒。M0 里 09 未落地、供托恒为 0，因此这条暂时是平凡的，用例用合成场况验。
+**给 09 的接口债**（同样写在 `Game.after` 的文档注释里）：立直棒是局内产生的，
+09 落地时要把结转的来源从 `context.Kyotaku`（局初）换成「这一局终了时场上实际还剩几根」。
+
+### 05 / 局数序列 = `GameLength.bakazes × [1 .. SeatCount]`，终局条件是「序列走完」
+
+新类型 `GameLength = Tonpuusen | Hanchan` 与 `Ruleset.Length` / `Ruleset.kyokus`；
+四麻东风战 4 局、四麻半庄 8 局、三麻半庄 6 局全是推出来的。**连庄也不延长**：
+东 4 局打完就终局（票明文不做西入 / 延长），因此天凤的アガリやめ / 西入这一族全部不实现。
+`Ruleset.yonma` 的长度预设取 `Tonpuusen`（M0 的验收与 CLI 默认都是东风战），见报告的待审项 2。
+
+### 05 / 终局精算：供托归头名，顺位同点时起家方向在前的靠前
+
+`Game.settle : Ruleset -> int -> int list -> GameResult`，`GameResult = { Scores; Juni }`。
+顺位按精算前的点数排（把供托给头名不可能改变名次顺序，两种算法同解）。
+同点由座位号决定（起家是座位 0），这是通行做法。
+新增 `Ruleset.RiichiBou = 1000`（供托记的是根数，换算成点数要它；09 扣立直棒也用它）。
+
+### 05 / 不新增错误 DU：`Game.advance` 的退化输入定义为「原样返回」
+
+`Game.run` / `Game.play` 复用 04 的 `KyokuError`。`advance` 收到一局还没打完、
+或这场对局已终，都原样返回（没有事情发生，不是错误），并写进文档注释。
+否决：为这两种情形立一个 `GameAdvanceError`（驱动路径永远走不到它；且裁决 D-3 之后
+每多一个错误 DU 就多一次跨层同名的风险）。
+
+### 05 / `end_kyoku` / `end_game` 两个事件，wire 上都不带字段
+
+照 gimite/mjai 与 libriichi（`libriichi/src/mjai/event.rs` 里两者都是 unit variant，
+往返就是 `{"type":"end_kyoku"}` / `{"type":"end_game"}`）。终局精算不进 wire：
+它由事件流 fold 得出（ADR-0002），不另存一份。
+`Game.events` **不含** `start_game`——它的 `names` 来自配桌不是引擎（02 的决定），仍由 CLI 拼在最前。
+
+### 05 / 测试对 08 天然免疫：点数只以不变量入断言（裁决 D-4）
+
+没有一条断言写死引擎算出的点数。三类断言：总和守恒（`Σ 点数 + 供托点数 = SeatCount × StartingScore`）、
+结转与归属（下一局的局初点数 = 上一局终了时的点数；供托流局结转 / 和了清零；Honba 与 Oya 的变化）、
+序关系（顺位是 `1..SeatCount` 的排列，点数高的靠前）。用例里出现的点数全是用例自己喂进去的输入。
+「一局**之内**」的总和不变没有写进本票的属性：09 之前引擎里没有局内增加供托这回事，
+硬写会在 09 落地时红给别人看；它是 08 的验收项与 14 的 soak 全集。
+
+### 提案 05-A：把对局层的几个词补进 CONTEXT.md
+
+本票落地、术语表里没有的词：`Juni`（顺位，`GameResult.Juni`——术语表没有「顺位」这个条目，
+按 ADR-0001 取了罗马字，但它与 `Junme`（巡）只差一个字母，读起来容易晃眼，
+若要换成英文 `Rank` 改一个字段名即可）、`GameLength`（对局长度，术语表有 `Tonpuusen` / `Hanchan`
+两个取值却没有这个上位词）、`GameResult`（终局精算）、`GameProgress`（对局进程）、
+`RiichiBou`（立直棒，术语表的 `Kyotaku` 条目提了「立直棒」没给罗马字）。

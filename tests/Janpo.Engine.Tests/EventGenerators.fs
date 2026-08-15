@@ -100,5 +100,8 @@ type EventArbitraries =
                         }
             }
 
-        Gen.oneof [ startGame; startKyoku; tsumo; dahai; hora; ryuukyoku ]
+        let endKyoku = Gen.constant EndKyoku
+        let endGame = Gen.constant EndGame
+
+        Gen.oneof [ startGame; startKyoku; tsumo; dahai; hora; ryuukyoku; endKyoku; endGame ]
         |> Arb.fromGen

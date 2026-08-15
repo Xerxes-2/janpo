@@ -181,7 +181,9 @@ module GameStateFixtures =
             | StartKyoku _
             | Dahai _
             | Hora _
-            | Ryuukyoku _ -> false)
+            | Ryuukyoku _
+            | EndKyoku
+            | EndGame -> false)
         |> List.length
 
     let shantenOf (tiles: Tile list) : int =

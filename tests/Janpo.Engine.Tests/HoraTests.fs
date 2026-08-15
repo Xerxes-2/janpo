@@ -504,7 +504,7 @@ module HoraTests =
         )
 
         // 四家点数与供托之和不变：供托被收走了，它那 2000 点落到了四家点数里。
-        Assert.Equal(List.sum context.Scores + 2 * ruleset.RiichiStick, List.sum (GameState.scores ended))
+        Assert.Equal(List.sum context.Scores + 2 * ruleset.RiichiBou, List.sum (GameState.scores ended))
 
     [<Fact>]
     let ``荣和时本场由放铳者一家付`` () =
@@ -532,7 +532,7 @@ module HoraTests =
             horasOf ended
         )
 
-        Assert.Equal(List.sum context.Scores + ruleset.RiichiStick, List.sum (GameState.scores ended))
+        Assert.Equal(List.sum context.Scores + ruleset.RiichiBou, List.sum (GameState.scores ended))
 
     [<Fact>]
     let ``双响时本场与供托只归排在最前的那一家`` () =
@@ -574,7 +574,7 @@ module HoraTests =
             horasOf ended
         )
 
-        Assert.Equal(List.sum context.Scores + ruleset.RiichiStick, List.sum (GameState.scores ended))
+        Assert.Equal(List.sum context.Scores + ruleset.RiichiBou, List.sum (GameState.scores ended))
 
     // ---- 渲染 ----
 

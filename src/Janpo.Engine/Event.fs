@@ -103,6 +103,12 @@ type Event =
     /// F# 这侧的标识符按 CONTEXT.md 的术语表拼作 `Ryuukyoku`，wire 上仍是 mjai 的
     /// `ryukyoku`——与 `Kaze` 同一处理（记法/拼法归 ADR-0001 与术语表，wire 归 mjai）。
     | Ryuukyoku of ryuukyoku: Ryuukyoku
+    /// mjai `end_kyoku`：一局收尾。**不带字段**（跟 mjai 一致）：这一局的结局与授受
+    /// 已经写在它前面的 `hora` / `ryukyoku` 里，下一局的场况写在后面的 `start_kyoku` 里。
+    | EndKyoku
+    /// mjai `end_game`：一场对局收尾。同样不带字段；终局精算（最终点数与顺位）是
+    /// `GameResult`，由事件流 fold 得出（ADR-0002），不另存一份在 wire 上。
+    | EndGame
 
 /// 流局形态的 mjai 记法与 JSON 编解码。
 [<RequireQualifiedAccess>]
@@ -186,6 +192,8 @@ module Event =
                         "deltas", fields.Deltas |> List.map Encode.int |> Encode.list
                         "scores", fields.Scores |> List.map Encode.int |> Encode.list
                     ]
+            | EndKyoku -> mjaiEvent "end_kyoku" []
+            | EndGame -> mjaiEvent "end_game" []
             | Ryuukyoku fields ->
                 mjaiEvent
                     "ryukyoku"
@@ -256,4 +264,6 @@ module Event =
                     (Decode.field "tsumogiri" Decode.bool)
             | "hora" -> horaDecoder
             | "ryukyoku" -> ryuukyokuDecoder
+            | "end_kyoku" -> Decode.succeed EndKyoku
+            | "end_game" -> Decode.succeed EndGame
             | other -> Decode.fail ("unknown mjai event type: " + other))

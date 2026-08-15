@@ -155,7 +155,9 @@ module GameState =
                 | StartKyoku _
                 | Tsumo _
                 | Hora _
-                | Ryuukyoku _ -> true)
+                | Ryuukyoku _
+                | EndKyoku
+                | EndGame -> true)
 
         { YakuContext.create kyokuContext.Bakaze (Seat.jikaze ruleset kyokuContext.Oya seat) with
             Haitei = flags.Haitei

@@ -22,7 +22,9 @@ module KyokuTests =
         | StartKyoku _
         | Dahai _
         | Hora _
-        | Ryuukyoku _ -> false
+        | Ryuukyoku _
+        | EndKyoku
+        | EndGame -> false
 
     let private isDahai (event: Event) =
         match event with
@@ -31,7 +33,9 @@ module KyokuTests =
         | StartKyoku _
         | Tsumo _
         | Hora _
-        | Ryuukyoku _ -> false
+        | Ryuukyoku _
+        | EndKyoku
+        | EndGame -> false
 
     [<Fact>]
     let ``四个随机选手把一局打到荒牌流局`` () =

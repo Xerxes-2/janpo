@@ -11,6 +11,8 @@ type Ruleset =
     {
         /// 座位数。
         SeatCount: int
+        /// 对局长度：一场对局打哪几局由它与座位数一起推出（`Ruleset.kyokus`）。
+        Length: GameLength
         /// 牌山里出现的牌种（正牌）。四麻是全部 34 种。
         TileKinds: Tile list
         /// 每种牌几张。
@@ -27,6 +29,9 @@ type Ruleset =
         RinshanCount: int
         /// 每家的起始点数。
         StartingScore: int
+        /// 立直棒一根的点数。供托（`KyokuContext.Kyotaku`）记的是**根数**，换算成点数要它；
+        /// 09 票宣言立直时从点数里扣的也是它。
+        RiichiBou: int
         /// ノーテン罰符（听牌料）：荒牌流局时不听牌的家合计付出的点数，听牌的家平分。
         /// 全听或全不听时不授受。它应当能被 `1 .. SeatCount - 1` 整除，否则授受不平：
         /// 3000 对四麣（1/2/3 家听）与三麣（1/2 家听）都成立，这也是 mjai 的算法。
@@ -45,8 +50,6 @@ type Ruleset =
         RinshanTsumoFu: bool
         /// 一本场的点数：荣和时放铳者多付这么多，自摸时由付家平摊。
         HonbaPoints: int
-        /// 一根立直棒的点数。供托（`Kyotaku`）记的是**根数**，换算成点数要乘它。
-        RiichiStick: int
     }
 
 /// 规则集的预设与推导量。
@@ -56,10 +59,13 @@ module Ruleset =
     // ---- 构造 ----
 
     /// 四麻默认规则集：34 种正牌各 4 张（136 张），红 5 各一张，
-    /// 配牌 13 张，王牌 14 张（4 张岭上 + 5 叠表里宝牌指示牌），起手 25000，听牌料 3000。
+    /// 配牌 13 张，王牌 14 张（4 张岭上 + 5 叠表里宝牌指示牌），起手 25000，听牌料 3000，
+    /// 立直棒 1000。长度取**东风战**：M0 的验收就是「四随机 Player 跑完一整场东风战」，
+    /// 半庄用 `Ruleset.withLength Hanchan` 换。
     let yonma: Ruleset =
         {
             SeatCount = 4
+            Length = Tonpuusen
             TileKinds = Tile.kinds
             CopiesPerKind = 4
             Akadora = Tile.akadoraKinds
@@ -68,13 +74,13 @@ module Ruleset =
             DeadWallSize = 14
             RinshanCount = 4
             StartingScore = 25000
+            RiichiBou = 1000
             NotenBappu = 3000
             Atamahane = true
             KiriageMangan = false
             DoubleKazeJantouFu = 4
             RinshanTsumoFu = true
             HonbaPoints = 300
-            RiichiStick = 1000
         }
 
     /// 关掉红宝牌（SPEC 的「红宝牌有无」开关）。开着的形态就是各预设本身。
@@ -90,6 +96,9 @@ module Ruleset =
     /// 关着的形态就是各预设本身——天凤与雀魂段位战都不采用它。
     let withKiriageMangan (ruleset: Ruleset) : Ruleset = { ruleset with KiriageMangan = true }
 
+    /// 换对局长度（spec 的「对局长度」配置）。
+    let withLength (length: GameLength) (ruleset: Ruleset) : Ruleset = { ruleset with Length = length }
+
     // ---- 拆解 ----
 
     /// 牌山总张数。牌山构成变了它就跟着变，因此别处不必知道 136 这个数。
@@ -99,6 +108,21 @@ module Ruleset =
     /// 配牌阶段要发出去的总张数。
     let haipaiTotal (ruleset: Ruleset) : int =
         max 0 ruleset.SeatCount * max 0 ruleset.HaipaiSize
+
+    /// 一场对局的**局数序列**，按顺序，每项是「场风 × 局数」（「东 1 局」= `Ton, 1`）。
+    /// 每个场风各打 `SeatCount` 局，因此四麻东风战 4 局、四麻半庄 8 局、三麻半庄 6 局——
+    /// 这些数都是推出来的，不写死（05 票的验收）。连庄不改变序列，只是把同一项再打一遍。
+    let kyokus (ruleset: Ruleset) : (Kaze * int) list =
+        GameLength.bakazes ruleset.Length
+        |> List.collect (fun bakaze -> [ for kyoku in 1 .. max 0 ruleset.SeatCount -> bakaze, kyoku ])
+
+    /// 一场对局的总点数：座位数乘起手点数。**四家点数与供托之和恒为它**——
+    /// 这是贯穿 05 / 08 / 12 / 14 的那条不变量。
+    let startingTotal (ruleset: Ruleset) : int =
+        max 0 ruleset.SeatCount * ruleset.StartingScore
+
+    /// 供托的点数：供托记的是立直棒的根数，换算成点数要乘立直棒的面值。
+    let kyotakuScore (ruleset: Ruleset) (kyotaku: int) : int = kyotaku * ruleset.RiichiBou
 
     /// 牌山的构成：每种正牌各 `CopiesPerKind` 张，其中 `Akadora` 列出的每种替换掉一张对应正牌。
     /// 这是**洗牌前**的规范形（mjai 顺序升序）；张数恒为 `wallSize`，红宝牌只换不加。

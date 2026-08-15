@@ -16,6 +16,7 @@
     <Compile Include="AgariShape.fs" />
     <Compile Include="Ukeire.fs" />
     <Compile Include="Kaze.fs" />
+    <Compile Include="GameLength.fs" />
     <Compile Include="Ruleset.fs" />
     <Compile Include="Seat.fs" />
     <Compile Include="Mentsu.fs" />
@@ -35,6 +36,7 @@
     <Compile Include="PlayerState.fs" />
     <Compile Include="GameState.fs" />
     <Compile Include="Kyoku.fs" />
+    <Compile Include="Game.fs" />
   </ItemGroup>
 
   <ItemGroup>

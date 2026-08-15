@@ -63,7 +63,7 @@ module RulesetTests =
 
         // 一本场 300 点、一根立直棒 1000 点。
         Assert.Equal(300, Ruleset.yonma.HonbaPoints)
-        Assert.Equal(1000, Ruleset.yonma.RiichiStick)
+        Assert.Equal(1000, Ruleset.yonma.RiichiBou)
 
     [<Fact>]
     let ``配牌总张数由座位数与配牌张数算出`` () =
