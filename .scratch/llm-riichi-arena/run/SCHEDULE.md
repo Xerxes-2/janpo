@@ -39,9 +39,9 @@
 | 06 | **done** | pstowroz | 334 测试；Hora/Ron/「过」、Furiten 两态、多家裁决 |
 | 07 | **done** | zsxqxsly | 269→305 测试；Mentsu/Naki 表示 + 多分解取最高番；提案 07-A |
 | 08 | **done** | lolyuwrx | 383 测试；Fu/Score + 接上无役不可和；修了 06 两个无役剧本 |
-| 09 | dispatched | | ws-a（D-8 已切开与 11 的重叠）|
+| 09 | **done** | vmurqows | 463 测试；reach/reach_accepted 两事件、一发、给 11 的 allowsAnkan 判据 |
 | 10 | **done** | nzlvxmur | 437 测试；禁止食替判据三处共用；一发钩子留给 09 |
-| 11 | pending | | |
+| 11 | dispatched | | ws-a |
 | 12 | pending | | |
 | 13 | pending | | 数据与固件已就位（D-7 前置），票已按缺口清单重写 |
 | 14 | pending | | |
