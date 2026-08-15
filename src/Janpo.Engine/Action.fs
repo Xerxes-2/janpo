@@ -4,7 +4,7 @@ namespace Janpo
 /// 类型，允许 case 同名——未验证的意图不应当能被误当成事实写进 Paifu。
 /// case 名与字段贴 mjai 的动作消息，不自创。
 ///
-/// **这个 DU 会被后续的票反复加 case**：`Reach`（09）、`Pon` / `Chi`（10）、
+/// **这个 DU 会被后续的票反复加 case**：`Reach`（09）、
 /// `Ankan` / `Kakan` / `Daiminkan`（11）、`Ryuukyoku`（九种九牌，12）。
 /// 加一个 case 的代价固定为三处，漏掉哪处编译器都会
 /// 指出来（`--warnaserror` 下不完整 match 是错误）：
@@ -23,6 +23,13 @@ type Action =
     /// mjai `hora`：宣言和了。自摸和时 `target` 等于 `actor`、`pai` 是刚摸进的那张；
     /// 荣和时 `target` 是打出这张的座位、`pai` 是刚打出的那张（mjai 的约定）。
     | Hora of actor: Seat * target: Seat * pai: Tile
+    /// mjai `pon`：碰。`target` 是打出这张的座位、`pai` 是被碰的那张、`consumed` 是自家亮出的
+    /// 两张同种牌（mjai 的约定）。红 5 与正牌是不同的牌，因此手里 `5m 5m 5mr` 碰 `5m`
+    /// 是**两个不同的动作**（亮 `5m 5m` 与亮 `5m 5mr`），合法动作集里各占一条。
+    | Pon of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
+    /// mjai `chi`：吃。字段与 `Pon` 同形，`consumed` 是自家亮出的、与 `pai` 凑成顺子的两张。
+    /// **只有下家能吃**，因此 `target` 恒是 `actor` 的上家。
+    | Chi of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
     /// mjai `none`：响应阶段的「过」——他家打出的这张我不要。
     ///
     /// **响应阶段一定有它**：合法动作集里只要出现了 Ron（06）或 Pon / Chi / Kan（10 / 11），
@@ -54,4 +61,6 @@ module Action =
         match action with
         | Action.Dahai(actor, _, _) -> actor
         | Action.Hora(actor, _, _) -> actor
+        | Action.Pon(actor, _, _, _) -> actor
+        | Action.Chi(actor, _, _, _) -> actor
         | Action.None actor -> actor

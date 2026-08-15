@@ -1,15 +1,23 @@
 namespace Janpo
 
-/// 引擎内某座位的牌局状态（CONTEXT.md）：手牌、河、点数……与占这个座位的 Player 是谁无关。
+/// 引擎内某座位的牌局状态（CONTEXT.md）：手牌、河、副露、点数……与占这个座位的 Player 是谁无关。
 ///
-/// 副露（10 / 11）与立直标志（09）由后续票加字段。
+/// 立直标志（09）由后续票加字段。
 type PlayerState =
     private
         {
-            /// 暗牌，mjai 顺序升序。轮到自己打牌时**含**刚摸进的那张。
+            /// 暗牌，mjai 顺序升序。轮到自己打牌时**含**刚摸进的那张；**不含副露**。
             Hand: Tile list
-            /// 河：这家打出去的牌，按打出顺序。被鸣走的标记是 10 票的事。
+            /// 河：这家打出去的牌，按打出顺序。
+            ///
+            /// **被鸣走的那张仍留在这里**：振听看的是「自己打过什么」，与那张牌后来被谁拿走无关。
+            /// 拿走这件事记在 `KawaTaken` 里，牌本身则另外进了鸣牌那家的副露。
             Kawa: Tile list
+            /// 副露（CONTEXT.md 的 Naki），按鸣的先后。公开信息。
+            Naki: Naki list
+            /// 河里是否有牌被他家鸣走过。**只置位不清除**——流し満谯（12 票）的前提
+            /// 就是它一局下来恒为 false。
+            KawaTaken: bool
             /// 点数。
             Score: int
             /// 刚摸进、还没打出去的那张；打完就归 None。摸切判定看它。
@@ -30,6 +38,8 @@ module PlayerState =
         {
             Hand = Tile.sort haipai
             Kawa = []
+            Naki = []
+            KawaTaken = false
             Score = score
             Drawn = drawn
             Furiten = Furiten.none
@@ -40,8 +50,17 @@ module PlayerState =
     /// 暗牌，mjai 顺序升序。
     let hand (player: PlayerState) : Tile list = player.Hand
 
-    /// 河，按打出顺序。
+    /// 河，按打出顺序；被鸣走的那张也在里面。
     let kawa (player: PlayerState) : Tile list = player.Kawa
+
+    /// 副露，按鸣的先后。
+    let naki (player: PlayerState) : Naki list = player.Naki
+
+    /// 副露数。形态判定（`HandShape` / `AgariHand`）要的就是它。
+    let nakiCount (player: PlayerState) : int = List.length player.Naki
+
+    /// 河里是否有牌被他家鸣走过。**流し満谯（12 票）的前提读的就是它。**
+    let kawaTaken (player: PlayerState) : bool = player.KawaTaken
 
     /// 点数。
     let score (player: PlayerState) : int = player.Score
@@ -69,25 +88,25 @@ module PlayerState =
         | None -> player.Hand
         | Some drawn -> removeOne drawn player.Hand |> Option.defaultValue player.Hand
 
-    /// 是否听牌：暗牌的 Shanten 为 0（CONTEXT.md）。听牌判定只有这一份，
+    /// 是否听牌：暗牌加副露的 Shanten 为 0（CONTEXT.md）。听牌判定只有这一份，
     /// 荒牌流局的听牌料与后续票的立直合法性读的都是它。
     /// 张数不成形态的手牌（本票内不会出现）当作不听。
     let isTenpai (kindSet: TileKindSet) (player: PlayerState) : bool =
-        match HandShape.create 0 player.Hand with
+        match HandShape.create (nakiCount player) player.Hand with
         | Error _ -> false
         | Ok shape -> Shanten.value (Shanten.calculate kindSet shape) = 0
 
     /// 暗牌自身是否已成和了型（刚摸完的 14 张手牌）。和了型判定只有 `AgariShape.classify`
     /// 一份，这里不另写。**只判型，不判役**（无役不可和是 07 票的事）。
     let isAgari (kindSet: TileKindSet) (player: PlayerState) : bool =
-        match HandShape.create 0 player.Hand with
+        match HandShape.create (nakiCount player) player.Hand with
         | Error _ -> false
         | Ok shape -> AgariShape.isAgari kindSet shape
 
     /// 暗牌加上这一张是否成和了型（荣和：13 张 + 他家打出的那张）。
     /// 手里已有四张同种时自然不成立（`HandShape` 拒绝第五张）。
     let isAgariWith (kindSet: TileKindSet) (pai: Tile) (player: PlayerState) : bool =
-        match HandShape.create 0 (pai :: player.Hand) with
+        match HandShape.create (nakiCount player) (pai :: player.Hand) with
         | Error _ -> false
         | Ok shape -> AgariShape.isAgari kindSet shape
 
@@ -95,12 +114,12 @@ module PlayerState =
     /// 荣和时把点出来的那张补进去——牌型上它就是手牌的一部分（牌本身仍留在放铳者的河里）。
     /// 张数不成和了牌姿时是 `AgariHandError`，是值不是异常。
     ///
-    /// **引擎里构造 `AgariHand` 只有这一处**：副露（10 / 11 票）落地后只需改这里。
+    /// **引擎里构造 `AgariHand` 只有这一处**：副露已经接上，11 的杠不必再动它。
     let agari (tsumo: bool) (winning: Tile) (player: PlayerState) : Result<AgariHand, AgariHandError> =
         if tsumo then
-            AgariHand.tsumo [] player.Hand winning
+            AgariHand.tsumo player.Naki player.Hand winning
         else
-            AgariHand.ron [] (winning :: player.Hand) winning
+            AgariHand.ron player.Naki (winning :: player.Hand) winning
 
     /// 和了牌的牌种（听什么）：暗牌加上它就成和了型的那些牌种，按 mjai 顺序升序。
     /// 永久振听用它与自己的河对。张数不对时得空列表。
@@ -109,6 +128,24 @@ module PlayerState =
         |> List.filter (fun kind -> isAgariWith kindSet kind player)
 
     // ---- 迁移 ----
+
+    /// 鸣牌：亮出的那几张离开暗牌进副露，**不摸牌**（`Drawn` 因此是 None，接下来那一手必定是手切）。
+    /// 被鸣的那张不进手牌——它已经在 `Naki` 里（`Naki.taken`）。
+    /// 牌不在手里时原样返回：合法性由 `GameState` 在此之前判掉（不在这里重复一份）。
+    let addNaki (naki: Naki) (player: PlayerState) : PlayerState =
+        let hand =
+            (player.Hand, Naki.consumed naki)
+            ||> List.fold (fun rest tile -> removeOne tile rest |> Option.defaultValue rest)
+
+        { player with
+            Hand = Tile.sort hand
+            Naki = player.Naki @ [ naki ]
+            Drawn = None
+        }
+
+    /// 河里的一张被他家鸣走了。**只置位，不清除，也不把牌从河里拿掉**
+    /// （振听要看它；流し満谯要看记号）。
+    let markKawaTaken (player: PlayerState) : PlayerState = { player with KawaTaken = true }
 
     /// 摸进一张：进手牌，并记成「刚摸进的那张」。**同巡振听到此解除**
     /// （它的定义就是「到自己下次摸牌为止」）；永久振听不受影响。

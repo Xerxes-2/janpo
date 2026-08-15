@@ -96,6 +96,10 @@ type Event =
     | Tsumo of actor: Seat * pai: Tile
     /// mjai `dahai`：某家打出一张。`tsumogiri` 为真表示打的就是刚摸进的那张（摸切）。
     | Dahai of actor: Seat * pai: Tile * tsumogiri: bool
+    /// mjai `pon`：某家碰了 `target` 打出的 `pai`，`consumed` 是它亮出的两张。
+    | Pon of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
+    /// mjai `chi`：某家吃了上家 `target` 打出的 `pai`，`consumed` 是它亮出的两张。
+    | Chi of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
     /// mjai `hora`：某家和了。同巡双响时会有两条（头跳关掉时才可能出现）。
     | Hora of hora: Hora
     /// mjai `ryukyoku`：一局在无人和了的情况下结束。
@@ -179,6 +183,24 @@ module Event =
                         "pai", Tile.encoder pai
                         "tsumogiri", Encode.bool tsumogiri
                     ]
+            | Pon(actor, target, pai, consumed) ->
+                mjaiEvent
+                    "pon"
+                    [
+                        "actor", Encode.int actor
+                        "target", Encode.int target
+                        "pai", Tile.encoder pai
+                        "consumed", encodeTiles consumed
+                    ]
+            | Chi(actor, target, pai, consumed) ->
+                mjaiEvent
+                    "chi"
+                    [
+                        "actor", Encode.int actor
+                        "target", Encode.int target
+                        "pai", Tile.encoder pai
+                        "consumed", encodeTiles consumed
+                    ]
             | Hora fields ->
                 mjaiEvent
                     "hora"
@@ -219,6 +241,15 @@ module Event =
                     Scores = get.Required.Field "scores" (Decode.list Decode.int)
                     Tehais = get.Required.Field "tehais" (Decode.list tilesDecoder)
                 })
+
+    /// 碰与吃的 wire 形状一模一样，只差一个 `type`，因此解码器只有一份。
+    let private nakiDecoder (build: Seat -> Seat -> Tile -> Tile list -> Event) : Decoder<Event> =
+        Decode.object (fun get ->
+            build
+                (get.Required.Field "actor" Decode.int)
+                (get.Required.Field "target" Decode.int)
+                (get.Required.Field "pai" Tile.decoder)
+                (get.Required.Field "consumed" tilesDecoder))
 
     let private horaDecoder: Decoder<Event> =
         Decode.object (fun get ->
@@ -262,6 +293,8 @@ module Event =
                     (Decode.field "actor" Decode.int)
                     (Decode.field "pai" Tile.decoder)
                     (Decode.field "tsumogiri" Decode.bool)
+            | "pon" -> nakiDecoder (fun actor target pai consumed -> Pon(actor, target, pai, consumed))
+            | "chi" -> nakiDecoder (fun actor target pai consumed -> Chi(actor, target, pai, consumed))
             | "hora" -> horaDecoder
             | "ryukyoku" -> ryuukyokuDecoder
             | "end_kyoku" -> Decode.succeed EndKyoku

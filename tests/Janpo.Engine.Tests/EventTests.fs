@@ -66,6 +66,31 @@ module EventTests =
         )
 
     [<Fact>]
+    let ``pon 与 chi 编码为 mjai 事件对象，consumed 是自家亮出的那两张`` () =
+        // F# 这侧的 case 名与 wire 同拼（术语表里就叫 Pon / Chi），红宝牌在 consumed 里原样保留。
+        Assert.Equal(
+            """{"type":"pon","actor":1,"target":0,"pai":"5s","consumed":["5s","5s"]}""",
+            encode (Pon(1, 0, tile "5s", [ tile "5s"; tile "5s" ]))
+        )
+
+        Assert.Equal(
+            """{"type":"chi","actor":2,"target":1,"pai":"4p","consumed":["5pr","6p"]}""",
+            encode (Chi(2, 1, tile "4p", [ tile "5pr"; tile "6p" ]))
+        )
+
+    [<Fact>]
+    let ``pon 与 chi 能从 mjai wire 解回来`` () =
+        Assert.Equal<Result<Event, string>>(
+            Ok(Pon(1, 0, tile "5s", [ tile "5s"; tile "5s" ])),
+            decode """{"type":"pon","actor":1,"target":0,"pai":"5s","consumed":["5s","5s"]}"""
+        )
+
+        Assert.Equal<Result<Event, string>>(
+            Ok(Chi(2, 1, tile "4p", [ tile "5pr"; tile "6p" ])),
+            decode """{"type":"chi","actor":2,"target":1,"pai":"4p","consumed":["5pr","6p"]}"""
+        )
+
+    [<Fact>]
     let ``hora 编码为 mjai 事件对象，符与番与和了点是独立字段`` () =
         let event =
             Hora

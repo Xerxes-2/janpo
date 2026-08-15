@@ -55,6 +55,21 @@ module HoraTests =
         | AwaitingDahai _
         | Ended _ -> false
 
+    /// 响应阶段且**有人能荣和**。鸣牌（10 票）落地之后一局里会出现一堆只能碰 / 吃的
+    /// 响应阶段，本文件的黄金用例要的是其中能荣和的那一步。
+    let private inRonPhase (state: GameState) : bool =
+        inResponsePhase state
+        && GameState.legalActions state
+           |> List.exists (fun choice ->
+               choice.Actions
+               |> List.exists (fun action ->
+                   match action with
+                   | Action.Hora _ -> true
+                   | Action.Dahai _
+                   | Action.Pon _
+                   | Action.Chi _
+                   | Action.None _ -> false))
+
     let private horasOf (state: GameState) : Hora list = GameState.horas state
 
     /// 这一局翻开的表宝牌指示牌。点数用例把它写成断言：宝牌几番是剧本的**输入**，
@@ -160,34 +175,53 @@ module HoraTests =
 
     // ---- 荣和与振听 ----
 
+    /// 让除 `keep` 之外的待答座位一律「过」。鸣牌（10 票）落地之后，一张牌打出去常常
+    /// 同时问好几家（能碰能吃的也被问），而本文件关心的只是其中能和的那一家。
+    let private othersPass (keep: Seat) (state: GameState) : GameState =
+        let pending = responding state |> List.filter (fun seat -> seat <> keep)
+
+        (state, pending)
+        ||> List.fold (fun state seat -> fst (stepped state (Action.None seat)))
+
     /// 跑到座位 0 打出 4p、等人响应的那一步（剧本见 `GameStateFixtures.ronFuritenScript`）。
+    /// 座位 1 与座位 2 都被问到：座位 2 能荣和，座位 1 振听但能吃。
     let private atTheRon () =
-        startScripted ronFuritenScript |> driveUntil passive inResponsePhase
+        startScripted ronFuritenScript |> driveUntil passive inRonPhase
+
+    /// 同一步，但能鸣牌的那几家已经「过」了：只剩座位 2 没答复，它的下一手立刻裁决。
+    let private atTheRonAlone () = atTheRon () |> othersPass 2
 
     [<Fact>]
     let ``他家打出和了牌时 Ron 与「过」一起进入对应座位的合法动作集`` () =
         let state = atTheRon ()
 
-        Assert.Equal<Seat list>([ 2 ], responding state)
-
+        // 座位 1 也在被问之列，但那是因为它能吃 4p（见下一条用例）。
+        Assert.Equal<Seat list>([ 1; 2 ], responding state)
         Assert.Equal<Action list>([ Action.Hora(2, 0, pai "4p"); Action.None 2 ], actionsOf 2 state)
 
     [<Fact>]
     let ``振听座位的 Ron 不出现在合法动作集里，它照样是听牌的`` () =
         let state = atTheRon ()
 
-        // 座位 1 听 4p / 7p，但它自己打过 7p —— 永久振听，因此压根不在被问之列。
+        // 座位 1 听 4p / 7p，但它自己打过 7p —— 永久振听。
         Assert.True(isTenpai 1 state)
         Assert.Equal<Furiten>({ Permanent = true; Doujun = false }, furitenOf 1 state)
-        Assert.DoesNotContain(1, responding state)
-        Assert.Empty(actionsOf 1 state)
 
-        // 不在被问之列的座位提交 Ron，得到的是「现在不轮到你」，而不是「和了不成立」。
-        Assert.Equal<IllegalAction>(NotYourTurn(1, [ 2 ]), rejected state (Action.Hora(1, 0, pai "4p")))
+        // **振听只挡荣和，不挡鸣牌**：座位 1 能吃 4p，因此照样被问，
+        // 只是它的那份里没有 Ron。
+        Assert.Contains(1, responding state)
+        Assert.DoesNotContain(Action.Hora(1, 0, pai "4p"), actionsOf 1 state)
+        Assert.Contains(Action.Chi(1, 0, pai "4p", tilesOf "5p 6p"), actionsOf 1 state)
+
+        // 它硬要宣言荣和：型成立、也有役（平和），挡住它的是振听。
+        Assert.Equal<IllegalAction>(RonWhileFuriten(1, pai "4p"), rejected state (Action.Hora(1, 0, pai "4p")))
+
+        // 已经答复过的座位再提交，得到的才是「现在不轮到你」。
+        Assert.Equal<IllegalAction>(NotYourTurn(1, [ 2 ]), rejected (atTheRonAlone ()) (Action.Hora(1, 0, pai "4p")))
 
     [<Fact>]
     let ``荣和结束这一局，Ko 和了则不连庄`` () =
-        let state = atTheRon ()
+        let state = atTheRonAlone ()
         let ended, events = stepped state (Action.Hora(2, 0, pai "4p"))
 
         // 规则集：`Ruleset.yonma`。座位 2 荣和 4p：234p 234s 678s 345m + 99m 雀头，
@@ -225,7 +259,7 @@ module HoraTests =
 
     [<Fact>]
     let ``见逃得到同巡振听，自己下次摸牌时解除`` () =
-        let state = atTheRon ()
+        let state = atTheRonAlone ()
         let passed, events = stepped state (Action.None 2)
 
         // 「过」自己不产出事件（mjai 的 none 是一次答复，不是既成事实）；
@@ -241,23 +275,30 @@ module HoraTests =
 
     [<Fact>]
     let ``同巡振听期间，他家再打出和了牌也不进合法动作集`` () =
-        let state = atTheRon ()
+        let state = atTheRonAlone ()
         let passed, _ = stepped state (Action.None 2)
 
         // 座位 1 第 2 巡摸进 1p 又摸切出去 —— 那是座位 2 的另一张和了牌，
-        // 但座位 2 同巡振听，因此引擎压根不停下来问，直接让座位 2 摸牌。
+        // 但座位 2 同巡振听，因此它那份里只有吃，没有 Ron。
         let discarded, events = stepped passed (Action.Dahai(1, pai "1p", true))
 
-        Assert.False(inResponsePhase discarded)
-        Assert.Equal<Event list>([ Dahai(1, pai "1p", true); Tsumo(2, pai "3z") ], events)
+        Assert.Equal<Event list>([ Dahai(1, pai "1p", true) ], events)
+        Assert.DoesNotContain(Action.Hora(2, 1, pai "1p"), actionsOf 2 discarded)
+        Assert.Contains(Action.Chi(2, 1, pai "1p", tilesOf "2p 3p"), actionsOf 2 discarded)
+
+        // 全部「过」之后这一局接着打，轮座位 2 摸牌。
+        let passedAgain, drawn = stepped (othersPass 2 discarded) (Action.None 2)
+
+        Assert.Equal<Event list>([ Tsumo(2, pai "3z") ], drawn)
+        Assert.False(GameState.isEnded passedAgain)
 
     [<Fact>]
     let ``同巡振听解除之后，再打出的和了牌又能荣和`` () =
-        let state = atTheRon ()
+        let state = atTheRonAlone ()
         let passed, _ = stepped state (Action.None 2)
 
         // 座位 2 自己摸过一巡（同巡振听解除），随后座位 3 打出 1p。
-        let again = passed |> driveUntil passive inResponsePhase
+        let again = passed |> driveUntil passive inRonPhase
 
         Assert.Equal<Seat list>([ 2 ], responding again)
         Assert.Equal<Action list>([ Action.Hora(2, 3, pai "1p"); Action.None 2 ], actionsOf 2 again)
@@ -267,7 +308,7 @@ module HoraTests =
     /// 跑到座位 0 打出 4p、座位 2 与座位 3 都能荣和的那一步
     /// （剧本见 `GameStateFixtures.doubleRonScript`）。
     let private atTheDoubleRon (ruleset: Ruleset) =
-        startScriptedWith ruleset doubleRonScript |> driveUntil passive inResponsePhase
+        startScriptedWith ruleset doubleRonScript |> driveUntil passive inRonPhase
 
     [<Fact>]
     let ``同巡两家都能荣和时，两家都进合法动作集`` () =
@@ -311,8 +352,7 @@ module HoraTests =
         let doubleRon = Ruleset.withoutAtamahane ruleset
 
         let state =
-            startScriptedWith doubleRon tripleRonScript
-            |> driveUntil passive inResponsePhase
+            startScriptedWith doubleRon tripleRonScript |> driveUntil passive inRonPhase
 
         Assert.Equal<Seat list>([ 1; 2; 3 ], responding state)
 
@@ -325,7 +365,7 @@ module HoraTests =
     [<Fact>]
     let ``头跳开着时同巡三响只成立最靠前的一家`` () =
         let state =
-            startScriptedWith ruleset tripleRonScript |> driveUntil passive inResponsePhase
+            startScriptedWith ruleset tripleRonScript |> driveUntil passive inRonPhase
 
         let first, _ = stepped state (Action.Hora(1, 0, pai "4p"))
         let second, _ = stepped first (Action.Hora(2, 0, pai "4p"))
@@ -386,11 +426,26 @@ module HoraTests =
             [ 1..40 ] |> List.collect (trace tenpaiSeeking) |> List.filter inResponsePhase
 
         Assert.NotEmpty(responsePhases)
+        Assert.NotEmpty(responsePhases |> List.filter inRonPhase)
 
         for state in responsePhases do
             for choice in GameState.legalActions state do
-                Assert.False(Furiten.blocksRon (furitenOf choice.Seat state))
+                // 任何被问到的座位都能「过」；能荣和的那几家另外必定不振听
+                // （振听的座位照样可以被问——振听只挡荣和，不挡鸣牌）。
                 Assert.Contains(Action.None choice.Seat, choice.Actions)
+
+                let offersRon =
+                    choice.Actions
+                    |> List.exists (fun action ->
+                        match action with
+                        | Action.Hora _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.None _ -> false)
+
+                if offersRon then
+                    Assert.False(Furiten.blocksRon (furitenOf choice.Seat state))
 
     [<Fact>]
     let ``摊好的两局各自以自摸和与荣和收尾`` () =
@@ -512,7 +567,8 @@ module HoraTests =
         // 放铳者另付 600 本场，和了者另收 1000 供托。
         let state =
             startScriptedIn ruleset (withSticks 2 1) ronFuritenScript
-            |> driveUntil passive inResponsePhase
+            |> driveUntil passive inRonPhase
+            |> othersPass 2
 
         let ended, _ = stepped state (Action.Hora(2, 0, pai "4p"))
 
@@ -543,7 +599,7 @@ module HoraTests =
 
         let state =
             startScriptedIn doubleRon (withSticks 1 1) doubleRonScript
-            |> driveUntil passive inResponsePhase
+            |> driveUntil passive inRonPhase
 
         let first, _ = stepped state (Action.Hora(2, 0, pai "4p"))
         let ended, _ = stepped first (Action.Hora(3, 0, pai "4p"))
@@ -588,7 +644,7 @@ module HoraTests =
 
         Assert.Equal("座位 1 的手牌加上 3索 一个役都没有，不能和", IllegalAction.toDisplay (IllegalAction.NoYaku(1, pai "3s")))
 
-        Assert.Equal("现在没有可响应的牌，座位 1 无从「过」起", IllegalAction.toDisplay (NothingToRespond 1))
+        Assert.Equal("现在没有可响应的牌，座位 1 无从响应起", IllegalAction.toDisplay (NothingToRespond 1))
 
     [<Fact>]
     let ``振听两种状态各有中文说明`` () =

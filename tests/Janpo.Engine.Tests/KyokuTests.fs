@@ -21,6 +21,8 @@ module KyokuTests =
         | StartGame _
         | StartKyoku _
         | Dahai _
+        | Pon _
+        | Chi _
         | Hora _
         | Ryuukyoku _
         | EndKyoku
@@ -32,6 +34,21 @@ module KyokuTests =
         | StartGame _
         | StartKyoku _
         | Tsumo _
+        | Pon _
+        | Chi _
+        | Hora _
+        | Ryuukyoku _
+        | EndKyoku
+        | EndGame -> false
+
+    let private isNaki (event: Event) =
+        match event with
+        | Pon _
+        | Chi _ -> true
+        | StartGame _
+        | StartKyoku _
+        | Tsumo _
+        | Dahai _
         | Hora _
         | Ryuukyoku _
         | EndKyoku
@@ -43,8 +60,11 @@ module KyokuTests =
         let events = GameState.events state
 
         Assert.Equal(70, liveWall)
+        // 可摸区摸完才流局，因此 tsumo 恒为可摸区张数；鸣牌跳过摸牌却照样要打一张，
+        // 因此 dahai 比 tsumo 多出来的那几条恰好是鸣牌的条数。
         Assert.Equal(liveWall, countOf isTsumo events)
-        Assert.Equal(liveWall, countOf isDahai events)
+        Assert.Equal(liveWall + countOf isNaki events, countOf isDahai events)
+        Assert.True(countOf isNaki events > 0, "随机选手应当鸣过牌")
         Assert.Equal(0, Wall.remaining (GameState.wall state))
         Assert.True(GameState.isEnded state)
 
@@ -53,14 +73,20 @@ module KyokuTests =
         | other -> failwith $"一局应当以 ryukyoku 收尾，实际是 {other}"
 
     [<Fact>]
-    let ``荒牌流局时各家手牌 13 张，打出去的牌都在河里`` () =
+    let ``荒牌流局时各家手牌加副露 13 张，打出去的牌都在河里`` () =
         let state = runWith Kyoku.randomPlayer 42
+        let events = GameState.events state
 
         for player in GameState.players state do
-            Assert.Equal(ruleset.HaipaiSize, PlayerState.hand player |> List.length)
+            // 一组副露抵三张暗牌（碰与吃都是三张）。
+            Assert.Equal(
+                ruleset.HaipaiSize,
+                (PlayerState.hand player |> List.length) + 3 * PlayerState.nakiCount player
+            )
 
+        // 被鸣走的那张仍留在打牌者的河里，因此河的总长就是 dahai 的条数。
         Assert.Equal(
-            liveWall,
+            countOf isDahai events,
             GameState.players state
             |> List.sumBy (fun player -> PlayerState.kawa player |> List.length)
         )

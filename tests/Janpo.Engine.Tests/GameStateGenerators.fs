@@ -171,7 +171,8 @@ module GameStateFixtures =
             Draws = "9s 9p 8p 8m 2m 9p 2m"
         }
 
-    /// 某座位摸到第几巡了：它的 `tsumo` 事件条数。
+    /// 某座位摸到第几巡了：它的 `tsumo` 事件条数。引擎的 `GameState.junme` 算的是同一件事，
+    /// 这里从事件流重新数一遍——两条路径对上才算数对。
     let junmeOf (seat: Seat) (state: GameState) : int =
         GameState.events state
         |> List.filter (fun event ->
@@ -180,11 +181,19 @@ module GameStateFixtures =
             | StartGame _
             | StartKyoku _
             | Dahai _
+            | Pon _
+            | Chi _
             | Hora _
             | Ryuukyoku _
             | EndKyoku
             | EndGame -> false)
         |> List.length
+
+    /// 某座位的副露。
+    let nakiOf (seat: Seat) (state: GameState) : Naki list =
+        GameState.player seat state
+        |> Option.map PlayerState.naki
+        |> Option.defaultValue []
 
     let shantenOf (tiles: Tile list) : int =
         match HandShape.create 0 tiles with
@@ -208,6 +217,8 @@ module GameStateFixtures =
                     match action with
                     | Action.Dahai(_, pai, _) -> Some(action, pai)
                     | Action.Hora _
+                    | Action.Pon _
+                    | Action.Chi _
                     | Action.None _ -> None)
 
             let chosen =
@@ -229,25 +240,32 @@ module GameStateFixtures =
                     match action with
                     | Action.Hora _ -> true
                     | Action.Dahai _
+                    | Action.Pon _
+                    | Action.Chi _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
                         match action with
                         | Action.Dahai(_, _, tsumogiri) -> tsumogiri
                         | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
                         match action with
                         | Action.None _ -> true
                         | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
             chosen, rng
 
-    /// 摸切选手：一律摸切，响应一律「过」，**从不宣言和了**。
+    /// 摸切选手：一律摸切，响应一律「过」（**也从不鸣牌**），**从不宣言和了**。
     /// 振听与同巡振听的黄金用例要它——见逃是它的默认行为。
+    /// 鸣牌一律打手切那一手（鸣完没摸切可打），因此它在鸣牌之后也推得动局面。
     let passive: Player<Rng> =
         fun rng _ choice ->
             let pick (predicate: Action -> bool) =
@@ -258,12 +276,59 @@ module GameStateFixtures =
                     match action with
                     | Action.Dahai(_, _, tsumogiri) -> tsumogiri
                     | Action.Hora _
+                    | Action.Pon _
+                    | Action.Chi _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
                         match action with
                         | Action.None _ -> true
                         | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Hora _ -> false))
+                |> Option.defaultValue (List.head choice.Actions)
+
+            chosen, rng
+
+    /// 见鸣就鸣的选手：能碰就碰、能吃就吃（碰优先），其余时候打合法动作集里第一条打牌，
+    /// **从不宣言和了**。鸣牌的不变量要一条副露密集的轨迹，随机选手鸣得太稀。
+    let nakiSeeking: Player<Rng> =
+        fun rng _ choice ->
+            let pick (predicate: Action -> bool) =
+                choice.Actions |> List.tryFind predicate
+
+            let chosen =
+                pick (fun action ->
+                    match action with
+                    | Action.Pon _ -> true
+                    | Action.Chi _
+                    | Action.Dahai _
+                    | Action.Hora _
+                    | Action.None _ -> false)
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Chi _ -> true
+                        | Action.Pon _
+                        | Action.Dahai _
+                        | Action.Hora _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai _ -> true
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Hora _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.None _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -359,6 +424,8 @@ type GameStateArbitraries =
                     [
                         4, Gen.constant (GameStateFixtures.trace Kyoku.randomPlayer seed)
                         4, Gen.constant (GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed)
+                        // 副露密集的一局：鸣牌的不变量（牌数守恒、手牌张数、河被鸣走的记号）靠它验。
+                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.nakiSeeking seed)
                         // 摊好的两局：一局自摸和收尾、一局荣和收尾。
                         1, Gen.constant (GameStateFixtures.horaTrace GameStateFixtures.tsumoHoraScript)
                         1, Gen.constant (GameStateFixtures.horaTrace GameStateFixtures.doubleRonScript)
@@ -391,6 +458,21 @@ type GameStateArbitraries =
                 return Action.Hora(actor, target, pai)
             }
 
+        let naki =
+            gen {
+                let! actor = seat
+                let! target = seat
+                let! pai = Gen.elements Tile.all
+                let! consumed = Gen.listOfLength 2 (Gen.elements Tile.all)
+                let! isPon = Gen.elements [ true; false ]
+
+                return
+                    if isPon then
+                        Action.Pon(actor, target, pai, consumed)
+                    else
+                        Action.Chi(actor, target, pai, consumed)
+            }
+
         let pass = seat |> Gen.map Action.None
 
-        Gen.oneof [ dahai; hora; pass ] |> Arb.fromGen
+        Gen.oneof [ dahai; hora; naki; pass ] |> Arb.fromGen

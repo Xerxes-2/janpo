@@ -303,6 +303,8 @@ module GameTests =
                 | StartGame _
                 | Tsumo _
                 | Dahai _
+                | Pon _
+                | Chi _
                 | Hora _
                 | Ryuukyoku _
                 | EndKyoku

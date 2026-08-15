@@ -24,14 +24,29 @@ module GameStateProperties =
             && choices |> List.forall (fun choice -> not (List.isEmpty choice.Actions))
 
     [<Property>]
-    let ``牌数守恒：各家手牌与河加上山上的牌恒为完整一副`` (state: GameState) =
+    let ``牌数守恒：各家手牌、河与副露里自家亮的那几张加上山上的牌恒为完整一副`` (state: GameState) =
+        // 副露里被鸣的那张（`Naki.taken`）**仍算在打牌者的河里**，因此这里只数自家亮出的
+        // `consumed`，不然要重复数一张。
         let everything =
             (GameState.players state
-             |> List.collect (fun player -> PlayerState.hand player @ PlayerState.kawa player))
+             |> List.collect (fun player ->
+                 PlayerState.hand player
+                 @ PlayerState.kawa player
+                 @ (PlayerState.naki player |> List.collect Naki.consumed)))
             @ Wall.tiles (GameState.wall state)
 
         List.length everything = Ruleset.wallSize ruleset
         && Tile.sort everything = Tile.sort (Ruleset.wallTiles ruleset)
+
+    [<Property>]
+    let ``鸣牌后牌数守恒：暗牌加副露的张数与没鸣牌时一样多`` (state: GameState) =
+        // 一组碰 / 吃是三张，其中两张来自手牌、一张来自他家的河；因此「暗牌 + 3 × 副露数」
+        // 与没鸣牌时的手牌张数完全一致（等打牌时多一张）。
+        GameState.players state
+        |> List.forall (fun player ->
+            let held = List.length (PlayerState.hand player) + 3 * PlayerState.nakiCount player
+
+            held = ruleset.HaipaiSize || held = ruleset.HaipaiSize + 1)
 
     [<Property>]
     let ``等着打牌的那家 14 张，自摸和了的那家 14 张，其余各家 13 张`` (state: GameState) =
@@ -53,7 +68,8 @@ module GameStateProperties =
                 else
                     ruleset.HaipaiSize
 
-            List.length (PlayerState.hand player) = expected)
+            // 一组副露抵三张暗牌。
+            List.length (PlayerState.hand player) + 3 * PlayerState.nakiCount player = expected)
         |> List.forall id
 
     [<Property>]
@@ -85,7 +101,7 @@ module GameStateProperties =
             | Error _ -> false)
 
     [<Property>]
-    let ``响应阶段等的每一家都不振听、和了型成立、有役，且都能「过」`` (state: GameState) =
+    let ``响应阶段等的每一家都能「过」，且它的 Ron 只在不振听、型成立、有役时出现`` (state: GameState) =
         match GameState.phase state with
         | AwaitingResponse phase ->
             phase.Responses
@@ -97,19 +113,89 @@ module GameStateProperties =
                         && PlayerState.isAgariWith kindSet phase.Pai player
                     | None -> false
 
-                // 无役不可和：被问到的每一家都算得出符与番。
+                // 无役不可和：能荣和的那几家都算得出符与番。
                 let hasYaku =
                     match GameState.horaOf choice.Seat state with
                     | Ok _ -> true
                     | Error _ -> false
 
-                canRon
-                && hasYaku
-                && choice.Seat <> phase.Target
-                && List.contains (Action.Hora(choice.Seat, phase.Target, phase.Pai)) choice.Actions
+                let ronOffered =
+                    List.contains (Action.Hora(choice.Seat, phase.Target, phase.Pai)) choice.Actions
+
+                // 被问到的座位至少有一样实事可做（荣和或鸣牌），否则不应当被问。
+                let hasSomethingToDo =
+                    choice.Actions
+                    |> List.exists (fun action ->
+                        match action with
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _ -> true
+                        | Action.Dahai _
+                        | Action.None _ -> false)
+
+                choice.Seat <> phase.Target
+                && hasSomethingToDo
+                && ronOffered = (canRon && hasYaku)
                 && List.contains (Action.None choice.Seat) choice.Actions)
         | AwaitingDahai _
         | Ended _ -> true
+
+    [<Property>]
+    let ``鸣牌：吃只吃上家、河底牌鸣不得、鸣完那一手一定有牌可打`` (state: GameState) =
+        match GameState.phase state with
+        | AwaitingResponse phase ->
+            phase.Responses
+            |> List.collect (fun choice -> choice.Actions)
+            |> List.forall (fun action ->
+                match action with
+                | Action.Pon(_, target, pai, consumed) ->
+                    target = phase.Target
+                    && pai = phase.Pai
+                    && List.length consumed = 2
+                    && Wall.remaining (GameState.wall state) > 0
+                | Action.Chi(actor, target, pai, consumed) ->
+                    target = phase.Target
+                    && pai = phase.Pai
+                    && List.length consumed = 2
+                    // 吃只能吃上家：宣言的那家恒是打牌者的下家。
+                    && Seat.next ruleset target = actor
+                    && Wall.remaining (GameState.wall state) > 0
+                | Action.Hora _
+                | Action.Dahai _
+                | Action.None _ -> true)
+        | AwaitingDahai _
+        | Ended _ -> true
+
+    [<Property>]
+    let ``鸣牌：刚鸣完那一手不摸牌、只有手切，且打不出被鸣的那张（禁食替）`` (state: GameState) =
+        match List.tryLast (GameState.events state), GameState.phase state with
+        | Some(Pon(actor, _, pai, _) | Chi(actor, _, pai, _)), AwaitingDahai phase ->
+            phase.Actor = actor
+            // 鸣牌跳过摸牌：没有「刚摸进的那张」。
+            && phase.Tsumo = None
+            && phase.Actions
+               |> List.forall (fun action ->
+                   match action with
+                   | Action.Dahai(_, dahai, tsumogiri) -> not tsumogiri && Tile.deaka dahai <> Tile.deaka pai
+                   | Action.Hora _
+                   | Action.Pon _
+                   | Action.Chi _
+                   | Action.None _ -> false)
+        | _ -> true
+
+    [<Property>]
+    let ``鸣牌：被鸣的那张仍在对家的河里，那家的河也被标成鸣走过`` (state: GameState) =
+        GameState.players state
+        |> List.forall (fun player ->
+            PlayerState.naki player
+            |> List.forall (fun naki ->
+                match Naki.taken naki, Naki.target naki with
+                | Some taken, Some target ->
+                    match GameState.player target state with
+                    | Some victim -> List.contains taken (PlayerState.kawa victim) && PlayerState.kawaTaken victim
+                    | None -> false
+                // 暗杠（11 票）没有被鸣的那张，本票里也不会出现。
+                | _ -> true))
 
     [<Property>]
     let ``和了收尾时授受把点数与供托一起守恒`` (state: GameState) =

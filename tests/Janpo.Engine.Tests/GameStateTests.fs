@@ -44,6 +44,8 @@ module GameStateTests =
         match action with
         | Action.Dahai(_, pai, _) -> pai
         | Action.Hora(_, _, pai) -> pai
+        | Action.Pon(_, _, pai, _) -> pai
+        | Action.Chi(_, _, pai, _) -> pai
         | Action.None actor -> failwith $"座位 {actor} 的「过」没有牌"
 
     [<Fact>]
@@ -77,7 +79,9 @@ module GameStateTests =
                 match action with
                 | Action.Dahai(_, _, tsumogiri) -> tsumogiri
                 | Action.Hora _
-                | Action.None _ -> failwith $"这一手不该有和了或「过」：{action}")
+                | Action.Pon _
+                | Action.Chi _
+                | Action.None _ -> failwith $"这一手不该有和了、鸣牌或「过」：{action}")
         )
 
     [<Fact>]

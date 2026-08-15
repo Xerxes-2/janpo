@@ -60,6 +60,21 @@ type EventArbitraries =
                 return Dahai(actor, pai, tsumogiri)
             }
 
+        let naki =
+            gen {
+                let! actor = seat
+                let! target = seat
+                let! pai = tile
+                let! consumed = Gen.listOfLength 2 tile
+                let! isPon = Gen.elements [ true; false ]
+
+                return
+                    if isPon then
+                        Pon(actor, target, pai, consumed)
+                    else
+                        Chi(actor, target, pai, consumed)
+            }
+
         let hora =
             gen {
                 let! actor = seat
@@ -103,5 +118,16 @@ type EventArbitraries =
         let endKyoku = Gen.constant EndKyoku
         let endGame = Gen.constant EndGame
 
-        Gen.oneof [ startGame; startKyoku; tsumo; dahai; hora; ryuukyoku; endKyoku; endGame ]
+        Gen.oneof
+            [
+                startGame
+                startKyoku
+                tsumo
+                dahai
+                naki
+                hora
+                ryuukyoku
+                endKyoku
+                endGame
+            ]
         |> Arb.fromGen
