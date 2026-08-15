@@ -37,7 +37,7 @@
 | 04 | **done** | vzoymsox | 223 测试；GameState/step/LegalActions 立起，事件流可回放 |
 | 05 | pending | | |
 | 06 | dispatched | | ws-a（裁决 D-2 提前并行）|
-| 07 | dispatched | | ws-b |
+| 07 | **done** | zsxqxsly | 269→305 测试；Mentsu/Naki 表示 + 多分解取最高番；提案 07-A |
 | 08 | pending | | |
 | 09 | pending | | |
 | 10 | pending | | |
