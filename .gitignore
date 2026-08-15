@@ -19,3 +19,6 @@ node_modules/
 .vscode/
 .idea/
 .ionide/
+
+# 牌谱样本（13 票对拍用；大文件不入版本控制，取法见 run/reports/13-prep-paifu-data.md）
+data/paifu/

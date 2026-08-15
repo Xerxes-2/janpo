@@ -728,3 +728,37 @@ mjai 的 `fan` 是个 int，役满没有番。记 13（数え役满同值，点�
 若要换成英文 `Rank` 改一个字段名即可）、`GameLength`（对局长度，术语表有 `Tonpuusen` / `Hanchan`
 两个取值却没有这个上位词）、`GameResult`（终局精算）、`GameProgress`（对局进程）、
 `RiichiBou`（立直棒，术语表的 `Kyotaku` 条目提了「立直棒」没给罗马字）。
+
+---
+
+### 13-prep / 牌谱取样走 HTTP Range 局部取 zip，不下整包
+
+上游按年打包（最小的 `2009.zip` 32MB，`2026.zip` 58MB）。取样脚本只 Range 取 zip 的中央目录 +
+抽中的成员，58MB 的包实际下行 ~3.5MB，落到 `data/paifu/`（已 gitignore）。
+否决：整包下载再抽（夜里无人值守，磁盘与带宽都不该按 GB 花）；用 `git clone` 上游仓库（那里只有转换器，
+数据在 release 里）。样本：2026-01 的 60 局（66,264 事件行 / 652 kyoku）+ 2009 的 8 局（只为验 schema 是否同）。
+
+### 13-prep / 额外配一份天凤官方 JSON 作 oracle，与 mjai 流按局对齐
+
+上游 mjai 数据集是给 Mortal 训练用的瘦身版：`hora` 只有 `actor/target/deltas/ura_markers`，
+`ryukyoku` 只有 `deltas`——**13 票要对拍的役种、符、番、和了点、流局形态全部缺失**。
+因牌谱 id 就是文件名，同一局可从 `https://tenhou.net/5/mjlog2json.cgi?<id>` 取回天凤官方 JSON，
+里面有 `["和了", deltas, [和了家, 放铳家, 包牌家, "40符2飜700-1300点", "立直(1飜)", …]]`。
+两者按第 k 个 `start_kyoku` ↔ `log[k]` 对齐，177 局的 `(bakaze,kyoku,honba,kyotaku)` 与 deltas 全等。
+否决：降级到 `fstqwq/mjlog2mjai` 自己转（读过其 `parse.py`，产出的 `hora` 同样瘦身，解决不了缺口）；
+直接取 mjlog XML（`tenhou.net/0/log/?id=` 实测 404，要账号态）。
+
+### 13-prep / 固件按「最小字节的集合覆盖」挑，18 局而不是 20 局
+
+目标是覆盖样本里出现过的全部 75 项特征（事件类型 × 流局形态 × 役 × 符档 × 点数档 ×
+双响/西入/本场/供托/里宝牌枚数）且总量 < 1MB。随机重启的贪心集合覆盖给出 11 局 697KB 的全覆盖，
+再按最小字节补到 18 局 / 177 kyoku / 987,413 字节。第 19、20 局会超 1MB，故停在 18。
+否决：随机抽 20 局（大明槓在 60 局样本里只出现 1 次，随机抽必漏）。
+
+### 13-prep / 字牌记法映射放 13 票的适配器，不放宽 `Tile.parse`
+
+样本用 mjai 生态原生记法 `E/S/W/N/P/F/C`（`bakaze` 亦然），我们只认 `1z`-`7z`。
+决定：映射写在 13 票自己的牌谱读入侧，`Tile.parse` 一字不动。
+否决：让 `Tile.parse` 兼收字母记法。理由：ADR-0001 与 01 票的决策都写死了「数据层只有一种记法」，
+一旦宽松，第二种记法会从牌谱读入渗回事件流与固件。同理建议 13 另立只读的 `PaifuEvent`，
+不要把 `Event` 的必填字段改成可选（那会毁掉「引擎产出的事件必然完整」这条不变量）。
