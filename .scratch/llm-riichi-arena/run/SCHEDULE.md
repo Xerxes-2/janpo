@@ -34,9 +34,9 @@
 | 01 | **done** | szpzyvsk | 9 条自主决策，2 条提案待审（提案 01-A/01-B） |
 | 02 | **done** | wmnqytql | 10 条决策，提案 02-A + 3 条待裁 |
 | 03 | **done** | szxmlrtu | 对拍 100 万手差异 0，逼出 3 个真 bug；7 条决策 + 提案 03-A |
-| 04 | dispatched | | ws-a |
+| 04 | **done** | vzoymsox | 223 测试；GameState/step/LegalActions 立起，事件流可回放 |
 | 05 | pending | | |
-| 06 | pending | | |
+| 06 | dispatched | | ws-a（裁决 D-2 提前并行）|
 | 07 | dispatched | | ws-b |
 | 08 | pending | | |
 | 09 | pending | | |
