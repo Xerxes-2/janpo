@@ -2,7 +2,7 @@ namespace Janpo
 
 /// 规则集：一场对局的规则配置。
 ///
-/// **座位数与牌山构成的唯一出处**——引擎别处不得再出现 `4`（座位数）、`136`（牌山张数）、
+/// **座位数、牌山构成与规则开关的唯一出处**——引擎别处不得再出现 `4`（座位数）、`136`（牌山张数）、
 /// `13`（配牌）、`14`（王牌）这类字面量，一律从这里读。
 ///
 /// 三麻（3 家 / 108 张 / 无 2-8m / 无红 5m）本版**不做**，但它在结构上只是另一个
@@ -17,6 +17,8 @@ type Ruleset =
         CopiesPerKind: int
         /// 红宝牌：牌山里把对应正牌的其中一张换成它。空列表 = 关掉红宝牌（SPEC 的规则开关）。
         Akadora: Tile list
+        /// 食断（SPEC 的「食断有无」开关）：关掉时副露的手牌不成立断幺九。
+        Kuitan: bool
         /// 每家的配牌张数。
         HaipaiSize: int
         /// 王牌张数。
@@ -45,6 +47,7 @@ module Ruleset =
             TileKinds = Tile.kinds
             CopiesPerKind = 4
             Akadora = Tile.akadoraKinds
+            Kuitan = true
             HaipaiSize = 13
             DeadWallSize = 14
             RinshanCount = 4
@@ -54,6 +57,9 @@ module Ruleset =
 
     /// 关掉红宝牌（SPEC 的「红宝牌有无」开关）。开着的形态就是各预设本身。
     let withoutAkadora (ruleset: Ruleset) : Ruleset = { ruleset with Akadora = [] }
+
+    /// 关掉食断（SPEC 的「食断有无」开关）：副露后断幺九不成立。
+    let withoutKuitan (ruleset: Ruleset) : Ruleset = { ruleset with Kuitan = false }
 
     // ---- 拆解 ----
 

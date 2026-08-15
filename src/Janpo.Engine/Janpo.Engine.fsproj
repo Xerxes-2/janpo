@@ -18,6 +18,12 @@
     <Compile Include="Kaze.fs" />
     <Compile Include="Ruleset.fs" />
     <Compile Include="Seat.fs" />
+    <Compile Include="Mentsu.fs" />
+    <Compile Include="Naki.fs" />
+    <Compile Include="AgariHand.fs" />
+    <Compile Include="MentsuBreakdown.fs" />
+    <Compile Include="Dora.fs" />
+    <Compile Include="Yaku.fs" />
     <Compile Include="Rng.fs" />
     <Compile Include="Wall.fs" />
     <Compile Include="Event.fs" />

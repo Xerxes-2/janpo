@@ -16,7 +16,23 @@ let private usage =
                                  用给定种子让四个随机选手打完一局，打印完整事件流与结算后点数
   janpo shanten [--naki N] <记法>...  打印向听数、和了型与有效牌（四麻全 34 牌种）
   janpo shanten --batch               从 stdin 逐行读「<副露数> <记法>...」，每行打印一个向听数
+  janpo yaku --win <记法> [选项] <暗牌记法>...
+                                 判定役种与番数（不含符与点数）
   janpo --help                        打印本帮助
+
+yaku 的选项:
+  --win <记法>        和了牌（必填，且要包含在暗牌里）
+  --tsumo / --ron     自摸或荣和（默认荣和）
+  --naki "<种类> <记法>..."
+                      副露，可重复：pon / chi / ankan / minkan / kakan，
+                      第一张是鸣来的那张（加杠第一张是加上去的那张）
+  --bakaze / --jikaze <1z-4z>
+                      场风与自风（默认都是 1z）
+  --riichi / --double-riichi / --ippatsu
+  --rinshan / --haitei / --houtei / --chankan / --tenhou / --chiihou
+  --dora <记法> / --ura <记法>
+                      宝牌指示牌，可重复
+  --no-kuitan         关掉食断
 
 示例:
   janpo tile "1z 5sr 5s 9s 3m"
@@ -26,7 +42,10 @@ let private usage =
   janpo kyoku 42
   janpo shanten "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
   janpo shanten --naki 1 "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p"
-  echo "0 1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z" | janpo shanten --batch"""
+  echo "0 1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z" | janpo shanten --batch
+  janpo yaku --win 9s --riichi "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z"
+  janpo yaku --win 4m --naki "pon 5z 5z 5z" --dora 1m "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z"
+"""
 
 /// `janpo tile <记法>...`：多个参数按空格拼接后当作一串记法。
 let private runTile (arguments: string list) : int =
@@ -189,6 +208,180 @@ let private runShantenBatch () : int =
     output.Flush()
     exitCode
 
+/// `janpo yaku` 的参数：暗牌、副露与上下文标志。
+type private YakuArguments =
+    {
+        Concealed: string list
+        Naki: Naki list
+        Winning: string option
+        Tsumo: bool
+        Context: YakuContext
+        Kuitan: bool
+    }
+
+/// 副露的记法：`<种类> <牌>...`，第一张是鸣来的那张（加杠是加上去的那张）。
+/// 座位只影响 mjai 事件与责任支付，判役用不上，这里填一个合法值。
+let private parseNakiSpec (text: string) : Result<Naki, string> =
+    let tokens =
+        text.Split([| ' '; '\t'; ',' |])
+        |> Array.filter (fun token -> token <> "")
+        |> List.ofArray
+
+    let described (result: Result<Naki, NakiError>) =
+        result |> Result.mapError NakiError.toDisplay
+
+    match tokens with
+    | [] -> Error "副露不能为空"
+    | kind :: rest ->
+        match Tile.parseMany (String.concat " " rest) with
+        | Error error -> Error(TileListParseError.toDisplay error)
+        | Ok tiles ->
+            match kind, tiles with
+            | "pon", taken :: consumed -> described (Naki.pon 1 taken consumed)
+            | "chi", taken :: consumed -> described (Naki.chi 3 taken consumed)
+            | "ankan", _ -> described (Naki.ankan tiles)
+            | "minkan", taken :: consumed -> described (Naki.minkan 1 taken consumed)
+            | "kakan", added :: taken :: consumed ->
+                described (Naki.pon 1 taken consumed |> Result.bind (Naki.kakan added))
+            | ("pon" | "chi" | "minkan" | "kakan"), _ -> Error $"「{kind}」后面牌太少"
+            | _ -> Error $"未知的副露种类「{kind}」，只有 pon / chi / ankan / minkan / kakan"
+
+/// `janpo yaku`：判定役种与番数。符与点数是 08 票的事，这里不算。
+let private runYaku (arguments: string list) : int =
+    let initial =
+        {
+            Concealed = []
+            Naki = []
+            Winning = None
+            Tsumo = false
+            Context = YakuContext.create Ton Ton
+            Kuitan = true
+        }
+
+    let withContext (arguments: YakuArguments) (context: YakuContext) = { arguments with Context = context }
+
+    let rec parse (arguments: YakuArguments) (rest: string list) : Result<YakuArguments, string> =
+        let context = arguments.Context
+
+        match rest with
+        | [] -> Ok arguments
+        | "--win" :: value :: tail -> parse { arguments with Winning = Some value } tail
+        | "--tsumo" :: tail -> parse { arguments with Tsumo = true } tail
+        | "--ron" :: tail -> parse { arguments with Tsumo = false } tail
+        | "--no-kuitan" :: tail -> parse { arguments with Kuitan = false } tail
+        | "--naki" :: value :: tail ->
+            match parseNakiSpec value with
+            | Error message -> Error message
+            | Ok naki ->
+                parse
+                    { arguments with
+                        Naki = arguments.Naki @ [ naki ]
+                    }
+                    tail
+        | "--bakaze" :: value :: tail ->
+            match Kaze.parse value with
+            | Some kaze -> parse (withContext arguments { context with Bakaze = kaze }) tail
+            | None -> Error $"场风要写成 1z-4z，得到「{value}」"
+        | "--jikaze" :: value :: tail ->
+            match Kaze.parse value with
+            | Some kaze -> parse (withContext arguments { context with Jikaze = kaze }) tail
+            | None -> Error $"自风要写成 1z-4z，得到「{value}」"
+        | "--dora" :: value :: tail ->
+            match Tile.parse value with
+            | Error error -> Error(TileParseError.toDisplay error)
+            | Ok marker ->
+                parse
+                    (withContext
+                        arguments
+                        { context with
+                            DoraMarkers = context.DoraMarkers @ [ marker ]
+                        })
+                    tail
+        | "--ura" :: value :: tail ->
+            match Tile.parse value with
+            | Error error -> Error(TileParseError.toDisplay error)
+            | Ok marker ->
+                parse
+                    (withContext
+                        arguments
+                        { context with
+                            UraDoraMarkers = context.UraDoraMarkers @ [ marker ]
+                        })
+                    tail
+        | "--riichi" :: tail ->
+            parse
+                (withContext
+                    arguments
+                    { context with
+                        Riichi = RiichiDeclaration.Riichi
+                    })
+                tail
+        | "--double-riichi" :: tail ->
+            parse
+                (withContext
+                    arguments
+                    { context with
+                        Riichi = RiichiDeclaration.DoubleRiichi
+                    })
+                tail
+        | "--ippatsu" :: tail -> parse (withContext arguments { context with Ippatsu = true }) tail
+        | "--rinshan" :: tail -> parse (withContext arguments { context with Rinshan = true }) tail
+        | "--haitei" :: tail -> parse (withContext arguments { context with Haitei = true }) tail
+        | "--houtei" :: tail -> parse (withContext arguments { context with Houtei = true }) tail
+        | "--chankan" :: tail -> parse (withContext arguments { context with Chankan = true }) tail
+        | "--tenhou" :: tail -> parse (withContext arguments { context with Tenhou = true }) tail
+        | "--chiihou" :: tail -> parse (withContext arguments { context with Chiihou = true }) tail
+        | token :: _ when token.StartsWith "--" -> Error $"未知选项「{token}」"
+        | token :: tail ->
+            parse
+                { arguments with
+                    Concealed = arguments.Concealed @ [ token ]
+                }
+                tail
+
+    match parse initial arguments with
+    | Error message ->
+        eprintfn "%s" message
+        2
+    | Ok parsed ->
+        match parsed.Winning with
+        | None ->
+            eprintfn "yaku 需要 --win <和了牌记法>"
+            2
+        | Some winning ->
+            let ruleset =
+                if parsed.Kuitan then
+                    Ruleset.yonma
+                else
+                    Ruleset.withoutKuitan Ruleset.yonma
+
+            let build = if parsed.Tsumo then AgariHand.tsumo else AgariHand.ron
+
+            let hand =
+                match Tile.parse winning, Tile.parseMany (String.concat " " parsed.Concealed) with
+                | Error error, _ -> Error(TileParseError.toDisplay error)
+                | _, Error error -> Error(TileListParseError.toDisplay error)
+                | Ok winning, Ok concealed ->
+                    build parsed.Naki concealed winning |> Result.mapError AgariHandError.toDisplay
+
+            match hand with
+            | Error message ->
+                eprintfn "%s" message
+                1
+            | Ok hand ->
+                match Yaku.detect ruleset parsed.Context hand with
+                | Error error ->
+                    eprintfn "%s" (YakuError.toDisplay error)
+                    1
+                | Ok tally ->
+                    printfn "shape: %s" (AgariShape.toDisplay tally.Shape)
+                    printfn "yaku: %s" (YakuTally.yaku tally |> List.map Yaku.name |> String.concat " ")
+                    printfn "han: %d" (YakuTally.han tally)
+                    printfn "yakuman: %d" (YakuTally.yakuman tally)
+                    printfn "dora: %d ura: %d aka: %d" tally.Dora tally.Uradora tally.Akadora
+                    printfn "display: %s" (YakuTally.toDisplay tally)
+                    0
+
 [<EntryPoint>]
 let main argv =
     match List.ofArray argv with
@@ -209,6 +402,7 @@ let main argv =
             eprintfn "--naki 要一个整数，得到: %s" naki
             2
     | "shanten" :: arguments -> runShanten 0 arguments
+    | "yaku" :: arguments -> runYaku arguments
     | unknown ->
         eprintfn "未知命令: %s" (String.concat " " unknown)
         eprintfn "%s" usage

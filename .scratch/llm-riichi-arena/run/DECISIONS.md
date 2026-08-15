@@ -370,6 +370,83 @@ ADR-0001 只说了记法（`1z` vs `E`）。罗马字**拼法**同样会分叉�
 `Ryuukyoku`。建议在 Consequences 补一句：wire 上的字符串一律照抄 mjai，F# 标识符一律照 CONTEXT.md，
 两者不一致时由编码器承担映射（`Kaze`、`Ryuukyoku` 已经是这样）。
 
+### 07 / 「已分解的和了形」是三个新类型，`HandShape` 与 `AgariShape` 一字未动
+
+`Naki`（副露的**内容**）→ `AgariHand`（暗牌 + 副露 + 和了牌 + 自摸/荣和）→
+`MentsuBreakdown`（4 个 `Mentsu` + 雀头 + `WaitKind`）。形态判定仍然走
+`AgariHand.toHandShape` + `AgariShape.classify`，不重复一份分解规则。
+否决：往 `HandShape` 里塞副露内容（03 的产出正被 04 用，且 Shanten 不需要牌面）。
+
+### 07 / `Naki` 是私有记录 + `NakiKind`，字段贴 mjai wire（10 / 11 复用）
+
+`Naki` 私有记录 `{ Kind; Taken: Tile option; Consumed: Tile list; Target: Seat option }`，
+对应 mjai 的 `pai` / `consumed` / `target`；构造子 `pon` / `chi` / `ankan` / `minkan` /
+`kakan`（`kakan` 吃一个已成的 `pon`，因此加杠必然记得原碰的来源，11 的责任支付要用）。
+红宝牌在副露里**保留**（要计番），`Naki.mentsu` 出来的 `Mentsu` 代表牌才去红。
+否决：公开 DU（不能带校验）、只存 `Tile list`（10/11 产事件时还得反推谁点的）。
+
+### 07 / 多种面子分解：全枚举 + `candidates` 排序，`detect` 取第一
+
+`MentsuBreakdown.enumerate` 穷举「雀头 × 面子拆法 × 和了牌落点」并去重
+（`111222333m` 出三刻与三顺两种，`2m2m2m3m4m` 和 2m 出单骑与两面两种）。
+`Yaku.candidates` 把每种读法（含七对子 / 国士）各判一遍，按
+「役满倍数 → 番数（含宝牌）→ 近似符」降序排；`Yaku.detect` 取第一个。
+否决：只取第一种分解（二盃口会被判成七对子、三暗刻会被判成一杯口）。
+
+### 07 / 同番时的 tiebreak 用一个私有的「近似符」函数
+
+高点法要求同番取高符，但符是 08 的。折中：`fuLikeness` 只算**随分解而变**的三项
+（面子基本符、雀头役牌符、听牌型符），不含门清荣和 / 自摸这类常数项，也不含连风牌雀头
+（规则集相关）。它是私有的、只用于排序；08 可以拿 `Yaku.candidates` 按自己的符规则再选一次。
+
+### 07 / `Yaku` / `NakiKind` / `YakuValue` / `RiichiDeclaration` 一律 `[<RequireQualifiedAccess>]`
+
+`Yaku` 有 43 个 case，`Chiitoitsu` / `Kokushi` 与 `AgariShape` 撞名、`Tenhou` 与将来的规则集
+预设撞名、`NakiKind.Pon` 与 10/11 要加的 `Event.Pon` 撞名。全部限定访问，写 `Yaku.Chiitoitsu`。
+否决：改名躲开（`YakuChiitoitsu` 这类前缀比限定访问更难读）。这是对 01「类型与同名 module 同文件」
+约定的一个补充，不是偏离。
+
+### 07 / 不做双倍役满；但十三面 / 单骑 / 纯正九莲各占一个 case
+
+天凤官方手册与 riichi.wiki 的 Tenhou rules 都写明：役满**复合**有，**双倍役满没有**
+（四暗刻单骑、国士十三面、纯正九莲、大四喜都是单倍）。13 票的对拍源就是天凤牌谱，
+因此 `YakuValue.Yakuman` 的倍数恒为 1，复合靠多个役各占一倍。
+`KokushiJuusanmen` / `SuuankouTanki` / `JunseiChuuren` 仍是独立 case——天凤的役表把它们
+分开列，13 票比对役种集合时要对得上；将来要开双倍役满，只需改 `Yaku.value` 一处。
+
+### 07 / 食断做成 `Ruleset.Kuitan`（动了 02 的 `Ruleset.fs`）
+
+SPEC 的规则开关只有「红宝牌有无、食断有无」，02 的决策也写明「后面 6 张票要加规则开关」，
+因此在 `Ruleset` 上加 `Kuitan: bool`（默认 true）与 `Ruleset.withoutKuitan`，不另立全局开关。
+这是本票唯一一处改到别的票的文件，改动是纯增字段。
+
+### 07 / 绿一色不要求发；混老头与混全带幺九互斥
+
+绿一色按通行规则**不**要求必须有发（天凤同）。「每一块都带幺九」且**没有顺子**时只计混老头，
+不再计混全带幺九 / 纯全带幺九（天凤的役表就是这么互斥的）。有字牌计混全带幺九，无字牌计纯全带幺九。
+
+### 07 / `Yaku.name` 是稳定的罗马字标识符，不是渲染层
+
+`Yaku.name : Yaku -> string`（`riichi` / `yakuhai:5z` / `bakaze:1z` / `junsei_chuuren`）供
+`janpo yaku` 输出与 13 票对拍用；中文仍然只在 `Yaku.toDisplay`。它与 `Tile.toMjai` 同类：
+是数据的稳定写法，不是给人看的形式。
+
+### 07 / 没做的役与原因
+
+流し満貫（12 票的流局范畴）、人和（非通行役，SPEC 的「古役与地方役」排除）、
+双倍役满（见上）、役满的包牌与点数（08 / 11）。符与点数全部不在本票，`YakuTally`
+只到「役 + 番 + 宝牌 + 选中的分解」为止。
+
+## 提案（需人裁决，勿自行落地）
+
+### 提案 07-A：把和了形相关的罗马字词补进 CONTEXT.md
+
+07 落地时用到、但术语表里没有的词：`Mentsu`（面子）与 `Shuntsu` / `Koutsu` / `Kantsu`
+（顺子 / 刻子 / 杠子）、`Jantou`（雀头）、`Menzen`（门清）、`Yakuman`（役满）、
+`Han`（番）、`Kuitan`（食断）、`WaitKind` 的五种听牌型（`Ryanmen` / `Penchan` / `Kanchan` /
+`Shanpon` / `Tanki`）、`RiichiDeclaration`。术语表现在只有 `Yaku` 与 `Fu` 两条，
+08（符）与 10/11（副露）会继续用这批词，建议在「规则判定」一节补齐。
+
 ### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
 
 02 与 03 并行开发，各自独立造了「这个规则集里存在哪些牌种」的表示：

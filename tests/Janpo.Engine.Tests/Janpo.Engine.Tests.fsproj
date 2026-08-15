@@ -20,6 +20,12 @@
     <Compile Include="ShantenProperties.fs" />
     <Compile Include="AgariShapeTests.fs" />
     <Compile Include="UkeireTests.fs" />
+    <Compile Include="YakuGenerators.fs" />
+    <Compile Include="NakiTests.fs" />
+    <Compile Include="AgariHandTests.fs" />
+    <Compile Include="DoraTests.fs" />
+    <Compile Include="YakuTests.fs" />
+    <Compile Include="YakuProperties.fs" />
     <Compile Include="ShantenOracleTests.fs" />
     <Compile Include="KazeTests.fs" />
     <Compile Include="RulesetTests.fs" />
