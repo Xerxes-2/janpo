@@ -4,10 +4,13 @@ open Xunit
 open Janpo
 open Janpo.Engine.Tests.GameStateFixtures
 
-/// 和了的成立路径：自摸和、荣和、振听与头跳。
+/// 和了的成立路径：自摸和、荣和、振听、头跳，以及和了事件里的真实点数。
 ///
 /// 牌山是**摊出来的**（`startScripted`），因此「指定的和了在指定 Junme 发生」是确定的事实，
-/// 不必去碰运气找种子。本票**不算点数**：事件里的符 / 番 / 和了点与授受一律为 0（08 票填）。
+/// 不必去碰运气找种子；连带的，表宝牌指示牌也是剧本定死的（每条用例写明它是哪张）。
+///
+/// **本文件的点数用例一律依据 `Ruleset.yonma`**（= 天凤：连风牌雀头 4 符、岭上自摸 +2 符、
+/// 切上满贯关、一本场 300 点、立直棒 1000 点）；符与点数本身的边界用例在 FuTests / ScoreTests。
 module HoraTests =
 
     let private pai (notation: string) : Tile =
@@ -54,6 +57,11 @@ module HoraTests =
 
     let private horasOf (state: GameState) : Hora list = GameState.horas state
 
+    /// 这一局翻开的表宝牌指示牌。点数用例把它写成断言：宝牌几番是剧本的**输入**，
+    /// 不是算出来的结果，读用例的人不必去反推牌山。
+    let private doraMarkers (state: GameState) : string list =
+        GameState.wall state |> Wall.doraIndicators |> List.map Tile.toMjai
+
     // ---- 自摸和 ----
 
     [<Fact>]
@@ -82,16 +90,23 @@ module HoraTests =
         Assert.True(GameState.isEnded ended)
         Assert.Empty(GameState.legalActions ended)
 
+        // 规则集：`Ruleset.yonma`。手牌 123m 456m 789m 123p + 5z，单骑自摸 5z：
+        // 门前清自摸和 1 番 + 一气通贯（门清）2 番 = 3 番；表宝牌指示牌 8s（宝牌 9s）
+        // 手里一张都没有，宝牌 0 番。
+        // 符 = 底 20 + 雀头（白）2 + 单骑 2 + 自摸 2 = 26 → 切上 30 符。
+        // 亲 30 符 3 番自摸：基本点 960，三家各付 ceil100(1920) = 2000，合计 6000。
+        Assert.Equal<string list>([ "8s" ], doraMarkers ended)
+
         let expected =
             {
                 Actor = 0
                 Target = 0
                 Pai = pai "5z"
-                Fu = 0
-                Fan = 0
-                HoraPoints = 0
-                Deltas = [ 0; 0; 0; 0 ]
-                Scores = [ 25000; 25000; 25000; 25000 ]
+                Fu = 30
+                Fan = 3
+                HoraPoints = 6000
+                Deltas = [ 6000; -2000; -2000; -2000 ]
+                Scores = [ 31000; 23000; 23000; 23000 ]
             }
 
         Assert.Equal<Event list>([ Hora expected ], events)
@@ -175,16 +190,22 @@ module HoraTests =
         let state = atTheRon ()
         let ended, events = stepped state (Action.Hora(2, 0, pai "4p"))
 
+        // 规则集：`Ruleset.yonma`。座位 2 荣和 4p：234p 234s 678s 345m + 99m 雀头，
+        // 四顺子 + 非役牌雀头 + 两面听 = 平和 1 番；表宝牌指示牌 2z（宝牌 3z）手里没有，宝牌 0 番。
+        // 符 = 底 20 + 门清荣和 10 = 30 符（平和荣和就是 30 符）。
+        // 子 30 符 1 番荣和：基本点 240，放铳者付 ceil100(960) = 1000。
+        Assert.Equal<string list>([ "2z" ], doraMarkers ended)
+
         let expected =
             {
                 Actor = 2
                 Target = 0
                 Pai = pai "4p"
-                Fu = 0
-                Fan = 0
-                HoraPoints = 0
-                Deltas = [ 0; 0; 0; 0 ]
-                Scores = [ 25000; 25000; 25000; 25000 ]
+                Fu = 30
+                Fan = 1
+                HoraPoints = 1000
+                Deltas = [ -1000; 0; 1000; 0 ]
+                Scores = [ 24000; 25000; 26000; 25000 ]
             }
 
         Assert.Equal<Event list>([ Hora expected ], events)
@@ -381,6 +402,180 @@ module HoraTests =
         Assert.Equal<Seat list>([ 0 ], horasOf tsumo |> List.map (fun hora -> hora.Actor))
         Assert.Equal<Seat list>([ 2 ], horasOf ron |> List.map (fun hora -> hora.Actor))
 
+    // ---- 无役不可和 ----
+
+    /// 跑到座位 0 第 2 巡摸进 2m、还没打出去的那一步（剧本见 `noYakuRonScript`）。
+    let private beforeTheNoYakuDiscard () =
+        startScripted noYakuRonScript
+        |> driveUntil passive (fun state -> junmeOf 0 state = 2)
+
+    [<Fact>]
+    let ``型成立但一个役都没有时，Ron 不出现在合法动作集里`` () =
+        let state = beforeTheNoYakuDiscard ()
+        let discarded, events = stepped state (Action.Dahai(0, pai "2m", true))
+
+        // 座位 2 确实听牌、确实不振听，手牌加上 2m 也确实成和了型——
+        // 挡住它的只有「无役」这一条。
+        match GameState.player 2 state with
+        | Some player ->
+            Assert.True(PlayerState.isTenpai kindSet player)
+            Assert.True(PlayerState.isAgariWith kindSet (pai "2m") player)
+            Assert.Equal<Furiten>(Furiten.none, PlayerState.furiten player)
+        | None -> failwith "座位 2 应当存在"
+
+        // 于是响应阶段压根不开：打完这张直接轮下家摸牌。
+        Assert.False(inResponsePhase discarded)
+        Assert.Empty(actionsOf 2 discarded)
+        Assert.Equal<Event list>([ Dahai(0, pai "2m", true); Tsumo(1, pai "9p") ], events)
+
+        // 宣言也没用：引擎压根不在等它答复。
+        Assert.Equal<IllegalAction>(NotYourTurn(2, [ 1 ]), rejected discarded (Action.Hora(2, 0, pai "2m")))
+
+    [<Fact>]
+    let ``同一手牌无役不能荣和，自摸却有门前清自摸和`` () =
+        let state =
+            beforeTheNoYakuDiscard ()
+            |> driveUntil passive (fun state -> junmeOf 2 state = 2)
+
+        // 座位 2 第 2 巡摸进的正是刚才和不了的那张 2m：同一个型，自摸就有役。
+        match GameState.player 2 state with
+        | Some player -> Assert.True(PlayerState.isAgari kindSet player)
+        | None -> failwith "座位 2 应当存在"
+
+        Assert.Contains(Action.Hora(2, 2, pai "2m"), actionsOf 2 state)
+
+        let ended, _ = stepped state (Action.Hora(2, 2, pai "2m"))
+
+        // 规则集：`Ruleset.yonma`。123m 567p 345s 789s + 1z 雀头，嵌张自摸 2m：
+        // 门前清自摸和 1 番（平和不成——嵌张听）；表宝牌指示牌 2z（宝牌 3z）手里没有。
+        // 符 = 底 20 + 雀头（场风东）2 + 嵌张 2 + 自摸 2 = 26 → 切上 30 符。
+        // 子 30 符 1 番自摸：基本点 240，子各付 300、亲付 500，合计 1100。
+        Assert.Equal<string list>([ "2z" ], doraMarkers ended)
+
+        Assert.Equal<Hora list>(
+            [
+                {
+                    Actor = 2
+                    Target = 2
+                    Pai = pai "2m"
+                    Fu = 30
+                    Fan = 1
+                    HoraPoints = 1100
+                    Deltas = [ -500; -300; 1100; -300 ]
+                    Scores = [ 24500; 24700; 26100; 24700 ]
+                }
+            ],
+            horasOf ended
+        )
+
+    // ---- 本场与供托 ----
+
+    /// 带本场与供托的开局条件。
+    let private withSticks (honba: int) (kyotaku: int) : KyokuContext =
+        { context with
+            Honba = honba
+            Kyotaku = kyotaku
+        }
+
+    [<Fact>]
+    let ``自摸时本场由付家平摊，供托归和了者`` () =
+        // 规则集：`Ruleset.yonma`（一本场 300 点、立直棒 1000 点）。3 本场且场上有 2 根立直棒：
+        // 亲 30 符 3 番自摸 6000，三家各多付 300，和了者另收 2000 供托。
+        let state =
+            startScriptedIn ruleset (withSticks 3 2) tsumoHoraScript
+            |> driveUntil passive (fun state -> junmeOf context.Oya state = 2)
+
+        let ended, _ = stepped state (Action.Hora(context.Oya, context.Oya, pai "5z"))
+
+        Assert.Equal<Hora list>(
+            [
+                {
+                    Actor = 0
+                    Target = 0
+                    Pai = pai "5z"
+                    Fu = 30
+                    Fan = 3
+                    HoraPoints = 6000
+                    Deltas = [ 8900; -2300; -2300; -2300 ]
+                    Scores = [ 33900; 22700; 22700; 22700 ]
+                }
+            ],
+            horasOf ended
+        )
+
+        // 四家点数与供托之和不变：供托被收走了，它那 2000 点落到了四家点数里。
+        Assert.Equal(List.sum context.Scores + 2 * ruleset.RiichiStick, List.sum (GameState.scores ended))
+
+    [<Fact>]
+    let ``荣和时本场由放铳者一家付`` () =
+        // 规则集：`Ruleset.yonma`。2 本场且 1 根立直棒：子 30 符 1 番荣和 1000，
+        // 放铳者另付 600 本场，和了者另收 1000 供托。
+        let state =
+            startScriptedIn ruleset (withSticks 2 1) ronFuritenScript
+            |> driveUntil passive inResponsePhase
+
+        let ended, _ = stepped state (Action.Hora(2, 0, pai "4p"))
+
+        Assert.Equal<Hora list>(
+            [
+                {
+                    Actor = 2
+                    Target = 0
+                    Pai = pai "4p"
+                    Fu = 30
+                    Fan = 1
+                    HoraPoints = 1000
+                    Deltas = [ -1600; 0; 2600; 0 ]
+                    Scores = [ 23400; 25000; 27600; 25000 ]
+                }
+            ],
+            horasOf ended
+        )
+
+        Assert.Equal(List.sum context.Scores + ruleset.RiichiStick, List.sum (GameState.scores ended))
+
+    [<Fact>]
+    let ``双响时本场与供托只归排在最前的那一家`` () =
+        // 规则集：`Ruleset.yonma` 关掉头跳。1 本场且 1 根立直棒。
+        // 座位 2（排在前）：平和 30 符 1 番 1000 + 本场 300 + 供托 1000；
+        // 座位 3：平和断幺九 30 符 2 番 2000，不再分本场与供托。
+        let doubleRon = Ruleset.withoutAtamahane ruleset
+
+        let state =
+            startScriptedIn doubleRon (withSticks 1 1) doubleRonScript
+            |> driveUntil passive inResponsePhase
+
+        let first, _ = stepped state (Action.Hora(2, 0, pai "4p"))
+        let ended, _ = stepped first (Action.Hora(3, 0, pai "4p"))
+
+        Assert.Equal<Hora list>(
+            [
+                {
+                    Actor = 2
+                    Target = 0
+                    Pai = pai "4p"
+                    Fu = 30
+                    Fan = 1
+                    HoraPoints = 1000
+                    Deltas = [ -1300; 0; 2300; 0 ]
+                    Scores = [ 23700; 25000; 27300; 25000 ]
+                }
+                {
+                    Actor = 3
+                    Target = 0
+                    Pai = pai "4p"
+                    Fu = 30
+                    Fan = 2
+                    HoraPoints = 2000
+                    Deltas = [ -2000; 0; 0; 2000 ]
+                    Scores = [ 21700; 25000; 27300; 27000 ]
+                }
+            ],
+            horasOf ended
+        )
+
+        Assert.Equal(List.sum context.Scores + ruleset.RiichiStick, List.sum (GameState.scores ended))
+
     // ---- 渲染 ----
 
     [<Fact>]
@@ -390,6 +585,9 @@ module HoraTests =
         Assert.Equal("座位 1 声称荣和座位 2 打出的 3索，但刚打出的不是这张", IllegalAction.toDisplay (HoraTileMismatch(1, 2, pai "3s")))
 
         Assert.Equal("座位 1 的手牌加上 3索 不成和了型", IllegalAction.toDisplay (IllegalAction.NotAgari(1, pai "3s")))
+
+        Assert.Equal("座位 1 的手牌加上 3索 一个役都没有，不能和", IllegalAction.toDisplay (IllegalAction.NoYaku(1, pai "3s")))
+
         Assert.Equal("现在没有可响应的牌，座位 1 无从「过」起", IllegalAction.toDisplay (NothingToRespond 1))
 
     [<Fact>]

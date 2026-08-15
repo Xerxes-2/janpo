@@ -24,6 +24,8 @@
     <Compile Include="MentsuBreakdown.fs" />
     <Compile Include="Dora.fs" />
     <Compile Include="Yaku.fs" />
+    <Compile Include="Fu.fs" />
+    <Compile Include="Score.fs" />
     <Compile Include="Rng.fs" />
     <Compile Include="Wall.fs" />
     <Compile Include="Furiten.fs" />

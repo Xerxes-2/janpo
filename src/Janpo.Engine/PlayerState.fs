@@ -91,6 +91,17 @@ module PlayerState =
         | Error _ -> false
         | Ok shape -> AgariShape.isAgari kindSet shape
 
+    /// 这家此刻的和了牌姿：暗牌 + 副露 + 和了牌。自摸时和了牌已经在暗牌里（刚摸进那张），
+    /// 荣和时把点出来的那张补进去——牌型上它就是手牌的一部分（牌本身仍留在放铳者的河里）。
+    /// 张数不成和了牌姿时是 `AgariHandError`，是值不是异常。
+    ///
+    /// **引擎里构造 `AgariHand` 只有这一处**：副露（10 / 11 票）落地后只需改这里。
+    let agari (tsumo: bool) (winning: Tile) (player: PlayerState) : Result<AgariHand, AgariHandError> =
+        if tsumo then
+            AgariHand.tsumo [] player.Hand winning
+        else
+            AgariHand.ron [] (winning :: player.Hand) winning
+
     /// 和了牌的牌种（听什么）：暗牌加上它就成和了型的那些牌种，按 mjai 顺序升序。
     /// 永久振听用它与自己的河对。张数不对时得空列表。
     let waits (kindSet: TileKindSet) (player: PlayerState) : Tile list =

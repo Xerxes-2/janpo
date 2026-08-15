@@ -85,7 +85,7 @@ module GameStateProperties =
             | Error _ -> false)
 
     [<Property>]
-    let ``响应阶段等的每一家都不振听、和了型成立，且都能「过」`` (state: GameState) =
+    let ``响应阶段等的每一家都不振听、和了型成立、有役，且都能「过」`` (state: GameState) =
         match GameState.phase state with
         | AwaitingResponse phase ->
             phase.Responses
@@ -97,7 +97,14 @@ module GameStateProperties =
                         && PlayerState.isAgariWith kindSet phase.Pai player
                     | None -> false
 
+                // 无役不可和：被问到的每一家都算得出符与番。
+                let hasYaku =
+                    match GameState.horaOf choice.Seat state with
+                    | Ok _ -> true
+                    | Error _ -> false
+
                 canRon
+                && hasYaku
                 && choice.Seat <> phase.Target
                 && List.contains (Action.Hora(choice.Seat, phase.Target, phase.Pai)) choice.Actions
                 && List.contains (Action.None choice.Seat) choice.Actions)
@@ -105,15 +112,24 @@ module GameStateProperties =
         | Ended _ -> true
 
     [<Property>]
-    let ``和了收尾时点数一张不动，符与番与和了点都记 0`` (state: GameState) =
-        GameState.horas state
-        |> List.forall (fun hora ->
-            hora.Fu = 0
-            && hora.Fan = 0
-            && hora.HoraPoints = 0
-            && hora.Deltas = List.replicate ruleset.SeatCount 0
-            && hora.Scores = GameState.scores state
-            && hora.Scores = context.Scores)
+    let ``和了收尾时授受把点数与供托一起守恒`` (state: GameState) =
+        match GameState.horas state with
+        | [] -> true
+        | horas ->
+            let kyotaku = context.Kyotaku * ruleset.RiichiStick
+
+            // 一次和了的增减之和 = 它收走的供托；全部和了加起来正好把供托收干净。
+            (horas |> List.sumBy (fun hora -> List.sum hora.Deltas)) = kyotaku
+            // 逐条累加：最后一条就是这一局的最终点数。
+            && (List.last horas).Scores = GameState.scores state
+            && List.sum (GameState.scores state) = List.sum context.Scores + kyotaku
+            // 和了者收、放铳者（或付家）付；自摸时其余三家都付。
+            && horas
+               |> List.forall (fun hora ->
+                   List.item hora.Actor hora.Deltas > 0
+                   && hora.Fu > 0
+                   && hora.Fan > 0
+                   && hora.HoraPoints > 0)
 
     [<Property>]
     let ``回放确定性：同一串动作重放出同一局面与同一事件流`` (seed: int) =

@@ -35,6 +35,18 @@ type Ruleset =
         /// 关掉则双响 / 三响都成立。**默认开**（spec 的规则清单）——
         /// 天凤与雀魂实际都是双响，默认值该不该翻是待人裁决的事（DECISIONS 提案 S-A）。
         Atamahane: bool
+        /// Kiriage Mangan（切上满贯）：把 4 番 30 符 / 3 番 60 符（基本点 1920）上调为满贯。
+        /// **默认关**——天凤与雀魂段位战都不采用（DECISIONS 提案 S-A）。
+        KiriageMangan: bool
+        /// 连风牌雀头的符：雀头同时是场风与自风时算几符。**天凤是 4 符**；
+        /// 只算 2 符的规则集把它改成 2。单独的场风 / 自风 / 三元牌雀头恒为 2 符，不可配。
+        DoubleKazeJantouFu: int
+        /// 岭上自摸加不加自摸符（2 符）。天凤加，因此默认 true。
+        RinshanTsumoFu: bool
+        /// 一本场的点数：荣和时放铳者多付这么多，自摸时由付家平摊。
+        HonbaPoints: int
+        /// 一根立直棒的点数。供托（`Kyotaku`）记的是**根数**，换算成点数要乘它。
+        RiichiStick: int
     }
 
 /// 规则集的预设与推导量。
@@ -58,6 +70,11 @@ module Ruleset =
             StartingScore = 25000
             NotenBappu = 3000
             Atamahane = true
+            KiriageMangan = false
+            DoubleKazeJantouFu = 4
+            RinshanTsumoFu = true
+            HonbaPoints = 300
+            RiichiStick = 1000
         }
 
     /// 关掉红宝牌（SPEC 的「红宝牌有无」开关）。开着的形态就是各预设本身。
@@ -68,6 +85,10 @@ module Ruleset =
 
     /// 关掉头跳：同巡多家荣和时双响 / 三响都成立。
     let withoutAtamahane (ruleset: Ruleset) : Ruleset = { ruleset with Atamahane = false }
+
+    /// 打开切上满贯（SPEC 的规则开关）：4 番 30 符 / 3 番 60 符按满贯算。
+    /// 关着的形态就是各预设本身——天凤与雀魂段位战都不采用它。
+    let withKiriageMangan (ruleset: Ruleset) : Ruleset = { ruleset with KiriageMangan = true }
 
     // ---- 拆解 ----
 

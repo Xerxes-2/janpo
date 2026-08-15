@@ -37,7 +37,7 @@ module YakuTests =
         // 嵌张听 8s：不成平和，役表里只剩立直本身。
         let hand = ron [] "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z" "8s"
 
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset context hand)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context hand)
 
         let declared =
             { context with
@@ -73,19 +73,19 @@ module YakuTests =
 
         // 没立直却把一发标志打开：不成立。
         let noRiichi = { context with Ippatsu = true }
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset noRiichi hand)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset noRiichi hand)
 
     [<Fact>]
     let ``门前清自摸和要门清且自摸`` () =
         let concealed = "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z"
         Assert.Equal<Yaku list>([ Yaku.MenzenTsumo ], yaku context (tsumo [] concealed "8s"))
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset context (ron [] concealed "8s"))
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context (ron [] concealed "8s"))
 
         // 副露之后自摸不成役。
         let opened =
             tsumo [ AgariFixture.chi 3 "2m" "3m 4m" ] "5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z" "8s"
 
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset context opened)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context opened)
 
     [<Fact>]
     let ``平和要四顺子加两面听且雀头不是役牌`` () =
@@ -94,13 +94,13 @@ module YakuTests =
 
         // 同一手牌换成嵌张 8s：不是平和。
         Assert.Equal(
-            Error NoYaku,
+            Error YakuError.NoYaku,
             Yaku.detect ruleset context (ron [] "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z" "8s")
         )
 
         // 雀头是场风牌：不是平和。
         Assert.Equal(
-            Error NoYaku,
+            Error YakuError.NoYaku,
             Yaku.detect ruleset context (ron [] "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 1z 1z" "9s")
         )
 
@@ -113,7 +113,7 @@ module YakuTests =
         let opened =
             ron [ AgariFixture.chi 3 "2m" "3m 4m" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "8s"
 
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset context opened)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context opened)
 
     // ---- 断幺九与食断开关 ----
 
@@ -127,7 +127,7 @@ module YakuTests =
             ron [ AgariFixture.pon 1 "2s" "2s 2s" ] "2m 3m 4m 6m 7m 8m 5p 6p 7p 5s 5s" "4m"
 
         Assert.Equal<Yaku list>([ Yaku.Tanyao ], yaku context hand)
-        Assert.Equal(Error NoYaku, Yaku.detect (Ruleset.withoutKuitan ruleset) context hand)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect (Ruleset.withoutKuitan ruleset) context hand)
 
         // 食断关掉也不影响门清的断幺九。
         let menzen = ron [] "2m 3m 4m 6m 7m 8m 5p 6p 7p 2s 3s 4s 5s 5s" "3s"
@@ -175,7 +175,7 @@ module YakuTests =
         let houtei = { context with Houtei = true }
 
         Assert.Equal<Yaku list>([ Yaku.MenzenTsumo; Yaku.Haitei ], yaku haitei (tsumo [] concealed "8s"))
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset haitei (ron [] concealed "8s"))
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset haitei (ron [] concealed "8s"))
 
         Assert.Equal<Yaku list>([ Yaku.Houtei ], yaku houtei (ron [] concealed "8s"))
         // 自摸时河底不成立（门前清自摸和是另一回事）。
@@ -190,10 +190,10 @@ module YakuTests =
         let chankan = { context with Chankan = true }
 
         Assert.Equal<Yaku list>([ Yaku.Rinshan ], yaku rinshan (tsumo naki concealed "8s"))
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset rinshan (ron naki concealed "8s"))
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset rinshan (ron naki concealed "8s"))
 
         Assert.Equal<Yaku list>([ Yaku.Chankan ], yaku chankan (ron naki concealed "8s"))
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset chankan (tsumo naki concealed "8s"))
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset chankan (tsumo naki concealed "8s"))
 
     [<Fact>]
     let ``天和与地和是役满`` () =
@@ -206,7 +206,7 @@ module YakuTests =
         Assert.Equal<Yaku list>([ Yaku.Chiihou ], yaku chiihou (tsumo [] concealed "8s"))
 
         // 天和只可能是自摸。
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset tenhou (ron [] concealed "8s"))
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset tenhou (ron [] concealed "8s"))
 
     // ---- 2 番役 ----
 
@@ -287,7 +287,7 @@ module YakuTests =
         let noPinfu =
             ron [ AgariFixture.ankan "4z 4z 4z 4z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "9s"
 
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset context noPinfu)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context noPinfu)
 
     [<Fact>]
     let ``三色同刻三门同号的刻子`` () =
@@ -588,7 +588,7 @@ module YakuTests =
                 DoraMarkers = AgariFixture.tiles "1m 1m 1m"
             }
 
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset withDora hand)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset withDora hand)
 
     // ---- 不成和了型 ----
 
@@ -600,7 +600,7 @@ module YakuTests =
         let noYaku =
             ron [ AgariFixture.pon 1 "3z" "3z 3z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 5m 5m" "4m"
 
-        Assert.Equal(Error NoYaku, Yaku.detect ruleset context noYaku)
+        Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context noYaku)
 
     // ---- 渲染与标识符 ----
 
@@ -634,4 +634,4 @@ module YakuTests =
             YakuTally.toDisplay (detect context (ron [] "5z 5z 5z 6z 6z 6z 7z 7z 7z 2m 3m 4m 9m 9m" "4m"))
         )
 
-        Assert.Equal("无役，不能和", YakuError.toDisplay NoYaku)
+        Assert.Equal("无役，不能和", YakuError.toDisplay YakuError.NoYaku)

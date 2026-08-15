@@ -172,6 +172,10 @@ type YakuTally =
     }
 
 /// 判定为不可和的原因。是值，不是异常。
+///
+/// 两个 case 在 `IllegalAction` 那层都有同名的投影（引擎拒绝一个动作的理由），
+/// 因此**两边的使用点一律写全**：`YakuError.NotAgari` / `IllegalAction.NotAgari`，
+/// `YakuError.NoYaku` / `IllegalAction.NoYaku`。不靠「就近定义优先」碰运气（裁决 D-3）。
 type YakuError =
     /// 牌姿根本不成和了型（`AgariShape.classify` 为空）。
     | NotAgari
@@ -699,7 +703,7 @@ module Yaku =
             if List.isEmpty (AgariShape.classify kindSet (AgariHand.toHandShape hand)) then
                 Error YakuError.NotAgari
             else
-                Error NoYaku
+                Error YakuError.NoYaku
 
     // ---- 稳定标识符 ----
 
@@ -876,4 +880,4 @@ module YakuError =
     let toDisplay (error: YakuError) : string =
         match error with
         | YakuError.NotAgari -> "牌型不成和了"
-        | NoYaku -> "无役，不能和"
+        | YakuError.NoYaku -> "无役，不能和"

@@ -26,6 +26,10 @@
     <Compile Include="DoraTests.fs" />
     <Compile Include="YakuTests.fs" />
     <Compile Include="YakuProperties.fs" />
+    <Compile Include="FuTests.fs" />
+    <Compile Include="FuProperties.fs" />
+    <Compile Include="ScoreGenerators.fs" />
+    <Compile Include="ScoreTests.fs" />
     <Compile Include="ShantenOracleTests.fs" />
     <Compile Include="KazeTests.fs" />
     <Compile Include="RulesetTests.fs" />
@@ -45,6 +49,7 @@
     <Compile Include="GameStateTests.fs" />
     <Compile Include="GameStateProperties.fs" />
     <Compile Include="HoraTests.fs" />
+    <Compile Include="ScoreProperties.fs" />
     <Compile Include="KyokuTests.fs" />
   </ItemGroup>
 

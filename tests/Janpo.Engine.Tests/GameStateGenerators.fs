@@ -76,14 +76,18 @@ module GameStateFixtures =
     /// 一局的剧本：四家的配牌加上摸牌顺序，都写成 mjai 记法。
     type Script = { Hands: string list; Draws: string }
 
-    /// 用摊好的牌山开一局，规则集可换（头跳开关的两条用例要它）。
-    let startScriptedWith (ruleset: Ruleset) (script: Script) : GameState =
+    /// 用摊好的牌山开一局，规则集与开局条件都可换
+    /// （头跳开关、本场与供托的那几条用例要它）。
+    let startScriptedIn (ruleset: Ruleset) (kyokuContext: KyokuContext) (script: Script) : GameState =
         let hands = script.Hands |> List.map tilesOf
-        let wall = scriptedWall ruleset context.Oya hands (tilesOf script.Draws)
+        let wall = scriptedWall ruleset kyokuContext.Oya hands (tilesOf script.Draws)
 
-        match GameState.startFrom ruleset context wall with
+        match GameState.startFrom ruleset kyokuContext wall with
         | Ok state -> state
         | Error error -> failwith $"应当开得出局，却得到 {KyokuStartError.toDisplay error}"
+
+    /// 用摊好的牌山开一局，规则集可换（头跳开关的两条用例要它）。
+    let startScriptedWith (ruleset: Ruleset) (script: Script) : GameState = startScriptedIn ruleset context script
 
     /// 用摊好的牌山开一局。
     let startScripted (script: Script) : GameState = startScriptedWith ruleset script
@@ -105,13 +109,16 @@ module GameStateFixtures =
     /// 荣和与振听的剧本：座位 1 与座位 2 都听 4p，座位 1 第 1 巡自己打掉 7p
     /// （它的另一张和了牌）因而永久振听；座位 0 第 2 巡摸进 4p 打出去。
     /// 之后座位 1 第 2 巡摸进 1p 打出、座位 2 摸进 3z、座位 3 再打出 1p——同巡振听的用例要这一段。
+    ///
+    /// 座位 2 是四顺子 + 非役牌雀头的**平和**形：1p 与 4p 两端都成平和，因此它的荣和不靠
+    /// 「无役也能和」成立（无役不可和是 08 票接上的）。
     let ronFuritenScript =
         {
             Hands =
                 [
                     "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 5s 8s 6p"
                     "2m 3m 4m 5m 6m 7m 2p 3p 4p 5p 6p 9s 9s"
-                    "2s 3s 4s 6s 7s 8s 1m 1m 1m 9m 9m 2p 3p"
+                    "2s 3s 4s 6s 7s 8s 3m 4m 5m 9m 9m 2p 3p"
                     "6z 6z 7z 7z 3m 6m 9m 1s 4s 7s 1p 8p 9p"
                 ]
             Draws = "6z 7p 7z 5z 4p 1p 3z 1p"
@@ -119,30 +126,49 @@ module GameStateFixtures =
 
     /// 同巡三响的剧本：座位 1、2、3 都听 4p，座位 0 第 2 巡打出 4p。
     /// 头跳关掉时三家都成立（天凤把三家和了判成途中流局，那是 12 票的规则集字段）。
+    /// 三家各自有役：座位 1 自风南刻子、座位 2 平和、座位 3 平和断幺九。
     let tripleRonScript =
         {
             Hands =
                 [
                     "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 5s 8s 6p"
                     "5m 6m 7m 2z 2z 2z 3z 3z 3z 4z 4z 3p 5p"
-                    "2s 3s 4s 6s 7s 8s 1m 1m 1m 9m 9m 2p 3p"
-                    "2m 3m 4m 6m 7m 8m 1s 1s 1s 7s 7s 3p 5p"
+                    "2s 3s 4s 6s 7s 8s 3m 4m 5m 9m 9m 2p 3p"
+                    "2m 3m 4m 6m 7m 8m 3s 4s 5s 7s 7s 5p 6p"
                 ]
             Draws = "6z 7z 9p 9s 4p"
         }
 
-    /// 同巡双响的剧本：座位 2 听 1p / 4p、座位 3 听 4p，座位 0 第 2 巡打出 4p。
+    /// 同巡双响的剧本：座位 2 听 1p / 4p、座位 3 听 4p / 7p，座位 0 第 2 巡打出 4p。
     /// 打牌者是座位 0，因此下家优先的顺序是 1 → 2 → 3，座位 2 排在座位 3 前面。
+    /// 两家都是平和形（座位 3 还带断幺九），无役不可和不会把它们挡在外面。
     let doubleRonScript =
         {
             Hands =
                 [
                     "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 5s 8s 6p"
                     "1z 1z 2z 2z 3z 3z 4z 4z 5z 6z 7z 9p 9s"
-                    "2s 3s 4s 6s 7s 8s 1m 1m 1m 9m 9m 2p 3p"
-                    "2m 3m 4m 6m 7m 8m 1s 1s 1s 7s 7s 3p 5p"
+                    "2s 3s 4s 6s 7s 8s 3m 4m 5m 9m 9m 2p 3p"
+                    "2m 3m 4m 6m 7m 8m 3s 4s 5s 7s 7s 5p 6p"
                 ]
             Draws = "6z 7z 9p 9s 4p"
+        }
+
+    /// 无役的剧本：座位 2 听 2m 嵌张，但那手牌荣和时**一个役都没有**
+    /// （不成平和——嵌张听；不成断幺九——带 1m 与 1z；三色 / 一气 / 混全带都不成）。
+    ///
+    /// 座位 0 第 2 巡摸进 2m 打出去：座位 2 既不振听、牌型也成立，但无役不可和，
+    /// Ron 压根不进合法动作集；随后座位 2 自己第 2 巡摸进 2m，门前清自摸就是役，于是能和。
+    let noYakuRonScript =
+        {
+            Hands =
+                [
+                    "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 5s 8s 6p"
+                    "9m 9m 9p 9p 1s 1s 6z 6z 7z 7z 2z 3z 4z"
+                    "1m 3m 5p 6p 7p 3s 4s 5s 7s 8s 9s 1z 1z"
+                    "1p 2p 3p 4p 1m 4m 7m 6s 6s 2s 3z 4z 5z"
+                ]
+            Draws = "9s 9p 8p 8m 2m 9p 2m"
         }
 
     /// 某座位摸到第几巡了：它的 `tsumo` 事件条数。

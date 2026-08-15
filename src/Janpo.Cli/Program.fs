@@ -17,7 +17,7 @@ let private usage =
   janpo shanten [--naki N] <记法>...  打印向听数、和了型与有效牌（四麻全 34 牌种）
   janpo shanten --batch               从 stdin 逐行读「<副露数> <记法>...」，每行打印一个向听数
   janpo yaku --win <记法> [选项] <暗牌记法>...
-                                 判定役种与番数（不含符与点数）
+                                 判定役种、番数、符与点数授受
   janpo --help                        打印本帮助
 
 yaku 的选项:
@@ -33,6 +33,12 @@ yaku 的选项:
   --dora <记法> / --ura <记法>
                       宝牌指示牌，可重复
   --no-kuitan         关掉食断
+  --honba <N> / --kyotaku <N>
+                      本场数与供托（立直棒根数），计入授受
+  --kiriage           打开切上满贯（默认关：天凤与雀魂段位战都不采用）
+
+授受的座位约定（deltas 那一行）：和了者固定在座位 0；自风为 `1z` 时它就是亲，
+否则亲是座位 1；荣和的放铳者取座位 1。
 
 示例:
   janpo tile "1z 5sr 5s 9s 3m"
@@ -218,6 +224,9 @@ type private YakuArguments =
         Tsumo: bool
         Context: YakuContext
         Kuitan: bool
+        Honba: int
+        Kyotaku: int
+        Kiriage: bool
     }
 
 /// 副露的记法：`<种类> <牌>...`，第一张是鸣来的那张（加杠是加上去的那张）。
@@ -257,6 +266,9 @@ let private runYaku (arguments: string list) : int =
             Tsumo = false
             Context = YakuContext.create Ton Ton
             Kuitan = true
+            Honba = 0
+            Kyotaku = 0
+            Kiriage = false
         }
 
     let withContext (arguments: YakuArguments) (context: YakuContext) = { arguments with Context = context }
@@ -270,6 +282,15 @@ let private runYaku (arguments: string list) : int =
         | "--tsumo" :: tail -> parse { arguments with Tsumo = true } tail
         | "--ron" :: tail -> parse { arguments with Tsumo = false } tail
         | "--no-kuitan" :: tail -> parse { arguments with Kuitan = false } tail
+        | "--kiriage" :: tail -> parse { arguments with Kiriage = true } tail
+        | "--honba" :: value :: tail ->
+            match System.Int32.TryParse value with
+            | true, honba -> parse { arguments with Honba = honba } tail
+            | false, _ -> Error $"--honba 要一个整数，得到「{value}」"
+        | "--kyotaku" :: value :: tail ->
+            match System.Int32.TryParse value with
+            | true, kyotaku -> parse { arguments with Kyotaku = kyotaku } tail
+            | false, _ -> Error $"--kyotaku 要一个整数，得到「{value}」"
         | "--naki" :: value :: tail ->
             match parseNakiSpec value with
             | Error message -> Error message
@@ -351,10 +372,9 @@ let private runYaku (arguments: string list) : int =
             2
         | Some winning ->
             let ruleset =
-                if parsed.Kuitan then
-                    Ruleset.yonma
-                else
-                    Ruleset.withoutKuitan Ruleset.yonma
+                Ruleset.yonma
+                |> (if parsed.Kuitan then id else Ruleset.withoutKuitan)
+                |> (if parsed.Kiriage then Ruleset.withKiriageMangan else id)
 
             let build = if parsed.Tsumo then AgariHand.tsumo else AgariHand.ron
 
@@ -370,17 +390,36 @@ let private runYaku (arguments: string list) : int =
                 eprintfn "%s" message
                 1
             | Ok hand ->
-                match Yaku.detect ruleset parsed.Context hand with
+                // 高点法：`Score.best` 把全部读法按**真符**各算一遍，取点数最高的那一种。
+                match Score.best ruleset parsed.Context hand with
                 | Error error ->
                     eprintfn "%s" (YakuError.toDisplay error)
                     1
-                | Ok tally ->
+                | Ok reading ->
+                    let tally = reading.Tally
+
+                    // 座位约定见 usage：和了者固定在座位 0，自风为东时它就是亲。
+                    let transfer =
+                        {
+                            Actor = 0
+                            Target = (if parsed.Tsumo then 0 else 1)
+                            Oya = (if parsed.Context.Jikaze = Ton then 0 else 1)
+                            Honba = parsed.Honba
+                            Kyotaku = parsed.Kyotaku
+                        }
+
+                    let score = Score.hora ruleset transfer reading.Value
+
                     printfn "shape: %s" (AgariShape.toDisplay tally.Shape)
                     printfn "yaku: %s" (YakuTally.yaku tally |> List.map Yaku.name |> String.concat " ")
                     printfn "han: %d" (YakuTally.han tally)
                     printfn "yakuman: %d" (YakuTally.yakuman tally)
                     printfn "dora: %d ura: %d aka: %d" tally.Dora tally.Uradora tally.Akadora
+                    printfn "fu: %d" reading.Value.Fu
+                    printfn "points: %d" score.HoraPoints
+                    printfn "deltas: %s" (score.Deltas |> List.map string |> String.concat " ")
                     printfn "display: %s" (YakuTally.toDisplay tally)
+                    printfn "score: %s" (HoraScore.toDisplay score)
                     0
 
 [<EntryPoint>]

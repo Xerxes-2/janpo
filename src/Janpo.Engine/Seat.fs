@@ -26,6 +26,17 @@ module Seat =
     /// 是否是这个规则集下的合法座位。
     let isValid (ruleset: Ruleset) (seat: Seat) : bool = seat >= 0 && seat < ruleset.SeatCount
 
+    /// 自风：由座位与亲推出——亲是东，下家是南，依次类推（CONTEXT.md：
+    /// 自风不是座位本身的属性）。座位数非正或超过四风时退回东（不抛异常）。
+    let jikaze (ruleset: Ruleset) (oya: Seat) (seat: Seat) : Kaze =
+        if ruleset.SeatCount <= 0 then
+            Ton
+        else
+            let offset =
+                ((seat - oya) % ruleset.SeatCount + ruleset.SeatCount) % ruleset.SeatCount
+
+            Kaze.ofIndex offset |> Option.defaultValue Ton
+
     /// 下家：摸打推进的方向。座位数非正时原样返回（规则集不自洽时不抛异常）。
     let next (ruleset: Ruleset) (seat: Seat) : Seat =
         if ruleset.SeatCount <= 0 then

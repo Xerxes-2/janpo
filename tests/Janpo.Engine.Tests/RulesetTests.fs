@@ -52,6 +52,20 @@ module RulesetTests =
         Assert.Equal<Tile list>(Tile.sort tiles, tiles)
 
     [<Fact>]
+    let ``符与点数的规则项是字段不是写死的，默认值照天凤`` () =
+        // 切上满贯 **默认关**：天凤与雀魂段位战都不采用（DECISIONS 提案 S-A）。
+        Assert.False(Ruleset.yonma.KiriageMangan)
+        Assert.True((Ruleset.withKiriageMangan Ruleset.yonma).KiriageMangan)
+
+        // 连风牌雀头天凤是 4 符；岭上自摸天凤加自摸符。
+        Assert.Equal(4, Ruleset.yonma.DoubleKazeJantouFu)
+        Assert.True(Ruleset.yonma.RinshanTsumoFu)
+
+        // 一本场 300 点、一根立直棒 1000 点。
+        Assert.Equal(300, Ruleset.yonma.HonbaPoints)
+        Assert.Equal(1000, Ruleset.yonma.RiichiStick)
+
+    [<Fact>]
     let ``配牌总张数由座位数与配牌张数算出`` () =
         Assert.Equal(52, Ruleset.haipaiTotal Ruleset.yonma)
 
