@@ -10,6 +10,13 @@
 
   <ItemGroup>
     <Compile Include="Tile.fs" />
+    <Compile Include="Kaze.fs" />
+    <Compile Include="Ruleset.fs" />
+    <Compile Include="Seat.fs" />
+    <Compile Include="Rng.fs" />
+    <Compile Include="Wall.fs" />
+    <Compile Include="Event.fs" />
+    <Compile Include="KyokuStart.fs" />
   </ItemGroup>
 
   <ItemGroup>

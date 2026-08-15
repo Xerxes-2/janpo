@@ -69,6 +69,84 @@ Decoder 的失败信息等引擎内部诊断串用英文；中文只出现在 `T
 理由：宿主机是 Determinate Nix，registry 里的 nixpkgs 已经是这份快照，复用缓存不必再拉一份；
 它是纯 tarball URL，任何现代 Nix 都能取，flake.lock 已把版本钉死（dotnet-sdk 10.0.302 / uv 0.12.1）。
 
+### 02 / 洗牌自带 xorshift32，不用 System.Random
+
+`Rng` 是 `[<Struct>]` 私有记录（一个 `uint32` 状态），只用 32 位的位移与异或；`ofSeed` 避开 0
+这个不动点并空转三步，`nextBelow` 用拒绝采样消掉取模偏差，`shuffle` 是 Fisher-Yates。
+否决：`System.Random`（dotnet 与 Fable 两侧实现不同，跨目标不可复现）、带乘法的 SplitMix32
+（JS 里 32 位乘法要走 `Math.imul`，多一层 Fable 语义假设）。
+理由：「同种子同牌山」要在 dotnet 与浏览器两侧都成立，位移与异或是两边语义完全相同的最大子集。
+`RngTests` 里钉了固定种子的取数序列与牌山头 6 张，M1 编到 JS 后这几行必须一字不差。
+
+### 02 / 规则集叫 `Ruleset`，是公开记录 + 预设，不做校验类型
+
+`Ruleset` 是公开记录（`SeatCount` / `TileKinds` / `CopiesPerKind` / `Akadora` / `HaipaiSize` /
+`DeadWallSize` / `RinshanCount` / `StartingScore`），预设是 `Ruleset.yonma`，开关是
+`Ruleset.withoutAkadora`。牌山构成由 `Ruleset.wallTiles` 算出（红宝牌**换**而不是**加**）。
+否决：私有记录 + 每个字段一个 `with` 组合子（后面 6 张票要加规则开关，每加一个就要加一个组合子）；
+`validate : Ruleset -> Result<...>` 与「已校验规则集」类型（会把 Result 推给所有下游）。
+理由：不自洽的规则集只可能来自手搓，且开局这条路径已经在 `KyokuStartError` 里把它变成了值。
+将来从 JSON 读规则时再加 `Ruleset.create : ... -> Result<Ruleset, RulesetError>` 是纯增量。
+
+### 02 / Event 的形状：字段少的内联、字段多的另立记录载荷
+
+`Event` 用内联具名字段（`Tsumo of actor: Seat * pai: Tile`）；字段多、或含多个同类型标量
+（`kyoku` / `honba` / `kyotaku` 三个 int 挨着，位置传错编译器抓不住）的 case 另立记录载荷，
+`StartKyoku` 就是。加一个 case 的代价固定为三处：DU、`encoder`、`decoder`；漏哪处编译器都会报。
+否决：每个 case 都套记录（`Tsumo` 这类两字段的会被记录淹掉）、每个 case 都内联（`start_kyoku`
+的 8 个字段位置化太危险）。case 名一律取 mjai 事件名转 PascalCase，不自创。
+
+### 02 / Event 不设 `toDisplay`
+
+事件是 wire 数据，中文由 UI 按事件结构自己拼。否决：给 `Event` 加渲染出口。
+理由：那会让「加一个 case」的代价从三处变四处，而后面还有 12 张票在加 case；
+且事件的人话形态高度依赖上下文（谁打的、第几巡），不是一个纯函数能拼好的。
+错误类型仍然有 `toDisplay`（`KyokuStartError`），这条不变。
+
+### 02 / 场风是 `Kaze` 类型，wire 上写 `1z`-`4z`
+
+新增 `Kaze = Ton | Nan | Shaa | Pei`，`start_kyoku` 的 `bakaze` 用它。记法由序号推出
+（`toMjai = string (index + 1) + "z"`），不另立对照表，因此不会与 `Tile.toMjai` 漂移。
+否决：`bakaze: Tile`（`5m` 这种非风牌在类型层就能表示）、mjai 生态原生的 `E`/`S`/`W`/`N`
+（ADR-0001 已明确否决那套记法，`EventTests` 里有一条测试钉住「不接受 E」）。
+代价：与 mjai 生态的牌谱互转时，风牌记法要过一次映射——但牌本身已经是这个情况了。
+
+### 02 / `Seat` 是 int 的透明别名
+
+`type Seat = int` 加一个 `Seat` 模块（`all` / `orderFrom` / `next` / `isValid`，座位数都从
+规则集读）。否决：私有包装类型（0-3 的索引要拿来 `List.item`、要直接进 mjai 的 `actor` 字段，
+包装之后每处都要拆；13 张后续票天天用）。
+理由：CONTEXT.md 把 Seat 定义成「0-3 的固定索引」，mjai wire 上它就是个 int。
+将来真要收紧，改成私有 struct 是一次机械替换，别名让调用点全都已经写成了 `Seat`。
+
+### 02 / 王牌的分法：岭上在前，之后每叠「表 + 里」
+
+王牌 14 张按实际摆法拆成：前 `RinshanCount`（4）张岭上牌，其余每两张一叠
+（上表宝牌指示牌 / 下里宝牌指示牌），共 5 叠。开局翻第一叠，杠一次多翻一叠（`revealIndicator`）。
+位置在 `Wall.build` 时就定死，之后的访问器不必再带着规则集跑。
+理由：这是日麻的实际摆法，也是「表里成对」这条在 08/09 算里宝牌时唯一需要的结构。
+
+### 02 / 配牌按 4-4-4-1 的取牌手顺，且发完就排序
+
+从 Oya 起按下家方向，三轮各取 4 张、最后一轮各取 1 张；每家发完的手牌按 mjai 顺序排序。
+否决：每家取连续 13 张（统计上等价，但复盘时对不上真实手顺，要多一句解释）；保留发牌顺序
+（顺序不携带任何信息，排序让固件与 diff 稳定）。摸切判定要的「刚摸进那张」由 04 的
+GameState 单独记，不靠手牌顺序。
+
+### 02 / `start_game` 由调用方产出，引擎只产 `start_kyoku` + `tsumo`
+
+`KyokuStart.create` 产出的是一局的开局事件；`start_game` 是对局级事件，`names` 来自配桌，
+由 CLI（将来是 05 的 Game 层）直接构造 `Event.StartGame names`。
+理由：不想在 02 就替 05 定 Game 层的形状。构造一个无字段逻辑的事件不算「逻辑跑进 CLI」。
+
+### 02 / 结构性概念用英文，规则性概念用罗马字
+
+`Wall` / `DeadWall` / `Ruleset` / `Seat` 用英文，`Rinshan` / `Haipai` / `Kaze` / `Oya` /
+`Honba` / `Kyotaku` / `Tehais` 用罗马字。
+理由：CONTEXT.md 自己就是这么分的——它用 `Tile`（并明确 _Avoid_ `Pai`）、`Hand`（不是 Tehai）、
+`Seat`、`Event`，而规则长尾一律罗马字。ADR-0001 反对的是把**日麻术语**意译（`AcceptanceTiles`），
+不是禁止英文结构词。`Event` 的字段名另当别论：它跟 mjai wire 1:1，所以是 `tehais` 不是 `hands`。
+
 ## 提案（需人裁决，勿自行落地）
 
 <!-- 涉及 CONTEXT.md / ADR 变更的提案写在这里 -->
@@ -127,3 +205,11 @@ ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下�
 会把所有 match 点找出来，那是优点，提前抽象反而是投机性泛化。
 
 若早上决定把三麻纳入范围，CONTEXT.md 的 `Seat`（现定义为固定索引 0-3）需要改。
+
+### 提案 02-A：把开局这几个词补进 CONTEXT.md
+
+02 票落地时用到、术语表里没有的词：`Ruleset`（规则集，提案 S-A 已在提它）、
+`Wall`（牌山）与 `DeadWall`（王牌）、`Rinshan`（岭上牌）、`Haipai`（配牌）、
+`Kaze`（风，含 `Ton`/`Nan`/`Shaa`/`Pei`）、`DoraIndicator`（宝牌指示牌，术语表现在只有 Dora）、
+`Seed`/`Rng`（种子化发生器）。建议在「牌与手牌」与「引擎接缝」两节补齐。
+另：CONTEXT.md 的 Seat 条目写死「0-3」，若将来纳入三麻需要改成「0 起的固定索引，上界由规则集给」。

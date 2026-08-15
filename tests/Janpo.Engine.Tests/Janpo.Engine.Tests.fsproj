@@ -14,6 +14,20 @@
     <Compile Include="TileNotationTests.fs" />
     <Compile Include="TileProperties.fs" />
     <Compile Include="TileJsonTests.fs" />
+    <Compile Include="KazeTests.fs" />
+    <Compile Include="RulesetTests.fs" />
+    <Compile Include="SeatTests.fs" />
+    <Compile Include="RngTests.fs" />
+    <Compile Include="RngProperties.fs" />
+    <Compile Include="RulesetGenerators.fs" />
+    <Compile Include="WallTests.fs" />
+    <Compile Include="WallProperties.fs" />
+    <Compile Include="EventGenerators.fs" />
+    <Compile Include="EventTests.fs" />
+    <Compile Include="EventProperties.fs" />
+    <Compile Include="KyokuStartGenerators.fs" />
+    <Compile Include="KyokuStartTests.fs" />
+    <Compile Include="KyokuStartProperties.fs" />
   </ItemGroup>
 
   <ItemGroup>
