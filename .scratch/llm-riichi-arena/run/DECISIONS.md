@@ -276,3 +276,14 @@ ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下�
 会把所有 match 点找出来，那是优点，提前抽象反而是投机性泛化。
 
 若早上决定把三麻纳入范围，CONTEXT.md 的 `Seat`（现定义为固定索引 0-3）需要改。
+
+### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
+
+02 与 03 并行时各造了一份「本规则集里存在哪些牌种」：02 的 `Ruleset.TileKinds : Tile list`，
+03 的 `TileKindSet`（内部 34 长存在标志数组，`internal` 快路径）。编译器不会抗议，但 04 起的每张票
+都要同时面对两者。
+
+集成时**没有**动它们——重新设计不是调度器的职权，而且 04 的 agent 需要一个不动的靶子。
+已在派工时要求 04 用 `TileKindSet.ofTiles ruleset.TileKinds` 派生，**不许造第三份**。
+
+早上可考虑：让 `Ruleset` 直接携带 `TileKindSet`（编译顺序已经为此留好——03 的模块排在 `Ruleset.fs` 之前）。

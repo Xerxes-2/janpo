@@ -33,7 +33,7 @@
 |---|---|---|---|
 | 01 | **done** | szpzyvsk | 9 条自主决策，2 条提案待审（提案 01-A/01-B） |
 | 02 | **done** | wmnqytql | 10 条决策，提案 02-A + 3 条待裁 |
-| 03 | dispatched | | ws-b |
+| 03 | **done** | szxmlrtu | 对拍 100 万手差异 0，逼出 3 个真 bug；7 条决策 + 提案 03-A |
 | 04 | pending | | |
 | 05 | pending | | |
 | 06 | pending | | |
