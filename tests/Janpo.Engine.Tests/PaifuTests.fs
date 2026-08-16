@@ -7,6 +7,8 @@ open Janpo
 
 /// 牌谱的 wire 形态（票 26）：**编解码往返逐字段相同**，且 thinking 是可省略的那一段
 /// ——JSON 导出全量带着，URL 分享（M2）抹掉它，**两条路径共用同一个解码器**（ADR-0002）。
+///
+/// 票 31 又多一条：版本 1 的牌谱（每手存一整份 prompt）**照样读得动**，而且写回去仍是版本 1。
 module PaifuTests =
 
     let private json (paifu: Paifu) : string =
@@ -23,8 +25,9 @@ module PaifuTests =
             {
                 Turn = 0
                 Seat = seat 1
-                Prompt = "东1局 0 本场，你是座位 1……\n可选动作：\n0. 摸切1索\n1. 手切9万"
-                Tools = """{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":["0","1"]}}}}"""
+                PromptTail = "【现在】东1局 0 本场，你是座位 1……\n【可选动作】\n- id=0：摸切1索\n- id=1：手切9万"
+                RenderVersion = "janpo-default@08fcaec3"
+                ActionIds = [ 0; 1 ]
                 Output = """{"stop_reason":"toolUse","content":[{"type":"toolCall","name":"choose_action"}]}"""
                 Reason = Some "9万是孤张，先切它"
                 Thinking = Some "先数向听：现在是 2 向听……"
@@ -44,8 +47,9 @@ module PaifuTests =
             {
                 Turn = 7
                 Seat = seat 1
-                Prompt = "东1局 0 本场，你是座位 1……"
-                Tools = """{"name":"choose_action"}"""
+                PromptTail = "【现在】东1局 0 本场，你是座位 1……"
+                RenderVersion = "janpo-default@08fcaec3"
+                ActionIds = [ 0 ]
                 Output = ""
                 Reason = None
                 Thinking = None
@@ -58,9 +62,24 @@ module PaifuTests =
             }
         ]
 
+    /// prompt 的前置（票 31）：工具定义形状整场一份，座位 1 的固定 preamble 一份。
+    let private prompting: Prompting =
+        {
+            Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
+            Preambles =
+                [
+                    {
+                        Seat = seat 1
+                        RenderVersion = "janpo-default@08fcaec3"
+                        Text = "你在打日本立直麻将（天凤规则，四人东）……"
+                    }
+                ]
+        }
+
     let private paifu () : Paifu =
         match Game.runRandom Ruleset.yonma (Rng.ofSeed 2088) with
-        | Ok(game, _) -> Paifu.create Ruleset.yonma (StartGame [ "p0"; "p1"; "p2"; "p3" ] :: Game.events game) records
+        | Ok(game, _) ->
+            Paifu.create Ruleset.yonma (StartGame [ "p0"; "p1"; "p2"; "p3" ] :: Game.events game) records prompting
         | Error error -> failwith $"这一场应当打得完，却得到「{KyokuError.toDisplay error}」"
 
     // ---- 往返 ----
@@ -152,6 +171,93 @@ module PaifuTests =
     let ``牌谱带着格式版本号`` () =
         Assert.Contains($"\"version\":{Paifu.version}", json (paifu ()))
         Assert.Contains(Paifu.version, Paifu.supported)
+
+    // ---- prompt 的前置（票 31） ----
+
+    [<Fact>]
+    let ``牌谱只存 prompt 的尾部，前置整场各存一份`` () =
+        let text = json (paifu ())
+
+        Assert.Contains("\"prompt_tail\"", text)
+        Assert.DoesNotContain("\"prompt\":", text)
+        // 工具定义只在 `prompting` 里出现一次，不在每条记录里（两条记录共享同一份形状）。
+        Assert.Equal(1, text.Split("\"tools\":").Length - 1)
+        Assert.Contains("\"action_ids\":[0,1]", text)
+
+    [<Fact>]
+    let ``前置往返：preamble 按座位与渲染版本取得回来`` () =
+        let round = paifu () |> json |> decode
+
+        Assert.Equal(prompting, round.Prompting)
+
+        Assert.Equal(
+            Some "你在打日本立直麻将（天凤规则，四人东）……",
+            Prompting.preambleFor (seat 1) "janpo-default@08fcaec3" round.Prompting
+        )
+
+        // 换了人格（渲染版本跟着变）就取不到那一份：**版本号就是那把键**。
+        Assert.Equal(None, Prompting.preambleFor (seat 1) "janpo-default@ffffffff" round.Prompting)
+        Assert.Equal(None, Prompting.preambleFor (seat 0) "janpo-default@08fcaec3" round.Prompting)
+
+    [<Fact>]
+    let ``同一座位同一版本只存一份 preamble，换了人格才多一份`` () =
+        let one (version: string) (text: string) : Prompting =
+            {
+                Tools = "[shape]"
+                Preambles =
+                    [
+                        {
+                            Seat = seat 1
+                            RenderVersion = version
+                            Text = text
+                        }
+                    ]
+            }
+
+        let after =
+            Prompting.empty
+            |> Prompting.add (one "v1" "甲")
+            |> Prompting.add (one "v1" "甲")
+            |> Prompting.add (one "v2" "乙")
+            // 一次都没问成的那几手没有 prompt 可言，不该撑出一条空记录。
+            |> Prompting.add (one "v3" "")
+
+        Assert.Equal(2, List.length after.Preambles)
+        Assert.Equal("[shape]", after.Tools)
+        Assert.Equal(Some "甲", Prompting.preambleFor (seat 1) "v1" after)
+        Assert.Equal(Some "乙", Prompting.preambleFor (seat 1) "v2" after)
+
+    // ---- 旧版牌谱 ----
+
+    /// 票 31 之前的那一版：每手一整份 prompt、每手一份工具定义，没有 `prompting`。
+    let private v1 =
+        """{"version":1,"ruleset":RULESET,"events":[],"decisions":[
+             {"turn":0,"seat":1,"prompt":"你在打日本立直麻将……\n【现在】东1局",
+              "tools":"{\"name\":\"choose_action\"}","output":"o","attempts":1,"latency_ms":5,"applied":0}]}"""
+            .Replace("RULESET", Ruleset.encoder Ruleset.yonma |> Encode.toString 0)
+
+    [<Fact>]
+    let ``版本 1 的牌谱照样读得动：那一版存的整文就在 PromptTail 里`` () =
+        let old = decode v1
+        let record = Paifu.decisionAt 0 old |> Option.get
+
+        Assert.Equal(1, old.Version)
+        Assert.Contains("【现在】", record.PromptTail)
+        // 那一版没有的三项：读出来是空的，不是编一个出来。
+        Assert.Equal("", record.RenderVersion)
+        Assert.Equal<int list>([], record.ActionIds)
+        Assert.Equal(Prompting.empty, old.Prompting)
+
+    [<Fact>]
+    let ``版本 1 读进来再写出去仍是版本 1：不把当年的整文重标成尾部`` () =
+        let old = decode v1
+        let text = json old
+
+        Assert.Contains("\"version\":1", text)
+        Assert.Contains("\"prompt\":", text)
+        Assert.DoesNotContain("prompt_tail", text)
+        Assert.DoesNotContain("prompting", text)
+        Assert.Equal(old, decode text)
 
     [<Fact>]
     let ``认不出的版本号是读不动，而不是当成当前版本读`` () =

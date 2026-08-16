@@ -1,5 +1,5 @@
 /**
- * prompt 里那几个中文词的**唯一一份**（票 29b）。
+ * prompt 里那几个中文词的**唯一一份**（票 29b 抽出来，票 31 降成数据）。
  *
  * 存在的理由是「同一套措辞」：前缀（【到目前为止你看到的】，`history.ts`）与尾部
  * （【现在】，`prompt.ts`）渲的是同一件事的两种形态，两处的风向、座位与副露必须写成一样的词，
@@ -9,77 +9,96 @@
  * 术语照 `CONTEXT.md`（Shimocha / Toimen / Kamicha、Pon / Chi / Ankan / Minkan / Kakan、
  * Riichi），牌一律 mjai 记法（ADR-0001：中文牌名不进 prompt）。
  *
- * **票 31 要把措辞降成数据**，这份文件就是它的落脚点：现在是常量，那时是模板槽位。
+ * **票 31 把它降成了数据**：`DEFAULT_WORDING` 只是**默认的那一份**，模板可以整表替换
+ * （`template.ts`）。渲染器不再直接读常量，一律经 `Words`——它由「哪一份措辞表」加
+ * 「谁在看」现造，**一局之内恒定**，因此拿它渲历史不破坏前缀的字节稳定性。
  */
-
-/** 风：mjai 的字牌记法 → 中文单字。场风与自风共用。 */
-const KAZE: Record<string, string> = { "1z": "东", "2z": "南", "3z": "西", "4z": "北" };
-
-/** 立直状态（`Observation` 的三值字段）。 */
-const RIICHI: Record<string, string> = { none: "无", declared: "已宣言", accepted: "已成立" };
 
 /**
- * 相对座位（CONTEXT.md 的 Shimocha / Toimen / Kamicha）。
- * **数字是引擎算好的 `relative`**，这一层一次取模都不做——三麻没有对家，那是引擎的事。
+ * 一份措辞表。五张表各自是「wire 取值 → 中文」的字典，**认不出来的键原样写出去**
+ * （读不懂的东西不许悄悄消失）。
+ *
+ * 换表就是换 prompt 的措辞，**不必改代码重编**：整表从座位配置里的模板 JSON 注入。
  */
-const RELATIVE: Record<number, string> = { 1: "下家", 2: "对家", 3: "上家" };
+export interface Wording {
+  /** 风：mjai 的字牌记法 → 中文单字。场风与自风共用。 */
+  kaze: Record<string, string>;
+  /** 立直状态（`Observation` 的三值字段）。 */
+  riichi: Record<string, string>;
+  /**
+   * 相对座位（CONTEXT.md 的 Shimocha / Toimen / Kamicha），键是引擎算好的 `relative`。
+   * **这一层一次取模都不做**——三麻没有对家，那是引擎的事。
+   */
+  relative: Record<string, string>;
+  /** 副露的种类（wire 名照 mjai，`daiminkan` 就是术语表的 Minkan）。 */
+  naki: Record<string, string>;
+  /** 流局的形态（`RyuukyokuReason` 的 wire 取值）。 */
+  ryuukyoku: Record<string, string>;
+}
 
-/** 副露的种类（wire 名照 mjai，`daiminkan` 就是术语表的 Minkan）。 */
-const NAKI: Record<string, string> = {
-  pon: "碰",
-  chi: "吃",
-  ankan: "暗杠",
-  daiminkan: "大明杠",
-  kakan: "加杠",
-};
-
-/** 流局的形态（`RyuukyokuReason` 的 wire 取值）。 */
-const RYUUKYOKU: Record<string, string> = {
-  fanpai: "荒牌流局",
-  nagashimangan: "流し満贯",
-  kyushukyuhai: "九种九牌",
-  sufonrenta: "四风连打",
-  sukaikan: "四杠散了",
-  suchareach: "四家立直",
-  sanchaho: "三家和了",
+/** 默认的那一份措辞表。**模板不指定时用它**（票 31：默认模板仍在代码里）。 */
+export const DEFAULT_WORDING: Wording = {
+  kaze: { "1z": "东", "2z": "南", "3z": "西", "4z": "北" },
+  riichi: { none: "无", declared: "已宣言", accepted: "已成立" },
+  relative: { "1": "下家", "2": "对家", "3": "上家" },
+  naki: {
+    pon: "碰",
+    chi: "吃",
+    ankan: "暗杠",
+    daiminkan: "大明杠",
+    kakan: "加杠",
+  },
+  ryuukyoku: {
+    fanpai: "荒牌流局",
+    nagashimangan: "流し満贯",
+    kyushukyuhai: "九种九牌",
+    sufonrenta: "四风连打",
+    sukaikan: "四杠散了",
+    suchareach: "四家立直",
+    sanchaho: "三家和了",
+  },
 };
 
 /** 认不出来就把 wire 值原样写出去：**读不懂的东西不许悄悄消失**。 */
-function lookup<T extends string | number>(table: Record<T, string>, key: T): string {
-  return table[key] ?? String(key);
-}
-
-export function kaze(notation: string): string {
-  return lookup(KAZE, notation);
-}
-
-export function riichiState(wire: string): string {
-  return lookup(RIICHI, wire);
-}
-
-export function nakiKind(wire: string): string {
-  return lookup(NAKI, wire);
-}
-
-export function ryuukyokuReason(wire: string): string {
-  return lookup(RYUUKYOKU, wire);
+function lookup(table: Record<string, string>, key: string): string {
+  return table[key] ?? key;
 }
 
 /**
- * 「谁」的称呼表：座位号 → `你` / `下家` / `对家` / `上家`。
+ * 这一份 prompt 里的说法：五张措辞表加「谁」的称呼。
  *
- * **相对位置由决策包里的 `relative` 给**（引擎算的），因此前缀与尾部叫的是同一个名字，
- * 而这一层不必知道座位数，也不必做取模。这张表在一局之内恒定（座位不动），
- * 因此拿它渲染历史**不破坏前缀的字节稳定性**。
+ * **它一局之内恒定**（措辞表来自模板，称呼来自座位，两者都不随手数变），
+ * 因此拿它渲染历史**不破坏前缀的字节稳定性**（`prefix.test.ts` 守着这条）。
  */
-export interface Naming {
-  /** 那个座位在这份 prompt 里的称呼。 */
+export interface Words {
+  kaze: (notation: string) => string;
+  riichiState: (wire: string) => string;
+  nakiKind: (wire: string) => string;
+  ryuukyokuReason: (wire: string) => string;
+  /** 那个座位在这份 prompt 里的称呼：`你` / `下家` / `对家` / `上家`。 */
   who: (seat: number) => string;
 }
 
-export function namesFor(viewer: number, others: { seat: number; relative: number }[]): Naming {
-  const table = new Map<number, string>([[viewer, "你"]]);
-  for (const other of others) table.set(other.seat, lookup(RELATIVE, other.relative));
+/**
+ * 现造这一份 prompt 的说法。
+ *
+ * **相对位置由决策包里的 `relative` 给**（引擎算的），因此前缀与尾部叫的是同一个名字，
+ * 而这一层不必知道座位数，也不必做取模。
+ */
+export function wordsFor(
+  wording: Wording,
+  viewer: number,
+  others: { seat: number; relative: number }[],
+): Words {
+  const names = new Map<number, string>([[viewer, "你"]]);
+  for (const other of others)
+    names.set(other.seat, lookup(wording.relative, String(other.relative)));
 
-  return { who: (seat: number) => table.get(seat) ?? `座位 ${seat}` };
+  return {
+    kaze: (notation) => lookup(wording.kaze, notation),
+    riichiState: (wire) => lookup(wording.riichi, wire),
+    nakiKind: (wire) => lookup(wording.naki, wire),
+    ryuukyokuReason: (wire) => lookup(wording.ryuukyoku, wire),
+    who: (seat) => names.get(seat) ?? `座位 ${seat}`,
+  };
 }

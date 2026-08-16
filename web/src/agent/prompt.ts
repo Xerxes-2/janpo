@@ -1,18 +1,19 @@
 /**
- * prompt 的渲染（票 23，票 29b 把形态翻了过来）。
+ * prompt 的渲染（票 23，票 29b 把形态翻了过来，票 31 把它降成数据）。
  * **prompt 在 TS 侧渲染，F# 只出结构化决策包**（ADR-0005）。
  *
- * ## 三段，前两段可缓存
+ * ## 三段，前两段可缓存；第一段是 system 消息
  *
  * ```
- * ① 固定 preamble          规则与任务，逐字不变
- * ② 【到目前为止你看到的】   掩蔽事件流，append-only，既有的行永不改写   ← 前缀，provider 缓存吃这两段
+ * ① 人格 + 规则与读法      逐字不变        ← **system 消息**（票 31：各家的缓存语义更认它）
+ * ② 【到目前为止你看到的】   掩蔽事件流，append-only，既有的行永不改写   ← user 消息的前半，可缓存
  * ③ 【现在】+【可选动作】+（脚手架）+（重试原因）  每手重算，每手付全价   ← 尾部
  * ```
  *
  * 同一局里第 n 手的 ①②（`cacheablePrefix`）必须是第 n+1 手整份 prompt 的**字节前缀**，
- * 那条属性由 `tests/agent/prompt.test.ts` 守着。**前缀里因此不许出现会被重算的量**
- * ——当前巡目、牌山剩余、任何聚合数都只能待在尾部。
+ * 那条属性由 `tests/agent/prefix.test.ts` 守着。**前缀里因此不许出现会被重算的量**
+ * ——当前巡目、牌山剩余、任何聚合数都只能待在尾部。①②分属两条消息不改变这件事：
+ * provider 的前缀缓存吃的是整份请求的开头，而 system 消息就排在最前面。
  *
  * 两种客观事实**都给**、位置不同（主人 8/16 第四次裁决）：时间上的事件流在前缀，
  * 空间上的场况在尾部。**重复是故意的**——尾部就是前缀那条流的 fold（29a 保证的一条掩蔽法则），
@@ -22,16 +23,22 @@
  *
  * 牌一律用 mjai 记法（`3m` / `7z` / `5mr`）：决策包里就是这个形态，而**中文牌名要查术语表，
  * 那是 F# 渲染层的事**（ADR-0001）——需要中文的地方由决策包携带已经渲染好的字符串，
- * 动作的 `label` 就是这么来的。措辞常量（风、相对座位、副露）在 `wording.ts`，
- * **前缀与尾部共用一份**。
+ * 动作的 `label` 就是这么来的。
  *
- * **票 31 要把这三段降成数据**（模板 + 槽位 + system/人格）：接口就是下面的
- * `promptSections`——三段各自一个函数，谁也没焊死在一次字符串拼接里。
+ * ## 措辞与人格是数据（票 31）
+ *
+ * 三段的抬头、五张措辞表、规则说明与人格全在 `template.ts` 的 `PromptTemplate` 里，
+ * 由座位配置注入（`resolveTemplate`）——**改措辞不必改代码重编，两个座位可以同模型不同人格**。
+ * 这一份文件只剩「怎么把决策包摆成那几行」。默认模板下渲出来的字节与 29b 逐字相同。
+ *
+ * **牌谱只存尾部**（票 31 第三节）：前缀是 (事件流 + 座位 + 模板) 的派生物，而事件流就在
+ * 同一份牌谱里。`promptTail` 是存下去的那一段，`rebuild` 是把它与重算出来的前缀接回去的那一步。
  */
 
 import { historyLines } from "./history.ts";
+import { DEFAULT_TEMPLATE, type PromptTemplate, preambleOf } from "./template.ts";
 import type { DecisionPackage, MaskedSeat, Naki, RevealedSeat, ScaffoldTier } from "./types.ts";
-import { kaze, type Naming, nakiKind, namesFor, riichiState } from "./wording.ts";
+import { type Words, wordsFor } from "./wording.ts";
 
 /**
  * 决策包 `scaffold` 槽位里那几个数的形状（票 24）。F# 侧的对应物是 `Scaffold.encoder`。
@@ -116,46 +123,46 @@ function kawa(entries: { pai: string; tsumogiri: boolean }[]): string {
  * 副露：**措辞与历史那一段同一套**（票 29b）——种类写中文（碰 / 吃 / 暗杠 / 大明杠 / 加杠），
  * 来源写相对位置而不是座位号，牌照 mjai 记法。
  */
-function naki(groups: Naki[], naming: Naming): string {
+function naki(groups: Naki[], words: Words): string {
   if (groups.length === 0) return "无";
   return groups
     .map((group) => {
       const taken = group.pai === null ? "" : ` ${group.pai}`;
-      const from = group.target === null ? "" : `来自${naming.who(group.target)}，`;
-      return `${nakiKind(group.type)}${taken}（${from}亮出 ${group.consumed.join(" ")}）`;
+      const from = group.target === null ? "" : `来自${words.who(group.target)}，`;
+      return `${words.nakiKind(group.type)}${taken}（${from}亮出 ${group.consumed.join(" ")}）`;
     })
     .join("，");
 }
 
-function marks(riichi: string, ippatsu: boolean): string {
-  const state = riichiState(riichi);
+function marks(riichi: string, ippatsu: boolean, words: Words): string {
+  const state = words.riichiState(riichi);
   return ippatsu ? `${state}・一发` : state;
 }
 
-function self(seat: RevealedSeat, naming: Naming): string {
+function self(seat: RevealedSeat, words: Words): string {
   const furiten = seat.furiten.permanent ? "是（永久）" : seat.furiten.doujun ? "是（同巡）" : "否";
   return [
-    `你是座位 ${seat.seat}（${kaze(seat.jikaze)}家），第 ${seat.junme} 巡，${seat.score} 点。`,
+    `你是座位 ${seat.seat}（${words.kaze(seat.jikaze)}家），第 ${seat.junme} 巡，${seat.score} 点。`,
     `手牌：${seat.tehai.join(" ")}（${seat.tehai.length} 张）`,
     `刚摸进：${seat.tsumo ?? "无（这一手不是你摸牌）"}`,
-    `副露：${naki(seat.naki, naming)}`,
+    `副露：${naki(seat.naki, words)}`,
     `牌河：${kawa(seat.kawa)}`,
-    `立直：${marks(seat.riichi, seat.ippatsu)}　振听：${furiten}`,
+    `立直：${marks(seat.riichi, seat.ippatsu, words)}　振听：${furiten}`,
   ].join("\n");
 }
 
-function other(seat: MaskedSeat, naming: Naming): string {
+function other(seat: MaskedSeat, words: Words): string {
   return [
-    `${naming.who(seat.seat)}（座位 ${seat.seat}・${kaze(seat.jikaze)}家）：手里 ${seat.tehai_count} 张，第 ${seat.junme} 巡，${seat.score} 点，立直：${marks(seat.riichi, seat.ippatsu)}`,
-    `  副露：${naki(seat.naki, naming)}`,
+    `${words.who(seat.seat)}（座位 ${seat.seat}・${words.kaze(seat.jikaze)}家）：手里 ${seat.tehai_count} 张，第 ${seat.junme} 巡，${seat.score} 点，立直：${marks(seat.riichi, seat.ippatsu, words)}`,
+    `  副露：${naki(seat.naki, words)}`,
     `  牌河：${kawa(seat.kawa)}`,
   ].join("\n");
 }
 
-function board(decision: DecisionPackage): string {
+function board(decision: DecisionPackage, words: Words): string {
   const observation = decision.observation;
   return [
-    `${kaze(observation.bakaze)}${observation.kyoku}局 ${observation.honba} 本场，供托 ${observation.kyotaku} 根。`,
+    `${words.kaze(observation.bakaze)}${observation.kyoku}局 ${observation.honba} 本场，供托 ${observation.kyotaku} 根。`,
     `宝牌指示牌：${observation.dora_markers.join(" ") || "无"}　牌山剩余可摸 ${observation.wall_remaining} 张。`,
   ].join("\n");
 }
@@ -237,7 +244,7 @@ function dangerLines(decision: DecisionPackage, view: ScaffoldView): string[] {
  * Assisted 档多出来的那一节。措辞照 `CONTEXT.md`：**向听数 / 有效牌 / 进退向 / 退向（向听戻し）**，
  * 以及危险度那一批标签（**现物 / 筋 / 壁**，票 25）。
  */
-function scaffoldBlock(decision: DecisionPackage): string | null {
+function scaffoldBlock(decision: DecisionPackage, template: PromptTemplate): string | null {
   const view = readScaffold(decision.scaffold);
   if (view === null) return null;
 
@@ -252,10 +259,7 @@ function scaffoldBlock(decision: DecisionPackage): string | null {
     return entry === undefined ? [] : [trial(entry, option.label, option.id)];
   });
 
-  const head = [
-    "【引擎算好的数】（下面这几个数是引擎算出来的事实，不是建议）",
-    `当前向听数：${view.shanten.display}`,
-  ];
+  const head = [template.labels.scaffold, `当前向听数：${view.shanten.display}`];
 
   if (trials.length === 0) {
     // 这一手打不了牌（响应阶段）：手牌就是等摸形，有效牌直接给得出来。
@@ -273,77 +277,68 @@ function scaffoldBlock(decision: DecisionPackage): string | null {
 
 // ---- 三段 ----
 
-/**
- * ①**固定 preamble**：规则、读法与任务，**逐字不变**。
- *
- * 它是整份 prompt 里第一段可缓存的字节，因此**这里一个跟局面有关的字都不许出现**
- * ——座位、巡目、点数全在后面两段里。
- *
- * 票 31 会把它换成模板 + system 槽位 + 人格文本；那时这个常量变成默认模板。
- */
-export const PREAMBLE = [
-  "你在打日本立直麻将（天凤规则，四人东）。现在轮到你做决策。",
-  "每一次都调用 choose_action 工具，给出你选的 action_id 与一句话理由。",
-  "",
-  "【怎么读这份 prompt】",
-  "牌用 mjai 记法：`3m` 是万子 3、`7z` 是中、`5mr` 是红 5。",
-  "别家按相对位置称呼：下家（你的下一家）、对家、上家（打给你的那家）。",
-  "打出去的牌缀 `*` 表示摸切（打的就是刚摸进那张），不缀就是手切。",
-  "【到目前为止你看到的】是你亲眼看见的每一件事，按发生顺序逐条列着，只往后加，既有的行永不改写；",
-  "看不见的东西不在里面（别家摸进的牌面、别家的手牌）。",
-  "一张牌打出去之后，下一行若直接是摸牌，就说明那一张谁都没要——没人碰、吃、杠，也没人荣和。",
-  "【现在】是此刻摆在桌面上的场况——它就是上面那条流到此刻的样子，两者说的是同一件事，",
-  "写两遍是为了省掉你的心算，不是两份互相独立的情报。",
-].join("\n");
-
 /** ②**【到目前为止你看到的】**：append-only 的那一段。 */
-function historySection(decision: DecisionPackage, naming: Naming): string {
-  return ["【到目前为止你看到的】", ...historyLines(decision, naming)].join("\n");
+function historySection(decision: DecisionPackage, words: Words, template: PromptTemplate): string {
+  return [template.labels.history, ...historyLines(decision, words)].join("\n");
 }
 
 /**
  * ③**尾部**：【现在】+【可选动作】+（脚手架）+（重试原因）。**每手重算，每手付全价。**
  *
  * 顺序是票 29b 定的：先摆场况、再摆能选什么，算好的数与重试原因排在后面。
- * 牌谱只存这一段（票 31）——前缀由事件流重算得出来，尾部才是那一手独有的。
+ * **牌谱只存这一段**（票 31）——前缀由事件流重算得出来，尾部才是那一手独有的。
  */
 function presentSection(
   decision: DecisionPackage,
-  naming: Naming,
+  words: Words,
+  template: PromptTemplate,
   scaffold: string | null,
   note: string | null,
 ): string {
   const observation = decision.observation;
+  const labels = template.labels;
 
   return [
-    `【现在】\n${board(decision)}`,
+    `${labels.board}\n${board(decision, words)}`,
     "",
-    `【你的手牌】\n${self(observation.self, naming)}`,
+    `${labels.hand}\n${self(observation.self, words)}`,
     "",
-    `【其他三家】\n${observation.others.map((seat) => other(seat, naming)).join("\n")}`,
+    `${labels.others}\n${observation.others.map((seat) => other(seat, words)).join("\n")}`,
     "",
-    `【可选动作】只能从下面这些 id 里选一个：\n${options(decision)}`,
+    `${labels.actions}\n${options(decision)}`,
     ...(scaffold === null ? [] : ["", scaffold]),
-    ...(note === null
-      ? []
-      : ["", `【上一次的回答没有被采用】${note}\n请重新从上面列出的 id 里选一个。`]),
+    ...(note === null ? [] : ["", `${labels.retry}${note}\n${labels.retryTail}`]),
   ].join("\n");
 }
 
 /**
- * 三段各自一份，**拼装留给调用方**（票 31 要在这上面做槽位注入）。
+ * 三段各自一份，**拼装留给调用方**（票 31 的槽位注入就落在这上面）。
  *
- * `prefix` = ① + ②，就是那段可缓存的字节；`present` 是尾部。
+ * `preamble` + `history` 就是那段可缓存的字节；`present` 是尾部。
  * **往里插东西只能插在 `present` 里**：动 `preamble` 或 `history` 的措辞等于换一份前缀，
  * 那一局之前攒下的缓存全废（改渲染 = 废缓存，见报告里那条运维含义）。
  */
 export interface PromptSections {
-  /** ①固定 preamble：逐字不变。 */
+  /** ①人格 + 规则与读法：逐字不变，**它是 system 消息**。 */
   preamble: string;
   /** ②【到目前为止你看到的】：append-only。 */
   history: string;
   /** ③【现在】+【可选动作】+（脚手架）+（重试原因）：每手重算。 */
   present: string;
+}
+
+/**
+ * 真发出去的那两条消息（票 31）。
+ *
+ * **固定 preamble 进 system**：各家的缓存语义更认它（Anthropic 的 `cache_control` 就挂在
+ * system 块上），而 user 消息只剩历史 + 现况 + 动作。两条消息按 `JOIN` 接起来就是
+ * `renderPrompt` 那一份全文——审计与前缀属性都按那一份说话。
+ */
+export interface PromptMessages {
+  /** system 消息：人格 + 规则与读法。 */
+  system: string;
+  /** user 消息：历史 + 尾部。 */
+  user: string;
 }
 
 /** 两段之间的分隔。**只有这一处**：属性测试算前缀长度时按的就是它。 */
@@ -353,20 +348,26 @@ const JOIN = "\n\n";
  * 这一手的三段。`note` 是上一次没被采用的原因（重试时才有）。
  *
  * 档位只决定 `present` 里有没有那一节算好的数——**两档的差异只能是它**，
- * 否则同一局面的对照就不是一个变量（票 24 的验收）。
+ * 否则同一局面的对照就不是一个变量（票 24 的验收）。模板决定措辞与人格，
+ * 与档位是**两个维度**：不给就是默认模板（票 31：默认仍在代码里，只是不再唯一）。
  */
 export function promptSections(
   decision: DecisionPackage,
   tier: ScaffoldTier,
   note: string | null,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
 ): PromptSections {
-  const naming = namesFor(decision.observation.self.seat, decision.observation.others);
-  const scaffold = (SCAFFOLDS[tier] ?? SCAFFOLDS.bare)(decision);
+  const words = wordsFor(
+    template.wording,
+    decision.observation.self.seat,
+    decision.observation.others,
+  );
+  const scaffold = (SCAFFOLDS[tier] ?? SCAFFOLDS.bare)(decision, template);
 
   return {
-    preamble: PREAMBLE,
-    history: historySection(decision, naming),
-    present: presentSection(decision, naming, scaffold, note),
+    preamble: preambleOf(template),
+    history: historySection(decision, words, template),
+    present: presentSection(decision, words, template, scaffold, note),
   };
 }
 
@@ -377,7 +378,10 @@ export function promptSections(
  * `tool_search` 是 M3 的事（在信息辅助之上追加局面模拟查询工具），在那之前照 Bare 渲染；
  * 配置面板里它是灰的，所以这条分支正常走不到。
  */
-const SCAFFOLDS: Record<ScaffoldTier, (decision: DecisionPackage) => string | null> = {
+const SCAFFOLDS: Record<
+  ScaffoldTier,
+  (decision: DecisionPackage, template: PromptTemplate) => string | null
+> = {
   bare: () => null,
   assisted: scaffoldBlock,
   tool_search: () => null,
@@ -387,24 +391,96 @@ const SCAFFOLDS: Record<ScaffoldTier, (decision: DecisionPackage) => string | nu
  * **可缓存的那一段**：① + ②。
  *
  * 同一局里第 n 手的它必须是第 n+1 手整份 prompt 的**字节前缀**——这就是 provider
- * 的前缀缓存能吃到的那一段，也是 `prompt.test.ts` 里那条属性测试断言的东西。
+ * 的前缀缓存能吃到的那一段，也是 `prefix.test.ts` 里那条属性测试断言的东西。
+ * ①进了 system 消息之后这条仍然成立：请求是「system 在前、user 在后」序列化的。
  */
-export function cacheablePrefix(decision: DecisionPackage, tier: ScaffoldTier): string {
-  const sections = promptSections(decision, tier, null);
+export function cacheablePrefix(
+  decision: DecisionPackage,
+  tier: ScaffoldTier,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
+): string {
+  const sections = promptSections(decision, tier, null, template);
   return sections.preamble + JOIN + sections.history;
 }
 
 /**
- * 渲染这一手的 prompt：三段拼起来的一整条 user message。
+ * 真发出去的那两条消息。
  *
- * **单条不断增长的 user message，不是多轮对话**（裁决）：模型自己上一手的推理不进上下文，
+ * **user 是单条不断增长的消息，不是多轮对话**（裁决）：模型自己上一手的推理不进上下文，
  * 前缀因此只由客观事实决定。
+ */
+export function promptMessages(
+  decision: DecisionPackage,
+  tier: ScaffoldTier,
+  note: string | null,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
+): PromptMessages {
+  return messagesOf(promptSections(decision, tier, note, template));
+}
+
+/**
+ * 三段 → 两条消息。**拼法只有这一处**：决策循环要同时拿到消息与尾部，
+ * 渲染两遍再拉各自那一半，两份就可能对不上。
+ */
+export function messagesOf(sections: PromptSections): PromptMessages {
+  return {
+    system: sections.preamble,
+    user: sections.history + JOIN + sections.present,
+  };
+}
+
+/**
+ * **牌谱里存下去的那一段**：尾部，且只有尾部（票 31 第三节）。
+ *
+ * 前缀不存——它是 (事件流 + 座位 + 模板) 的派生物，而事件流就在同一份牌谱里。
+ * 存它在快照式 prompt 下只是浪费，在事件流式 prompt 下是 O(n²)。
+ */
+export function promptTail(
+  decision: DecisionPackage,
+  tier: ScaffoldTier,
+  note: string | null,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
+): string {
+  return promptSections(decision, tier, note, template).present;
+}
+
+/**
+ * 把牌谱里那一段尾部接回重算出来的前缀：**重建出当时真发出去的那两条消息**（票 31 第三节）。
+ *
+ * `preamble` 从牌谱的 `Prompting` 里按「座位 + 渲染版本」取，`decision` 由事件流 fold
+ * 到那一手重新算出来（`DecisionPackage.forSeat`），尾部原样取自那一条记录。
+ * **审计价值不打折**：渲染器当时出了什么怪，尾部原样留着证。
+ */
+export function rebuildMessages(
+  preamble: string,
+  decision: DecisionPackage,
+  tail: string,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
+): PromptMessages {
+  const words = wordsFor(
+    template.wording,
+    decision.observation.self.seat,
+    decision.observation.others,
+  );
+
+  return {
+    system: preamble,
+    user: historySection(decision, words, template) + JOIN + tail,
+  };
+}
+
+/**
+ * 整份 prompt 的全文：两条消息按 `JOIN` 拼起来。
+ *
+ * **它不是又一种发法**（真发出去的是 `promptMessages` 那两条），而是「这一手模型看到的
+ * 全部文字」的那一份——前缀属性、打印脚本与录制固件都按它说话。
  */
 export function renderPrompt(
   decision: DecisionPackage,
   tier: ScaffoldTier,
   note: string | null,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
 ): string {
-  const sections = promptSections(decision, tier, note);
-  return [sections.preamble, sections.history, sections.present].join(JOIN);
+  const messages = promptMessages(decision, tier, note, template);
+  return messages.system + JOIN + messages.user;
 }

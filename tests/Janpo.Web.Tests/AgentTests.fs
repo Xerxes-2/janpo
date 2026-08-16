@@ -21,6 +21,8 @@ module AgentTests =
             Thinking = Thinking.Low
             Tier = ScaffoldTier.Bare
             BaseUrl = ""
+            Persona = ""
+            Template = ""
         }
 
     /// 接本地 Ollama 的那一座（票 30）：**provider 是自定义端点、没有 key、有 baseUrl**。
@@ -73,6 +75,9 @@ module AgentTests =
         Assert.Contains("\"thinking\":\"low\"", json)
         // 档位过界：24 号票的 prompt 分档按它走。
         Assert.Contains("\"tier\":\"bare\"", json)
+        // 人格与模板也过界（票 31）：它们是 prompt 的数据，与档位互不相干。
+        Assert.Contains("\"persona\":\"\"", json)
+        Assert.Contains("\"template\":\"\"", json)
 
     [<Fact>]
     let ``key 随请求过界——它只从这台浏览器走到 provider`` () =
@@ -115,11 +120,16 @@ module AgentTests =
         let answer =
             answer
                 """{"action_id":3,"reason":"这张最安全","failure":null,"attempts":2,"latency_ms":2446,
-                    "prompt":"【可选动作】只能从下面这些 id 里选一个：","tools":"[{\"name\":\"choose_action\"}]",
+                    "prompt_tail":"【可选动作】只能从下面这些 id 里选一个：","tools":"[{\"name\":\"choose_action\"}]",
+                    "preamble":"你在打日本立直麻将……","render_version":"janpo-default@08fcaec3","action_ids":[0,3],
                     "output":"{\"stop_reason\":\"toolUse\"}","thinking":"先数向听……"}"""
 
-        Assert.Contains("可选动作", answer.Prompt)
+        Assert.Contains("可选动作", answer.PromptTail)
         Assert.Contains("choose_action", answer.Tools)
+        // prompt 的前后两半分开过界（票 31）：尾部每手一份，preamble 与渲染版本号整场一份。
+        Assert.Contains("你在打日本立直麻将", answer.Preamble)
+        Assert.Equal("janpo-default@08fcaec3", answer.RenderVersion)
+        Assert.Equal<int list>([ 0; 3 ], answer.ActionIds)
         Assert.Contains("toolUse", answer.Output)
         Assert.Equal(Some "先数向听……", answer.Thinking)
 
@@ -133,8 +143,11 @@ module AgentTests =
         Assert.Equal(None, answer.Failure)
         Assert.Equal(0, answer.Attempts)
         Assert.Equal(0, answer.LatencyMs)
-        // 审计那四项同理：缺了就是空的，不把这一手废掉。
-        Assert.Equal("", answer.Prompt)
+        // 审计那几项同理：缺了就是空的，不把这一手废掉。
+        Assert.Equal("", answer.PromptTail)
+        Assert.Equal("", answer.Preamble)
+        Assert.Equal("", answer.RenderVersion)
+        Assert.Equal<int list>([], answer.ActionIds)
         Assert.Equal("", answer.Tools)
         Assert.Equal("", answer.Output)
         Assert.Equal(None, answer.Thinking)
@@ -180,6 +193,30 @@ module AgentTests =
             Assert.Equal({ config with Tier = tier }, LlmSeat.edit LlmField.Tier (ScaffoldTier.toWire tier) config)
 
     [<Fact>]
+    let ``人格与档位是两个维度，不缠在一个枚举里`` () =
+        // 主人 8/16 第五次裁决第 2 条：同一个人格可以跑两档，同一档可以跑两个人格。
+        let styled = config |> LlmSeat.edit LlmField.Persona "你打得很凶。"
+
+        Assert.Equal("你打得很凶。", styled.Persona)
+        Assert.Equal(config.Tier, styled.Tier)
+
+        Assert.Equal(
+            { styled with
+                Tier = ScaffoldTier.Assisted
+            },
+            LlmSeat.edit LlmField.Tier "assisted" styled
+        )
+
+    [<Fact>]
+    let ``人格与模板原样存着，这一层不判读`` () =
+        // 人边打边存的中间态（写一半的 JSON）不该被吐回去：形状合不合法在 Agent 层判
+        // （`template.ts` 读不动就退回默认），而不是在这里把人填到一半的字清掉。
+        let half = """{"labels":{"history":"""
+
+        Assert.Equal(half, (LlmSeat.edit LlmField.Template half config).Template)
+        Assert.Equal("  前后带空格  ", (LlmSeat.edit LlmField.Persona "  前后带空格  " config).Persona)
+
+    [<Fact>]
     let ``每个字段读出来再写回去都是原样的`` () =
         // localStorage 那一层就是这么存的（`Store` 遍历 `LlmField.all`），
         // 因此这条同时钉住「存进去再读回来不会变形」。
@@ -191,7 +228,7 @@ module AgentTests =
         let keys = LlmField.all |> List.map LlmField.key
 
         Assert.Equal<string list>(List.distinct keys, keys)
-        Assert.Equal(7, List.length keys)
+        Assert.Equal(9, List.length keys)
 
     [<Fact>]
     let ``provider 列表里没有 Bedrock——它是 Node-only`` () =

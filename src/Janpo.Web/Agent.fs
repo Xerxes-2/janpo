@@ -35,6 +35,16 @@ type LlmSeat = {
     /// **只有 `Provider` 是 `LlmSeat.customProvider` 时用得上**：官方那八家走自己的地址，
     /// 这一项填了也一字不看。**这一层不判读它**（读不读得懂在 `endpoint.ts`）。
     BaseUrl: string
+    /// 这个座位的**人格 / 风格文本**（票 31），进 prompt 的 system 消息最前面；空串就是不写。
+    ///
+    /// **它与 `Tier` 是两个维度**（主人 8/16 第五次裁决第 2 条）：同一个人格可以跑两档，
+    /// 同一档可以跑两个人格——M2 的对照实验要它。**这一层不判读它**，原样递给 Agent 层。
+    Persona: string
+    /// prompt 模板的覆盖，一段 JSON（票 31）；空串就是默认模板。
+    ///
+    /// 抬头、规则说明与五张措辞表都换得动，**不必改代码重编**。形状与合法与否全在
+    /// `web/src/agent/template.ts`（ADR-0005：prompt 在 TS 侧渲染），这里只是一个字符串。
+    Template: string
 }
 
 /// Agent 层的一次回执。**跨界回来的东西只有它**：一个动作 id（或者一句「我交不出来」），
@@ -54,11 +64,18 @@ type AgentAnswer = {
     Attempts: int
     /// 端到端毫秒，含重试。
     LatencyMs: int
-    /// 最后一次问出去的 prompt 全文。
-    Prompt: string
-    /// 工具定义的 JSON 全文（`choose_action` 的 schema）。**F# 不解释它**：
+    /// 最后一次问出去的 prompt 的**尾部**（票 31）。前缀不在里面：它是事件流的派生物。
+    PromptTail: string
+    /// 这一手 system 消息的正文（人格 + 规则说明）。**整场不变**，牌谱里存一次。
+    Preamble: string
+    /// 渲染版本号（`模板 id@内容哈希`，票 31）。**算出来的，不是手填的**；
+    /// 它是决策记录与牌谱里那份 preamble 之间的键。
+    RenderVersion: string
+    /// 工具定义的**形状**（`choose_action` 的 schema，动作 id 的 enum 留空）。**F# 不解释它**：
     /// 那是 Agent 层那侧的形状，这边只负责原样搬进牌谱（ADR-0005：跨界只传字符串）。
     Tools: string
+    /// 这一手真发出去的那份 enum：合法动作的 id 集。
+    ActionIds: int list
     /// 模型原始输出的 JSON 全文（停止原因、内容块、token 用量），**不含 thinking**。
     Output: string
     /// 扩展思考全文；没开、provider 不给、或这一次根本没答上话时是 None。
@@ -92,6 +109,8 @@ type LlmField =
     | TimeoutMs
     | Thinking
     | Tier
+    | Persona
+    | Template
 
 /// 思考预算的取值与两个出口。
 [<RequireQualifiedAccess>]
@@ -135,6 +154,8 @@ module LlmField =
         LlmField.TimeoutMs
         LlmField.Thinking
         LlmField.Tier
+        LlmField.Persona
+        LlmField.Template
     ]
 
     /// localStorage 里的键名（不带前缀）。**只有这一份**：写的与读的拼不到一块去。
@@ -147,6 +168,8 @@ module LlmField =
         | LlmField.TimeoutMs -> "timeout_ms"
         | LlmField.Thinking -> "thinking"
         | LlmField.Tier -> "tier"
+        | LlmField.Persona -> "persona"
+        | LlmField.Template -> "template"
 
 /// LLM 座位配置的默认值与编辑。**它不碰 localStorage**：读写浏览器本地存储是页面的事，
 /// 这里只管「一个字段改成什么值」。
@@ -199,6 +222,9 @@ module LlmSeat =
         Thinking = Thinking.Off
         // 默认裸奔：它是对照组（量「模型自己会不会数牌」），加脚手架是主持人自己拨的实验变量。
         Tier = ScaffoldTier.Bare
+        // 不填就是默认模板、没有人格（票 31）。
+        Persona = ""
+        Template = ""
     }
 
     /// 字段现在的值（输入框里显示的那个）。
@@ -211,6 +237,8 @@ module LlmSeat =
         | LlmField.TimeoutMs -> string seat.TimeoutMs
         | LlmField.Thinking -> Thinking.toWire seat.Thinking
         | LlmField.Tier -> ScaffoldTier.toWire seat.Tier
+        | LlmField.Persona -> seat.Persona
+        | LlmField.Template -> seat.Template
 
     /// 改一个字段。**读不懂的值一律原样不改**（超时框里的非数字、认不出的思考档位）：
     /// 配置是人填的，不该因为一次误输入就把设定清掉。
@@ -234,6 +262,10 @@ module LlmSeat =
             match ScaffoldTier.ofWire value with
             | Some tier -> { seat with Tier = tier }
             | None -> seat
+        // 人格与模板都原样存着，这一层不判读：它们的形状在 Agent 层（`template.ts`），
+        // 而人边打边存的中间态（写一半的 JSON）不该被吐回去。
+        | LlmField.Persona -> { seat with Persona = value }
+        | LlmField.Template -> { seat with Template = value }
 
 /// F#/TS 的那道边界（ADR-0005：**只有 F# 调 TS 这一个方向**）。
 ///
@@ -260,6 +292,8 @@ module Agent =
                 "timeout_ms", Encode.int seat.TimeoutMs
                 "thinking", Thinking.toWire seat.Thinking |> Encode.string
                 "tier", ScaffoldTier.toWire seat.Tier |> Encode.string
+                "persona", Encode.string seat.Persona
+                "template", Encode.string seat.Template
             ]
 
     /// 一次问话的 wire 形态。`decision` 就是 `DecisionPackage.encoder` 的产物，
@@ -281,8 +315,13 @@ module Agent =
             Failure = get.Optional.Field "failure" Decode.string
             Attempts = get.Optional.Field "attempts" Decode.int |> Option.defaultValue 0
             LatencyMs = get.Optional.Field "latency_ms" Decode.int |> Option.defaultValue 0
-            Prompt = get.Optional.Field "prompt" Decode.string |> Option.defaultValue ""
+            PromptTail = get.Optional.Field "prompt_tail" Decode.string |> Option.defaultValue ""
+            Preamble = get.Optional.Field "preamble" Decode.string |> Option.defaultValue ""
+            RenderVersion = get.Optional.Field "render_version" Decode.string |> Option.defaultValue ""
             Tools = get.Optional.Field "tools" Decode.string |> Option.defaultValue ""
+            ActionIds =
+                get.Optional.Field "action_ids" (Decode.list Decode.int)
+                |> Option.defaultValue []
             Output = get.Optional.Field "output" Decode.string |> Option.defaultValue ""
             Thinking = get.Optional.Field "thinking" Decode.string
             Usage = get.Optional.Field "usage" Usage.decoder
@@ -301,8 +340,11 @@ module Agent =
         Failure = Some reason
         Attempts = 0
         LatencyMs = 0
-        Prompt = ""
+        PromptTail = ""
+        Preamble = ""
+        RenderVersion = ""
         Tools = ""
+        ActionIds = []
         Output = ""
         Thinking = None
         Usage = None

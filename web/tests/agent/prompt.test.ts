@@ -6,7 +6,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PREAMBLE, promptSections, renderPrompt } from "../../src/agent/prompt.ts";
+import { promptSections, renderPrompt } from "../../src/agent/prompt.ts";
+import { DEFAULT_TEMPLATE, preambleOf } from "../../src/agent/template.ts";
 import { dahaiPackage, dangerPackage, responsePackage } from "./fixtures.ts";
 
 const bare = renderPrompt(dahaiPackage, "bare", null);
@@ -39,7 +40,7 @@ test("三段：固定 preamble → 【到目前为止你看到的】 → 【现�
   // **三段是分开取得出来的**（票 31 要在这上面做槽位注入），拼起来才是整份 prompt。
   const sections = promptSections(dahaiPackage, "bare", null);
 
-  assert.equal(sections.preamble, PREAMBLE, "preamble 逐字不变，与局面无关");
+  assert.equal(sections.preamble, preambleOf(DEFAULT_TEMPLATE), "preamble 逐字不变，与局面无关");
   assert.ok(sections.history.startsWith("【到目前为止你看到的】\n"));
   assert.ok(sections.present.startsWith("【现在】\n"));
   assert.equal([sections.preamble, sections.history, sections.present].join("\n\n"), bare);

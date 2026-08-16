@@ -10,7 +10,14 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cacheablePrefix, renderPrompt } from "../../src/agent/prompt.ts";
+import {
+  cacheablePrefix,
+  promptMessages,
+  promptTail,
+  rebuildMessages,
+  renderPrompt,
+} from "../../src/agent/prompt.ts";
+import { DEFAULT_TEMPLATE, type PromptTemplate, readTemplate } from "../../src/agent/template.ts";
 import type {
   DecisionPackage,
   KawaEntry,
@@ -20,6 +27,21 @@ import type {
 import { sequencePackages } from "./fixtures.ts";
 
 const TIERS: ScaffoldTier[] = ["bare", "assisted"];
+
+/**
+ * 一份**换过人格与措辞**的模板（票 31）。前缀属性必须在它下面照样成立：
+ * 人格与措辞都在可缓存前缀里，但它们**一局之内不变**，因此单调性不受影响。
+ */
+const STYLED: PromptTemplate = readTemplate(
+  JSON.stringify({
+    id: "styled",
+    persona: "你是一位以防守见长的雀士。",
+    labels: { history: "【战况回放】" },
+    wording: { naki: { pon: "碰！" } },
+  }),
+);
+
+const TEMPLATES: PromptTemplate[] = [DEFAULT_TEMPLATE, STYLED];
 
 test("这一串确实是同一局、同一座位的连续几手", () => {
   assert.ok(sequencePackages.length >= 10, "太短的一串证明不了前缀在长");
@@ -38,30 +60,101 @@ test("这一串确实是同一局、同一座位的连续几手", () => {
 // ---- 一、前缀字节稳定 ----
 
 for (const tier of TIERS) {
-  test(`前缀字节稳定（${tier} 档）：第 n 手的可缓存前缀是第 n+1 手整份 prompt 的字节前缀`, () => {
-    const prompts = sequencePackages.map((decision) => renderPrompt(decision, tier, null));
-    const prefixes = sequencePackages.map((decision) => cacheablePrefix(decision, tier));
-
-    for (let hand = 0; hand < sequencePackages.length; hand += 1) {
-      assert.ok(
-        prompts[hand].startsWith(prefixes[hand]),
-        `第 ${hand} 手：整份 prompt 该以它自己的可缓存前缀开头`,
+  for (const template of TEMPLATES) {
+    test(`前缀字节稳定（${tier} 档、${template.id} 模板）：第 n 手的可缓存前缀是第 n+1 手整份 prompt 的字节前缀`, () => {
+      const prompts = sequencePackages.map((decision) =>
+        renderPrompt(decision, tier, null, template),
+      );
+      const prefixes = sequencePackages.map((decision) =>
+        cacheablePrefix(decision, tier, template),
       );
 
-      if (hand + 1 === sequencePackages.length) continue;
+      for (let hand = 0; hand < sequencePackages.length; hand += 1) {
+        assert.ok(
+          prompts[hand].startsWith(prefixes[hand]),
+          `第 ${hand} 手：整份 prompt 该以它自己的可缓存前缀开头`,
+        );
 
-      assert.ok(
-        prompts[hand + 1].startsWith(prefixes[hand]),
-        `第 ${hand} 手的前缀该是第 ${hand + 1} 手 prompt 的字节前缀——前缀里出现了会被重算的量？`,
-      );
-      assert.ok(
-        prefixes[hand + 1].startsWith(prefixes[hand]),
-        `前缀是 append-only 的：第 ${hand} 手写下的行，第 ${hand + 1} 手不许改写`,
-      );
-      assert.ok(prefixes[hand + 1].length > prefixes[hand].length, "前缀只会长");
-    }
-  });
+        if (hand + 1 === sequencePackages.length) continue;
+
+        assert.ok(
+          prompts[hand + 1].startsWith(prefixes[hand]),
+          `第 ${hand} 手的前缀该是第 ${hand + 1} 手 prompt 的字节前缀——前缀里出现了会被重算的量？`,
+        );
+        assert.ok(
+          prefixes[hand + 1].startsWith(prefixes[hand]),
+          `前缀是 append-only 的：第 ${hand} 手写下的行，第 ${hand + 1} 手不许改写`,
+        );
+        assert.ok(prefixes[hand + 1].length > prefixes[hand].length, "前缀只会长");
+      }
+    });
+  }
 }
+
+test("换人格不破坏单调性：人格在 preamble 里，一局之内不变", () => {
+  // 人格与措辞都在可缓存前缀里，因此**换它们就是换一份前缀**（跨版本不保证一致）；
+  // 但同一次运行里它一字不变，因此同一局内的单调性照旧。
+  const styled = sequencePackages.map((decision) => cacheablePrefix(decision, "bare", STYLED));
+  const plain = sequencePackages.map((decision) => cacheablePrefix(decision, "bare"));
+
+  assert.notEqual(styled[0], plain[0], "换了人格与措辞，前缀就不是同一份字节了");
+  for (const prefix of styled) {
+    assert.ok(prefix.startsWith(STYLED.persona), "人格排在最前面，逐手一样");
+  }
+});
+
+test("system 那一条逐手逐字节相同：它是整份请求里最先被缓存的那一段", () => {
+  for (const template of TEMPLATES) {
+    const systems = sequencePackages.map(
+      (decision) => promptMessages(decision, "bare", null, template).system,
+    );
+
+    assert.equal(new Set(systems).size, 1, `${template.id}：system 不该随手数变`);
+  }
+});
+
+// ---- 一之二、尾部 + 重算出来的前缀 = 当时真发出去的那两条（票 31） ----
+
+test("牌谱只存尾部：前缀重算一遍接回去，逐字节就是当时那两条消息", () => {
+  // 重建的两个输入都不是“另存一份”：preamble 整场存一次，决策包由事件流 fold 重算。
+  // **审计价值不打折**：尾部原样存着，渲染器当时出了什么怪都看得见。
+  const notes = [null, "action_id=99 不在这一手的合法动作集里"];
+
+  for (const template of TEMPLATES) {
+    for (const tier of TIERS) {
+      for (const note of notes) {
+        for (const [hand, decision] of sequencePackages.entries()) {
+          const sent = promptMessages(decision, tier, note, template);
+          const tail = promptTail(decision, tier, note, template);
+          const rebuilt = rebuildMessages(sent.system, decision, tail, template);
+
+          assert.deepEqual(rebuilt, sent, `${template.id}・${tier}・第 ${hand} 手重建不回去`);
+        }
+      }
+    }
+  }
+});
+
+test("尾部真的只是尾部：历史那一段一行也不在里面", () => {
+  const last = sequencePackages[sequencePackages.length - 1];
+  const tail = promptTail(last, "assisted", null);
+  const full = renderPrompt(last, "assisted", null);
+
+  assert.ok(full.endsWith(tail), "尾部就是整份 prompt 的末尾");
+  assert.equal(tail.includes("【到目前为止你看到的】"), false);
+  assert.equal(tail.includes("摸牌"), false, "历史那几行一行都不该在尾部里");
+
+  // 省下来的那一块**随手数变大**：前缀含前 n-1 手的历史，而尾部大小大致恒定
+  // ——这正是票面说的「存全文在事件流式 prompt 下是 O(n²)」。
+  const share = (decision: DecisionPackage) =>
+    promptTail(decision, "bare", null).length / renderPrompt(decision, "bare", null).length;
+
+  assert.ok(
+    share(last) < share(sequencePackages[0]),
+    `尾部占比该随手数下降，实为 ${share(sequencePackages[0]).toFixed(2)} → ${share(last).toFixed(2)}`,
+  );
+  assert.ok(tail.length < full.length);
+});
 
 test("重试不动前缀：多出来的那句话接在尾部，前面一个字节都不变", () => {
   const decision = sequencePackages[sequencePackages.length - 1];

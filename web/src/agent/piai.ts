@@ -168,7 +168,9 @@ export const piAsk: Ask = async (request) => {
   if (!wired.ok) return failed(wired.why, elapsed());
   const model = wired.model;
 
+  // 固定 preamble 走 system（票 31）：各家的缓存语义更认它，user 消息只剩历史 + 现况 + 动作。
   const context: Context = {
+    systemPrompt: request.system,
     messages: [{ role: "user", content: request.prompt, timestamp: Date.now() }],
     tools: [chooseAction(request.actionIds)],
   };

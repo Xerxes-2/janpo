@@ -63,6 +63,9 @@ export const seat: SeatConfig = {
   tier: "bare",
   // 官方八家用不上 baseUrl（票 30）。
   base_url: "",
+  // 不填就是默认模板、没有人格（票 31）。
+  persona: "",
+  template: "",
 };
 
 /** 同一个座位，**只把脚手架档位拨到 Assisted**（票 24：档位是座位级配置）。 */
@@ -86,18 +89,27 @@ export function request(
 
 /**
  * 回放录制的响应：第 N 次问话拿第 N 条，问超了就一直拿最后一条
- * （「每次都失败」的用例靠这个）。`prompts` 记下每次问出去的 prompt。
+ * （「每次都失败」的用例靠这个）。
+ *
+ * `prompts` 记下每次那两条消息拼起来的全文（与 `renderPrompt` 同一份），
+ * `messages` 记下它们各自的那一半——票 31 把固定 preamble 挑进了 system 消息。
  */
-export function replay(...results: AskResult[]): { ask: Ask; prompts: string[] } {
+export function replay(...results: AskResult[]): {
+  ask: Ask;
+  prompts: string[];
+  messages: { system: string; user: string }[];
+} {
   const prompts: string[] = [];
+  const messages: { system: string; user: string }[] = [];
   let index = 0;
 
   const ask: Ask = async (asked) => {
-    prompts.push(asked.prompt);
+    prompts.push(`${asked.system}\n\n${asked.prompt}`);
+    messages.push({ system: asked.system, user: asked.prompt });
     const result = results[Math.min(index, results.length - 1)];
     index += 1;
     return result;
   };
 
-  return { ask, prompts };
+  return { ask, prompts, messages };
 }

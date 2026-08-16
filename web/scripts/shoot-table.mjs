@@ -6,20 +6,22 @@
 // **视角是围观视角**（默认 `座位 0`，页面自己的默认值）——不开上帝视角：
 // 对外展示的应当是「他家暗牌看不见」的那一份投影。
 //
-// 端口取 4190，与四个 `verify-*` 脚本（4179–4182）错开，跑批时并行也不撞。
+// 端口不写死：与四个 `verify-*` 脚本共用 `serve.mjs`，vite 自己找一个空闲的（票 31 清的
+// 那笔残债：它原来写死 4190、`strictPort: true`，两个工作区同时跑就撞）。
+// 想钉死一个端口就 `JANPO_PORT=4190 node scripts/shoot-table.mjs`。
 //
 // 跑法：
 //   cd web && pnpm run fable && node scripts/shoot-table.mjs        # README 里那张：种子 1177、走 52 手
 //   node scripts/shoot-table.mjs --scan 8 --seed 340 --turns 44     # 挑种子：印出各种子在目标手数时的副露与河
 //
-// 选项：--seed N、--turns N（先走几手）、--out <路径>、--port N、--scan N（试 N 个种子后退出）。
+// 选项：--seed N、--turns N（先走几手）、--out <路径>、--scan N（试 N 个种子后退出）。
 
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { createServer } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { pageUrl, startDevServer } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,7 +33,6 @@ const flag = (name, fallback) => {
 
 const seed = Number.parseInt(flag("--seed", "1177"), 10);
 const turns = Number.parseInt(flag("--turns", "52"), 10);
-const port = Number.parseInt(flag("--port", "4190"), 10);
 const scan = Number.parseInt(flag("--scan", "0"), 10);
 const out = resolve(webRoot, "..", flag("--out", "docs/images/table.png"));
 
@@ -42,12 +43,7 @@ if (!executablePath) {
 }
 
 // dev server 而不是 preview：与 verify-export 同一个理由（要按源码路径拿页面）。
-const server = await createServer({
-  root: webRoot,
-  server: { port, strictPort: true },
-  logLevel: "warn",
-});
-await server.listen();
+const server = await startDevServer(webRoot);
 const browser = await chromium.launch({ executablePath, headless: true });
 
 /** 走 n 手：一手一手点「单步」，等「上一手」那行变了再点下一手。
@@ -92,7 +88,7 @@ async function shape(page) {
 }
 
 async function open(page, withSeed) {
-  await page.goto(`http://localhost:${port}/`, { waitUntil: "load" });
+  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
   await page.getByTestId("table-seed").fill(String(withSeed));
   await page.getByTestId("table-restart").click();
 }

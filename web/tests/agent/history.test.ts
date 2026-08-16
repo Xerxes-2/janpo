@@ -13,11 +13,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { historyLines } from "../../src/agent/history.ts";
 import type { DecisionPackage, MaskedEvent } from "../../src/agent/types.ts";
-import { namesFor } from "../../src/agent/wording.ts";
+import { DEFAULT_WORDING, wordsFor } from "../../src/agent/wording.ts";
 import { dahaiPackage, sequencePackages } from "./fixtures.ts";
 
 /** 视角固定在座位 1：下家 = 2、对家 = 3、上家 = 0。 */
-const naming = namesFor(1, [
+const naming = wordsFor(DEFAULT_WORDING, 1, [
   { seat: 2, relative: 1 },
   { seat: 3, relative: 2 },
   { seat: 0, relative: 3 },
@@ -188,7 +188,11 @@ test("读不懂的事件也占一行：它不许从历史里静静消失", () =>
 // ---- 与真数据对上 ----
 
 test("真决策包：一条事件一行，一行也不多一行也不少", () => {
-  const naming = namesFor(dahaiPackage.observation.self.seat, dahaiPackage.observation.others);
+  const naming = wordsFor(
+    DEFAULT_WORDING,
+    dahaiPackage.observation.self.seat,
+    dahaiPackage.observation.others,
+  );
 
   assert.equal(historyLines(dahaiPackage, naming).length, dahaiPackage.history.length);
 });
@@ -203,7 +207,7 @@ test("真数据里每一行都只写得出那一条事件里有的东西", () =>
   // 反例是「巡目从尾部抄」：那样最后一手的行会跟前面几手对不上。
   // 这里的判据简单粗暴——同一条流，逐前缀渲染，前面那几行必须逐字节不变。
   const last = sequencePackages[sequencePackages.length - 1];
-  const naming = namesFor(last.observation.self.seat, last.observation.others);
+  const naming = wordsFor(DEFAULT_WORDING, last.observation.self.seat, last.observation.others);
   const full = historyLines(last, naming);
 
   for (const decision of sequencePackages) {

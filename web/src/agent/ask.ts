@@ -14,6 +14,12 @@ import type { SeatConfig } from "./types.ts";
 /** 一次问话要的全部东西。 */
 export interface AskRequest {
   seat: SeatConfig;
+  /**
+   * **system 消息**：人格 + 规则与读法（票 31）。整场逐字不变，
+   * 各家的前缀缓存语义更认它。
+   */
+  system: string;
+  /** **user 消息**：历史（append-only）+ 尾部现况与动作。 */
   prompt: string;
   /** `choose_action` 的 enum：这一手的合法动作 id（字符串形态，StringEnum 要的）。 */
   actionIds: string[];

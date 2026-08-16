@@ -10,12 +10,16 @@
  * **审计数据也在这一层收**（票 26）：问出去的 prompt 与工具定义、收回来的原始输出与
  * thinking 随回执一起过界，由 F# 侧组装成 `DecisionRecord`。记的是**最后一次**那轮：
  * 它才是产出这条回答的那一次，问了几次看 `attempts`。
+ *
+ * **交上去的审计数据只有尾部**（票 31）：前缀（固定 preamble + 事件流历史）是派生物，
+ * 牌谱里另外整场存一份 preamble 与渲染版本号，重建走 `rebuildMessages`。
  */
 
 import type { Ask, AskResult } from "./ask.ts";
 import { missingConfig } from "./endpoint.ts";
-import { renderPrompt } from "./prompt.ts";
-import { CHOOSE_ACTION, toolsJson } from "./tools.ts";
+import { messagesOf, promptSections } from "./prompt.ts";
+import { renderVersion, resolveTemplate } from "./template.ts";
+import { CHOOSE_ACTION, toolsShape } from "./tools.ts";
 import type { DecideRequest, DecideResponse } from "./types.ts";
 
 /** 一次回答的判读。 */
@@ -87,6 +91,22 @@ function rawOutput(result: AskResult | null): string {
   });
 }
 
+/** 审计里那几项「问出去的是什么」。一次请求都没发时全是空串与空表。 */
+interface Asked {
+  /** 尾部：牌谱存的就是它（票 31）。 */
+  tail: string;
+  /** system 消息正文：整场不变，牌谱存一次。 */
+  preamble: string;
+  /** 渲染版本号：模板 id + 内容哈希，**算出来的**。 */
+  version: string;
+  /** 工具定义的**形状**（enum 留空）：真发出去的那份 = 形状 + 下面那一行的 id 集。 */
+  tools: string;
+  /** 这一手的合法动作 id 集（工具定义里唯一随手变的那一项）。 */
+  actionIds: number[];
+}
+
+const NOTHING_ASKED: Asked = { tail: "", preamble: "", version: "", tools: "", actionIds: [] };
+
 /**
  * 一轮问话里审计要的那几项。一次都没问成时 `result` 是 null。
  *
@@ -94,12 +114,15 @@ function rawOutput(result: AskResult | null): string {
  * 由 `TablePage.settle` 收进这一手的 `DecisionRecord`，页面上看得见。
  * 记的是**最后一轮**那次（与 prompt / 输出同一轮，裁决 26-16）。
  */
-function audited(prompt: string, tools: string, result: AskResult | null) {
+function audited(asked: Asked, result: AskResult | null) {
   const usage = result?.usage ?? null;
 
   return {
-    prompt,
-    tools,
+    prompt_tail: asked.tail,
+    preamble: asked.preamble,
+    render_version: asked.version,
+    tools: asked.tools,
+    action_ids: asked.actionIds,
     output: rawOutput(result),
     thinking: result?.thinking ?? null,
     usage:
@@ -114,7 +137,7 @@ function audited(prompt: string, tools: string, result: AskResult | null) {
   };
 }
 
-/** 一条「我交不出来」。审计那四项默认是空的，真问过的那几条路上再盖上去。 */
+/** 一条「我交不出来」。审计那几项默认是空的，真问过的那几条路上再盖上去。 */
 function refuse(why: string, attempts: number, latencyMs: number): DecideResponse {
   return {
     action_id: null,
@@ -122,7 +145,7 @@ function refuse(why: string, attempts: number, latencyMs: number): DecideRespons
     failure: why,
     attempts,
     latency_ms: latencyMs,
-    ...audited("", "", null),
+    ...audited(NOTHING_ASKED, null),
   };
 }
 
@@ -146,22 +169,40 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
   }
 
   const ids = new Set(options.map((option) => option.id));
-  const actionIds = options.map((option) => String(option.id));
-  const tools = toolsJson(actionIds);
+  const actionIds = options.map((option) => option.id);
+  const enumIds = actionIds.map(String);
+  // 模板一手解一次（重试的那几轮共用）：同一手里前缀不得因为重试而变。
+  const template = resolveTemplate(request.seat);
+  const version = renderVersion(template);
   const rounds = Math.max(1, request.retry_limit + 1);
 
   let attempts = 0;
   let latencyMs = 0;
   let why = "没问出结果";
   let note: string | null = null;
-  let prompt = "";
+  let asked: Asked = NOTHING_ASKED;
   let last: AskResult | null = null;
 
   while (attempts < rounds) {
-    prompt = renderPrompt(request.decision, request.seat.tier, note);
+    // 一轮只渲染一次：发出去的两条消息与存进牌谱的尾部必须是同一次渲染的产物。
+    const sections = promptSections(request.decision, request.seat.tier, note, template);
+    const messages = messagesOf(sections);
+    asked = {
+      tail: sections.present,
+      preamble: sections.preamble,
+      version,
+      tools: toolsShape(),
+      actionIds,
+    };
+
     let verdict: Verdict;
     try {
-      const result = await ask({ seat: request.seat, prompt, actionIds });
+      const result = await ask({
+        seat: request.seat,
+        system: messages.system,
+        prompt: messages.user,
+        actionIds: enumIds,
+      });
       last = result;
       latencyMs += result.latencyMs;
       verdict = judge(result, ids);
@@ -179,7 +220,7 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
         failure: null,
         attempts,
         latency_ms: latencyMs,
-        ...audited(prompt, tools, last),
+        ...audited(asked, last),
       };
     }
 
@@ -189,6 +230,6 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
 
   return {
     ...refuse(`${why}（重试 ${rounds - 1} 次仍无结果）`, attempts, latencyMs),
-    ...audited(prompt, tools, last),
+    ...audited(asked, last),
   };
 }

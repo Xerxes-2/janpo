@@ -34,10 +34,21 @@ export function chooseAction(actionIds: string[]): Tool {
 }
 
 /**
- * 工具定义的 JSON 全文，进决策记录。
+ * 工具定义的 JSON 全文。
  *
  * `JSON.stringify` 落下的正是**上 wire 的那一份**（schema 里的 symbol 键本来就不上 wire）。
  */
 export function toolsJson(actionIds: string[]): string {
   return JSON.stringify([chooseAction(actionIds)]);
+}
+
+/**
+ * 工具定义的**形状**（票 31）：同一份 schema，只是 `action_id` 那个 enum 留空。
+ *
+ * 26 号票每手存一份工具定义（实测每手 437–513 字、几乎逐字相同），而那份里唯一随手变的
+ * 就是 enum。牌谱因此**整场存一次形状**，每手只留那一手的 id 集
+ * （`DecisionRecord.ActionIds`）：两者合起来就是那一手真发出去的那一份。
+ */
+export function toolsShape(): string {
+  return toolsJson([]);
 }

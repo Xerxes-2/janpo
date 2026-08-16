@@ -9,14 +9,18 @@
 //   pnpm run prompt -- --package tests/fixtures/agent/decision-dahai.json
 //                                                    直接读一份决策包 JSON（不跑 dotnet）
 //   pnpm run prompt -- --diff                        只打两档的差异（Assisted 多出来那一节）
+//   pnpm run prompt -- --persona "你打得很凶。"           换一个人格（票 31）
+//   pnpm run prompt -- --template my-template.json   换一份模板（一段 JSON，或直接写 JSON 本身）
 //
-// 决策包由 `janpo decide` 生成，**与浏览器里跨界的那一份是同一个 encoder 的产物**。
+// 决策包由 `janpo decide` 生成，**与浏览器里跨界的那一份是同一个 encoder 的产物**；
+// 人格与模板走的也是座位配置那条路（`resolveTemplate`）——**页面上填什么，这里就看得到什么**。
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderPrompt } from "../src/agent/prompt.ts";
+import { renderVersion, resolveTemplate } from "../src/agent/template.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
@@ -24,7 +28,16 @@ const repo = resolve(here, "../..");
 const TIERS = ["bare", "assisted", "tool_search"];
 
 function parseArguments(argv) {
-  const parsed = { seed: "1177", steps: "8", seat: null, tier: "both", package: null, diff: false };
+  const parsed = {
+    seed: "1177",
+    steps: "8",
+    seat: null,
+    tier: "both",
+    package: null,
+    persona: "",
+    template: "",
+    diff: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === "--") {
@@ -80,7 +93,19 @@ const source =
     ? `janpo decide ${parsed.seed} --steps ${parsed.steps}${parsed.seat === null ? "" : ` --seat ${parsed.seat}`}`
     : parsed.package;
 
-const prompts = new Map(TIERS.map((tier) => [tier, renderPrompt(decision, tier, null)]));
+/** `--template` 可以是一个文件名，也可以直接写那段 JSON。 */
+function templateText(given) {
+  if (given === "") return "";
+  const path = resolve(process.cwd(), given);
+  return existsSync(path) ? readFileSync(path, "utf8") : given;
+}
+
+// 模板从座位配置来（票 31）：这里造的就是页面上那两格填完之后的样子。
+const template = resolveTemplate({
+  persona: parsed.persona,
+  template: templateText(parsed.template),
+});
+const prompts = new Map(TIERS.map((tier) => [tier, renderPrompt(decision, tier, null, template)]));
 
 if (parsed.diff) {
   // 两档只差一节（`prompt.ts` 的 `frame`），把那一节单独打出来。
@@ -96,7 +121,9 @@ if (parsed.diff) {
   for (const tier of parsed.tier === "both" ? ["bare", "assisted"] : [parsed.tier]) {
     const prompt = prompts.get(tier);
     console.log(`${"=".repeat(78)}`);
-    console.log(`档位 ${tier}　决策包：${source}　座位 ${decision.seat}　${prompt.length} 字`);
+    console.log(
+      `档位 ${tier}　渲染版本 ${renderVersion(template)}　决策包：${source}　座位 ${decision.seat}　${prompt.length} 字`,
+    );
     console.log(`${"=".repeat(78)}`);
     console.log(prompt);
     console.log();

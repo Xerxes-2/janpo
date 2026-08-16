@@ -19,6 +19,8 @@ module TablePageTests =
             TimeoutMs = 12000
             Thinking = Thinking.Off
             Tier = ScaffoldTier.Bare
+            Persona = ""
+            Template = ""
         }
 
     /// 座位 0 交给 LLM 的一桌（开局第一手就是它：亲摸完牌等着打）。
@@ -45,8 +47,11 @@ module TablePageTests =
             Failure = None
             Attempts = 1
             LatencyMs = 640
-            Prompt = "东1局 0 本场……（prompt 全文）"
-            Tools = """{"name":"choose_action"}"""
+            PromptTail = "【现在】东1局 0 本场……\n【可选动作】只能从下面这些 id 里选一个：\n- id=0：摸切1索"
+            Preamble = "你在打日本立直麻将（天凤规则，四人东）……"
+            RenderVersion = "janpo-default@08fcaec3"
+            Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
+            ActionIds = [ 0 ]
             Output = """{"stop_reason":"toolUse"}"""
             Thinking = Some "先数向听……"
             Usage =
@@ -67,8 +72,11 @@ module TablePageTests =
             Failure = Some "模型超时（重试 2 次仍无结果）"
             Attempts = 3
             LatencyMs = 91000
-            Prompt = "东1局 0 本场……（prompt 全文）"
-            Tools = """{"name":"choose_action"}"""
+            PromptTail = "【现在】东1局 0 本场……\n【可选动作】只能从下面这些 id 里选一个：\n- id=0：摸切1索"
+            Preamble = "你在打日本立直麻将（天凤规则，四人东）……"
+            RenderVersion = "janpo-default@08fcaec3"
+            Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
+            ActionIds = [ 0 ]
             Output = ""
             Thinking = None
             // 一次都没问成：没有账单可记。

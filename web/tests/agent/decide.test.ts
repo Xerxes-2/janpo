@@ -21,15 +21,19 @@ test("请求读不动时回一条「交不出来」，而不是 reject", async (
 test("回执的形状就是 F# 侧 answerDecoder 认的那几个字段", async () => {
   const response = JSON.parse(await decide("{")) as DecideResponse;
 
-  // 审计那几项（票 26）与 token 账单（票 29b）：它们过界之后组装成牌谱里的 `DecisionRecord`。
+  // 审计那几项（票 26）、token 账单（票 29b）与 prompt 的前后两半（票 31）：
+  // 它们过界之后组装成牌谱里的 `DecisionRecord` 与 `Prompting`。
   assert.deepEqual(Object.keys(response).sort(), [
     "action_id",
+    "action_ids",
     "attempts",
     "failure",
     "latency_ms",
     "output",
-    "prompt",
+    "preamble",
+    "prompt_tail",
     "reason",
+    "render_version",
     "thinking",
     "tools",
     "usage",

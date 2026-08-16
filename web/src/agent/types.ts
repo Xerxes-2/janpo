@@ -132,6 +132,19 @@ export interface SeatConfig {
    * 官方那八家走自己的地址，这一项填了也一字不看。形如 `http://localhost:11434/v1`。
    */
   base_url: string;
+  /**
+   * 座位级的**人格 / 风格文本**（票 31），进 system 消息的最前面；空串就是不写。
+   *
+   * **它与脚手架档位是两个维度**：同一个人格可以跑两档，同一档可以跑两个人格。
+   */
+  persona: string;
+  /**
+   * prompt 模板的覆盖，一段 JSON（票 31）。空串就是默认模板。
+   *
+   * 给几项换几项（`template.ts` 的 `readTemplate`）：抬头、规则说明、五张措辞表都换得动，
+   * **不必改代码重编**。读不动就退回默认并往 console 说一句。
+   */
+  template: string;
 }
 
 /** 一次问话。 */
@@ -158,10 +171,20 @@ export interface DecideResponse {
   failure: string | null;
   attempts: number;
   latency_ms: number;
-  /** 最后一次问出去的 prompt 全文（重试的那几次只多一句「上次为什么不行」）。 */
-  prompt: string;
-  /** 工具定义的 JSON 全文（`tools.ts` 那一份，与真发出去的同一个）。 */
+  /**
+   * 最后一次问出去的 prompt 的**尾部**（票 31）：【现在】+【可选动作】+（脚手架）+（重试原因）。
+   *
+   * **前缀不在里面**：它是 (事件流 + 座位 + 模板) 的派生物，而事件流就在同一份牌谱里。
+   */
+  prompt_tail: string;
+  /** 这一手 system 消息的正文（人格 + 规则说明）。**整场不变**，牌谱里存一次。 */
+  preamble: string;
+  /** 渲染版本号 `模板 id@内容哈希`（票 31）。**算出来的，不是手填的**。 */
+  render_version: string;
+  /** 工具定义的**形状**（`tools.ts` 那一份，动作 id 的 enum 留空）。牌谱里整场存一次。 */
   tools: string;
+  /** 这一手真发出去的那份 enum：合法动作的 id 集。 */
+  action_ids: number[];
   /** 模型最后一次的原始输出，JSON 全文，**不含 thinking**。 */
   output: string;
   /** 扩展思考全文。**它是可省略的那一段**：URL 分享（M2）会把它抹掉。 */

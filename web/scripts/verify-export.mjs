@@ -182,8 +182,15 @@ try {
       `牌谱：版本 ${report.version}　事件 ${report.events} 条　决策记录 ${report.decisions} 条` +
         `（其中带 thinking ${report.thinking} 条、兜底 ${report.fallbacks} 条）　已打完 ${report.kyokus} 局`,
     );
+    // prompt 的前置（票 31）：尾部每手一份，preamble 整场几份（换人格才多一份）。
+    console.log(
+      `prompt：尾部共 ${report.tail_chars} 字　preamble ${report.preambles} 份　逐手重建得回去 = ${report.rebuildable}`,
+    );
     console.log(`回放：事件流逐条相同 = ${report.same_events}　点数 ${report.scores.join(" / ")}`);
     if (!report.same_events) problems.push(`回放出的事件流与牌谱不同：${report.mismatch}`);
+    if (report.decisions > 0 && !report.rebuildable) {
+      problems.push("有决策记录指不回它那一份 preamble：重建不出当时发出去的 prompt");
+    }
 
     // 页面上的点数与回放算出来的点数必须一致——牌桌与 fold 出来的是同一场对局。
     const onPage = await Promise.all(

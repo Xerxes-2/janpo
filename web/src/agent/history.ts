@@ -7,19 +7,20 @@
  *
  * 因此有一条硬约束：**每一行只由那一条事件本身决定**（外加一局之内恒定的视角与称呼，
  * 以及它**之前**那些事件数出来的巡目），绝不依赖它之后发生的任何事。守这条的是
- * `tests/agent/prompt.test.ts` 里那条「前缀字节稳定」的属性测试——CI 里别的用例
+ * `tests/agent/prefix.test.ts` 里那条「前缀字节稳定」的属性测试——CI 里别的用例
  * 全绿它也照样红。
  *
  * 巡目是**从左往右数**出来的（某家在这一条之前摸过几次牌），因此它写下去就再也不会变；
  * 尾部那个「第几巡」是同一条流 fold 出来的当前值（`Observation.junme`），两者同源。
  *
- * 措辞与牌的记法在 `wording.ts`，与尾部共用一份（DECISIONS 第六次裁决）。
+ * 措辞与牌的记法由调用方给的 `Words` 决定（`wording.ts`），与尾部共用一份
+ * （DECISIONS 第六次裁决）；票 31 起那一份来自模板，因此人格与措辞换得动而这里一行不动。
  * 引擎那边的结构在 `MaskedEvent.encoder`：`Public` 那十四条逐字段就是 mjai 事件，
  * 掩掉的两条也仍是 mjai 的形状（看不见的那一格写 `"?"`）。
  */
 
 import type { DecisionPackage, MaskedEvent } from "./types.ts";
-import { kaze, type Naming, nakiKind, ryuukyokuReason } from "./wording.ts";
+import type { Words } from "./wording.ts";
 
 // ---- 读 wire 字段 ----
 //
@@ -66,14 +67,14 @@ function discarded(event: MaskedEvent): string {
 }
 
 /** 开局那一条：桌面上摆出来的全部 + 自家配牌。**他家的配牌不在事件里**（掩蔽掉了）。 */
-function startKyoku(event: MaskedEvent, naming: Naming): string {
+function startKyoku(event: MaskedEvent, words: Words): string {
   const scores = numbers(event, "scores")
-    .map((score, seat) => `${naming.who(seat)} ${score}`)
+    .map((score, seat) => `${words.who(seat)} ${score}`)
     .join("　");
 
   return [
-    `开局：${kaze(text(event, "bakaze"))}${num(event, "kyoku")}局 ${num(event, "honba")} 本场，`,
-    `供托 ${num(event, "kyotaku")} 根，庄家是${naming.who(num(event, "oya"))}，`,
+    `开局：${words.kaze(text(event, "bakaze"))}${num(event, "kyoku")}局 ${num(event, "honba")} 本场，`,
+    `供托 ${num(event, "kyotaku")} 根，庄家是${words.who(num(event, "oya"))}，`,
     `宝牌指示牌：${text(event, "dora_marker")}，各家点数 ${scores}。`,
     `你的配牌：${tiles(event, "tehai").join(" ")}`,
   ].join("");
@@ -81,40 +82,40 @@ function startKyoku(event: MaskedEvent, naming: Naming): string {
 
 /** 和了那一条。**它不会出现在决策包的历史里**（和了即一局终，没有下一手要问）， */
 /** 渲得出来是为了牌谱回放与围观视角共用同一条渲染路径。 */
-function hora(event: MaskedEvent, naming: Naming): string {
+function hora(event: MaskedEvent, words: Words): string {
   const actor = num(event, "actor");
   const target = num(event, "target");
   const how =
     actor === target
       ? `自摸 ${text(event, "pai")}`
-      : `荣和${naming.who(target)}打的 ${text(event, "pai")}`;
+      : `荣和${words.who(target)}打的 ${text(event, "pai")}`;
   const ura = tiles(event, "uradora_markers");
   const uraText = ura.length === 0 ? "" : `，里宝牌指示牌 ${ura.join(" ")}`;
 
-  return `${naming.who(actor)} 和了：${how}，${num(event, "fan")} 番 ${num(event, "fu")} 符，${num(event, "hora_points")} 点${uraText}`;
+  return `${words.who(actor)} 和了：${how}，${num(event, "fan")} 番 ${num(event, "fu")} 符，${num(event, "hora_points")} 点${uraText}`;
 }
 
-function ryuukyoku(event: MaskedEvent, naming: Naming): string {
+function ryuukyoku(event: MaskedEvent, words: Words): string {
   const tenpai = numbers(event, "tenpais")
-    .map((value, seat) => (value ? naming.who(seat) : null))
+    .map((value, seat) => (value ? words.who(seat) : null))
     .filter((who) => who !== null);
   const who = tenpai.length === 0 ? "无人听牌" : `听牌的是 ${tenpai.join("、")}`;
 
-  return `流局（${ryuukyokuReason(text(event, "reason"))}）：${who}`;
+  return `流局（${words.ryuukyokuReason(text(event, "reason"))}）：${who}`;
 }
 
 /**
  * 一条事件的那一行。**没有 default 兜底成空串**：读不懂的事件也占一行，
  * 否则它从历史里静静消失，而模型看到的是一条缺了东西的流。
  */
-function line(event: MaskedEvent, naming: Naming, junme: Junme): string {
+function line(event: MaskedEvent, words: Words, junme: Junme): string {
   const actor = num(event, "actor");
-  const who = naming.who(actor);
+  const who = words.who(actor);
   const at = junmeOf(junme, actor);
 
   switch (event.type) {
     case "start_kyoku":
-      return startKyoku(event, naming);
+      return startKyoku(event, words);
     case "tsumo":
       // 他家摸的那张看不见（wire 上是 mjai 的 `"?"`）：**「他摸了」本身是看得见的**，
       // 巡目与手切摸切的时间轴全靠这一条撑着。
@@ -126,7 +127,7 @@ function line(event: MaskedEvent, naming: Naming, junme: Junme): string {
     case "pon":
     case "chi":
     case "daiminkan":
-      return `${who} ${at} ${nakiKind(event.type)} ${naming.who(num(event, "target"))}打的 ${text(event, "pai")}（亮出 ${tiles(event, "consumed").join(" ")}）`;
+      return `${who} ${at} ${words.nakiKind(event.type)} ${words.who(num(event, "target"))}打的 ${text(event, "pai")}（亮出 ${tiles(event, "consumed").join(" ")}）`;
     case "ankan":
       return `${who} ${at} 暗杠 ${tiles(event, "consumed").join(" ")}`;
     case "kakan":
@@ -139,9 +140,9 @@ function line(event: MaskedEvent, naming: Naming, junme: Junme): string {
     case "reach_accepted":
       return `${who}的立直成立，放出立直棒`;
     case "hora":
-      return hora(event, naming);
+      return hora(event, words);
     case "ryukyoku":
-      return ryuukyoku(event, naming);
+      return ryuukyoku(event, words);
     case "start_game":
       return "对局开始";
     case "end_kyoku":
@@ -161,7 +162,7 @@ function line(event: MaskedEvent, naming: Naming, junme: Junme): string {
  * **只从 `decision.history` 读**（引擎给的掩蔽事件流），一个字都不从尾部那份快照抄：
  * 两种形态同源是 29a 保证的，这一层再抄一遍就等于又造了一个来源。
  */
-export function historyLines(decision: DecisionPackage, naming: Naming): string[] {
+export function historyLines(decision: DecisionPackage, words: Words): string[] {
   const junme: Junme = new Map();
   // 读不出历史就当没有（29b 之前录下来的包就是这个形状）：**少一段不该让这一手渲不出来**，
   // 与 `readScaffold` 同一个方针。
@@ -173,6 +174,6 @@ export function historyLines(decision: DecisionPackage, naming: Naming): string[
       const actor = num(event, "actor");
       junme.set(actor, (junme.get(actor) ?? 0) + 1);
     }
-    return line(event, naming, junme);
+    return line(event, words, junme);
   });
 }

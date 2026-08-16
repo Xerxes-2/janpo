@@ -45,7 +45,7 @@ module ReplayTests =
         let original = played 2088
 
         let paifu =
-            Paifu.create Ruleset.yonma (StartGame [ "p0"; "p1"; "p2"; "p3" ] :: Game.events original) []
+            Paifu.create Ruleset.yonma (StartGame [ "p0"; "p1"; "p2"; "p3" ] :: Game.events original) [] Prompting.empty
 
         match Replay.ofPaifu paifu with
         | Ok replayed ->

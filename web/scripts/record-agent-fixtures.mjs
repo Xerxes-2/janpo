@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { createModels } from "@earendil-works/pi-ai";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { piAsk } from "../src/agent/piai.ts";
-import { renderPrompt } from "../src/agent/prompt.ts";
+import { promptMessages } from "../src/agent/prompt.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = resolve(here, "../tests/fixtures/agent");
@@ -38,8 +38,14 @@ const seat = (overrides) => ({
   timeout_ms: 30000,
   thinking: "off",
   tier: "bare",
+  // 默认模板、没有人格（票 31）：固件录的是「模型对**默认那一份 prompt** 怎么答」。
+  persona: "",
+  template: "",
   ...overrides,
 });
+
+/** 两条消息摊进 `piAsk` 的请求（它的字段名是 `system` 与 `prompt`）。 */
+const messages = (rendered) => ({ system: rendered.system, prompt: rendered.user });
 
 /** 点名了就只录点名的那几份；一份都没点名就全录。 */
 const named = process.argv.slice(2).filter((argument) => !argument.startsWith("-"));
@@ -53,14 +59,16 @@ async function record(name, note, run) {
   console.log(`${name}: stopReason=${result.stopReason} ${result.latencyMs}ms`);
 }
 
-const bare = renderPrompt(decision, "bare", null);
+// 两条消息（票 31）：固定 preamble 进 system，历史 + 现况进 user。
+// **录制走的与生产同一个渲染出口**，否则录下来的答案答的不是真会发出去的那份 prompt。
+const bare = promptMessages(decision, "bare", null);
 const actionIds = decision.actions.map((option) => String(option.id));
 
 // 1) 合法输出：模型调 choose_action，给一个包里有的 id。
 await record(
   "ask-legal",
   `真实录制：DeepSeek ${MODEL} 对 decision-dahai.json 的单轮 tool call。`,
-  () => piAsk({ seat: seat(), prompt: bare, actionIds }),
+  () => piAsk({ seat: seat(), ...messages(bare), actionIds }),
 );
 
 // 2) Assisted 档（票 24）：**同一份决策包、同一个模型**，prompt 换成带脚手架的那一档。
@@ -71,7 +79,7 @@ await record(
   () =>
     piAsk({
       seat: seat({ tier: "assisted" }),
-      prompt: renderPrompt(decision, "assisted", null),
+      ...messages(promptMessages(decision, "assisted", null)),
       actionIds,
     }),
 );
@@ -84,7 +92,7 @@ await record(
   () =>
     piAsk({
       seat: seat({ tier: "assisted" }),
-      prompt: renderPrompt(dangerDecision, "assisted", null),
+      ...messages(promptMessages(dangerDecision, "assisted", null)),
       actionIds: dangerDecision.actions.map((option) => String(option.id)),
     }),
 );
@@ -100,7 +108,10 @@ await record(
     const model = models.getModel("deepseek", MODEL);
     const message = await models.completeSimple(
       model,
-      { messages: [{ role: "user", content: bare, timestamp: Date.now() }] },
+      {
+        systemPrompt: bare.system,
+        messages: [{ role: "user", content: bare.user, timestamp: Date.now() }],
+      },
       { apiKey },
     );
     return {
@@ -123,10 +134,10 @@ await record(
 await record(
   "ask-aborted",
   "真实录制：timeout_ms=300 时的 abort（票 18 实测：它是值不是异常）。",
-  () => piAsk({ seat: seat({ timeout_ms: 300 }), prompt: bare, actionIds }),
+  () => piAsk({ seat: seat({ timeout_ms: 300 }), ...messages(bare), actionIds }),
 );
 
 // 6) provider 报错：故意用一把坏 key（**断电演习**在浏览器里的等价物）。
 await record("ask-error-bad-key", "真实录制：坏 key 的 401（stopReason=error，不抛异常）。", () =>
-  piAsk({ seat: seat({ api_key: "sk-invalid-key-for-fixture" }), prompt: bare, actionIds }),
+  piAsk({ seat: seat({ api_key: "sk-invalid-key-for-fixture" }), ...messages(bare), actionIds }),
 );

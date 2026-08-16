@@ -89,7 +89,38 @@ module Usage =
     let toDisplay (usage: Usage) : string =
         $"输入 {promptTokens usage} tok（缓存命中 {usage.CacheRead}，{cacheHitPercent usage}%%）、输出 {usage.Output} tok"
 
-/// 一次决策的完整审计数据（CONTEXT.md 的 DecisionRecord）：输入（prompt、工具定义）、
+/// 某座位某一版模板的固定 preamble（票 31）：可缓存前缀里**逐字不变**的那一段，
+/// 也就是真发出去的 system 消息。
+///
+/// **整场存一次，不每手存**：它是 (模板 + 人格) 的函数，与手数无关。键是「座位 + 渲染版本」
+/// ——主持人打到一半换了人格，就多一条，而每条决策记录靠自己的 `RenderVersion` 指得回
+/// 当时那一份。
+type Preamble =
+    {
+        /// 用这一份 preamble 的座位。
+        Seat: Seat
+        /// 渲染版本号（`模板 id@内容哈希`）。**算出来的，不是手填的**：
+        /// 手填的数字没有任何东西保证有人改措辞时会 +1（裁决 29b-A）。
+        RenderVersion: string
+        /// 正文（人格 + 规则与读法）。
+        Text: string
+    }
+
+/// 一份牌谱里 prompt 的**前置**（票 31）：整场存一次的那两样。
+///
+/// 它存在的理由是**别把派生值当事实存**：prompt 是 (事件流 + 座位 + 渲染版本 + 脚手架档位)
+/// 的派生物，而事件流就在同一份牌谱里。每手存一整份 prompt 在快照式 prompt 下只是浪费，
+/// 在 29b 的事件流式 prompt 下是 O(n²)。
+type Prompting =
+    {
+        /// 工具定义的**形状**：`choose_action` 的 schema，动作 id 的 enum 留空。
+        /// 某一手真发出去的那一份 = 形状 + 那一条记录的 `ActionIds`。
+        Tools: string
+        /// 各座位的固定 preamble，按「座位 + 渲染版本」去重。
+        Preambles: Preamble list
+    }
+
+/// 一次决策的完整审计数据（CONTEXT.md 的 DecisionRecord）：输入（prompt 的尾部、这一手的动作 id 集）、
 /// 输出（含 thinking）、延迟、重试次数，以及这一手最后落定的是哪个动作、是不是兜底代打的。
 ///
 /// **它是数据，不是 UI**：思考气泡（M2）读它，但它自己不知道任何渲染的事。
@@ -103,14 +134,23 @@ type DecisionRecord =
         Turn: int
         /// 做这次决策的座位。
         Seat: Seat
-        /// 问出去的 prompt 全文。**重试时记最后一次**（重试的 prompt 只多一句「上次为什么不行」，
-        /// 而最后那次才是产出这条回答的那次）；问了几次看 `Attempts`。
-        Prompt: string
-        /// 工具定义的 JSON 全文（`choose_action` 的 schema，含这一手的合法 id 列表）。
+        /// 问出去的 prompt 的**尾部**（票 31）：【现在】+【可选动作】+（脚手架）+（重试原因）。
+        /// **重试时记最后一次**（重试的尾部只多一句「上次为什么不行」，而最后那次才是产出
+        /// 这条回答的那次）；问了几次看 `Attempts`。
         ///
-        /// **F# 不解释这段字符串**：它是 Agent 层那侧的形状（ADR-0005：跨界只传字符串），
-        /// 牌谱只负责原样保存下来给人和分析脚本看。
-        Tools: string
+        /// **前缀不在里面**：固定 preamble 在 `Paifu.Prompting`，历史由事件流重算得出来。
+        /// 重建当时那一整份 prompt 是 Agent 层的 `rebuildMessages`——渲染在 TS 侧（ADR-0005）。
+        /// 读 v1 牌谱时这里装的是当时存下来的**整份** prompt（那一版没有前后之分，
+        /// `Paifu.Version` 分得清是哪一种）。
+        PromptTail: string
+        /// 渲染版本号（`模板 id@内容哈希`）。**它是这条记录与 `Prompting.Preambles` 之间的键**，
+        /// 也让 M2 看命中率掉时一眼归因到「换了模板」。v1 牌谱里没有这一项，读出来是空串。
+        RenderVersion: string
+        /// 这一手真发出去的那份 enum：合法动作的 id 集。
+        ///
+        /// **工具定义的其余部分整场存一次**（`Prompting.Tools`）——26 号票每手存一整份，
+        /// 实测每手 437–513 字、几乎逐字相同，而其中唯一随手变的就是这个 id 集。
+        ActionIds: int list
         /// 模型的原始输出，JSON 全文（停止原因、内容块、token 用量）。同样**不被 F# 解释**。
         ///
         /// **thinking 不在里面**：它单独一个字段，因为分享路径要省得掉它（见 `Thinking`）。
@@ -148,8 +188,9 @@ type DecisionRecord =
 
 /// 牌谱（CONTEXT.md 的 Paifu）：一场对局的完整记录，也是本项目**唯一的可分享物**（ADR-0002）。
 ///
-/// 四样东西：格式版本号、规则集、mjai 事件流、逐手的决策记录。
-/// **没有局面快照**——局面是对事件流做 fold 得出来的（`Replay`），不是存下来的。
+/// 五样东西：格式版本号、规则集、mjai 事件流、逐手的决策记录，以及 prompt 的前置。
+/// **没有局面快照**——局面是对事件流做 fold 得出来的（`Replay`），不是存下来的；
+/// **也没有每手一整份 prompt**——prompt 同样是那条事件流的派生物（票 31）。
 ///
 /// URL 分享（M2）与 JSON 导入导出走的是同一个类型、同一个编码器、同一个解码器：
 /// 前者只是先做一次 `Paifu.stripThinking`。
@@ -164,7 +205,43 @@ type Paifu =
         Events: Event list
         /// 决策记录，按手序。随机选手的手不在里面。
         Decisions: DecisionRecord list
+        /// prompt 的前置（票 31）：固定 preamble 与工具定义形状，整场各存一次。
+        /// v1 的牌谱没有这一段，读出来是空的。
+        Prompting: Prompting
     }
+
+/// prompt 前置的累加与取用。
+[<RequireQualifiedAccess>]
+module Prompting =
+
+    /// 一样都还没有。累加的起点，也是 v1 牌谱读出来的样子。
+    let empty: Prompting = { Tools = ""; Preambles = [] }
+
+    /// 收进一手带来的前置。**preamble 按「座位 + 渲染版本」去重**，工具形状整场只记第一份；
+    /// 空的一律不记（Agent 层压根没答话的那几手没有 prompt 可言）。
+    let add (incoming: Prompting) (existing: Prompting) : Prompting =
+        let known (preamble: Preamble) =
+            existing.Preambles
+            |> List.exists (fun seen -> seen.Seat = preamble.Seat && seen.RenderVersion = preamble.RenderVersion)
+
+        let fresh =
+            incoming.Preambles
+            |> List.filter (fun preamble -> preamble.Text <> "" && not (known preamble))
+
+        {
+            Tools =
+                if existing.Tools = "" then
+                    incoming.Tools
+                else
+                    existing.Tools
+            Preambles = existing.Preambles @ fresh
+        }
+
+    /// 某座位在某个渲染版本下的那一份 preamble；没有就是 None（v1 牌谱恒是 None）。
+    let preambleFor (seat: Seat) (renderVersion: string) (prompting: Prompting) : string option =
+        prompting.Preambles
+        |> List.tryFind (fun preamble -> preamble.Seat = seat && preamble.RenderVersion = renderVersion)
+        |> Option.map (fun preamble -> preamble.Text)
 
 /// 牌谱的构造、变换与编解码。
 [<RequireQualifiedAccess>]
@@ -173,20 +250,25 @@ module Paifu =
     // ---- 版本 ----
 
     /// 当前的格式版本号。
-    let version = 1
+    ///
+    /// **1 → 2 是票 31 涨的**：`prompt` 那一字段从「整份 prompt」变成「只有尾部」，
+    /// 工具定义从每手一份变成整场一份形状。**改含义才涨版本**（裁决 26）：
+    /// 字段名宁可跟着换（`prompt` → `prompt_tail`），也不能让同一个名字在两个版本里说两件事。
+    let version = 2
 
     /// 这个版本的引擎读得动的格式版本。加一个版本就在这里加一项，并让解码器认得它。
-    let supported: int list = [ 1 ]
+    let supported: int list = [ 1; 2 ]
 
     // ---- 构造 ----
 
     /// 摆一份牌谱。版本号由这里给，调用方不必知道它是几。
-    let create (ruleset: Ruleset) (events: Event list) (decisions: DecisionRecord list) : Paifu =
+    let create (ruleset: Ruleset) (events: Event list) (decisions: DecisionRecord list) (prompting: Prompting) : Paifu =
         {
             Version = version
             Ruleset = ruleset
             Events = events
             Decisions = decisions
+            Prompting = prompting
         }
 
     // ---- 变换 ----
@@ -209,16 +291,24 @@ module Paifu =
     let private optional (encode: Encoder<'a>) (name: string) (value: 'a option) : (string * IEncodable) list =
         value |> Option.map (fun value -> name, encode value) |> Option.toList
 
-    let recordEncoder: Encoder<DecisionRecord> =
+    /// 一条决策记录的 wire 形态。**按牌谱自己那个版本号写**：读进来一份 v1，写出去仍是 v1，
+    /// 不把当年那份整文 prompt 重标成「尾部」（那是把一个谎写进可分享物里）。
+    let recordEncoderFor (formatVersion: int) : Encoder<DecisionRecord> =
         fun record ->
+            let prompt =
+                if formatVersion < 2 then
+                    [ "prompt", Encode.string record.PromptTail ]
+                else
+                    [
+                        "prompt_tail", Encode.string record.PromptTail
+                        "render_version", Encode.string record.RenderVersion
+                        "action_ids", record.ActionIds |> List.map Encode.int |> Encode.list
+                    ]
+
             Encode.object (
-                [
-                    "turn", Encode.int record.Turn
-                    "seat", Seat.encoder record.Seat
-                    "prompt", Encode.string record.Prompt
-                    "tools", Encode.string record.Tools
-                    "output", Encode.string record.Output
-                ]
+                [ "turn", Encode.int record.Turn; "seat", Seat.encoder record.Seat ]
+                @ prompt
+                @ [ "output", Encode.string record.Output ]
                 @ optional Encode.string "reason" record.Reason
                 @ optional Encode.string "thinking" record.Thinking
                 @ [
@@ -230,17 +320,32 @@ module Paifu =
                 @ optional Usage.encoder "usage" record.Usage
             )
 
-    /// **可缺省的五个字段**：`reason` / `thinking` / `applied` / `fallback` / `usage`。
+    /// 当前版本的记录编码器。
+    let recordEncoder: Encoder<DecisionRecord> = recordEncoderFor version
+
+    /// **可缺省的四个字段**：`reason` / `thinking` / `applied` / `fallback` / `usage`。
     /// **加可缺省的字段不涨版本号**（裁决 26）：旧牌谱没有 `usage`，照样读得动。
     /// thinking 缺省是分享路径的硬需求（ADR-0002），其余四个缺省分别是
     /// 「模型没说」「换不回 id」与「这一手不是兜底」。
+    ///
+    /// **两个版本的 prompt 字段都认**（票 31）：v2 读 `prompt_tail`，v1 读 `prompt`
+    /// （那一版存的是整文，没有前后之分）。两个都没有就是空串——审计数据缺一项
+    /// 不应当让一整份牌谱读不动。
     let recordDecoder: Decoder<DecisionRecord> =
         Decode.object (fun get ->
+            let tail =
+                match get.Optional.Field "prompt_tail" Decode.string with
+                | Some tail -> tail
+                | None -> get.Optional.Field "prompt" Decode.string |> Option.defaultValue ""
+
             {
                 Turn = get.Required.Field "turn" Decode.int
                 Seat = get.Required.Field "seat" Seat.decoder
-                Prompt = get.Required.Field "prompt" Decode.string
-                Tools = get.Required.Field "tools" Decode.string
+                PromptTail = tail
+                RenderVersion = get.Optional.Field "render_version" Decode.string |> Option.defaultValue ""
+                ActionIds =
+                    get.Optional.Field "action_ids" (Decode.list Decode.int)
+                    |> Option.defaultValue []
                 Output = get.Required.Field "output" Decode.string
                 Reason = get.Optional.Field "reason" Decode.string
                 Thinking = get.Optional.Field "thinking" Decode.string
@@ -251,16 +356,60 @@ module Paifu =
                 Usage = get.Optional.Field "usage" Usage.decoder
             })
 
+    let private preambleEncoder: Encoder<Preamble> =
+        fun preamble ->
+            Encode.object
+                [
+                    "seat", Seat.encoder preamble.Seat
+                    "render_version", Encode.string preamble.RenderVersion
+                    "text", Encode.string preamble.Text
+                ]
+
+    let private preambleDecoder: Decoder<Preamble> =
+        Decode.object (fun get ->
+            {
+                Seat = get.Required.Field "seat" Seat.decoder
+                RenderVersion = get.Required.Field "render_version" Decode.string
+                Text = get.Required.Field "text" Decode.string
+            })
+
+    let promptingEncoder: Encoder<Prompting> =
+        fun prompting ->
+            Encode.object
+                [
+                    "tools", Encode.string prompting.Tools
+                    "preambles", prompting.Preambles |> List.map preambleEncoder |> Encode.list
+                ]
+
+    let promptingDecoder: Decoder<Prompting> =
+        Decode.object (fun get ->
+            {
+                Tools = get.Optional.Field "tools" Decode.string |> Option.defaultValue ""
+                Preambles =
+                    get.Optional.Field "preambles" (Decode.list preambleDecoder)
+                    |> Option.defaultValue []
+            })
+
     /// 牌谱的 wire 形态。**导出与分享是同一个编码器**（分享那条先 `stripThinking`）。
+    ///
+    /// v1 的牌谱写不出 `prompting`：那一版根本没有这一段，而 v1 只能从读里来，读出来就是空的。
     let encoder: Encoder<Paifu> =
         fun paifu ->
-            Encode.object
+            let prompting =
+                if paifu.Version < 2 then
+                    []
+                else
+                    [ "prompting", promptingEncoder paifu.Prompting ]
+
+            Encode.object (
                 [
                     "version", Encode.int paifu.Version
                     "ruleset", Ruleset.encoder paifu.Ruleset
                     "events", paifu.Events |> List.map Event.encoder |> Encode.list
-                    "decisions", paifu.Decisions |> List.map recordEncoder |> Encode.list
+                    "decisions", paifu.Decisions |> List.map (recordEncoderFor paifu.Version) |> Encode.list
                 ]
+                @ prompting
+            )
 
     let private versionDecoder: Decoder<int> =
         Decode.int
@@ -279,4 +428,7 @@ module Paifu =
                 Ruleset = get.Required.Field "ruleset" Ruleset.decoder
                 Events = get.Required.Field "events" (Decode.list Event.decoder)
                 Decisions = get.Required.Field "decisions" (Decode.list recordDecoder)
+                Prompting =
+                    get.Optional.Field "prompting" promptingDecoder
+                    |> Option.defaultValue Prompting.empty
             })

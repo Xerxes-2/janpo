@@ -22,6 +22,8 @@ module PaifuExportTests =
             TimeoutMs = 12000
             Thinking = Thinking.Medium
             Tier = ScaffoldTier.Bare
+            Persona = ""
+            Template = ""
         }
 
     let private seat (index: int) : Seat =
@@ -48,8 +50,11 @@ module PaifuExportTests =
             Failure = None
             Attempts = 1
             LatencyMs = 640
-            Prompt = "东1局 0 本场……\n可选动作：\n0. 摸切1索"
-            Tools = """{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":["0"]}}}}"""
+            PromptTail = "【现在】东1局 0 本场……\n【可选动作】只能从下面这些 id 里选一个：\n- id=0：摸切1索"
+            Preamble = "你在打日本立直麻将（天凤规则，四人东）……"
+            RenderVersion = "janpo-default@08fcaec3"
+            Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
+            ActionIds = [ 0 ]
             Output = """{"stop_reason":"toolUse","content":[{"type":"toolCall","name":"choose_action"}]}"""
             Thinking = Some "先数向听：现在是 2 向听……"
             Usage =
@@ -70,8 +75,11 @@ module PaifuExportTests =
             Failure = Some "provider 报错：401（重试 2 次仍无结果）"
             Attempts = 3
             LatencyMs = 91000
-            Prompt = "东1局 0 本场……"
-            Tools = """{"name":"choose_action"}"""
+            PromptTail = "【现在】东1局 0 本场……"
+            Preamble = "你在打日本立直麻将（天凤规则，四人东）……"
+            RenderVersion = "janpo-default@08fcaec3"
+            Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
+            ActionIds = [ 0 ]
             Output = ""
             Thinking = None
             Usage = None
@@ -122,8 +130,10 @@ module PaifuExportTests =
 
         for record in table.Decisions do
             Assert.Equal(seat 1, record.Seat)
-            Assert.Equal(spoke.Prompt, record.Prompt)
-            Assert.Equal(spoke.Tools, record.Tools)
+            // **只存尾部**（票 31）：前缀在 `Prompting` 里整场一份，下一条用例盯它。
+            Assert.Equal(spoke.PromptTail, record.PromptTail)
+            Assert.Equal(spoke.RenderVersion, record.RenderVersion)
+            Assert.Equal<int list>(spoke.ActionIds, record.ActionIds)
             Assert.Equal(spoke.Output, record.Output)
             Assert.Equal(spoke.Reason, record.Reason)
             Assert.Equal(spoke.Thinking, record.Thinking)

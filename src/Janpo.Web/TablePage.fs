@@ -255,8 +255,10 @@ module TablePage =
         let record: DecisionRecord = {
             Turn = table.Turns
             Seat = seat
-            Prompt = answer.Prompt
-            Tools = answer.Tools
+            // **只存尾部**（票 31）：前缀是事件流的派生物，而事件流就在同一份牌谱里。
+            PromptTail = answer.PromptTail
+            RenderVersion = answer.RenderVersion
+            ActionIds = answer.ActionIds
             Output = answer.Output
             Reason = answer.Reason
             Thinking = answer.Thinking
@@ -268,7 +270,20 @@ module TablePage =
             Usage = answer.Usage
         }
 
-        let played = Table.applyRecorded record action table
+        // 那一手带来的前置：固定 preamble 与工具定义形状。**牌桌按「座位 + 渲染版本」去重**，
+        // 因此整场只存一份（中途换了人格就多一份）。
+        let prompting: Prompting = {
+            Tools = answer.Tools
+            Preambles = [
+                {
+                    Seat = seat
+                    RenderVersion = answer.RenderVersion
+                    Text = answer.Preamble
+                }
+            ]
+        }
+
+        let played = Table.applyRecorded record prompting action table
 
         match fallback with
         | None -> played, AgentStatus.Spoke(seat, answer.Reason, answer.LatencyMs)
@@ -883,6 +898,31 @@ module TablePage =
             ]
         ]
 
+    /// 一格多行文本（票 31）：人格与模板都是整段文字，单行输入框里根本读不下来。
+    /// **措辞与人格就是从这两格注入的**：改它们不用改代码、不用重编。
+    let private areaField
+        (testId: string)
+        (label: string)
+        (hint: string)
+        (which: LlmField)
+        (model: TableModel)
+        (dispatch: TableMsg -> unit)
+        =
+        Html.label [
+            prop.key testId
+            prop.className "field"
+            prop.children [
+                Html.span [ prop.className "label"; prop.text label ]
+                Html.textarea [
+                    prop.testId testId
+                    prop.rows 3
+                    prop.placeholder hint
+                    prop.value (LlmSeat.field which model.Llm)
+                    prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
+                ]
+            ]
+        ]
+
     /// 一个下拉框。`options` 是（值, 显示, 选不选得了）三元组。
     ///
     /// **选不了的选项仍然列出来**：脚手架的工具搜索档是 M3 的事，列着它并灰掉
@@ -990,11 +1030,33 @@ module TablePage =
                             dispatch
                     ]
                 ]
+                // 人格与模板（票 31）：**与脚手架档位是两个维度**，因此另起一行。
+                // 两格都进可缓存的前缀，因此改它们 = 废掉那一局的缓存（渲染版本号会跟着变）。
+                Html.div [
+                    prop.key "prompt"
+                    prop.className "controls"
+                    prop.children [
+                        areaField
+                            "table-llm-persona"
+                            "人格"
+                            "留空就没有人格。例：你是一位以防守见长的雀士，宁可少和一把，也不点炮。"
+                            LlmField.Persona
+                            model
+                            dispatch
+                        areaField
+                            "table-llm-template"
+                            "prompt 模板"
+                            "留空就用默认模板。一段 JSON，给几项换几项：{\"id\":\"我的模板\",\"labels\":{\"history\":\"【战况回放】\"}}"
+                            LlmField.Template
+                            model
+                            dispatch
+                    ]
+                ]
                 Html.p [
                     prop.key "note"
                     prop.className "intro"
                     prop.text
-                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的），对局不会卡住。"
+                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的），对局不会卡住。"
                 ]
                 // 自定义端点那段话只在选中它时出现：两个坑（CORS、mixed content）说清楚要一整段，
                 // 而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。

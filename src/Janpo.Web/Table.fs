@@ -53,6 +53,10 @@ type Table = {
     /// 这一桌至今的决策记录，按手序（票 26）。**只有问过模型的那几手在里面**：
     /// 随机选手没有可审计的推理，写一条空记录只会把牌谱撑胖。
     Decisions: DecisionRecord list
+    /// prompt 的前置（票 31）：各座位的固定 preamble 与工具定义形状，**整场各存一次**。
+    ///
+    /// **它不是第二份 prompt**：每手的尾部在各自的记录里，前缀由这一段加事件流重算得出来。
+    Prompting: Prompting
     /// 引擎拒绝了某个动作。**不该发生**（提交的动作都取自合法动作集），
     /// 落在这里就停住不再推进，把话说给人看，而不是静静地卡住。
     Fault: string option
@@ -106,6 +110,7 @@ module Table =
                 Latest = None
                 Turns = 0
                 Decisions = []
+                Prompting = Prompting.empty
                 Fault = None
             })
 
@@ -212,13 +217,20 @@ module Table =
     /// 选手自己决出来的一手，**没有可审计的推理**（随机座位）。
     let apply (action: Action) (table: Table) : Table = played None action table
 
-    /// 问过模型的那一手：动作加它的决策记录（票 26）。
+    /// 问过模型的那一手：动作加它的决策记录（票 26），以及那一手带来的 prompt 前置（票 31）。
     ///
     /// **兜底与否写在记录里**（`DecisionRecord.Fallback`），牌桌上那句「兜底：……」与
     /// 兜底计数都取自同一处。**与 `apply` 同一条路**：代打的动作同样取自合法动作集，
     /// 引擎不会因此放宽任何判定。
-    let applyRecorded (record: DecisionRecord) (action: Action) (table: Table) : Table =
-        played (Some record) action table
+    ///
+    /// 前置按「座位 + 渲染版本」去重：一场里换了人格就多一条，没换就整场只有一条。
+    let applyRecorded (record: DecisionRecord) (prompting: Prompting) (action: Action) (table: Table) : Table =
+        let played = played (Some record) action table
+
+        {
+            played with
+                Prompting = Prompting.add prompting played.Prompting
+        }
 
     /// 推进一手：决策 + 落子。已终或出过错则原样返回（没有事情发生，不是错误）。
     ///
@@ -272,4 +284,4 @@ module Table =
     ///
     /// **局面不在里面**：它是对事件流 fold 出来的（`Replay.ofPaifu`），不存第二份。
     let paifu (roster: Roster) (table: Table) : Paifu =
-        Paifu.create (Game.ruleset table.Game) (events roster table) table.Decisions
+        Paifu.create (Game.ruleset table.Game) (events roster table) table.Decisions table.Prompting

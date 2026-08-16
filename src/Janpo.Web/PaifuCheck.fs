@@ -84,5 +84,19 @@ let check (text: string) : string =
                 "juni", juni
                 "thinking", counted (fun record -> Option.isSome record.Thinking)
                 "fallbacks", counted (fun record -> Option.isSome record.Fallback)
+                // prompt 的前置（票 31）：每手的尾部能不能接回一整份 prompt，靠它两项。
+                "preambles", paifu.Prompting.Preambles |> List.length |> Encode.int
+                "tail_chars",
+                paifu.Decisions
+                |> List.sumBy (fun record -> record.PromptTail.Length)
+                |> Encode.int
+                // 每一手的尾部都指得回一份 preamble（否则重建不回当时那两条消息）。
+                "rebuildable",
+                Encode.bool (
+                    paifu.Decisions
+                    |> List.forall (fun record ->
+                        Prompting.preambleFor record.Seat record.RenderVersion paifu.Prompting
+                        |> Option.isSome)
+                )
             ]
             |> Encode.toString 0

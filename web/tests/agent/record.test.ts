@@ -25,22 +25,31 @@ const cached: AskResult = {
   usage: { input: 212, output: 96, cacheRead: 1344, cacheWrite: 0 },
 };
 
-test("回执带着这一手的 prompt 全文与工具定义", async () => {
-  const { ask, prompts } = replay(legal);
+test("回执带着这一手 prompt 的尾部与工具定义的形状", async () => {
+  const { ask, messages } = replay(legal);
   const response = await decideWith(ask, request(dahaiPackage));
 
-  assert.equal(response.prompt, prompts[0], "记的就是真问出去的那一段");
-  assert.match(response.prompt, /【可选动作】/);
+  // **只有尾部**（票 31）：前缀是事件流的派生物，牌谱里不存第二份。
+  assert.match(response.prompt_tail, /【可选动作】/);
+  assert.ok(messages[0].user.endsWith(response.prompt_tail), "尾部就是那条 user 消息的末尾");
+  assert.equal(response.prompt_tail.includes("【到目前为止你看到的】"), false, "历史不在尾部里");
 
-  // 工具定义与真发出去的是同一份：`tools.ts` 只有一个出处。
-  const ids = dahaiPackage.actions.map((option) => String(option.id));
-  assert.equal(response.tools, toolsJson(ids));
-  assert.match(response.tools, /choose_action/);
+  // 固定 preamble 单独一段，进 system 消息；整场不变，牌谱里存一次。
+  assert.equal(response.preamble, messages[0].system);
+  assert.match(response.preamble, /怎么读这份 prompt/);
+  assert.match(response.render_version, /^janpo-default@[0-9a-f]{8}$/);
 
-  // enum 是这一手动态生成的：记录里那份 schema 列的就是这一包的 id。
-  const [tool] = JSON.parse(response.tools);
-  assert.equal(tool.name, chooseAction(ids).name);
-  assert.deepEqual(tool.parameters.properties.action_id.enum, ids);
+  // 工具定义存的是**形状**（enum 留空），这一手真发出去的 enum 在 `action_ids` 里。
+  const ids = dahaiPackage.actions.map((option) => option.id);
+  assert.equal(response.tools, toolsJson([]));
+  assert.deepEqual(response.action_ids, ids);
+
+  // 形状 + 这一手的 id 集 = 真发出去的那一份（`tools.ts` 只有一个出处）。
+  const [shape] = JSON.parse(response.tools);
+  assert.equal(shape.name, chooseAction(ids.map(String)).name);
+  assert.deepEqual(shape.parameters.properties.action_id.enum, []);
+  shape.parameters.properties.action_id.enum = response.action_ids.map(String);
+  assert.equal(JSON.stringify([shape]), toolsJson(ids.map(String)));
 });
 
 test("回执带着模型的原始输出，thinking 单独一段（分享时省得掉）", async () => {
@@ -72,8 +81,8 @@ test("重试之后记的是最后那一轮：prompt 带着上一次的原因，�
   const response = await decideWith(ask, request(dahaiPackage));
 
   assert.equal(response.attempts, 2);
-  assert.equal(response.prompt, prompts[1]);
-  assert.match(response.prompt, /上一次的回答没有被采用/);
+  assert.ok(prompts[1].endsWith(response.prompt_tail));
+  assert.match(response.prompt_tail, /上一次的回答没有被采用/);
   assert.equal(response.thinking, thoughtful.thinking);
   assert.equal(JSON.parse(response.output).tool_call.name, "choose_action");
 });
@@ -84,8 +93,9 @@ test("一直交不出来的那一手照样记全：审计数据在失败时最�
 
   assert.equal(response.action_id, null);
   assert.match(response.failure ?? "", /模型超时/);
-  assert.match(response.prompt, /【可选动作】/);
+  assert.match(response.prompt_tail, /【可选动作】/);
   assert.match(response.tools, /choose_action/);
+  assert.notEqual(response.render_version, "");
   assert.equal(JSON.parse(response.output).stop_reason, "aborted");
   assert.equal(JSON.parse(response.output).error_message, "Request aborted");
 });
@@ -97,8 +107,11 @@ test("连请求都没发出去时，审计那几项是空的而不是编的", as
     request(dahaiPackage, { seat: { ...seat, api_key: "   " } }),
   );
 
-  assert.equal(response.prompt, "");
+  assert.equal(response.prompt_tail, "");
+  assert.equal(response.preamble, "");
+  assert.equal(response.render_version, "");
   assert.equal(response.tools, "");
+  assert.deepEqual(response.action_ids, []);
   assert.equal(response.output, "");
   assert.equal(response.thinking, null);
 });
