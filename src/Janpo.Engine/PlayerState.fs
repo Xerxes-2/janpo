@@ -200,7 +200,7 @@ module PlayerState =
     /// 放过的那张在他家的河里而不在自己的河里，因此平时它不永久。
     ///
     /// **立直中的见逃是永久振听**：立直后手牌不再变，这一位从此闩死
-    /// （`refreshFuriten` 对立直中的座位只置位不清除）。
+    /// （`refreshFuriten` 对立直**已成立**的座位只置位不清除）。
     let minogashi (player: PlayerState) : PlayerState =
         { player with
             Furiten =
@@ -214,6 +214,11 @@ module PlayerState =
     /// 听牌一变就要重算，因此每次自家打牌后调一次（手牌只会在那时变）。
     /// 这是**重算**而不是置位：换听到不含自己打过的牌上就解除，这是通行规则。
     /// 红宝牌与对应正牌同一牌种，对比前先去红。
+    ///
+    /// **闩死只从立直成立（`Accepted`）那一刻算起**：宣言牌那一手手牌还在变（状态是
+    /// `Declared`），宣言牌换了听就照常解除振听——否则「振听时立直、用宣言牌换听」
+    /// 这个常见手筋会被闩死，那一家从此荣和不了。真实牌谱实证（票 13 的对拍，200 局里 2 处）：
+    /// 天凤在这种局面下让荣和成立。
     let refreshFuriten (kindSet: TileKindSet) (player: PlayerState) : PlayerState =
         let waiting = waits kindSet player
 
@@ -223,9 +228,10 @@ module PlayerState =
         { player with
             Furiten =
                 { player.Furiten with
-                    // 立直中只置位不清除：立直后手牌不再变，重算只会把「立直后见逃」
+                    // 立直**成立后**只置位不清除：那之后手牌不再变，重算只会把「立直后见逃」
                     // 那一位（放过的牌不在自家河里，重算看不到）冲掉。
-                    Permanent = hit || (RiichiState.isActive player.Riichi && player.Furiten.Permanent)
+                    // 宣言牌那一手（`Declared`）不在此列：那一手听牌还会变。
+                    Permanent = hit || (RiichiState.isAccepted player.Riichi && player.Furiten.Permanent)
                 }
         }
 

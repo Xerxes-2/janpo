@@ -93,9 +93,26 @@
     <Compile Include="GameProperties.fs" />
   </ItemGroup>
 
+  <!-- 真实牌谱对拍（票 13）。顺序有依赖：事件 → oracle → 重放 → 对拍 → 断言。 -->
+  <ItemGroup>
+    <Compile Include="PaifuEvent.fs" />
+    <Compile Include="PaifuOracle.fs" />
+    <Compile Include="PaifuReplay.fs" />
+    <Compile Include="PaifuDifferential.fs" />
+    <Compile Include="PaifuDifferentialTests.fs" />
+  </ItemGroup>
+
   <!-- oracle 对拍固件：由 scripts/oracle/refresh-fixture.sh 生成，让 dotnet test 能离线对拍。 -->
   <ItemGroup>
     <Content Include="fixtures/shanten-oracle.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- 真实牌谱固件（tests/fixtures/paifu/，来源与许可见同目录 README）：
+       mjai 事件流驱动重放，天凤官方 JSON 作役 / 符 / 点数的 oracle。
+       `Link` 把它们落到输出目录的 fixtures/paifu/ 下，因此 dotnet test 离线跑。 -->
+  <ItemGroup>
+    <Content Include="../fixtures/paifu/mjai/*.mjson" Link="fixtures/paifu/mjai/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../fixtures/paifu/tenhou/*.json" Link="fixtures/paifu/tenhou/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

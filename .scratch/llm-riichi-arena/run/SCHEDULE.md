@@ -43,8 +43,9 @@
 | 10 | **done** | nzlvxmur | 437 测试；禁止食替判据三处共用；一发钩子留给 09 |
 | 11 | **done** | wqzppokx | 493 测试；岭上/抢杠/新宝牌/责任支付；kanCount 给 12 |
 | 12 | **done** | kmuuknlq | 528 测试；RyuukyokuReason 全集（wire 出自 mjai 参考实现）、Nagashi Mangan 替代清算 |
-| 13 | dispatched | | ws-a |
+| 13 | **done** | uoltqvry | 541 测试；固件 0 差异，200 局报 8 条→修 1 真 bug、开 16 票 |
 | 14 | pending | | |
+| 16 | dispatched | | ws-a（13 票发现的真 bug，阻塞 14）|
 | 15 | pending | | M0 之后：立直合法性的 Shanten 前置闸门（N-19），阻塞于 14 |
 
 ## 中途插入的调研（用户给了牌谱屋链接与三麻 bonus）

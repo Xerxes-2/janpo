@@ -233,6 +233,23 @@ module RiichiTests =
             Draws = "1z 5z 3z 4z 2z"
         }
 
+    /// **振听时立直、用宣言牌换听**的剧本（票 13 的对拍报出来的那个 bug）：
+    ///
+    /// Oya 听 `3p / 6p`，第 1 巡摸进和了牌 `6p` 却打掉它 → 永久振听；
+    /// 第 2 巡摸进 `9p` 凑成 `999p`，立直打 `4p` 换成 `5p` 单骑——
+    /// `5p` 不在自家河里，**振听就此解除**，随后座位 1 摸切 `5p` 应当荣和得了。
+    let private riichiClearsFuritenScript =
+        {
+            Hands =
+                [
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 9p 9p 4p 5p"
+                    "1p 4p 7p 1s 4s 7s 1z 2z 3z 4z 6z 7z 9m"
+                    "2p 5p 8p 2s 5s 8s 1z 2z 3z 4z 6z 7z 9m"
+                    "3p 6p 9p 3s 6s 9s 1z 2z 3z 4z 6z 7z 9m"
+                ]
+            Draws = "6p 5z 5z 5z 9p 5p"
+        }
+
     // ---- 宣言 ----
 
     [<Fact>]
@@ -548,6 +565,46 @@ module RiichiTests =
 
         Assert.True((PlayerState.furiten (playerOf (seat 0) later)).Permanent)
         Assert.True(Furiten.blocksRon (PlayerState.furiten (playerOf (seat 0) later)))
+
+    [<Fact>]
+    let ``振听时立直，宣言牌换了听就解除振听`` () =
+        // 闩死只从立直**成立**那一刻算起：宣言牌那一手手牌还在变。
+        // 真实牌谱对拍报出来的差异（200 局里 2 处）：天凤让这个荣和成立。
+        let opening = startScripted riichiClearsFuritenScript
+
+        // 第 1 巡：摸进的 `6p` 就是和了牌，却把它打了出去 → 永久振听。
+        Assert.Contains(Action.Hora(seat 0, seat 0, pai "6p"), actionsOf (seat 0) opening)
+        let discarded, _ = stepped opening (Action.Dahai(seat 0, pai "6p", true))
+
+        Assert.True((PlayerState.furiten (playerOf (seat 0) discarded)).Permanent)
+
+        // 其余三家各摸切一张无关的 5z。
+        let roundTripped =
+            (discarded, [ 1; 2; 3 ])
+            ||> List.fold (fun state index -> stepped state (Action.Dahai(seat index, pai "5z", true)) |> fst)
+
+        // 第 2 巡：摸进 9p 凑成刻子，立直打 4p，听牌从 `3p / 6p` 换成 `5p` 单骑。
+        Assert.True((PlayerState.furiten (playerOf (seat 0) roundTripped)).Permanent)
+        let declared, _ = stepped roundTripped (Action.Riichi(seat 0))
+        let switched, _ = stepped declared (Action.Dahai(seat 0, pai "4p", false))
+
+        // **这一条就是回归**：新听的 5p 不在自家河里，振听该解除。
+        Assert.False(Furiten.blocksRon (PlayerState.furiten (playerOf (seat 0) switched)))
+        Assert.True(RiichiState.isAccepted (riichiOf (seat 0) switched))
+
+        // 座位 1 摸切 5p：Oya 荣和得了。
+        let offered, _ = stepped switched (Action.Dahai(seat 1, pai "5p", true))
+        Assert.Contains(Action.Hora(seat 0, seat 1, pai "5p"), actionsOf (seat 0) offered)
+        Assert.Contains(Yaku.Riichi, yakuOf (seat 0) offered)
+
+        let ended, _ = stepped offered (Action.Hora(seat 0, seat 1, pai "5p"))
+
+        match GameState.horas ended with
+        | [ hora ] ->
+            Assert.Equal(seat 0, hora.Actor)
+            Assert.Equal(seat 1, hora.Target)
+            Assert.Equal<Tile>(pai "5p", hora.Pai)
+        | other -> failwith $"应当恰有一条和了，实际是 {other}"
 
     // ---- 立直棒与供托 ----
 

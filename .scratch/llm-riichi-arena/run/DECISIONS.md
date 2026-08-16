@@ -1163,3 +1163,48 @@ mjai 参考实现在九种九牌那条 `ryukyoku` 上带 `actor`，本票没加�
 `Ruleset.withoutSanchaHoraRyuukyoku` 并改了标题；天凤那一边（三响 → 流局）在 `RyuukyokuTests` 里另有一条。
 **这是本票唯一改动既有断言语义的地方**，两边的行为都有用例钉着，一条用例都没删。
 同批：`GameStateProperties` 的「听牌料」属性加了一个 `Fanpai` 的形态守卫——听牌料只是荒牌流局的事。
+
+### 13 / 牌谱侧另立四个只读类型，全在测试工程，引擎一个字段没加
+
+`PaifuEvent`（瘦身版事件）/ `OracleYaku`（日文役名）/ `PaifuDiff` + `KyokuReplay` / `OracleHora` 等
+全部落在 `tests/Janpo.Engine.Tests/`，因为重放入口 `Wall.ofOrdered` 与 `GameState.startFrom`
+是 `internal`（`InternalsVisibleTo Janpo.Engine.Tests`），本来就只能在那里调。
+否决：把牌谱读入放进引擎（M1 要过 Fable，引擎不该背测试数据的格式）；改 `Event.decoder` 收瘦身版
+（会让「引擎产出的事件必然完整」这条不变量失效，票里明确禁止）。
+
+### 13 / 字牌字母记法只做「记法 → 记法」的改写，不碰 `Tile.parse`
+
+`PaifuNotation.toMjai`：`E S W N P F C` → `1z`-`7z`，改写完再交给引擎的 `Tile.parse` / `Kaze.parse`。
+否决：给 `Tile.parse` 加一支认字母（ADR-0001 定的是内部单一规范形、边界处适配；放宽会让第二种记法
+从边界渗回事件流与牌谱）。有一条断言钉着「`Tile.parse "P"` 仍然是 Error」。
+
+### 13 / 样本量用环境变量 `JANPO_PAIFU_DIR` 扩大，默认是随工程分发的 18 局固件
+
+票要求「样本量可通过参数扩大，不改代码」。语料目录下有 `mjai/` 就够跑，
+`tenhou/<id>.json` 有就当 oracle 用、没有就只对拍动作序列与钱流——**独立锚点不依赖 oracle**
+（它读的是 mjai 自己的 `ryukyoku.deltas`）。取样脚本 `scripts/paifu/fetch-corpus.py`。
+理由（备注 N-19）：固件 4 秒，200 局 54 秒；CI 只跑固件，大样本手动开。
+
+### 13 / 修了一处真 bug：立直宣言牌换了听牌，振听没被解除
+
+`PlayerState.refreshFuriten` 的闩死判据 `RiichiState.isActive` → `isAccepted`（1 个标识符）。
+`isActive` 对 `Declared` 也为真，于是「振听时立直、用宣言牌换掉听牌」这个常见手筋被闩死，
+引擎从此不给那家荣和。真实牌谱实证 2/2110 kyoku（天凤让荣和成立）。
+立直**成立之后**照旧只置位不清除（那之后手牌不再变），`minogashi` 一字未动，536 个测试全绿、
+一条既有断言都没改。**修它是因为它不需要改任何既有期望值**——这条界线同时也是不修提案 13-B 的理由。
+
+### 提案 13-B（需人裁）：明杠的新宝牌指示牌翻早了，岭上开花时多算宝牌
+
+真实牌谱 218 局实证天凤的时机是「**暗杠立刻翻，明杠等到打牌那一刻才翻**」：
+`ankan → dora → tsumo`（116 次，含岭上开花 6 次照翻）、`kakan/daiminkan → tsumo → dora → dahai`（87 次），
+而**加杠后当场岭上开花的 2 次，牌谱里根本没有 `dora`**。我们的 `GameState.completeKan` 三种杠一律
+补摸后立刻翻，于是那 2 局多翻一张，其中 1 局把 40符2飜(2700) 算成了满贯(8000)。
+改法要给 `GameState` 加「欠着几张明杠宝牌」的状态并在 `applyDahai` 开头补翻，
+**且要改 `KanTests` 两条断言的期望值**（整条事件流顺序不变，变的只是哪一次 `step` 吐出 `Dora`）——
+那是改 11 票的既有断言，按 RUNBOOK 不自作主张。影响面 2/2110 kyoku（0.09%）。
+
+### 提案 13-C（需人裁）：上游牌谱把双响的 `ura_markers` 抄在两条 `hora` 上
+
+6/2110 kyoku，全是双响，后一家根本没立直，而两边**钱流一字不差**——我们的处理是对的。
+对拍时按牌谱**自己的** `reach_accepted` 把这份噪声抹掉（`PaifuReplay.denoiseUra`），
+判据取自牌谱而不是引擎。若将来换数据源，这一处可以删。

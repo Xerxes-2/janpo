@@ -80,6 +80,10 @@ module Shanten =
     /// 搭子只有补得上才算搭子：补齐它的牌种必须存在于规则集。三麻缺 2m-8m 时
     /// `1m3m` 不是搭子，这个判断就是四麻与三麻的分界。
     let private searchStandard (legal: bool array) (original: int array) (counts: int array) (nakiCount: int) : int =
+        // `best` 是可变累加器而不是返回值，这是量过的取舍，不是懒（风格规则 5 要求注明理由）：
+        // 改成「每个分支返回子树最优、末尾 min 汇总」的纯函数写法实测 **11.98–12.42 → 13.11–13.25 µs/次（约 +10%）**，
+        // 超出噪声带。原因推测是 7 个分支值要跨过 counts 的恢复写存活着，寄存器压力变大。
+        // 它不参与剪枝，只在叶子取 min——如果将来有人想试纯函数写法，请先拿 `scripts/fsi/` 的探针量一遍。
         let mutable best = 8
 
         // anyFloater / allFloatersAreQuads：孤张的牌种是不是全都握满了 4 张。
