@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Janpo.Cli/Janpo.Cli.fsproj" />
     <Project Path="src/Janpo.Engine/Janpo.Engine.fsproj" />
+    <Project Path="src/Janpo.Golden/Janpo.Golden.fsproj" />
     <Project Path="src/Janpo.Web/Janpo.Web.fsproj" />
   </Folder>
   <Folder Name="/tests/">

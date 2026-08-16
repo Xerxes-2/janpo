@@ -1,7 +1,9 @@
 module Janpo.Cli.Program
 
+open Thoth.Json.Core
 open Thoth.Json.Newtonsoft
 open Janpo
+open Janpo.Golden
 
 /// 无头驱动入口。规则与算法都在 Janpo.Engine 里，这里只做参数解析与打印；
 /// 后续票新增子命令时，在 `main` 的 match 上加一支，逻辑仍写进引擎库。
@@ -26,6 +28,12 @@ let private usage =
                                  加带 id 与中文 label 的动作列表。不给 --seat 就取正在被问的那家；
                                  --god 改打上帝视角（全部暗牌与里宝牌，围观与复盘用）。
                                  走的选手与 `janpo kyoku <种子>` 同一个，因此第 N 手就是那一局的第 N 手
+  janpo golden check <文件>          跑一份黄金用例文件，逐条逐字段逐行对照期望。
+                                 对不上就退出码 1，每条报错指得出是哪条用例的哪个字段的第几行。
+                                 **同一份文件浏览器里也要跑**（web/scripts/verify-golden.mjs）
+  janpo golden write <文件>          把文件里每条用例按**当前引擎**重跑一遍，用跑出来的值换掉期望。
+                                 加一条用例：先写 id / note / ruleset / run，再跑它，
+                                 然后**逐行看 diff**——这份文件的对与错靠人看 diff 把关
   janpo soak <种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform]
                                  用给定种子区间连续跑 N 场，**逐手验不变量、逐场数覆盖率**：
                                  牌数守恒、点数与供托之和恒定、合法动作集非空或局已终、
@@ -69,6 +77,8 @@ yaku 的选项:
   janpo game 42
   janpo game 42 --hanchan
   janpo game 42 --covering
+  janpo golden check tests/fixtures/golden/dual-target.json
+  janpo golden write tests/fixtures/golden/dual-target.json
   janpo soak 1 60
   janpo soak 1 200 --uniform
   janpo shanten "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
@@ -304,6 +314,55 @@ let private runSoak (arguments: string list) : int =
                 eprintfn "  janpo game %d --covering  # 打印同一场的完整事件流" seed
 
             1
+
+/// 黄金用例文件的读写。**用例本身是数据**，不在任一侧的代码里：
+/// dotnet 侧由这里与测试工程读它，JS 侧由 `web/scripts/verify-golden.mjs` 读同一份。
+///
+/// JSON 的具体后端由宿主带（这里是 Newtonsoft，浏览器那侧是 Thoth.Json.JavaScript）：
+/// `Janpo.Golden` 只依赖 `Thoth.Json.Core` 这层抽象，因此它能被 Fable 编。
+let private goldenText: IEncodable -> string = Encode.toString 0
+
+let private readSuite (path: string) : Result<GoldenSuite, string> =
+    if System.IO.File.Exists path then
+        System.IO.File.ReadAllText path |> Decode.fromString GoldenSuite.decoder
+    else
+        Error $"用例文件不存在：{path}"
+
+/// `janpo golden check <文件>`：逐条跑、逐字段逐行对照。对不上退出码 1。
+let private runGoldenCheck (path: string) : int =
+    match readSuite path with
+    | Error message ->
+        eprintfn "%s" message
+        1
+    | Ok suite ->
+        let report = GoldenCheck.suite goldenText suite
+        printfn "%s" (GoldenReport.toDisplay report)
+        if GoldenReport.isClean report then 0 else 1
+
+/// `janpo golden write <文件>`：把期望换成当前引擎跑出来的值。
+///
+/// 它不会碰 `run`（用例的**输入**只能人写），只重写 `expect`，并把省略掉的
+/// 规则集开关补齐写回去——ADR-0004 要求每条用例都注明所依据的规则集。
+let private runGoldenWrite (path: string) : int =
+    match readSuite path with
+    | Error message ->
+        eprintfn "%s" message
+        1
+    | Ok suite ->
+        let refreshed = GoldenCheck.refresh goldenText suite
+        let text = refreshed |> GoldenSuite.encoder |> Encode.toString 2
+        System.IO.File.WriteAllText(path, text + "\n")
+        printfn "%s" (GoldenReport.toDisplay (GoldenCheck.suite goldenText refreshed))
+        printfn "已写回 %s——**逐行看 diff**再提交" path
+        0
+
+let private runGolden (arguments: string list) : int =
+    match arguments with
+    | [ "check"; path ] -> runGoldenCheck path
+    | [ "write"; path ] -> runGoldenWrite path
+    | _ ->
+        eprintfn "golden 只认 `check <文件>` 与 `write <文件>`"
+        2
 
 /// `<种子> [--seat N] [--steps N] [--no-akadora] [--god]`：decide 的参数形态。
 type private DecideArguments =
@@ -712,6 +771,7 @@ let main argv =
     | "game" :: arguments -> runGame arguments
     | "decide" :: arguments -> runDecide arguments
     | "soak" :: arguments -> runSoak arguments
+    | "golden" :: arguments -> runGolden arguments
     | [ "shanten"; "--batch" ] -> runShantenBatch ()
     | "shanten" :: "--naki" :: naki :: arguments ->
         match System.Int32.TryParse naki with

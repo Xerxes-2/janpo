@@ -7,11 +7,11 @@
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { preview } from "vite";
+import { chromeExecutable, missingChrome } from "./chrome.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
@@ -52,23 +52,6 @@ function summaryLines(text) {
 }
 
 // ---- 浏览器侧 ----
-
-function chromeExecutable() {
-  if (process.env.JANPO_CHROME) return process.env.JANPO_CHROME;
-  try {
-    const bundled = chromium.executablePath();
-    if (bundled && existsSync(bundled)) return bundled;
-  } catch {
-    // playwright-core 没装过浏览器时会抛，落到下面的系统路径。
-  }
-  const candidates = [
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-  ];
-  return candidates.find((path) => existsSync(path)) ?? null;
-}
 
 /**
  * 起一个 vite preview 托管 dist/，用无头 Chrome 打开页面，把种子输进去点「重跑」，
@@ -140,10 +123,7 @@ const seed = parseSeed(process.argv.slice(2));
 const executablePath = chromeExecutable();
 
 if (!executablePath) {
-  console.error(
-    "找不到可用的 Chrome/Chromium。装一个（`pnpm dlx playwright install chromium`）" +
-      "或用 JANPO_CHROME=<路径> 指过去。",
-  );
+  console.error(missingChrome);
   process.exit(1);
 }
 

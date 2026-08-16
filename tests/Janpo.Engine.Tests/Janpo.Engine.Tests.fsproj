@@ -106,6 +106,12 @@
     <Compile Include="SoakTests.fs" />
   </ItemGroup>
 
+  <!-- 双目标黄金用例（票 21）：dotnet 侧跑的那一遍。JS 侧跑同一份数据，
+       入口在 web/scripts/verify-golden.mjs。 -->
+  <ItemGroup>
+    <Compile Include="GoldenSuiteTests.fs" />
+  </ItemGroup>
+
   <!-- 真实牌谱对拍（票 13）。顺序有依赖：事件 → oracle → 重放 → 对拍 → 断言。 -->
   <ItemGroup>
     <Compile Include="PaifuEvent.fs" />
@@ -128,8 +134,15 @@
     <Content Include="../fixtures/paifu/tenhou/*.json" Link="fixtures/paifu/tenhou/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 黄金用例固件（票 21）：用例本身是数据，**不写死在任一侧的代码里**。
+       刷新用 `janpo golden write tests/fixtures/golden/dual-target.json`。 -->
+  <ItemGroup>
+    <Content Include="../fixtures/golden/*.json" Link="fixtures/golden/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../src/Janpo.Engine/Janpo.Engine.fsproj" />
+    <ProjectReference Include="../../src/Janpo.Golden/Janpo.Golden.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

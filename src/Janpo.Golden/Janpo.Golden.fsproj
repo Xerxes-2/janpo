@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 黄金用例：**两个目标共用的那一份**。用例本身是数据（tests/fixtures/golden/*.json），
+       这里只有「怎么把一条用例跑成一串字段」与「怎么跟期望逐行对照」。
+
+       它与引擎受同一条约束：只允许 Fable 兼容的 F# 子集与 Thoth.Json.Core，
+       因为 dotnet 侧（Janpo.Cli / 测试工程）与 Fable 侧（Janpo.Web）都要编它。
+       **JSON 的具体后端由宿主带**：这里只出 Encoder / Decoder，`toString` 与
+       `fromString` 由调用方注入（dotnet 侧 Newtonsoft、JS 侧 Thoth.Json.JavaScript）。 -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <!-- 顺序有依赖：用例的数据模型 → 怎么跑 → 怎么对照。 -->
+  <ItemGroup>
+    <Compile Include="GoldenCase.fs" />
+    <Compile Include="GoldenObservation.fs" />
+    <Compile Include="GoldenCheck.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Janpo.Engine/Janpo.Engine.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Thoth.Json.Core" />
+  </ItemGroup>
+
+</Project>

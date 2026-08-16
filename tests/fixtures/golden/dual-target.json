@@ -1,0 +1,2684 @@
+{
+  "note": "双目标黄金用例（票 21）。dotnet 侧由 GoldenSuiteTests 与 `janpo golden check` 跑，JS 侧由 web/scripts/verify-golden.mjs 在浏览器里跑同一份。加一条用例：写 id/note/ruleset/run，跑 `janpo golden write <本文件>`，再逐行看 diff。",
+  "cases": [
+    {
+      "id": "rng-seed-0",
+      "note": "M0 钉住的取数序列。xorshift32 的位移与异或、拒绝采样的取模，两个目标必须一字不差",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "rng",
+        "seed": 0,
+        "bound": 100,
+        "count": 8
+      },
+      "expect": {
+        "draws": [
+          "21 51 31 12 31 65 68 14"
+        ],
+        "shuffle": [
+          "50 14 25 39 26 8 62 85"
+        ]
+      }
+    },
+    {
+      "id": "rng-seed-42",
+      "note": "同上，另一个种子",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "rng",
+        "seed": 42,
+        "bound": 100,
+        "count": 8
+      },
+      "expect": {
+        "draws": [
+          "13 3 45 0 1 70 71 76"
+        ],
+        "shuffle": [
+          "74 50 67 15 92 52 19 32"
+        ]
+      }
+    },
+    {
+      "id": "rng-seed-negative",
+      "note": "负种子：`uint32 seed` 的转换在两侧必须同义（int32 补码 → uint32）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "rng",
+        "seed": -1,
+        "bound": 100,
+        "count": 8
+      },
+      "expect": {
+        "draws": [
+          "87 46 35 0 88 35 27 9"
+        ],
+        "shuffle": [
+          "30 87 89 73 76 72 80 32"
+        ]
+      }
+    },
+    {
+      "id": "rng-wall-scale",
+      "note": "牌山那次洗牌的规模（bound 136）：拒绝采样的 excess 分支与 Fisher-Yates 的下标",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "rng",
+        "seed": 1177,
+        "bound": 136,
+        "count": 16
+      },
+      "expect": {
+        "draws": [
+          "125 14 83 21 119 128 126 51 63 129 100 108 75 9 68 58"
+        ],
+        "shuffle": [
+          "81 50 44 46 12 98 5 8 15 53 124 122 123 28 121 74"
+        ]
+      }
+    },
+    {
+      "id": "wall-1177-head",
+      "note": "牌山头几张、宝牌指示牌、岭上牌与四家配牌。同种子同牌山这句话的字面意思",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "wall",
+        "seed": 1177,
+        "count": 14
+      },
+      "expect": {
+        "live": [
+          "3s 4p 2p 3p 3m 7s 2m 2m 4m 5p 4z 4z 4z 7m"
+        ],
+        "dora": [
+          "1m"
+        ],
+        "ura": [
+          "1z"
+        ],
+        "rinshan": [
+          "5s 6m 8m 7m"
+        ],
+        "remaining": [
+          "122"
+        ],
+        "haipai": [
+          "8m 9m 1p 2p 3p 4p 5pr 7p 3s 2z 2z 6z 6z",
+          "2m 2m 3m 1p 5p 9p 9p 2s 6s 6s 7s 9s 3z",
+          "4m 4m 4m 7m 5p 8p 2s 5s 4z 4z 5z 6z 7z",
+          "1m 1m 3m 7m 3p 4p 7p 8p 1s 3s 1z 4z 4z"
+        ],
+        "remaining-after-deal": [
+          "70"
+        ]
+      }
+    },
+    {
+      "id": "wall-42-no-akadora",
+      "note": "关掉红宝牌的牌山构成（规则集换了，牌山也换）",
+      "ruleset": {
+        "akadora": false,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "wall",
+        "seed": 42,
+        "count": 14
+      },
+      "expect": {
+        "live": [
+          "7z 5z 5m 9p 2p 8s 6z 2m 1s 1m 5s 7z 6m 7m"
+        ],
+        "dora": [
+          "1z"
+        ],
+        "ura": [
+          "2m"
+        ],
+        "rinshan": [
+          "1p 4z 4s 4m"
+        ],
+        "remaining": [
+          "122"
+        ],
+        "haipai": [
+          "5m 5m 5m 7m 8m 6p 9p 9p 5s 9s 1z 5z 7z",
+          "2m 2p 3p 4p 8p 1s 3s 5s 7s 8s 8s 4z 6z",
+          "1m 4p 5p 5p 1s 2s 3s 5s 6s 7s 1z 3z 7z",
+          "6m 7m 9m 9m 2p 5p 6p 8p 3s 6s 7s 8s 6z"
+        ],
+        "remaining-after-deal": [
+          "70"
+        ]
+      }
+    },
+    {
+      "id": "notation-mixed",
+      "note": "记法往返：解析 → 排序 → mjai → 再解析。含红 5 与字牌",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "notation",
+        "tiles": "1z 5sr 5s 9s 3m"
+      },
+      "expect": {
+        "mjai": [
+          "3m 5s 5sr 9s 1z"
+        ],
+        "count": [
+          "5"
+        ],
+        "display": [
+          "3万 5索 赤5索 9索 东"
+        ],
+        "kinds": [
+          "2 22 22 26 27"
+        ],
+        "roundtrip": [
+          "3m 5s 5sr 9s 1z"
+        ]
+      }
+    },
+    {
+      "id": "notation-every-kind",
+      "note": "全 34 种正牌加 3 张红 5：排序次序与 kindIndex 的映射",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "notation",
+        "tiles": "1m 2m 3m 4m 5m 5mr 6m 7m 8m 9m 1p 2p 3p 4p 5p 5pr 6p 7p 8p 9p 1s 2s 3s 4s 5s 5sr 6s 7s 8s 9s 1z 2z 3z 4z 5z 6z 7z"
+      },
+      "expect": {
+        "mjai": [
+          "1m 2m 3m 4m 5m 5mr 6m 7m 8m 9m 1p 2p 3p 4p 5p 5pr 6p 7p 8p 9p 1s 2s 3s 4s 5s 5sr 6s 7s 8s 9s 1z 2z 3z 4z 5z 6z 7z"
+        ],
+        "count": [
+          "37"
+        ],
+        "display": [
+          "1万 2万 3万 4万 5万 赤5万 6万 7万 8万 9万 1筒 2筒 3筒 4筒 5筒 赤5筒 6筒 7筒 8筒 9筒 1索 2索 3索 4索 5索 赤5索 6索 7索 8索 9索 东 南 西 北 白 发 中"
+        ],
+        "kinds": [
+          "0 1 2 3 4 4 5 6 7 8 9 10 11 12 13 13 14 15 16 17 18 19 20 21 22 22 23 24 25 26 27 28 29 30 31 32 33"
+        ],
+        "roundtrip": [
+          "1m 2m 3m 4m 5m 5mr 6m 7m 8m 9m 1p 2p 3p 4p 5p 5pr 6p 7p 8p 9p 1s 2s 3s 4s 5s 5sr 6s 7s 8s 9s 1z 2z 3z 4z 5z 6z 7z"
+        ]
+      }
+    },
+    {
+      "id": "notation-out-of-range",
+      "note": "错误文案本身也是被钉住的字符串（8z 不存在）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "notation",
+        "tiles": "1m 8z 3p"
+      },
+      "expect": {
+        "error": [
+          "第 2 个记法「8z」无效：字牌只有 1z-7z，没有 8z"
+        ]
+      }
+    },
+    {
+      "id": "notation-akadora-not-allowed",
+      "note": "只有 5m/5p/5s 有红宝牌；错误里带序数与花色的中文",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "notation",
+        "tiles": "5zr"
+      },
+      "expect": {
+        "error": [
+          "第 1 个记法「5zr」无效：字牌没有红宝牌，红宝牌只有 5mr / 5pr / 5sr"
+        ]
+      }
+    },
+    {
+      "id": "collection-order-mixed",
+      "note": "Set / Map / sort / distinct 的次序全由牌的结构化比较决定，而那是 Fable 自己实现的一段",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "collection",
+        "tiles": "9s 1z 5m 5mr 3p 9s 7z 1m 5m 4s 2p 7z 5mr"
+      },
+      "expect": {
+        "set": [
+          "1m 5m 5mr 2p 3p 4s 9s 1z 7z"
+        ],
+        "map": [
+          "1m=7 5m=8 5mr=12 2p=10 3p=4 4s=9 9s=5 1z=1 7z=11"
+        ],
+        "sorted": [
+          "1m 5m 5m 5mr 5mr 2p 3p 4s 9s 9s 1z 7z 7z"
+        ],
+        "distinct": [
+          "9s 1z 5m 5mr 3p 7z 1m 4s 2p"
+        ],
+        "groups": [
+          "9s 9s 4s",
+          "1z 7z 7z",
+          "5m 5mr 1m 5m 5mr",
+          "3p 2p"
+        ],
+        "display-set": [
+          "1万 2筒 3筒 4索 5万 9索 东 中 赤5万"
+        ]
+      }
+    },
+    {
+      "id": "collection-groupby-suit",
+      "note": "groupBy 的分组次序是「首次出现」的次序；display-set 是中文串进 Set 的次序",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "collection",
+        "tiles": "7z 3m 5p 1s 2z 4m 9p 6s 3m"
+      },
+      "expect": {
+        "set": [
+          "3m 4m 5p 9p 1s 6s 2z 7z"
+        ],
+        "map": [
+          "3m=8 4m=5 5p=2 9p=6 1s=3 6s=7 2z=4 7z=0"
+        ],
+        "sorted": [
+          "3m 3m 4m 5p 9p 1s 6s 2z 7z"
+        ],
+        "distinct": [
+          "7z 3m 5p 1s 2z 4m 9p 6s"
+        ],
+        "groups": [
+          "7z 2z",
+          "3m 4m 3m",
+          "5p 9p",
+          "1s 6s"
+        ],
+        "display-set": [
+          "1索 3万 4万 5筒 6索 9筒 中 南"
+        ]
+      }
+    },
+    {
+      "id": "shanten-tenpai-ryanmen",
+      "note": "34 长计数数组 + 分支限界搜索：听牌手的向听、和了型与有效牌",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "shanten",
+        "naki": 0,
+        "tiles": "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 3z"
+      },
+      "expect": {
+        "shanten": [
+          "0"
+        ],
+        "agari": [
+          ""
+        ],
+        "display": [
+          "听牌"
+        ],
+        "ukeire": [
+          "3z"
+        ],
+        "ukeire-total": [
+          "3"
+        ]
+      }
+    },
+    {
+      "id": "shanten-kokushi-13",
+      "note": "国士无双十三面：另一条判定路径（幺九牌的索引表）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "shanten",
+        "naki": 0,
+        "tiles": "1m 9m 1p 9p 1s 9s 1z 2z 3z 4z 5z 6z 7z"
+      },
+      "expect": {
+        "shanten": [
+          "0"
+        ],
+        "agari": [
+          ""
+        ],
+        "display": [
+          "听牌"
+        ],
+        "ukeire": [
+          "1m 9m 1p 9p 1s 9s 1z 2z 3z 4z 5z 6z 7z"
+        ],
+        "ukeire-total": [
+          "39"
+        ]
+      }
+    },
+    {
+      "id": "shanten-chiitoitsu",
+      "note": "七对子路径：对子数与种类数的整数比较",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "shanten",
+        "naki": 0,
+        "tiles": "1m 1m 4m 4m 2p 2p 8p 8p 3s 3s 7s 5z 5z"
+      },
+      "expect": {
+        "shanten": [
+          "0"
+        ],
+        "agari": [
+          ""
+        ],
+        "display": [
+          "听牌"
+        ],
+        "ukeire": [
+          "7s"
+        ],
+        "ukeire-total": [
+          "3"
+        ]
+      }
+    },
+    {
+      "id": "shanten-naki-one",
+      "note": "副露一组之后的向听：nakiCount 参与面子数的算术",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "shanten",
+        "naki": 1,
+        "tiles": "2m 3m 4m 5p 6p 7p 2s 3s 4s 3z"
+      },
+      "expect": {
+        "shanten": [
+          "0"
+        ],
+        "agari": [
+          ""
+        ],
+        "display": [
+          "听牌"
+        ],
+        "ukeire": [
+          "3z"
+        ],
+        "ukeire-total": [
+          "3"
+        ]
+      }
+    },
+    {
+      "id": "shanten-agari-14",
+      "note": "已经和了的 14 张：和了型分类走这条路，有效牌则报「不是等摸的手」",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "shanten",
+        "naki": 0,
+        "tiles": "2m 3m 4m 5p 6p 7p 3s 4s 5s 7s 8s 9s 3z 3z"
+      },
+      "expect": {
+        "shanten": [
+          "-1"
+        ],
+        "agari": [
+          "一般型"
+        ],
+        "display": [
+          "和了"
+        ],
+        "ukeire": [
+          "有效牌只对等摸的手牌有定义：副露 0 组时暗牌应为 13 张，得到 14 张"
+        ]
+      }
+    },
+    {
+      "id": "shanten-bad-count",
+      "note": "张数不合法时 HandShape.create 拒绝构造，错误文案被钉住",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "shanten",
+        "naki": 0,
+        "tiles": "1m 2m 3m"
+      },
+      "expect": {
+        "error": [
+          "副露 0 组时暗牌应为 13 或 14 张，得到 3 张"
+        ]
+      }
+    },
+    {
+      "id": "hora-pinfu-tsumo",
+      "note": "平和自摸 20 符：符的下限，也是「不加自摸符就不是平和」那条的锚",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "2m 3m 4m 5p 6p 7p 3s 4s 5s 7s 8s 9s 3z 3z",
+          "naki": [],
+          "win": "5p",
+          "bakaze": "1z",
+          "jikaze": "1z",
+          "dora": [],
+          "ura": [],
+          "flags": [
+            "tsumo"
+          ],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "shape": [
+          "一般型"
+        ],
+        "yaku": [
+          "menzen_tsumo pinfu"
+        ],
+        "han": [
+          "2"
+        ],
+        "yakuman": [
+          "0"
+        ],
+        "dora": [
+          "0 0 0"
+        ],
+        "fu": [
+          "20"
+        ],
+        "points": [
+          "2100"
+        ],
+        "deltas": [
+          "2100 -700 -700 -700"
+        ],
+        "display": [
+          "20 符 2 番 2100 点"
+        ]
+      }
+    },
+    {
+      "id": "hora-riichi-ron-ankou",
+      "note": "立直荣和 + 幺九刻：门清荣和 10 符与刻子符相加之后切上到 10 的倍数",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "1m 1m 1m 2m 3m 4m 5p 6p 7p 2s 3s 4s 3z 3z",
+          "naki": [],
+          "win": "4s",
+          "bakaze": "1z",
+          "jikaze": "1z",
+          "dora": [
+            "9p"
+          ],
+          "ura": [
+            "2z"
+          ],
+          "flags": [
+            "riichi"
+          ],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "shape": [
+          "一般型"
+        ],
+        "yaku": [
+          "riichi"
+        ],
+        "han": [
+          "1"
+        ],
+        "yakuman": [
+          "0"
+        ],
+        "dora": [
+          "0 2 0"
+        ],
+        "fu": [
+          "40"
+        ],
+        "points": [
+          "7700"
+        ],
+        "deltas": [
+          "7700 -7700 0 0"
+        ],
+        "display": [
+          "40 符 3 番 7700 点"
+        ]
+      }
+    },
+    {
+      "id": "hora-open-yakuhai",
+      "note": "副露役牌 + 宝牌（`janpo yaku` 帮助里的那个例子），自风南：子荣和走 4 份那条路",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z",
+          "naki": [
+            "pon 5z 5z 5z"
+          ],
+          "win": "4m",
+          "bakaze": "1z",
+          "jikaze": "2z",
+          "dora": [
+            "1m"
+          ],
+          "ura": [],
+          "flags": [],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "shape": [
+          "一般型"
+        ],
+        "yaku": [
+          "yakuhai:5z"
+        ],
+        "han": [
+          "1"
+        ],
+        "yakuman": [
+          "0"
+        ],
+        "dora": [
+          "1 0 0"
+        ],
+        "fu": [
+          "30"
+        ],
+        "points": [
+          "2000"
+        ],
+        "deltas": [
+          "2000 -2000 0 0"
+        ],
+        "display": [
+          "30 符 2 番 2000 点"
+        ]
+      }
+    },
+    {
+      "id": "hora-ankan-fu",
+      "note": "暗杠 16 符：符最容易漂的一处，加起来 36 要切上到 40",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z",
+          "naki": [
+            "ankan 5m 5m 5m 5m"
+          ],
+          "win": "9s",
+          "bakaze": "1z",
+          "jikaze": "1z",
+          "dora": [],
+          "ura": [],
+          "flags": [
+            "tsumo"
+          ],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "shape": [
+          "一般型"
+        ],
+        "yaku": [
+          "menzen_tsumo"
+        ],
+        "han": [
+          "1"
+        ],
+        "yakuman": [
+          "0"
+        ],
+        "dora": [
+          "0 0 0"
+        ],
+        "fu": [
+          "40"
+        ],
+        "points": [
+          "2100"
+        ],
+        "deltas": [
+          "2100 -700 -700 -700"
+        ],
+        "display": [
+          "40 符 1 番 2100 点"
+        ]
+      }
+    },
+    {
+      "id": "hora-chiitoitsu-25fu",
+      "note": "七对子 25 符：唯一不切上到 10 的倍数的那个符值",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "1m 1m 4m 4m 2p 2p 8p 8p 3s 3s 7s 7s 5z 5z",
+          "naki": [],
+          "win": "5z",
+          "bakaze": "1z",
+          "jikaze": "1z",
+          "dora": [],
+          "ura": [],
+          "flags": [
+            "riichi"
+          ],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "shape": [
+          "七对子"
+        ],
+        "yaku": [
+          "riichi chiitoitsu"
+        ],
+        "han": [
+          "3"
+        ],
+        "yakuman": [
+          "0"
+        ],
+        "dora": [
+          "0 0 0"
+        ],
+        "fu": [
+          "25"
+        ],
+        "points": [
+          "4800"
+        ],
+        "deltas": [
+          "4800 -4800 0 0"
+        ],
+        "display": [
+          "25 符 3 番 4800 点"
+        ]
+      }
+    },
+    {
+      "id": "hora-kokushi-yakuman",
+      "note": "役满：番不参与算点，基本点走另一条分支",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "1m 9m 1p 9p 1s 9s 1z 2z 3z 4z 5z 6z 7z 1m",
+          "naki": [],
+          "win": "1m",
+          "bakaze": "1z",
+          "jikaze": "1z",
+          "dora": [],
+          "ura": [],
+          "flags": [
+            "tsumo"
+          ],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "shape": [
+          "国士无双"
+        ],
+        "yaku": [
+          "kokushi_juusanmen"
+        ],
+        "han": [
+          "0"
+        ],
+        "yakuman": [
+          "1"
+        ],
+        "dora": [
+          "0 0 0"
+        ],
+        "fu": [
+          "30"
+        ],
+        "points": [
+          "48000"
+        ],
+        "deltas": [
+          "48000 -16000 -16000 -16000"
+        ],
+        "display": [
+          "役满 48000 点"
+        ]
+      }
+    },
+    {
+      "id": "hora-no-yaku-kuitan-off",
+      "note": "关掉食断的副露断幺九：无役。错误文案与规则集一起被钉住（ADR-0004）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": false,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "hora",
+        "hora": {
+          "concealed": "2m 3m 4m 5p 6p 7p 3s 4s 5s 8s 8s",
+          "naki": [
+            "pon 6s 6s 6s"
+          ],
+          "win": "5s",
+          "bakaze": "1z",
+          "jikaze": "1z",
+          "dora": [],
+          "ura": [],
+          "flags": [],
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "error": [
+          "无役，不能和"
+        ]
+      }
+    },
+    {
+      "id": "points-ko-ron-30-3",
+      "note": "子荣和 30 符 3 番：基本点 960 × 4 = 3840，每笔切上到 100",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 30,
+          "han": 3,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 1,
+          "oya": 1,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "960"
+        ],
+        "limit": [
+          ""
+        ],
+        "points": [
+          "3900"
+        ],
+        "deltas": [
+          "3900 -3900 0 0"
+        ],
+        "display": [
+          "30 符 3 番 3900 点"
+        ]
+      }
+    },
+    {
+      "id": "points-ko-tsumo-20-2",
+      "note": "子自摸 20 符 2 番：子付 1 份、亲付 2 份，两笔各自切上到 100（320→400 / 640→700）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 20,
+          "han": 2,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 0,
+          "oya": 1,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "320"
+        ],
+        "limit": [
+          ""
+        ],
+        "points": [
+          "1500"
+        ],
+        "deltas": [
+          "1500 -700 -400 -400"
+        ],
+        "display": [
+          "20 符 2 番 1500 点"
+        ]
+      }
+    },
+    {
+      "id": "points-oya-tsumo-40-3",
+      "note": "亲自摸 40 符 3 番：三家各付 2 份",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 40,
+          "han": 3,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 0,
+          "oya": 0,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "1280"
+        ],
+        "limit": [
+          ""
+        ],
+        "points": [
+          "7800"
+        ],
+        "deltas": [
+          "7800 -2600 -2600 -2600"
+        ],
+        "display": [
+          "40 符 3 番 7800 点"
+        ]
+      }
+    },
+    {
+      "id": "points-haneman-three-halves",
+      "note": "跳满：满贯基本点 × 3 / 2 —— 整数除法就在这一行",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 40,
+          "han": 6,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 1,
+          "oya": 1,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "3000"
+        ],
+        "limit": [
+          "跳满"
+        ],
+        "points": [
+          "12000"
+        ],
+        "deltas": [
+          "12000 -12000 0 0"
+        ],
+        "display": [
+          "40 符 6 番 跳满 12000 点"
+        ]
+      }
+    },
+    {
+      "id": "points-kiriage-off",
+      "note": "4 番 30 符，切上满贯**关**（天凤与雀魂段位战的默认）：基本点 1920",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 30,
+          "han": 4,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 1,
+          "oya": 1,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "1920"
+        ],
+        "limit": [
+          ""
+        ],
+        "points": [
+          "7700"
+        ],
+        "deltas": [
+          "7700 -7700 0 0"
+        ],
+        "display": [
+          "30 符 4 番 7700 点"
+        ]
+      }
+    },
+    {
+      "id": "points-kiriage-on",
+      "note": "同一副 4 番 30 符，切上满贯**开**：上调为满贯。规则集不同结论不同（ADR-0004）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": true,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 30,
+          "han": 4,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 1,
+          "oya": 1,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "2000"
+        ],
+        "limit": [
+          "满贯"
+        ],
+        "points": [
+          "8000"
+        ],
+        "deltas": [
+          "8000 -8000 0 0"
+        ],
+        "display": [
+          "30 符 4 番 满贯 8000 点"
+        ]
+      }
+    },
+    {
+      "id": "points-honba-kyotaku-tsumo",
+      "note": "自摸 3 本场 + 2 根供托：本场在付家之间平摊（900 / 3 = 300），供托归和了者",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 30,
+          "han": 3,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 0,
+          "oya": 2,
+          "honba": 3,
+          "kyotaku": 2
+        }
+      },
+      "expect": {
+        "base": [
+          "960"
+        ],
+        "limit": [
+          ""
+        ],
+        "points": [
+          "4000"
+        ],
+        "deltas": [
+          "6900 -1300 -2300 -1300"
+        ],
+        "display": [
+          "30 符 3 番 4000 点"
+        ]
+      }
+    },
+    {
+      "id": "points-sekinin-split",
+      "note": "包 + 放铳者另有其人：两家平分，先切上到 100 再把余下的给放铳者（整数除法 + 切上）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 30,
+          "han": 3,
+          "yakuman": 0,
+          "actor": 0,
+          "target": 1,
+          "oya": 3,
+          "honba": 0,
+          "kyotaku": 0,
+          "sekinin": 2
+        }
+      },
+      "expect": {
+        "base": [
+          "960"
+        ],
+        "limit": [
+          ""
+        ],
+        "points": [
+          "3900"
+        ],
+        "deltas": [
+          "3900 -1900 -2000 0"
+        ],
+        "display": [
+          "30 符 3 番 3900 点"
+        ]
+      }
+    },
+    {
+      "id": "points-yakuman-oya-tsumo",
+      "note": "亲自摸役满：基本点 8000，三家各付 2 份",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "points",
+        "points": {
+          "fu": 20,
+          "han": 0,
+          "yakuman": 1,
+          "actor": 0,
+          "target": 0,
+          "oya": 0,
+          "honba": 0,
+          "kyotaku": 0
+        }
+      },
+      "expect": {
+        "base": [
+          "8000"
+        ],
+        "limit": [
+          "役满"
+        ],
+        "points": [
+          "48000"
+        ],
+        "deltas": [
+          "48000 -16000 -16000 -16000"
+        ],
+        "display": [
+          "役满 48000 点"
+        ]
+      }
+    },
+    {
+      "id": "decide-1177-step-8",
+      "note": "决策包 JSON（票 20）：23 票的 Agent 层读的是它在浏览器里的那一份，因此要逐字节相同",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "decide",
+        "seed": 1177,
+        "steps": 8
+      },
+      "expect": {
+        "asked": [
+          "3"
+        ],
+        "package": [
+          "{\"seat\":3,\"observation\":{\"seat\":3,\"bakaze\":\"1z\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"dora_markers\":[\"1m\"],\"wall_remaining\":62,\"self\":{\"seat\":3,\"jikaze\":\"4z\",\"junme\":2,\"score\":25000,\"tehai\":[\"1m\",\"1m\",\"2m\",\"3m\",\"7m\",\"3p\",\"4p\",\"7p\",\"1s\",\"3s\",\"3s\",\"1z\",\"4z\",\"4z\"],\"tsumo\":\"2m\",\"kawa\":[{\"pai\":\"8p\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false,\"furiten\":{\"permanent\":false,\"doujun\":false}},\"others\":[{\"seat\":0,\"jikaze\":\"1z\",\"junme\":2,\"score\":25000,\"relative\":1,\"kawa\":[{\"pai\":\"6z\",\"tsumogiri\":false},{\"pai\":\"8m\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":1,\"jikaze\":\"2z\",\"junme\":2,\"score\":25000,\"relative\":2,\"kawa\":[{\"pai\":\"7s\",\"tsumogiri\":false},{\"pai\":\"9p\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":2,\"jikaze\":\"3z\",\"junme\":2,\"score\":25000,\"relative\":3,\"kawa\":[{\"pai\":\"2s\",\"tsumogiri\":true},{\"pai\":\"5z\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false}]},\"actions\":[{\"id\":0,\"label\":\"手切1万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}},{\"id\":1,\"label\":\"手切3万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}},{\"id\":2,\"label\":\"手切7万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}},{\"id\":3,\"label\":\"手切3筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}},{\"id\":4,\"label\":\"手切4筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4p\",\"tsumogiri\":false}},{\"id\":5,\"label\":\"手切7筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}},{\"id\":6,\"label\":\"手切1索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1s\",\"tsumogiri\":false}},{\"id\":7,\"label\":\"手切3索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}},{\"id\":8,\"label\":\"手切东\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}},{\"id\":9,\"label\":\"手切北\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4z\",\"tsumogiri\":false}},{\"id\":10,\"label\":\"摸切2万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":true}}],\"scaffold\":{}}"
+        ]
+      }
+    },
+    {
+      "id": "decide-42-first-hand",
+      "note": "开局第一手的决策包：Oya 的 13+1 张与全部合法打牌",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "decide",
+        "seed": 42,
+        "steps": 0
+      },
+      "expect": {
+        "asked": [
+          "0"
+        ],
+        "package": [
+          "{\"seat\":0,\"observation\":{\"seat\":0,\"bakaze\":\"1z\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"dora_markers\":[\"1z\"],\"wall_remaining\":69,\"self\":{\"seat\":0,\"jikaze\":\"1z\",\"junme\":1,\"score\":25000,\"tehai\":[\"5m\",\"5m\",\"5mr\",\"7m\",\"8m\",\"6p\",\"7p\",\"9p\",\"9p\",\"5s\",\"9s\",\"1z\",\"5z\",\"7z\"],\"tsumo\":\"7p\",\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false,\"furiten\":{\"permanent\":false,\"doujun\":false}},\"others\":[{\"seat\":1,\"jikaze\":\"2z\",\"junme\":0,\"score\":25000,\"relative\":1,\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":2,\"jikaze\":\"3z\",\"junme\":0,\"score\":25000,\"relative\":2,\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":3,\"jikaze\":\"4z\",\"junme\":0,\"score\":25000,\"relative\":3,\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false}]},\"actions\":[{\"id\":0,\"label\":\"手切5万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":false}},{\"id\":1,\"label\":\"手切赤5万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5mr\",\"tsumogiri\":false}},{\"id\":2,\"label\":\"手切7万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7m\",\"tsumogiri\":false}},{\"id\":3,\"label\":\"手切8万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8m\",\"tsumogiri\":false}},{\"id\":4,\"label\":\"手切6筒\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6p\",\"tsumogiri\":false}},{\"id\":5,\"label\":\"手切9筒\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9p\",\"tsumogiri\":false}},{\"id\":6,\"label\":\"手切5索\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5s\",\"tsumogiri\":false}},{\"id\":7,\"label\":\"手切9索\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9s\",\"tsumogiri\":false}},{\"id\":8,\"label\":\"手切东\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1z\",\"tsumogiri\":false}},{\"id\":9,\"label\":\"手切白\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}},{\"id\":10,\"label\":\"手切中\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}},{\"id\":11,\"label\":\"摸切7筒\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7p\",\"tsumogiri\":true}}],\"scaffold\":{}}"
+        ]
+      }
+    },
+    {
+      "id": "kyoku-1177",
+      "note": "一局打到终：逐条 mjai 事件 + 终了点数与顺位（`janpo kyoku 1177`）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "kyoku",
+        "seed": 1177
+      },
+      "expect": {
+        "kyokus": [
+          "1"
+        ],
+        "scores": [
+          "30800 25000 19200 25000"
+        ],
+        "juni": [
+          "1 2 4 3"
+        ],
+        "event-count": [
+          "146"
+        ],
+        "events": [
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"1m\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"oya\":0,\"scores\":[25000,25000,25000,25000],\"tehais\":[[\"8m\",\"9m\",\"1p\",\"2p\",\"3p\",\"4p\",\"5pr\",\"7p\",\"3s\",\"2z\",\"2z\",\"6z\",\"6z\"],[\"2m\",\"2m\",\"3m\",\"1p\",\"5p\",\"9p\",\"9p\",\"2s\",\"6s\",\"6s\",\"7s\",\"9s\",\"3z\"],[\"4m\",\"4m\",\"4m\",\"7m\",\"5p\",\"8p\",\"2s\",\"5s\",\"4z\",\"4z\",\"5z\",\"6z\",\"7z\"],[\"1m\",\"1m\",\"3m\",\"7m\",\"3p\",\"4p\",\"7p\",\"8p\",\"1s\",\"3s\",\"1z\",\"4z\",\"4z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":3,\"pai\":\"2m\",\"consumed\":[\"2m\",\"2m\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"3p\",\"consumed\":[\"2p\",\"4p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":3,\"target\":0,\"pai\":\"3s\",\"consumed\":[\"3s\",\"3s\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"4p\",\"consumed\":[\"3p\",\"5pr\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":2,\"target\":1,\"pai\":\"7z\",\"consumed\":[\"7z\",\"7z\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5mr\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":3,\"pai\":\"7p\",\"consumed\":[\"7p\",\"7p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5sr\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5m\",\"tsumogiri\":true}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":3,\"pai\":\"5m\",\"consumed\":[\"5m\",\"5mr\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"hora\",\"actor\":0,\"target\":2,\"pai\":\"5p\",\"fu\":30,\"fan\":3,\"hora_points\":5800,\"deltas\":[5800,0,-5800,0],\"scores\":[30800,25000,19200,25000],\"uradora_markers\":[]}"
+        ]
+      }
+    },
+    {
+      "id": "kyoku-42",
+      "note": "另一局，另一种终局形态（`janpo kyoku 42`）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "kyoku",
+        "seed": 42
+      },
+      "expect": {
+        "kyokus": [
+          "1"
+        ],
+        "scores": [
+          "25000 25000 25000 25000"
+        ],
+        "juni": [
+          "1 2 3 4"
+        ],
+        "event-count": [
+          "152"
+        ],
+        "events": [
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"1z\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"oya\":0,\"scores\":[25000,25000,25000,25000],\"tehais\":[[\"5m\",\"5m\",\"5mr\",\"7m\",\"8m\",\"6p\",\"9p\",\"9p\",\"5s\",\"9s\",\"1z\",\"5z\",\"7z\"],[\"2m\",\"2p\",\"3p\",\"4p\",\"8p\",\"1s\",\"3s\",\"5sr\",\"7s\",\"8s\",\"8s\",\"4z\",\"6z\"],[\"1m\",\"4p\",\"5p\",\"5pr\",\"1s\",\"2s\",\"3s\",\"5s\",\"6s\",\"7s\",\"1z\",\"3z\",\"7z\"],[\"6m\",\"7m\",\"9m\",\"9m\",\"2p\",\"5p\",\"6p\",\"8p\",\"3s\",\"6s\",\"7s\",\"8s\",\"6z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5mr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5pr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8p\",\"tsumogiri\":true}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"8p\",\"consumed\":[\"7p\",\"9p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"4p\",\"consumed\":[\"5p\",\"6p\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"1s\",\"consumed\":[\"2s\",\"3s\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":3,\"pai\":\"8s\",\"consumed\":[\"8s\",\"8s\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7m\",\"tsumogiri\":true}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"7m\",\"consumed\":[\"5m\",\"6m\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"ryukyoku\",\"reason\":\"fanpai\",\"tenpais\":[false,false,false,false],\"deltas\":[0,0,0,0],\"scores\":[25000,25000,25000,25000]}"
+        ]
+      }
+    },
+    {
+      "id": "game-1177",
+      "note": "一整场东风战：局数序列走完、逐条事件、终局精算的点数与顺位（`janpo game 1177`）",
+      "ruleset": {
+        "akadora": true,
+        "kuitan": true,
+        "kiriage": false,
+        "atamahane": false,
+        "length": "tonpuusen"
+      },
+      "run": {
+        "kind": "game",
+        "seed": 1177
+      },
+      "expect": {
+        "kyokus": [
+          "6"
+        ],
+        "scores": [
+          "29800 24000 22200 24000"
+        ],
+        "juni": [
+          "1 2 4 3"
+        ],
+        "event-count": [
+          "940"
+        ],
+        "events": [
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"1m\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"oya\":0,\"scores\":[25000,25000,25000,25000],\"tehais\":[[\"8m\",\"9m\",\"1p\",\"2p\",\"3p\",\"4p\",\"5pr\",\"7p\",\"3s\",\"2z\",\"2z\",\"6z\",\"6z\"],[\"2m\",\"2m\",\"3m\",\"1p\",\"5p\",\"9p\",\"9p\",\"2s\",\"6s\",\"6s\",\"7s\",\"9s\",\"3z\"],[\"4m\",\"4m\",\"4m\",\"7m\",\"5p\",\"8p\",\"2s\",\"5s\",\"4z\",\"4z\",\"5z\",\"6z\",\"7z\"],[\"1m\",\"1m\",\"3m\",\"7m\",\"3p\",\"4p\",\"7p\",\"8p\",\"1s\",\"3s\",\"1z\",\"4z\",\"4z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":3,\"pai\":\"2m\",\"consumed\":[\"2m\",\"2m\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"3p\",\"consumed\":[\"2p\",\"4p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":3,\"target\":0,\"pai\":\"3s\",\"consumed\":[\"3s\",\"3s\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"4p\",\"consumed\":[\"3p\",\"5pr\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":2,\"target\":1,\"pai\":\"7z\",\"consumed\":[\"7z\",\"7z\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5mr\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":3,\"pai\":\"7p\",\"consumed\":[\"7p\",\"7p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5sr\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5m\",\"tsumogiri\":true}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":3,\"pai\":\"5m\",\"consumed\":[\"5m\",\"5mr\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"hora\",\"actor\":0,\"target\":2,\"pai\":\"5p\",\"fu\":30,\"fan\":3,\"hora_points\":5800,\"deltas\":[5800,0,-5800,0],\"scores\":[30800,25000,19200,25000],\"uradora_markers\":[]}",
+          "{\"type\":\"end_kyoku\"}",
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"3s\",\"kyoku\":1,\"honba\":1,\"kyotaku\":0,\"oya\":0,\"scores\":[30800,25000,19200,25000],\"tehais\":[[\"1m\",\"3m\",\"6m\",\"1p\",\"1p\",\"1p\",\"4p\",\"6p\",\"7p\",\"4s\",\"2z\",\"5z\",\"7z\"],[\"3m\",\"4m\",\"6m\",\"1p\",\"2p\",\"2p\",\"5p\",\"6p\",\"2s\",\"4s\",\"9s\",\"5z\",\"7z\"],[\"5m\",\"5mr\",\"9p\",\"9p\",\"1s\",\"3s\",\"3s\",\"4s\",\"8s\",\"9s\",\"2z\",\"6z\",\"6z\"],[\"1m\",\"6m\",\"7m\",\"8m\",\"5p\",\"2s\",\"5s\",\"7s\",\"1z\",\"3z\",\"4z\",\"4z\",\"5z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5sr\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5pr\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":3,\"pai\":\"7s\",\"consumed\":[\"7s\",\"7s\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2p\",\"tsumogiri\":true}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":0,\"pai\":\"2p\",\"consumed\":[\"2p\",\"2p\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5mr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":3,\"pai\":\"5s\",\"consumed\":[\"5s\",\"5sr\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"4p\",\"consumed\":[\"3p\",\"5p\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3s\",\"tsumogiri\":true}",
+          "{\"type\":\"pon\",\"actor\":2,\"target\":1,\"pai\":\"3s\",\"consumed\":[\"3s\",\"3s\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":2,\"pai\":\"1s\",\"consumed\":[\"1s\",\"1s\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"4m\",\"consumed\":[\"5m\",\"6m\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"8m\",\"consumed\":[\"7m\",\"9m\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5pr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"ryukyoku\",\"reason\":\"fanpai\",\"tenpais\":[false,false,false,false],\"deltas\":[0,0,0,0],\"scores\":[30800,25000,19200,25000]}",
+          "{\"type\":\"end_kyoku\"}",
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"2s\",\"kyoku\":2,\"honba\":2,\"kyotaku\":0,\"oya\":1,\"scores\":[30800,25000,19200,25000],\"tehais\":[[\"1m\",\"1p\",\"3p\",\"4p\",\"5p\",\"5p\",\"2s\",\"2s\",\"5s\",\"7s\",\"8s\",\"5z\",\"6z\"],[\"3m\",\"1p\",\"3p\",\"6p\",\"6p\",\"1s\",\"3s\",\"4s\",\"7s\",\"8s\",\"9s\",\"3z\",\"4z\"],[\"2m\",\"4m\",\"4m\",\"7m\",\"7m\",\"9m\",\"2p\",\"8p\",\"9p\",\"1z\",\"4z\",\"5z\",\"6z\"],[\"1m\",\"3m\",\"5m\",\"5mr\",\"3p\",\"3p\",\"5pr\",\"5sr\",\"1z\",\"2z\",\"3z\",\"3z\",\"4z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5sr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":3,\"target\":1,\"pai\":\"3p\",\"consumed\":[\"3p\",\"3p\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":1,\"target\":0,\"pai\":\"5s\",\"consumed\":[\"3s\",\"4s\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"4m\",\"consumed\":[\"3m\",\"5mr\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5pr\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"5pr\",\"consumed\":[\"3p\",\"4p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":1,\"target\":0,\"pai\":\"8s\",\"consumed\":[\"7s\",\"9s\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"3s\",\"consumed\":[\"1s\",\"2s\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"ryukyoku\",\"reason\":\"fanpai\",\"tenpais\":[false,false,false,false],\"deltas\":[0,0,0,0],\"scores\":[30800,25000,19200,25000]}",
+          "{\"type\":\"end_kyoku\"}",
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"1p\",\"kyoku\":3,\"honba\":3,\"kyotaku\":0,\"oya\":2,\"scores\":[30800,25000,19200,25000],\"tehais\":[[\"3m\",\"7m\",\"4p\",\"4p\",\"9p\",\"9p\",\"5s\",\"5s\",\"9s\",\"3z\",\"3z\",\"4z\",\"7z\"],[\"3m\",\"4m\",\"9m\",\"2p\",\"3p\",\"3p\",\"1s\",\"6s\",\"9s\",\"1z\",\"4z\",\"6z\",\"7z\"],[\"2m\",\"5mr\",\"6m\",\"8m\",\"1p\",\"7p\",\"3s\",\"7s\",\"5z\",\"5z\",\"6z\",\"6z\",\"6z\"],[\"3m\",\"6m\",\"7m\",\"8m\",\"1p\",\"7p\",\"7p\",\"1s\",\"3s\",\"8s\",\"2z\",\"3z\",\"7z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"8m\",\"consumed\":[\"7m\",\"9m\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"6s\",\"consumed\":[\"5s\",\"7s\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":1,\"target\":0,\"pai\":\"4p\",\"consumed\":[\"2p\",\"3p\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5mr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":true}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"8s\",\"consumed\":[\"6s\",\"7s\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5pr\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":2,\"target\":3,\"pai\":\"4s\",\"consumed\":[\"4s\",\"4s\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":3,\"target\":1,\"pai\":\"1z\",\"consumed\":[\"1z\",\"1z\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5pr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":1,\"target\":0,\"pai\":\"8p\",\"consumed\":[\"6p\",\"7p\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"6m\",\"consumed\":[\"5m\",\"7m\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"ryukyoku\",\"reason\":\"fanpai\",\"tenpais\":[false,false,true,false],\"deltas\":[-1000,-1000,3000,-1000],\"scores\":[29800,24000,22200,24000]}",
+          "{\"type\":\"end_kyoku\"}",
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"6p\",\"kyoku\":3,\"honba\":4,\"kyotaku\":0,\"oya\":2,\"scores\":[29800,24000,22200,24000],\"tehais\":[[\"3m\",\"5m\",\"5m\",\"1p\",\"4p\",\"5p\",\"7p\",\"3s\",\"7s\",\"8s\",\"1z\",\"2z\",\"7z\"],[\"1m\",\"4m\",\"6m\",\"7m\",\"7p\",\"9p\",\"1s\",\"1s\",\"4s\",\"9s\",\"4z\",\"4z\",\"7z\"],[\"2m\",\"6m\",\"6m\",\"8m\",\"3p\",\"6p\",\"8p\",\"1s\",\"2s\",\"2s\",\"6s\",\"9s\",\"5z\"],[\"1m\",\"2m\",\"4m\",\"9m\",\"1p\",\"5p\",\"7p\",\"8p\",\"2s\",\"4s\",\"5sr\",\"6s\",\"5z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":2,\"pai\":\"1s\",\"consumed\":[\"1s\",\"1s\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"6p\",\"consumed\":[\"7p\",\"8p\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"3m\",\"consumed\":[\"2m\",\"4m\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"6s\",\"consumed\":[\"7s\",\"8s\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"7s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":2,\"target\":3,\"pai\":\"2s\",\"consumed\":[\"2s\",\"2s\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":1,\"target\":2,\"pai\":\"6m\",\"consumed\":[\"6m\",\"6m\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5pr\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5mr\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5mr\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":3,\"pai\":\"5mr\",\"consumed\":[\"5m\",\"5m\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5sr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3s\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5pr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4s\",\"tsumogiri\":false}",
+          "{\"type\":\"ryukyoku\",\"reason\":\"fanpai\",\"tenpais\":[false,false,false,false],\"deltas\":[0,0,0,0],\"scores\":[29800,24000,22200,24000]}",
+          "{\"type\":\"end_kyoku\"}",
+          "{\"type\":\"start_kyoku\",\"bakaze\":\"1z\",\"dora_marker\":\"2z\",\"kyoku\":4,\"honba\":5,\"kyotaku\":0,\"oya\":3,\"scores\":[29800,24000,22200,24000],\"tehais\":[[\"1m\",\"3m\",\"9m\",\"1p\",\"1p\",\"3p\",\"7p\",\"9p\",\"2s\",\"7s\",\"7s\",\"2z\",\"6z\"],[\"2m\",\"3m\",\"4m\",\"7m\",\"4p\",\"5p\",\"7p\",\"9p\",\"5s\",\"6s\",\"7s\",\"7s\",\"8s\"],[\"5mr\",\"9m\",\"9m\",\"3p\",\"6p\",\"6p\",\"8p\",\"1s\",\"3s\",\"3z\",\"4z\",\"4z\",\"5z\"],[\"1m\",\"5m\",\"1p\",\"2p\",\"2p\",\"3p\",\"6p\",\"7p\",\"8p\",\"3s\",\"5s\",\"9s\",\"5z\"]]}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":1,\"target\":0,\"pai\":\"3p\",\"consumed\":[\"4p\",\"5p\"]}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5sr\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"5mr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6p\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":2,\"target\":3,\"pai\":\"6p\",\"consumed\":[\"6p\",\"6p\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":0,\"target\":3,\"pai\":\"8p\",\"consumed\":[\"7p\",\"9p\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"3p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"3p\",\"consumed\":[\"1p\",\"2p\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":0,\"target\":1,\"pai\":\"7s\",\"consumed\":[\"7s\",\"7s\"]}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"9p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"1s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1s\",\"tsumogiri\":false}",
+          "{\"type\":\"pon\",\"actor\":3,\"target\":0,\"pai\":\"1s\",\"consumed\":[\"1s\",\"1s\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9m\",\"tsumogiri\":false}",
+          "{\"type\":\"daiminkan\",\"actor\":2,\"target\":0,\"pai\":\"9m\",\"consumed\":[\"9m\",\"9m\",\"9m\"]}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8s\"}",
+          "{\"type\":\"dora\",\"dora_marker\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":3,\"target\":2,\"pai\":\"8p\",\"consumed\":[\"7p\",\"9p\"]}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5sr\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"5z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"8p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"6s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1z\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"2m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"3p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"4m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4p\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"2m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"5z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"4s\"}",
+          "{\"type\":\"kakan\",\"actor\":2,\"pai\":\"6p\",\"consumed\":[\"6p\",\"6p\",\"6p\"]}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"7p\"}",
+          "{\"type\":\"dora\",\"dora_marker\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"1z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"7m\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"4m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"8s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"9s\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"9s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"5p\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5p\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"3z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"2s\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"8s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"2z\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"7z\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"3m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"9p\",\"tsumogiri\":false}",
+          "{\"type\":\"chi\",\"actor\":2,\"target\":1,\"pai\":\"9p\",\"consumed\":[\"7p\",\"8p\"]}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"6m\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":3,\"pai\":\"4s\"}",
+          "{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":0,\"pai\":\"8m\"}",
+          "{\"type\":\"dahai\",\"actor\":0,\"pai\":\"3z\",\"tsumogiri\":false}",
+          "{\"type\":\"tsumo\",\"actor\":1,\"pai\":\"1m\"}",
+          "{\"type\":\"dahai\",\"actor\":1,\"pai\":\"1m\",\"tsumogiri\":true}",
+          "{\"type\":\"tsumo\",\"actor\":2,\"pai\":\"6m\"}",
+          "{\"type\":\"dahai\",\"actor\":2,\"pai\":\"4p\",\"tsumogiri\":false}",
+          "{\"type\":\"ryukyoku\",\"reason\":\"fanpai\",\"tenpais\":[false,false,false,false],\"deltas\":[0,0,0,0],\"scores\":[29800,24000,22200,24000]}",
+          "{\"type\":\"end_kyoku\"}",
+          "{\"type\":\"end_game\"}"
+        ]
+      }
+    }
+  ]
+}

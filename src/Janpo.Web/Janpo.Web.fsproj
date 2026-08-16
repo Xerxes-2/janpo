@@ -12,15 +12,19 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
 
-  <!-- 引擎调用与 MVU。加页面放这里，牌桌组件是 22 票的事。 -->
+  <!-- 引擎调用与 MVU。加页面放这里，牌桌组件是 22 票的事。
+       `Golden.fs` 不在页面里，它是无头闸门（票 21）在浏览器里 `import` 的那个入口。 -->
   <ItemGroup>
     <Compile Include="Tracer.fs" />
+    <Compile Include="Golden.fs" />
     <Compile Include="App.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Janpo.Engine/Janpo.Engine.fsproj" />
+    <!-- 黄金用例（票 21）：跑与对照的那段代码两个目标共用，这里只接 JS 侧的 JSON 后端。 -->
+    <ProjectReference Include="../Janpo.Golden/Janpo.Golden.fsproj" />
   </ItemGroup>
 
   <ItemGroup>
