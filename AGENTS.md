@@ -23,3 +23,8 @@ See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## 验证引擎行为
+
+用 `dotnet fsi` 引用已编译的引擎 DLL 直接调真实 API，**不要把引擎逻辑移植到别的语言**。
+现成探针与实测数字见 `scripts/fsi/README.md`。Python 只用于跑第三方 oracle 与解析数据。

@@ -26,6 +26,9 @@
 ## 验收
 
 - [ ] 固件挂进测试工程，`dotnet test` 能离线跑对拍（网络只在扩样本时需要）
+- [ ] **对拍本体写在 F# 测试工程里，驱动真实引擎 API**。不许把引擎逻辑移植到 Python 再跟牌谱比——
+      移植版与牌谱不符时分不清是移植错还是引擎错，**那样的实验设计上就得不出结论**（RUNBOOK 有硬约束）。
+      Python 只用于牌谱解析与统计；探索期想快速试手牌用 `scripts/fsi/`（`#load "load-engine.fsx"` 直调编译好的 API，5.8 µs/手）
 - [ ] **字牌记法适配**：牌谱写 `E/S/W/N/P/F/C`（bakaze 亦然），我们的 `Tile.parse` 只认 `1z`-`7z`。映射放在本票的适配器里，**不许放宽 `Tile.parse`**——ADR-0001 定的是内部只用 mjai 记法，边界处适配
 - [ ] **另立只读 `PaifuEvent`**，不要改 `Event.decoder`：牌谱的 `hora`/`ryukyoku` 缺我们的必填字段，硬塞会把引擎的事件类型弄脏
 - [ ] 重放入口用**已有的** `Wall.ofOrdered` + `GameState.startFrom`（引擎已支持注入摊好的牌山；`tests/.../GameStateGenerators.fs` 的 `scriptedWall` 是可照抄的样例），**不要新造牌山注入机制**
