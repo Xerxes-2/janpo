@@ -120,15 +120,49 @@ function kawa(entries: { pai: string; tsumogiri: boolean }[]): string {
 }
 
 /**
+ * 一家的副露画出来时的**参照系**（票 40）。
+ *
+ * 两个都要，因为同一句话里有两个参照系各管一半：【他家】那一节的抬头
+ * （`下家（座位 2・…）`）相对**观测者**，而副露那句「来自谁」相对**副露方**。
+ */
+interface NakiFrame {
+  /** 这几组副露的主人：「来自谁」按它算。 */
+  owner: number;
+  /** 正在读这份 prompt 的那一家：`words.who` 按它算。 */
+  viewer: number;
+}
+
+/**
+ * 副露里那句「来自谁」。**参照系是副露方，而且就地声明**（票 40）。
+ *
+ * 三种写法，各自都回答得了「这个上家是相对谁说的」：
+ *
+ * - 鸣的是观测者打的那张 → **`你`**。它是身份不是方位，无所谓参照系，
+ *   而且「那张是我打的」比「它的下家」直接得多（振听与安全度都要这一条）。
+ * - 自家那几组 → **`上家`**。副露方就是观测者，两个参照系重合，与固定 preamble 里
+ *   那句「别家按相对位置称呼」说的是同一件事。
+ * - 他家那几组 → **`他的上家`**。“他的”三个字就是参照系的声明：不写它，这个词
+ *   会被读成相对观测者，而那正是票 40 要修的那个错。
+ */
+function nakiFrom(words: Words, frame: NakiFrame, target: number): string {
+  if (target === frame.viewer) return "你";
+  const relative = words.whoFrom(frame.owner, target);
+  return frame.owner === frame.viewer ? relative : `他的${relative}`;
+}
+
+/**
  * 副露：**措辞与历史那一段同一套**（票 29b）——种类写中文（碰 / 吃 / 暗杠 / 大明杠 / 加杠），
  * 来源写相对位置而不是座位号，牌照 mjai 记法。
+ *
+ * **参照系当参数传进来**（票 40 的判据）：同一个函数既渲自家又渲他家，而方位是相对的，
+ * 靠调用点隐含就一定会错。
  */
-function naki(groups: Naki[], words: Words): string {
+function naki(groups: Naki[], words: Words, frame: NakiFrame): string {
   if (groups.length === 0) return "无";
   return groups
     .map((group) => {
       const taken = group.pai === null ? "" : ` ${group.pai}`;
-      const from = group.target === null ? "" : `来自${words.who(group.target)}，`;
+      const from = group.target === null ? "" : `来自${nakiFrom(words, frame, group.target)}，`;
       return `${words.nakiKind(group.type)}${taken}（${from}亮出 ${group.consumed.join(" ")}）`;
     })
     .join("，");
@@ -145,16 +179,18 @@ function self(seat: RevealedSeat, words: Words): string {
     `你是座位 ${seat.seat}（${words.kaze(seat.jikaze)}家），第 ${seat.junme} 巡，${seat.score} 点。`,
     `手牌：${seat.tehai.join(" ")}（${seat.tehai.length} 张）`,
     `刚摸进：${seat.tsumo ?? "无（这一手不是你摸牌）"}`,
-    `副露：${naki(seat.naki, words)}`,
+    // 副露方就是观测者：两个参照系重合，这一行因此与票 40 之前逐字相同。
+    `副露：${naki(seat.naki, words, { owner: seat.seat, viewer: seat.seat })}`,
     `牌河：${kawa(seat.kawa)}`,
     `立直：${marks(seat.riichi, seat.ippatsu, words)}　振听：${furiten}`,
   ].join("\n");
 }
 
-function other(seat: MaskedSeat, words: Words): string {
+/** 一家他家。**抬头相对观测者、副露那句「来自谁」相对它自己**（票 40）。 */
+function other(seat: MaskedSeat, words: Words, viewer: number): string {
   return [
     `${words.who(seat.seat)}（座位 ${seat.seat}・${words.kaze(seat.jikaze)}家）：手里 ${seat.tehai_count} 张，第 ${seat.junme} 巡，${seat.score} 点，立直：${marks(seat.riichi, seat.ippatsu, words)}`,
-    `  副露：${naki(seat.naki, words)}`,
+    `  副露：${naki(seat.naki, words, { owner: seat.seat, viewer })}`,
     `  牌河：${kawa(seat.kawa)}`,
   ].join("\n");
 }
@@ -303,7 +339,7 @@ function presentSection(
     "",
     `${labels.hand}\n${self(observation.self, words)}`,
     "",
-    `${labels.others}\n${observation.others.map((seat) => other(seat, words)).join("\n")}`,
+    `${labels.others}\n${observation.others.map((seat) => other(seat, words, observation.self.seat)).join("\n")}`,
     "",
     `${labels.actions}\n${options(decision)}`,
     ...(scaffold === null ? [] : ["", scaffold]),

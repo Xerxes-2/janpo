@@ -75,15 +75,29 @@ export interface Words {
   riichiState: (wire: string) => string;
   nakiKind: (wire: string) => string;
   ryuukyokuReason: (wire: string) => string;
-  /** 那个座位在这份 prompt 里的称呼：`你` / `下家` / `对家` / `上家`。 */
+  /** 那个座位在这份 prompt 里的称呼：`你` / `下家` / `对家` / `上家`。**参照系是观测者**。 */
   who: (seat: number) => string;
+  /**
+   * `seat` 相对 `origin` 是第几家：`下家` / `对家` / `上家`（数不出来就写座位号）。
+   *
+   * **参照系是 `origin` 而不是观测者**，副露的「来自谁」要的就是它：那句话说的是
+   * **副露方**的第几家（`Naki.Target` 的语义，与牌桌那边一致）。换成观测者的参照系
+   * 会写出「吃 来自对家」——日麻里不成立的句子（票 40）。
+   */
+  whoFrom: (origin: number, seat: number) => string;
 }
 
 /**
  * 现造这一份 prompt 的说法。
  *
  * **相对位置由决策包里的 `relative` 给**（引擎算的），因此前缀与尾部叫的是同一个名字，
- * 而这一层不必知道座位数，也不必做取模。
+ * 而这一层不必知道座位数。
+ *
+ * `whoFrom` 要的那个参照系（副露方）**包里没有**——包给的每一项 `relative` 都是相对观测者的。
+ * 它因此**沿着座位环走**：包给的那几个 `relative` 排出来的就是「自己、下家、对家、上家」
+ * 那个圈（引擎的 `Seat.orderFrom`），从副露方那一格起往下家方向数到目标那一格是第几步。
+ * **这不是第二处座位取模**（CONTEXT.md：全仓库唯一的座位取模在 `Seat` 的私有 `shift` 里）：
+ * 数的是包自己给的那个圈，圈多长、有没有对家都由引擎说了算。
  */
 export function wordsFor(
   wording: Wording,
@@ -94,11 +108,24 @@ export function wordsFor(
   for (const other of others)
     names.set(other.seat, lookup(wording.relative, String(other.relative)));
 
+  // 座位环：观测者排头，其余按引擎给的 `relative` 升序——那就是下家方向。
+  const ring = [{ seat: viewer, relative: 0 }, ...others]
+    .sort((left, right) => left.relative - right.relative)
+    .map((each) => each.seat);
+
   return {
     kaze: (notation) => lookup(wording.kaze, notation),
     riichiState: (wire) => lookup(wording.riichi, wire),
     nakiKind: (wire) => lookup(wording.naki, wire),
     ryuukyokuReason: (wire) => lookup(wording.ryuukyoku, wire),
     who: (seat) => names.get(seat) ?? `座位 ${seat}`,
+    whoFrom: (origin, seat) => {
+      const start = ring.indexOf(origin);
+      // 把圈从 `origin` 那一格转到头，往后找一次就是第几家（找不到、或者数出 0 家
+      // ——那是它自己——都退回座位号：**读不懂的东西不许悄悄消失**）。
+      const rotated = start < 0 ? [] : [...ring.slice(start), ...ring.slice(0, start)];
+      const steps = rotated.indexOf(seat);
+      return steps > 0 ? lookup(wording.relative, String(steps)) : `座位 ${seat}`;
+    },
   };
 }

@@ -8,7 +8,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { promptSections, renderPrompt } from "../../src/agent/prompt.ts";
 import { DEFAULT_TEMPLATE, preambleOf } from "../../src/agent/template.ts";
-import { dahaiPackage, dangerPackage, responsePackage } from "./fixtures.ts";
+import type { DecisionPackage } from "../../src/agent/types.ts";
+import { DEFAULT_WORDING, wordsFor } from "../../src/agent/wording.ts";
+import { dahaiPackage, dangerPackage, responsePackage, sequencePackages } from "./fixtures.ts";
 
 const bare = renderPrompt(dahaiPackage, "bare", null);
 
@@ -233,4 +235,220 @@ test("脚手架读不动时 Assisted 退回 Bare，而不是崩", () => {
     renderPrompt(legacyPackage, "assisted", null),
     renderPrompt(legacyPackage, "bare", null),
   );
+});
+
+// ---- 副露那一句的参照系（票 40） ----
+//
+// **相对方位在多主体渲染里必须显式声明参照系，否则必错**（票 38 挖出来的判据）。
+// 副露的「来自谁」说的是**副露方**的第几家（`Naki.Target` 的语义、牌桌那边的画法），
+// 而【他家】那一节的抬头（`下家（座位 2・…）`）说的是**观测者**的第几家。
+// 同一份 prompt 里两个参照系各管一半，因此谁是谁必须**在那句话里就看得出来**。
+//
+// 下面这几条钉的不是措辞而是**这句中文说的是不是真的**：黄金用例逐字段钉的是决策包
+// （里面是绝对座位，永远没错），前缀属性测试钉的是字节单调，两者都不检查这一层。
+
+/** 五种副露的中文（默认模板的 `wording.naki`）。 */
+const KINDS = ["碰", "吃", "暗杠", "大明杠", "加杠"] as const;
+
+interface CalledGroup {
+  /** 这一组副露挂在谁名下：`你` 或【他家】那一节的抬头（`下家` / `对家` / `上家`）。 */
+  owner: string;
+  kind: string;
+  /** 那句「来自X」里的 X；暗杠没有这一项。 */
+  from: string | null;
+}
+
+const OWNER = /^(?:你是座位 \d+|(下家|对家|上家|座位 \d+)（座位 \d+・)/;
+const GROUPS = new RegExp(
+  `(${KINDS.join("|")})(?: [^（]+)?（(?:来自([^，]+)，)?亮出 [^）]+）`,
+  "g",
+);
+
+/** 把渲染出来的 prompt 拆回「谁的哪一组副露、写着来自谁」。 */
+function calledGroups(prompt: string): CalledGroup[] {
+  const groups: CalledGroup[] = [];
+  let owner = "";
+
+  for (const line of prompt.split("\n")) {
+    const head = OWNER.exec(line);
+    if (head !== null) owner = head[1] ?? "你";
+
+    const naki = /^\s*副露：(.+)$/.exec(line);
+    if (naki === null) continue;
+
+    for (const [, kind, from] of naki[1].matchAll(GROUPS)) {
+      groups.push({ owner, kind, from: from ?? null });
+    }
+  }
+
+  return groups;
+}
+
+/** 决策包里那几家：座位号、观测者眼里的称呼、以及各自的副露。 */
+function seatsOf(decision: DecisionPackage) {
+  const words = wordsFor(
+    DEFAULT_WORDING,
+    decision.observation.self.seat,
+    decision.observation.others,
+  );
+  const self = decision.observation.self;
+
+  return [
+    { seat: self.seat, name: "你", naki: self.naki },
+    ...decision.observation.others.map((other) => ({
+      seat: other.seat,
+      name: words.who(other.seat),
+      naki: other.naki,
+    })),
+  ];
+}
+
+/**
+ * 从 `owner` 起沿**下家方向**数到 `seat` 是第几家。
+ *
+ * 用例这一侧独立走一遍座位环（决策包给的 `relative` 排出来的那个圈），
+ * 不去调渲染器用的那份——两边都错成同一个样子的话这条就白写了。
+ */
+function distance(decision: DecisionPackage, owner: number, seat: number): number {
+  const ring = [
+    { seat: decision.observation.self.seat, relative: 0 },
+    ...decision.observation.others,
+  ]
+    .sort((left, right) => left.relative - right.relative)
+    .map((each) => each.seat);
+
+  const start = ring.indexOf(owner);
+  return [...ring.slice(start), ...ring.slice(0, start)].indexOf(seat);
+}
+
+const CORPUS: { name: string; decision: DecisionPackage }[] = [
+  { name: "decision-dahai", decision: dahaiPackage },
+  { name: "decision-response", decision: responsePackage },
+  { name: "decision-danger", decision: dangerPackage },
+  ...sequencePackages.map((decision, hand) => ({ name: `decision-sequence[${hand}]`, decision })),
+];
+
+test("他家的副露：「来自谁」以副露方为参照系，并就地声明是「他的」", () => {
+  // `decision-sequence[11]`（座位 1 的视角）里三家都有副露，且**两个参照系给的词不一样**：
+  // 座位 0（上家）吃的是座位 3 打的——座位 3 相对**它**是上家，相对**我**是对家。
+  const prompt = renderPrompt(sequencePackages[11], "bare", null);
+
+  assert.ok(
+    prompt.includes("副露：吃 2p（来自他的上家，亮出 3p 4p）"),
+    "上家那一组吃：来源相对副露方是上家（相对观测者才是对家）",
+  );
+  assert.ok(
+    prompt.includes("吃 3m（来自他的上家，亮出 4m 5mr），吃 6m（来自他的上家，亮出 4m 5m）"),
+    "对家那两组吃：来源相对副露方是上家（相对观测者才是下家）",
+  );
+  assert.ok(
+    prompt.includes("副露：碰 2z（来自你，亮出 2z 2z）"),
+    "鸣的是观测者打的那张时写「你」：那是身份不是方位，不必声明参照系",
+  );
+});
+
+test("自家的副露一个字没变：它的参照系本来就是观测者自己", () => {
+  const prompt = renderPrompt(sequencePackages[11], "bare", null);
+
+  assert.match(bare, /副露：碰 3m（来自对家，亮出 3m 3m）/);
+  assert.ok(
+    prompt.includes("副露：吃 7p（来自上家，亮出 8p 9p），大明杠 9m（来自对家，亮出 9m 9m 9m）"),
+    "自家那几组不写「他的」——副露方就是观测者，两个参照系重合",
+  );
+});
+
+/** 一份固件里渲出来的每一组副露，配上包里那一组的绝对座位。 */
+function paired(name: string, decision: DecisionPackage) {
+  const rendered = calledGroups(renderPrompt(decision, "bare", null));
+  const expected = seatsOf(decision).flatMap((seat) =>
+    seat.naki.map((group) => ({ seat: seat.seat, name: seat.name, group })),
+  );
+
+  assert.equal(rendered.length, expected.length, `${name}：渲出来的副露组数该与包里一样`);
+
+  return rendered.map((group, index) => {
+    const each = expected[index];
+    assert.equal(group.owner, each.name, `${name} 的那组「${group.kind}」挂错了人`);
+
+    return {
+      where: `${name} 的${each.name}那组「${group.kind}」`,
+      viewer: decision.observation.self.seat,
+      owner: each.seat,
+      target: each.group.target,
+      /** 从副露方起沿下家方向数到来源那家是第几家；暗杠没有来源，记 0。 */
+      step: each.group.target === null ? 0 : distance(decision, each.seat, each.group.target),
+      from: group.from,
+      kind: group.kind,
+    };
+  });
+}
+
+const CALLED = CORPUS.flatMap(({ name, decision }) => paired(name, decision));
+
+test("吃恒来自上家——规则那一条：写出来的那句话在日麻里得成立", () => {
+  // 这条与实现无关，钉的是**规则**：吃只吃得了上家（`Naki.chi` 的不变量，`Action.fs:34`）。
+  // 参照系一旦漂到观测者，它当场报「吃 来自对家」这种日麻里不成立的句子。
+  const chi = CALLED.filter((group) => group.kind === "吃");
+
+  for (const group of chi) {
+    assert.equal(group.step, 3, `${group.where}：包里的来源座位就不是它的上家，固件坏了`);
+    assert.ok(
+      group.from === "你" || group.from?.endsWith("上家"),
+      `${group.where}写着「来自${group.from}」：吃只吃得了上家`,
+    );
+  }
+
+  // 防空转：语料里真有吃（自家的与他家的都要有），上面那一条才验到了东西。
+  assert.ok(chi.length >= 4, `吃只走到 ${chi.length} 组，这条闸门在空转`);
+  assert.ok(
+    chi.some((group) => group.owner !== group.viewer),
+    "语料里没有**他家**的吃，这条闸门在空转",
+  );
+});
+
+test("每一组副露的「来自谁」都与决策包里的绝对座位对得上（全部固件）", () => {
+  const words = ["下家", "对家", "上家"];
+  let others = 0;
+
+  for (const group of CALLED) {
+    if (group.target === null) {
+      assert.equal(group.from, null, `${group.where}：暗杠没有来源`);
+      continue;
+    }
+
+    // 写出来的词必须就是「从副露方起数到那一家」的第几家；鸣的是观测者打的那张时写「你」。
+    const relative = words[group.step - 1];
+    const expected =
+      group.target === group.viewer
+        ? "你"
+        : group.owner === group.viewer
+          ? relative
+          : `他的${relative}`;
+
+    assert.equal(group.from, expected, `${group.where}：来源的参照系漂了`);
+    if (group.owner !== group.viewer) others += 1;
+  }
+
+  assert.ok(others >= 6, `他家的副露只走到 ${others} 组，这条闸门在空转`);
+});
+
+test("危险度那一节的参照系是**观测者**：威胁名单按你自己的方位说", () => {
+  // 与副露那一句不同，威胁名单说的是「谁在威胁**你**」，参照系本来就该是观测者。
+  // 引擎渲染好的 `display` 用的是 `Threat.who`（`MaskedSeat.Relative`，相对观测者）。
+  const threats = (dangerPackage.scaffold as { threats: { seat: number; display: string }[] })
+    .threats;
+  const words = wordsFor(
+    DEFAULT_WORDING,
+    dangerPackage.observation.self.seat,
+    dangerPackage.observation.others,
+  );
+
+  assert.ok(threats.length > 0, "这份固件本来就该有有威胁的家");
+  for (const threat of threats) {
+    assert.ok(
+      threat.display.startsWith(words.who(threat.seat)),
+      `威胁名单里「${threat.display}」该按观测者的方位称呼座位 ${threat.seat}`,
+    );
+  }
+  assert.match(danger, /有威胁的家：对家有副露/);
 });

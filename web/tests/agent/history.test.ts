@@ -215,3 +215,48 @@ test("真数据里每一行都只写得出那一条事件里有的东西", () =>
     assert.deepEqual(lines, full.slice(0, lines.length));
   }
 });
+
+// ---- 参照系（票 40） ----
+
+test("历史那一行的参照系是**观测者**：一句里的两家都按观测者称呼，因此说得出的话都成立", () => {
+  // 与尾部那一句副露不同（票 40：那边的参照系是**副露方**），历史是**观测者的旁白**：
+  // 「上家 第2巡 吃 对家打的 2p」里的两个词都相对**你**，而对家正是上家的上家，
+  // 因此这句话在日麻里成立。判据是逐条核**绝对座位**：吃那一行写的「谁打的」
+  // 必须就是副露方上家那个座位在观测者眼里的称呼。
+  const kamicha = new Map([
+    [0, 3],
+    [1, 0],
+    [2, 1],
+    [3, 2],
+  ]);
+  let checked = 0;
+
+  for (const decision of sequencePackages) {
+    const words = wordsFor(
+      DEFAULT_WORDING,
+      decision.observation.self.seat,
+      decision.observation.others,
+    );
+    const lines = historyLines(decision, words);
+
+    for (const [index, event] of decision.history.entries()) {
+      if (event.type !== "chi") continue;
+
+      const actor = event.actor as number;
+      const source = kamicha.get(actor) ?? -1;
+
+      assert.equal(event.target, source, "引擎给的吃就该来自上家，固件坏了");
+      assert.ok(
+        lines[index].startsWith(`${words.who(actor)} `),
+        `「${lines[index]}」该按观测者称呼副露方`,
+      );
+      assert.ok(
+        lines[index].includes(`吃 ${words.who(source)}打的 `),
+        `「${lines[index]}」该按观测者称呼打牌那家（座位 ${source}）`,
+      );
+      checked += 1;
+    }
+  }
+
+  assert.ok(checked >= 3, `只核到 ${checked} 行吃，这条闸门在空转`);
+});
