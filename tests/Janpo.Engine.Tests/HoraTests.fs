@@ -69,6 +69,9 @@ module HoraTests =
                    | Action.Pon _
                    | Action.Chi _
                    | Action.Riichi _
+                   | Action.Ankan _
+                   | Action.Kakan _
+                   | Action.Minkan _
                    | Action.None _ -> false))
 
     let private horasOf (state: GameState) : Hora list = GameState.horas state
@@ -446,6 +449,9 @@ module HoraTests =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false)
 
                 if offersRon then

@@ -310,6 +310,10 @@ module GameTests =
                 | Riichi _
                 | RiichiAccepted _
                 | EndKyoku
+                | Ankan _
+                | Kakan _
+                | Minkan _
+                | Dora _
                 | EndGame -> false)
             |> List.length
 

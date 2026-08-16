@@ -61,8 +61,14 @@ module PlayerState =
     /// 副露，按鸣的先后。
     let naki (player: PlayerState) : Naki list = player.Naki
 
-    /// 副露数。形态判定（`HandShape` / `AgariHand`）要的就是它。
+    /// 副露数。形态判定（`HandShape` / `AgariHand`）要的就是它。**杠也只算一组**：
+    /// 杠多吃掉的那一张恰好被补摸的岭上牌抵回来，因此「暗牌 + 3 × 副露数」恒定。
     let nakiCount (player: PlayerState) : int = List.length player.Naki
+
+    /// 这家杠了几次（三种杠都算）。**12 票的四杠散了读它**：单人四杠不流局，
+    /// 因此光有全场总数（`GameState.kanCount`）不够，还要逐家的这一份。
+    let kanCount (player: PlayerState) : int =
+        player.Naki |> List.filter Naki.isKan |> List.length
 
     /// 河里是否有牌被他家鸣走过。**流し満谯（12 票）的前提读的就是它。**
     let kawaTaken (player: PlayerState) : bool = player.KawaTaken
@@ -154,6 +160,28 @@ module PlayerState =
             Naki = player.Naki @ [ naki ]
             Drawn = None
         }
+
+    /// 加杠：手里那张离开暗牌，原来那组碰**原地换成加杠**——副露数不变、位置不变，
+    /// 因此「暗牌 + 3 × 副露数」也不变（多吃的那一张由岭上牌补回来）。
+    ///
+    /// `kakan` 必须是由那组碰升上来的（`Naki.kakan`）；找不到同牌种的碰时原样返回
+    /// ——合法性由 `GameState` 在此之前判掉（不在这里重复一份）。
+    let addKakan (added: Tile) (kakan: Naki) (player: PlayerState) : PlayerState =
+        let index =
+            player.Naki
+            |> List.tryFindIndex (fun naki ->
+                Naki.kind naki = NakiKind.Pon
+                && Naki.tiles naki
+                   |> List.forall (fun tile -> Tile.kindIndex tile = Tile.kindIndex added))
+
+        match index, removeOne added player.Hand with
+        | Some index, Some hand ->
+            { player with
+                Hand = Tile.sort hand
+                Naki = player.Naki |> List.mapi (fun each naki -> if each = index then kakan else naki)
+                Drawn = None
+            }
+        | _ -> player
 
     /// 河里的一张被他家鸣走了。**只置位，不清除，也不把牌从河里拿掉**
     /// （振听要看它；流し満谯要看记号）。

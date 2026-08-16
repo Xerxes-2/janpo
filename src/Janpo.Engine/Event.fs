@@ -79,8 +79,8 @@ type Ryuukyoku =
 /// 引擎产出的**既成事实**，必然合法（CONTEXT.md）。case 名与字段贴 mjai wire 事件 1:1，
 /// 与 `Action`（Player 提交的意图，可以非法）是两个类型，允许 case 同名。
 ///
-/// **这个 DU 会被后续的票反复加 case**（`dahai` / `reach` / `pon` / `chi` / `kan` /
-/// `hora` / `ryukyoku` / `end_kyoku` / `end_game` …）。加一个 case 的代价固定为三处，
+/// **这个 DU 会被后续的票反复加 case**（`dahai` / `reach` / `pon` / `chi` / `ankan` /
+/// `kakan` / `daiminkan` / `dora` / `hora` / `ryukyoku` / `end_kyoku` / `end_game` …）。加一个 case 的代价固定为三处，
 /// 漏掉哪处编译器都会指出来（`--warnaserror` 下不完整 match 是错误）：
 ///
 /// 1. 这里加一个 case——字段少的直接内联具名字段（`Tsumo of actor: Seat * pai: Tile`）；
@@ -103,6 +103,22 @@ type Event =
     | Pon of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
     /// mjai `chi`：某家吃了上家 `target` 打出的 `pai`，`consumed` 是它亮出的两张。
     | Chi of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
+    /// mjai `ankan`：某家暗杠，`consumed` 是那四张。**没有 `pai` 与 `target`**。
+    ///
+    /// 三种杠在 mjai 里是**三个分立的事件**（没有统一的 `kan`），字段也各不相同，
+    /// 真实牌谱里逐字实测过（D-7 的前置任务）。
+    | Ankan of actor: Seat * consumed: Tile list
+    /// mjai `kakan`：某家加杠，`pai` 是加上去的那张、`consumed` 是原碰的三张。
+    /// **没有 `target`**：原碰的来源座位不在 wire 上（它已经写在前面那条 `pon` 里）。
+    | Kakan of actor: Seat * pai: Tile * consumed: Tile list
+    /// mjai `daiminkan`：某家大明杠了 `target` 打出的 `pai`，`consumed` 是它亮出的三张。
+    ///
+    /// F# 这侧的标识符按 CONTEXT.md 的术语表拼作 `Minkan`，wire 上仍是 mjai 的 `daiminkan`
+    /// ——与 `Riichi` / `reach`、`Ryuukyoku` / `ryukyoku` 同一处理（裁决 D-1）。
+    | Minkan of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
+    /// mjai `dora`：翻开一张新的表宝牌指示牌（杠宝牌）。**它是独立的一条事件**，
+    /// 不挂在杠的事件上；翻开的时机区分明杠与暗杠（见 `GameState` 的 `completeKan`）。
+    | Dora of doraMarker: Tile
     /// mjai `reach`：某家**宣言**立直。紧接着的那条 `dahai` 就是宣言牌；
     /// 立直棒还没出，要等宣言牌落定（`RiichiAccepted`）。
     ///
@@ -215,6 +231,26 @@ module Event =
                         "pai", Tile.encoder pai
                         "consumed", encodeTiles consumed
                     ]
+            | Ankan(actor, consumed) ->
+                mjaiEvent "ankan" [ "actor", Encode.int actor; "consumed", encodeTiles consumed ]
+            | Kakan(actor, pai, consumed) ->
+                mjaiEvent
+                    "kakan"
+                    [
+                        "actor", Encode.int actor
+                        "pai", Tile.encoder pai
+                        "consumed", encodeTiles consumed
+                    ]
+            | Minkan(actor, target, pai, consumed) ->
+                mjaiEvent
+                    "daiminkan"
+                    [
+                        "actor", Encode.int actor
+                        "target", Encode.int target
+                        "pai", Tile.encoder pai
+                        "consumed", encodeTiles consumed
+                    ]
+            | Dora doraMarker -> mjaiEvent "dora" [ "dora_marker", Tile.encoder doraMarker ]
             | Hora fields ->
                 mjaiEvent
                     "hora"
@@ -313,6 +349,19 @@ module Event =
                     (Decode.field "tsumogiri" Decode.bool)
             | "pon" -> nakiDecoder (fun actor target pai consumed -> Pon(actor, target, pai, consumed))
             | "chi" -> nakiDecoder (fun actor target pai consumed -> Chi(actor, target, pai, consumed))
+            | "daiminkan" -> nakiDecoder (fun actor target pai consumed -> Minkan(actor, target, pai, consumed))
+            | "ankan" ->
+                Decode.map2
+                    (fun actor consumed -> Ankan(actor, consumed))
+                    (Decode.field "actor" Decode.int)
+                    (Decode.field "consumed" tilesDecoder)
+            | "kakan" ->
+                Decode.map3
+                    (fun actor pai consumed -> Kakan(actor, pai, consumed))
+                    (Decode.field "actor" Decode.int)
+                    (Decode.field "pai" Tile.decoder)
+                    (Decode.field "consumed" tilesDecoder)
+            | "dora" -> Decode.field "dora_marker" Tile.decoder |> Decode.map Dora
             | "reach" -> Decode.field "actor" Decode.int |> Decode.map Riichi
             | "reach_accepted" -> Decode.field "actor" Decode.int |> Decode.map RiichiAccepted
             | "hora" -> horaDecoder

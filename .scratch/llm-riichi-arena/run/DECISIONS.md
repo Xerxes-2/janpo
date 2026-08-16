@@ -960,3 +960,87 @@ wire 名取 mjai 官方规格的 `uradora_markers`；13 票那批牌谱写的是
 > 或给 `Ruleset` 加 `TenpaiRule` 开关。雀魂取哪一边**未找到一手资料**。
 
 两条都只是把已经落地的事实显式化，不改任何代码行为。
+
+### 11-A / 三种杠的标识符照术语表，wire 照 mjai：`Minkan` ↔ `daiminkan`
+
+`Action` / `Event` 的 case 是 `Ankan` / `Kakan` / `Minkan`（CONTEXT.md 的 Naki 条目就是这三个词，
+`NakiKind` 也早就是这么拼的），JSON wire 上是 mjai 原拼 `ankan` / `kakan` / `daiminkan`，
+另有独立的 `dora` 事件。
+否决：case 名照 wire 写成 `Daiminkan`（仓库里会同时出现 `NakiKind.Minkan` 与 `Event.Daiminkan` 两种拼法）。
+理由：裁决 D-1 已经定死，与 `Riichi`/`reach`、`Ryuukyoku`/`ryukyoku` 同一处理。
+
+### 11-B / 新宝牌的翻开时机：暗杠先翻后摸，明杠先摸后翻（固件 18/18 实测）
+
+固件 `tests/fixtures/paifu/mjai` 里 18 条杠**无一例外**：
+`ankan → dora → tsumo`，`kakan`/`daiminkan → tsumo → dora`。实现照抄这个顺序。
+**已知偏离**：教科书上「明槓のカンドラは打牌後にめくる」，据此大明杠后的岭上开花不该吃到新宝牌；
+本实现里明杠的 `dora` 落在 `tsumo` 与 `dahai` 之间，因此那种和了**吃得到**新宝牌。
+否决：为明杠加一个「待翻」标志把翻开推迟到打牌之后（多一处状态、且产出的事件流与我们唯一的
+对拍源不同形）。这条要人裁：13 票对拍时若在明杠局上出现符点差，先查这里。
+
+### 11-C / 杠后王牌恒 14 张、可摸区少一张（票里「王牌张数正确减少」的落实方式）
+
+`Wall.drawRinshan` 取走一张岭上牌的同时**把可摸区的最后一张补进王牌**——这是日麻的实际摆法，
+效果是「海底往前挪一张」。因此断言写成：王牌恒 `DeadWallSize` 张、可摸区每杠少一张、
+可用的杠次数减少（上限 `RinshanCount`），而不是「王牌张数减少」。
+否决：不补充、让王牌真的少一张（那样牌会凭空蒸发，牌数守恒这条最值钱的属性就废了）。
+
+### 11-D / 抢杠做成响应阶段的一种「起因」，宣言杠这一步不改局面
+
+`AwaitingResponse` 加一个 `Cause: ResponseCause`（`Dahai` / `Kan of Naki`）。宣言暗杠 / 加杠时
+**只产出事件、不动手牌与副露**，能荣和那张的家先答复；没人抢，那个杠才在 `applyKan` 里成立。
+否决：先把杠落地、被抢时回滚（多一条回滚路径）；另立一个 `AwaitingChankan` 阶段
+（响应阶段的收答复、见逃振听、头跳裁决要整套重写一遍）。
+mjai 的事件顺序也是「先 `kakan` 后 `hora`」，被抢的那个杠在牌谱里照样留一条记录。
+
+### 11-E / 暗杠与加杠只在「自己刚摸完牌」那一手宣言得了
+
+判据是 `PlayerState.drawn` 非 None：鸣完那一手没摸牌，杠不了。
+证据：固件里 18/18 条 `ankan`/`kakan` 都紧跟在自家的 `tsumo` 之后。
+（`RiichiState.allowsAnkan` 对没立直的家恒为 true，因此这一层必须由 11 自己守。）
+
+### 11-F / 责任支付挂在 `HoraTransfer.Sekinin`，范围按天凤
+
+选了 08 给的第一个挂点（给 `HoraTransfer` 加 `Sekinin: Seat option`），**不改 `Fu` / `basePoints` /
+`limit`，也不改 `HoraPoints`**——包只改「谁付」。三条分担：自摸由责任者一家付光；荣和且放铳者
+就是责任者照常付；荣和且另有其人则两家各半（切上到 100，役满的点数恒能整除）。
+**本场恒由放铳者付**（自摸时由付和了点的那几家平摊），供托照旧归和了者。
+范围：大明杠后的岭上开花、大三元 / 大四喜由副露凑齐；**四杠子没有**（天凤）。
+判定在 `GameState.sekininOf`：前者读倒序事件流里最近那条杠事件（**不能读「最后一组副露」**——
+加杠是原地换掉那组碰，排在它后面的副露仍旧靠后），后者读副露序列里第三组三元牌 / 第四组风牌的来源座位。
+
+### 11-G / `Wall.revealIndicator` 换成 `Wall.reveal`，返回**新翻开的那张**
+
+`dora` 是独立事件、要带 `dora_marker`，而原来的 `revealIndicator` 翻满之后静默不动，
+调用方分不出「翻了」与「没翻」。新的 `reveal : Wall -> (Tile * Wall) option` 两者都说得清。
+没有生产调用点，只改了 WallTests 的两处。
+
+### 11-H / 一局最多杠几次 = `Ruleset.RinshanCount`；杠数暴露成拆解器给 12 票
+
+`GameState.kanCount`（全场）与 `PlayerState.kanCount`（逐家）。合法动作集在
+`kanCount < RinshanCount` 且可摸区非空时才给杠。**四杠散了不在本票**：12 票读这两个拆解器
+（「四个杠且不是同一家」才流局）。
+
+### 11-I / `Naki.fromKawa` / `Naki.fromHand`：加杠的 `consumed` 里含着原碰被鸣的那张
+
+mjai 的 `kakan` 是 `pai`（加上去的那张）+ `consumed`（原碰的三张），而原碰被鸣的那张**仍在打牌者的河里**。
+牌数守恒若照旧只数 `Naki.consumed`，那张会被数两遍、而加上去的那张一遍都不数（红 5 时连多重集都对不上）。
+因此给 `Naki` 加两个互补的拆解器，并把 `Naki.kakan` 的「`Consumed` 第一张恒是原碰被鸣的那张」写成注释里的不变量。
+
+### 11-J / 国士抢暗杠做成规则集字段 `KokushiAnkanChankan`，默认 false
+
+天凤禁止、雀魂允许（提案 S-A、`smly/RiichiEnv` issue #43），默认值跟天凤（我们的默认规则集与
+对拍源都是天凤）。开关组合子 `Ruleset.withKokushiAnkanChankan`。加杠不受它影响：加杠恒可抢。
+
+### 11-K / 属性的取样里加了**摊好的杠剧本**，不只靠随机取样
+
+「见杠就杠」的选手跑四个种子只有一局杠得成（杠要手里四张同种，概率就那么小）。
+因此 `GameStateArbitraries` 里加了三条摊好的杠轨迹（一局三个暗杠、一局大明杠后岭上开花、
+一局暗杠后岭上开花），并把「那些轨迹里真的有杠」钉成一条用例。
+这是备注 N-8 的同一课：没断言过覆盖率的属性只证明了没崩，没证明跑到过。
+
+### 提案 11-L：术语表里没有「杠」与「岭上」的词条
+
+`CONTEXT.md` 的 Naki 条目列了 Ankan / Minkan / Kakan，但没有 **Kan**（杠这个动作 / `NakiKind` 的上位词）、
+**Kantsu**（杠子这个面子，`Mentsu` 里已经在用）、**Rinshan**（岭上牌与岭上开花，Ippatsu 条目里
+提过中文「岭上」没给罗马字）、**Chankan**（同上）。本票这四个词都进了标识符。请一并裁。

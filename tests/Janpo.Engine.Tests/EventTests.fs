@@ -78,6 +78,32 @@ module EventTests =
             encode (Chi(2, 1, tile "4p", [ tile "5pr"; tile "6p" ]))
         )
 
+    /// 三种杠在 mjai 里是**三个分立的事件**（没有统一的 `kan`），字段也各不相同：
+    /// `ankan` 没有 `pai` 与 `target`，`kakan` 没有 `target`。
+    /// 这三个形状是在真实牌谱（天凤鳳凰卓）里逐字实测过的，13 票对拍要对上它们。
+    [<Fact>]
+    let ``ankan 、 kakan 与 daiminkan 是三个分立的 mjai 事件`` () =
+        Assert.Equal(
+            """{"type":"ankan","actor":3,"consumed":["9s","9s","9s","9s"]}""",
+            encode (Ankan(3, [ tile "9s"; tile "9s"; tile "9s"; tile "9s" ]))
+        )
+
+        Assert.Equal(
+            """{"type":"kakan","actor":1,"pai":"7z","consumed":["7z","7z","7z"]}""",
+            encode (Kakan(1, tile "7z", [ tile "7z"; tile "7z"; tile "7z" ]))
+        )
+
+        // 标识符按术语表拼作 `Minkan`，wire 上是 mjai 的 `daiminkan`（裁决 D-1）。
+        Assert.Equal(
+            """{"type":"daiminkan","actor":3,"target":0,"pai":"5s","consumed":["5s","5s","5sr"]}""",
+            encode (Minkan(3, 0, tile "5s", [ tile "5s"; tile "5s"; tile "5sr" ]))
+        )
+
+    /// 新宝牌是**独立的一条事件**，不挂在杠的事件上。
+    [<Fact>]
+    let ``dora 编码为 mjai 事件对象`` () =
+        Assert.Equal("""{"type":"dora","dora_marker":"2s"}""", encode (Dora(tile "2s")))
+
     [<Fact>]
     let ``pon 与 chi 能从 mjai wire 解回来`` () =
         Assert.Equal<Result<Event, string>>(

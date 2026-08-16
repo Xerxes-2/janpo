@@ -135,10 +135,37 @@ module Wall =
 
                 ordered, rest)
 
-    // ---- 宝牌指示牌 ----
+    // ---- 宝牌指示牌与岭上牌 ----
 
-    /// 多翻一叠表宝牌指示牌（杠）。已经翻完的话原样返回。
-    let revealIndicator (wall: Wall) : Wall =
-        { wall with
-            Revealed = min (wall.Revealed + 1) (List.length wall.Indicators)
-        }
+    /// 多翻一叠表宝牌指示牌（杠）：给出**新翻开的那张**表指示牌与翻开之后的牌山。
+    /// 指示牌用尽时返回 None，牌山原样——新宝牌是一个事件（mjai `dora`），
+    /// 「翻了但没有新的那张」表示不出来才对。
+    let reveal (wall: Wall) : (Tile * Wall) option =
+        if wall.Revealed >= List.length wall.Indicators then
+            None
+        else
+            let revealed =
+                { wall with
+                    Revealed = wall.Revealed + 1
+                }
+
+            doraIndicators revealed
+            |> List.tryLast
+            |> Option.map (fun marker -> marker, revealed)
+
+    /// 杠之后从王牌补摸一张岭上牌。**可摸区的最后一张同时补进王牌**：王牌恒为
+    /// `DeadWallSize` 张，可摸区因此每杠少一张——这就是日麻实际摆法里「杠一次，
+    /// 海底往前挪一张」。
+    ///
+    /// 可摸区空了（补不进王牌）或岭上牌用尽时返回 None：那时杠不成立。
+    let drawRinshan (wall: Wall) : (Tile * Wall) option =
+        match wall.Rinshan, List.rev wall.Live with
+        | drawn :: rest, last :: reversedLive ->
+            Some(
+                drawn,
+                { wall with
+                    Live = List.rev reversedLive
+                    Rinshan = rest @ [ last ]
+                }
+            )
+        | _ -> None

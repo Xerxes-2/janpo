@@ -65,6 +65,10 @@ module RiichiTests =
                 | Hora _
                 | Ryuukyoku _
                 | EndKyoku
+                | Ankan _
+                | Kakan _
+                | Minkan _
+                | Dora _
                 | EndGame -> None)
 
         let accepted =
@@ -82,6 +86,10 @@ module RiichiTests =
                 | Hora _
                 | Ryuukyoku _
                 | EndKyoku
+                | Ankan _
+                | Kakan _
+                | Minkan _
+                | Dora _
                 | EndGame -> None)
 
         declared, accepted
@@ -115,6 +123,9 @@ module RiichiTests =
                         | Action.Hora _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false)
                     |> Option.orElseWith (fun () ->
                         pick (fun action ->
@@ -124,6 +135,9 @@ module RiichiTests =
                             | Action.Pon _
                             | Action.Chi _
                             | Action.Riichi _
+                            | Action.Ankan _
+                            | Action.Kakan _
+                            | Action.Minkan _
                             | Action.None _ -> false))
                     |> Option.orElseWith (fun () ->
                         pick (fun action ->
@@ -133,6 +147,9 @@ module RiichiTests =
                             | Action.Pon _
                             | Action.Chi _
                             | Action.Riichi _
+                            | Action.Ankan _
+                            | Action.Kakan _
+                            | Action.Minkan _
                             | Action.Hora _ -> false))
                     |> Option.defaultValue (List.head choice.Actions)
 
@@ -153,6 +170,9 @@ module RiichiTests =
                         | Action.Hora _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false)
 
                 match pon with
@@ -230,6 +250,9 @@ module RiichiTests =
                 | Action.Pon _
                 | Action.Chi _
                 | Action.Riichi _
+                | Action.Ankan _
+                | Action.Kakan _
+                | Action.Minkan _
                 | Action.None _ -> false)
 
         Assert.True(riichiIndex < firstDahai)
@@ -300,6 +323,9 @@ module RiichiTests =
                 | Action.Pon _
                 | Action.Chi _
                 | Action.Riichi _
+                | Action.Ankan _
+                | Action.Kakan _
+                | Action.Minkan _
                 | Action.None _ -> failwith $"宣言之后这一手只剩打牌，却有 {action}"
         )
 

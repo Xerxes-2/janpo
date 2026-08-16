@@ -24,15 +24,16 @@ module GameStateProperties =
             && choices |> List.forall (fun choice -> not (List.isEmpty choice.Actions))
 
     [<Property>]
-    let ``牌数守恒：各家手牌、河与副露里自家亮的那几张加上山上的牌恒为完整一副`` (state: GameState) =
-        // 副露里被鸣的那张（`Naki.taken`）**仍算在打牌者的河里**，因此这里只数自家亮出的
-        // `consumed`，不然要重复数一张。
+    let ``牌数守恒：各家手牌、河与副露里自家出的那几张加上山上的牌恒为完整一副`` (state: GameState) =
+        // 副露里来自他家河的那张（`Naki.fromKawa`）**仍算在打牌者的河里**，因此这里只数
+        // 自家出的那几张（`Naki.fromHand`），不然要重复数一张——加杠尤其如此：
+        // 它的 `consumed` 里包着当初被碰的那张，`taken` 反而是后来从手里加上去的。
         let everything =
             (GameState.players state
              |> List.collect (fun player ->
                  PlayerState.hand player
                  @ PlayerState.kawa player
-                 @ (PlayerState.naki player |> List.collect Naki.consumed)))
+                 @ (PlayerState.naki player |> List.collect Naki.fromHand)))
             @ Wall.tiles (GameState.wall state)
 
         List.length everything = Ruleset.wallSize ruleset
@@ -42,6 +43,9 @@ module GameStateProperties =
     let ``鸣牌后牌数守恒：暗牌加副露的张数与没鸣牌时一样多`` (state: GameState) =
         // 一组碰 / 吃是三张，其中两张来自手牌、一张来自他家的河；因此「暗牌 + 3 × 副露数」
         // 与没鸣牌时的手牌张数完全一致（等打牌时多一张）。
+        //
+        // **杠也在这一条里**：杠多吃掉的那一张恰好被岭上牌补回来（暗杠 −4+1、
+        // 大明杠 −3+1、加杠 −1+1），因此一组杠仍旧只折三张暗牌。
         GameState.players state
         |> List.forall (fun player ->
             let held = List.length (PlayerState.hand player) + 3 * PlayerState.nakiCount player
@@ -57,7 +61,11 @@ module GameStateProperties =
             | Ended(KyokuEnd.Hora horas) ->
                 horas
                 |> List.tryPick (fun hora -> if hora.Actor = hora.Target then Some hora.Actor else None)
-            | AwaitingResponse _
+            // 抢杠的那一段：杠宣言了还没成立，宣言的那家手里仍握着刚摸进的那张。
+            | AwaitingResponse phase ->
+                match phase.Cause with
+                | ResponseCause.Kan _ -> Some phase.Target
+                | ResponseCause.Dahai -> None
             | Ended(KyokuEnd.Ryuukyoku _) -> None
 
         GameState.players state
@@ -122,16 +130,20 @@ module GameStateProperties =
                 let ronOffered =
                     List.contains (Action.Hora(choice.Seat, phase.Target, phase.Pai)) choice.Actions
 
-                // 被问到的座位至少有一样实事可做（荣和或鸣牌），否则不应当被问。
+                // 被问到的座位至少有一样实事可做（荣和、碰吃或大明杠），否则不应当被问。
+                // 暗杠 / 加杠不在列：它们是自家摸完牌那一手的动作，不是响应。
                 let hasSomethingToDo =
                     choice.Actions
                     |> List.exists (fun action ->
                         match action with
                         | Action.Hora _
                         | Action.Pon _
-                        | Action.Chi _ -> true
+                        | Action.Chi _
+                        | Action.Minkan _ -> true
                         | Action.Dahai _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
                         | Action.None _ -> false)
 
                 choice.Seat <> phase.Target
@@ -161,9 +173,19 @@ module GameStateProperties =
                     // 吃只能吃上家：宣言的那家恒是打牌者的下家。
                     && Seat.next ruleset target = actor
                     && Wall.remaining (GameState.wall state) > 0
+                // 大明杠亮三张，同样需要可摸区还有牌（补摸岭上牌要把最后一张补进王牌），
+                // 且此刻的杠数没到上限。
+                | Action.Minkan(_, target, pai, consumed) ->
+                    target = phase.Target
+                    && pai = phase.Pai
+                    && List.length consumed = 3
+                    && Wall.remaining (GameState.wall state) > 0
+                    && GameState.kanCount state < ruleset.RinshanCount
                 | Action.Hora _
                 | Action.Dahai _
                 | Action.Riichi _
+                | Action.Ankan _
+                | Action.Kakan _
                 | Action.None _ -> true)
         | AwaitingDahai _
         | Ended _ -> true
@@ -183,6 +205,9 @@ module GameStateProperties =
                    | Action.Pon _
                    | Action.Chi _
                    | Action.Riichi _
+                   | Action.Ankan _
+                   | Action.Kakan _
+                   | Action.Minkan _
                    | Action.None _ -> false)
         | _ -> true
 
@@ -192,12 +217,13 @@ module GameStateProperties =
         |> List.forall (fun player ->
             PlayerState.naki player
             |> List.forall (fun naki ->
-                match Naki.taken naki, Naki.target naki with
+                // 加杠看的是**原碰**被鸣的那张（`fromKawa`）而不是后来加上去的 `taken`；
+                // 暗杠没有这一张，自然也没有被鸣的人。
+                match Naki.fromKawa naki, Naki.target naki with
                 | Some taken, Some target ->
                     match GameState.player target state with
                     | Some victim -> List.contains taken (PlayerState.kawa victim) && PlayerState.kawaTaken victim
                     | None -> false
-                // 暗杠（11 票）没有被鸣的那张，本票里也不会出现。
                 | _ -> true))
 
     [<Property>]

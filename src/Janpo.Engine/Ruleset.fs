@@ -48,6 +48,10 @@ type Ruleset =
         DoubleKazeJantouFu: int
         /// 岭上自摸加不加自摸符（2 符）。天凤加，因此默认 true。
         RinshanTsumoFu: bool
+        /// 国士无双能不能抢暗杠（Chankan）。**天凤禁止、雀魂允许**（提案 S-A、
+        /// `smly/RiichiEnv` issue #43），因此默认 false；其余牌型任何规则集都抢不了暗杠。
+        /// 加杠不受它影响：加杠恒可抢。
+        KokushiAnkanChankan: bool
         /// 一本场的点数：荣和时放铳者多付这么多，自摸时由付家平摊。
         HonbaPoints: int
     }
@@ -80,6 +84,7 @@ module Ruleset =
             KiriageMangan = false
             DoubleKazeJantouFu = 4
             RinshanTsumoFu = true
+            KokushiAnkanChankan = false
             HonbaPoints = 300
         }
 
@@ -95,6 +100,12 @@ module Ruleset =
     /// 打开切上满贯（SPEC 的规则开关）：4 番 30 符 / 3 番 60 符按满贯算。
     /// 关着的形态就是各预设本身——天凤与雀魂段位战都不采用它。
     let withKiriageMangan (ruleset: Ruleset) : Ruleset = { ruleset with KiriageMangan = true }
+
+    /// 允许国士无双抢暗杠（雀魂的做法）。关着的形态就是各预设本身——天凤禁止。
+    let withKokushiAnkanChankan (ruleset: Ruleset) : Ruleset =
+        { ruleset with
+            KokushiAnkanChankan = true
+        }
 
     /// 换对局长度（spec 的「对局长度」配置）。
     let withLength (length: GameLength) (ruleset: Ruleset) : Ruleset = { ruleset with Length = length }

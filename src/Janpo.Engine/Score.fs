@@ -49,6 +49,15 @@ type HoraTransfer =
         Honba: int
         /// 供托：场上堆着的立直棒**根数**，由和了者取得。
         Kyotaku: int
+        /// Sekinin Barai（责任支付，CONTEXT.md）：要为这一和负责的那家，没有则为 None。
+        ///
+        /// **它只改「谁付」，不改「付多少」**：符、番、基本点与级别一律照算（`Fu` /
+        /// `basePoints` / `limit` 都不受影响），只把账改挂到责任者头上：
+        ///
+        /// - 自摸：责任者一家付全额（大明杠后的岭上开花就是这条）；
+        /// - 荣和且放铳者就是责任者：照常付；
+        /// - 荣和且放铳者另有其人：两家各付一半（包牌的通行算法）。
+        Sekinin: Seat option
     }
 
 /// 一次和了的点数与授受。
@@ -164,6 +173,9 @@ module Score =
     /// 子自摸「子付 1 份、亲付 2 份」，亲自摸「三家各付 2 份」；
     /// 荣和由放铳者一家付子 4 份 / 亲 6 份。每一笔各自切上到 100。
     /// 本场按 `HonbaPoints` 计：荣和由放铳者付，自摸由付家平摊。供托归和了者。
+    ///
+    /// **责任支付（`transfer.Sekinin`）只换付钱的人**：和了点一分不多一分不少，
+    /// `HoraPoints` 因此与没包时完全一样，只是 `Deltas` 里负的那几项换了座位。
     let hora (ruleset: Ruleset) (transfer: HoraTransfer) (value: HoraValue) : HoraScore =
         let seats = Seat.all ruleset
         let basis = basePoints ruleset value
@@ -183,24 +195,56 @@ module Score =
             else
                 ceil100 (basis * (if actorIsOya then 6 else 4))
 
-        /// 一家付的本场：荣和由放铳者一家付，自摸由付家平摊。
+        let horaPoints = payers |> List.sumBy payment
+
+        // 和了者自己包不了自己，座位不合法的也不算：那两种情形当作没包（错误不能把点数弄丢）。
+        let sekinin =
+            transfer.Sekinin
+            |> Option.filter (fun liable -> liable <> transfer.Actor && Seat.isValid ruleset liable)
+
+        /// 和了点的分担：没包时就是各付各的；有包时改挂到责任者头上（见 `HoraTransfer.Sekinin`）。
+        /// 两家平分时先切上到 100 再把剩下的给放铳者，因此合计恒等于 `horaPoints`。
+        let charges: (Seat * int) list =
+            match sekinin with
+            | Some liable when tsumo -> [ liable, horaPoints ]
+            | Some liable when liable <> transfer.Target ->
+                let half = ceil100 (horaPoints / 2)
+                [ liable, half; transfer.Target, horaPoints - half ]
+            | Some _
+            | None -> payers |> List.map (fun seat -> seat, payment seat)
+
+        /// 本场的付家：自摸由付和了点的那几家平摊（包了就只剩责任者一家），
+        /// 荣和恒由**放铳者**一家付，即使包把和了点分了一半出去。
+        let honbaPayers =
+            if tsumo then
+                charges |> List.map fst
+            else
+                [ transfer.Target ]
+
         let honba =
             let total = max 0 ruleset.HonbaPoints * max 0 transfer.Honba
 
-            if List.isEmpty payers then 0
-            else if tsumo then total / List.length payers
-            else total
+            if List.isEmpty honbaPayers then
+                0
+            else
+                total / List.length honbaPayers
 
-        let horaPoints = payers |> List.sumBy payment
-        let received = horaPoints + honba * List.length payers
+        let charged (seat: Seat) : int =
+            (charges |> List.sumBy (fun (each, points) -> if each = seat then points else 0))
+            + (honbaPayers |> List.sumBy (fun each -> if each = seat then honba else 0))
+
+        let received =
+            seats |> List.filter (fun seat -> seat <> transfer.Actor) |> List.sumBy charged
+
         let kyotaku = max 0 ruleset.RiichiBou * max 0 transfer.Kyotaku
 
         let deltas =
             seats
             |> List.map (fun seat ->
-                if seat = transfer.Actor then received + kyotaku
-                elif List.contains seat payers then -(payment seat + honba)
-                else 0)
+                if seat = transfer.Actor then
+                    received + kyotaku
+                else
+                    -(charged seat))
 
         {
             Value = value

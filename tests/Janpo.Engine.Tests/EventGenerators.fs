@@ -116,6 +116,25 @@ type EventArbitraries =
                         }
             }
 
+        /// 三种杠在 mjai 里是三个分立的事件，字段也各不相同（暗杠没 `pai` / `target`，
+        /// 加杠没 `target`），因此三支各生各的。
+        let kan =
+            gen {
+                let! actor = seat
+                let! target = seat
+                let! pai = tile
+                let! consumed = Gen.listOfLength 3 tile
+                let! kind = Gen.elements [ 0; 1; 2 ]
+
+                return
+                    match kind with
+                    | 0 -> Ankan(actor, pai :: consumed)
+                    | 1 -> Kakan(actor, pai, consumed)
+                    | _ -> Minkan(actor, target, pai, consumed)
+            }
+
+        let dora = tile |> Gen.map Dora
+
         let endKyoku = Gen.constant EndKyoku
         let endGame = Gen.constant EndGame
 
@@ -126,6 +145,8 @@ type EventArbitraries =
                 tsumo
                 dahai
                 naki
+                kan
+                dora
                 hora
                 ryuukyoku
                 endKyoku

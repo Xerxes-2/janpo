@@ -28,6 +28,10 @@ module KyokuTests =
         | Riichi _
         | RiichiAccepted _
         | EndKyoku
+        | Ankan _
+        | Kakan _
+        | Minkan _
+        | Dora _
         | EndGame -> false
 
     let private isDahai (event: Event) =
@@ -43,9 +47,15 @@ module KyokuTests =
         | Riichi _
         | RiichiAccepted _
         | EndKyoku
+        | Ankan _
+        | Kakan _
+        | Minkan _
+        | Dora _
         | EndGame -> false
 
-    let private isNaki (event: Event) =
+    /// 碰与吃：**跳过摸牌**的那两种鸣牌。杠不在此列——杠要补摸一张岭上牌，
+    /// 因此它自带一条 `tsumo`（可摸区也随之少一张），不会让 dahai 与 tsumo 的条数错开。
+    let private isPonOrChi (event: Event) =
         match event with
         | Pon _
         | Chi _ -> true
@@ -58,6 +68,10 @@ module KyokuTests =
         | Riichi _
         | RiichiAccepted _
         | EndKyoku
+        | Ankan _
+        | Kakan _
+        | Minkan _
+        | Dora _
         | EndGame -> false
 
     [<Fact>]
@@ -69,8 +83,8 @@ module KyokuTests =
         // 可摸区摸完才流局，因此 tsumo 恒为可摸区张数；鸣牌跳过摸牌却照样要打一张，
         // 因此 dahai 比 tsumo 多出来的那几条恰好是鸣牌的条数。
         Assert.Equal(liveWall, countOf isTsumo events)
-        Assert.Equal(liveWall + countOf isNaki events, countOf isDahai events)
-        Assert.True(countOf isNaki events > 0, "随机选手应当鸣过牌")
+        Assert.Equal(liveWall + countOf isPonOrChi events, countOf isDahai events)
+        Assert.True(countOf isPonOrChi events > 0, "随机选手应当鸣过牌")
         Assert.Equal(0, Wall.remaining (GameState.wall state))
         Assert.True(GameState.isEnded state)
 

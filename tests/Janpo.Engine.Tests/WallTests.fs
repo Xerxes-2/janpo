@@ -37,7 +37,7 @@ module WallTests =
 
         let allRevealed =
             [ 1..indicatorArea ]
-            |> List.fold (fun state _ -> Wall.revealIndicator state) wall
+            |> List.fold (fun state _ -> Wall.reveal state |> Option.map snd |> Option.defaultValue state) wall
 
         Assert.Equal(indicatorArea, Wall.doraIndicators allRevealed |> List.length)
         Assert.Equal(indicatorArea, Wall.uraIndicators allRevealed |> List.length)
@@ -54,7 +54,7 @@ module WallTests =
 
         let counts =
             [ 1..7 ]
-            |> List.scan (fun state _ -> Wall.revealIndicator state) wall
+            |> List.scan (fun state _ -> Wall.reveal state |> Option.map snd |> Option.defaultValue state) wall
             |> List.map (Wall.doraIndicators >> List.length)
 
         Assert.Equal<int list>([ 1; 2; 3; 4; 5; 5; 5; 5 ], counts)

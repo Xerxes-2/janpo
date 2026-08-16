@@ -5,7 +5,7 @@ open Janpo
 open Janpo.Engine.Tests.GameStateFixtures
 
 /// 鸣牌路径的前半：碰与吃。谁能鸣、鸣完谁出手、禁食替、河被鸣走的记号与 Junme。
-/// 杠是 11 票的事，这里一条都没有。
+/// 杠本身在 KanTests；这里只在合法动作集的断言里带上它（手里三张同种时大明杠与碰并列）。
 ///
 /// 牌山是**摊出来的**（`startScripted`），因此「谁在第几巡能碰什么」是确定的事实。
 /// 不变量（牌数守恒、吃只吃上家、河底牌鸣不得）见 GameStateProperties。
@@ -46,6 +46,9 @@ module PonChiTests =
             | Action.Pon _
             | Action.Chi _
             | Action.Riichi _
+            | Action.Ankan _
+            | Action.Kakan _
+            | Action.Minkan _
             | Action.None _ -> None)
 
     let private handOf (seat: Seat) (state: GameState) : Tile list =
@@ -115,9 +118,11 @@ module PonChiTests =
         // 座位 2 没有 3s；座位 3 有 4s 5s，但吃只吃上家。
         Assert.Equal<Seat list>([ 1 ], waiting state)
 
+        // 座位 1 手里三张 3s，因此大明杠也在列：它与碰同级，排在吃前面。
         Assert.Equal<Action list>(
             [
                 Action.Pon(1, 0, pai "3s", tilesOf "3s 3s")
+                Action.Minkan(1, 0, pai "3s", tilesOf "3s 3s 3s")
                 Action.Chi(1, 0, pai "3s", tilesOf "4s 5s")
                 Action.None 1
             ],
@@ -151,10 +156,12 @@ module PonChiTests =
         let state = atTheRaceFor5s ()
 
         // 座位 2 手里 5s 5s 5sr：亮两张正牌，或者亮一张正牌加红 5。
+        // 大明杠只有一种亮法（三张全上），红 5 也跟着亮出去。
         Assert.Equal<Action list>(
             [
                 Action.Pon(2, 0, pai "5s", tilesOf "5s 5s")
                 Action.Pon(2, 0, pai "5s", tilesOf "5s 5sr")
+                Action.Minkan(2, 0, pai "5s", tilesOf "5s 5s 5sr")
                 Action.None 2
             ],
             actionsOf 2 state

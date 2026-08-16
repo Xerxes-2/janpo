@@ -4,8 +4,7 @@ namespace Janpo
 /// 类型，允许 case 同名——未验证的意图不应当能被误当成事实写进 Paifu。
 /// case 名与字段贴 mjai 的动作消息，不自创。
 ///
-/// **这个 DU 会被后续的票反复加 case**：
-/// `Ankan` / `Kakan` / `Daiminkan`（11）、`Ryuukyoku`（九种九牌，12）。
+/// **这个 DU 会被后续的票反复加 case**：`Ryuukyoku`（九种九牌，12）。
 /// 加一个 case 的代价固定为三处，漏掉哪处编译器都会
 /// 指出来（`--warnaserror` 下不完整 match 是错误）：
 ///
@@ -30,6 +29,20 @@ type Action =
     /// mjai `chi`：吃。字段与 `Pon` 同形，`consumed` 是自家亮出的、与 `pai` 凑成顺子的两张。
     /// **只有下家能吃**，因此 `target` 恒是 `actor` 的上家。
     | Chi of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
+    /// mjai `ankan`：暗杠。`consumed` 是自家的四张同种牌（含红 5）。**只在自己摸完牌那一手**
+    /// 宣言得了（真实牌谱里 18/18 条 `ankan` 都紧跟在自己的 `tsumo` 之后）。
+    /// 立直后能不能暗杠由 `RiichiState.allowsAnkan` 判（裁决 D-8）。
+    | Ankan of actor: Seat * consumed: Tile list
+    /// mjai `kakan`：加杠。`pai` 是从手里加上去的那张、`consumed` 是原本那组碰的三张。
+    /// **没有 `target`**（mjai 的 `kakan` 就不带它）——原碰的来源座位记在 `Naki` 里，责任支付要它。
+    /// 同样只在自己摸完牌那一手宣言得了；立直中加不了杠。
+    | Kakan of actor: Seat * pai: Tile * consumed: Tile list
+    /// mjai `daiminkan`：大明杠。字段与 `Pon` 同形，`consumed` 是自家亮出的三张同种牌。
+    /// 它是**响应阶段**的动作，与碰同级（裁决顺序 Ron > Pon / Minkan > Chi）。
+    ///
+    /// 标识符按术语表拼作 `Minkan`（CONTEXT.md 的 Naki 条目），wire 上仍是 mjai 的
+    /// `daiminkan`——与 `Riichi` / `reach` 同一处理（裁决 D-1）。
+    | Minkan of actor: Seat * target: Seat * pai: Tile * consumed: Tile list
     /// mjai `reach`：宣言立直。**宣言与宣言牌是两步**——提交这一条只是宣言，
     /// 紧接着的那一手仍要提交一条 `Dahai`（宣言牌），且只能打「打完仍听牌」的那几张。
     /// wire 上是 mjai 的 `reach`，标识符按术语表拼作 `Riichi`（裁决 D-1）。
@@ -67,5 +80,8 @@ module Action =
         | Action.Hora(actor, _, _) -> actor
         | Action.Pon(actor, _, _, _) -> actor
         | Action.Chi(actor, _, _, _) -> actor
+        | Action.Ankan(actor, _) -> actor
+        | Action.Kakan(actor, _, _) -> actor
+        | Action.Minkan(actor, _, _, _) -> actor
         | Action.Riichi actor -> actor
         | Action.None actor -> actor

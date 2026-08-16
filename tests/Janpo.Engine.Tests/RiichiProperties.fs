@@ -18,11 +18,14 @@ module RiichiProperties =
         | Some player -> PlayerState.riichi player
         | None -> RiichiState.none
 
-    /// 最后一条事件是不是鸣牌。
+    /// 最后一条事件是不是鸣牌（**三种杠也算**：它们同样打断全场的一发）。
     let private lastIsNaki (state: GameState) : bool =
         match List.tryLast (GameState.events state) with
         | Some(Pon _)
-        | Some(Chi _) -> true
+        | Some(Chi _)
+        | Some(Ankan _)
+        | Some(Kakan _)
+        | Some(Minkan _) -> true
         | Some(StartGame _)
         | Some(StartKyoku _)
         | Some(Tsumo _)
@@ -31,6 +34,7 @@ module RiichiProperties =
         | Some(RiichiAccepted _)
         | Some(Hora _)
         | Some(Ryuukyoku _)
+        | Some(Dora _)
         | Some EndKyoku
         | Some EndGame
         | None -> false
@@ -62,6 +66,10 @@ module RiichiProperties =
                 | Hora _
                 | Ryuukyoku _
                 | EndKyoku
+                | Ankan _
+                | Kakan _
+                | Minkan _
+                | Dora _
                 | EndGame -> declared, accepted)
 
         List.length accepted <= List.length declared
@@ -78,7 +86,7 @@ module RiichiProperties =
         |> List.forall id
 
     [<Property>]
-    let ``立直成立之后那家只剩自摸和与摸切，宣言牌那一手只剩仍然听牌的打法`` (state: GameState) =
+    let ``立直成立之后那家只剩自摸和、暗杠与摸切，宣言牌那一手只剩仍然听牌的打法`` (state: GameState) =
         match GameState.phase state with
         | AwaitingDahai phase ->
             let keeps =
@@ -94,9 +102,14 @@ module RiichiProperties =
                     match action with
                     | Action.Dahai(_, _, tsumogiri) -> tsumogiri
                     | Action.Hora _ -> true
+                    // 暗杠是立直后唯一的例外（判据在 `RiichiState.allowsAnkan`）；
+                    // 加杠与大明杠都不行。
+                    | Action.Ankan _ -> true
                     | Action.Pon _
                     | Action.Chi _
                     | Action.Riichi _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> false)
             | RiichiState.Declared _ ->
                 phase.Actions
@@ -107,6 +120,9 @@ module RiichiProperties =
                     | Action.Pon _
                     | Action.Chi _
                     | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> false)
             | RiichiState.None -> true
         | AwaitingResponse _
@@ -122,11 +138,15 @@ module RiichiProperties =
                     choice.Actions
                     |> List.forall (fun action ->
                         match action with
+                        // 立直中碰不了吃不了，大明杠同理。
                         | Action.Pon _
-                        | Action.Chi _ -> false
+                        | Action.Chi _
+                        | Action.Minkan _ -> false
                         | Action.Hora _
                         | Action.Dahai _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
                         | Action.None _ -> true)
                 else
                     true)

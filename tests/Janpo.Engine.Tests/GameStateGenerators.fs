@@ -34,12 +34,8 @@ module GameStateFixtures =
         let rest = ruleset.HaipaiSize % 4
         [ for _ in 1..rounds -> 4 ] @ (if rest > 0 then [ rest ] else [])
 
-    /// 摊一座牌山：四家按 `hands` 拿到配牌，之后按 `draws` 的顺序摸牌（`draws` 的第一张
-    /// 是 Oya 的第一次自摸，之后依次是下家、对家、上家……），余下的位置用整副牌里
-    /// 没被用掉的牌补满，末尾 `DeadWallSize` 张自然成为王牌。
-    ///
-    /// 黄金用例「让指定的和了在指定 Junme 发生」靠它：牌山是确定性的，不必去碰运气找种子。
-    let scriptedWall (ruleset: Ruleset) (oya: Seat) (hands: Tile list list) (draws: Tile list) : Wall =
+    /// 配牌与摸牌一共用掉的那一串牌，按牌山里的位置顺序。
+    let private usedBy (ruleset: Ruleset) (oya: Seat) (hands: Tile list list) (draws: Tile list) : Tile list =
         let plan =
             [
                 for chunk in haipaiChunks ruleset do
@@ -56,8 +52,10 @@ module GameStateFixtures =
 
                 taken @ drawnNow, remaining |> List.mapi (fun index each -> if index = seat then rest else each))
 
-        let used = dealt @ draws
+        dealt @ draws
 
+    /// 整副牌里没被用掉的那些，用来把牌山补满。
+    let private fillerFor (ruleset: Ruleset) (used: Tile list) : Tile list =
         let filler =
             (Ruleset.wallTiles ruleset, used)
             ||> List.fold (fun rest tile -> removeOne tile rest)
@@ -65,7 +63,35 @@ module GameStateFixtures =
         if List.length filler <> Ruleset.wallSize ruleset - List.length used then
             failwith "摊牌山用了整副牌里没有的牌（同一种牌最多四张）"
 
-        Wall.ofOrdered ruleset (used @ filler)
+        filler
+
+    /// 摊一座牌山：四家按 `hands` 拿到配牌，之后按 `draws` 的顺序摸牌（`draws` 的第一张
+    /// 是 Oya 的第一次自摸，之后依次是下家、对家、上家……），余下的位置用整副牌里
+    /// 没被用掉的牌补满，末尾 `DeadWallSize` 张自然成为王牌。
+    ///
+    /// 黄金用例「让指定的和了在指定 Junme 发生」靠它：牌山是确定性的，不必去碰运气找种子。
+    let scriptedWall (ruleset: Ruleset) (oya: Seat) (hands: Tile list list) (draws: Tile list) : Wall =
+        let used = usedBy ruleset oya hands draws
+        Wall.ofOrdered ruleset (used @ fillerFor ruleset used)
+
+    /// 摊一座**连岭上牌也指定**的牌山：`rinshan` 按补摸顺序摆在王牌的头上，
+    /// 不足 `RinshanCount` 张的部分由余牌补齐，多出来的那几张自然落进指示牌区。
+    ///
+    /// 岭上开花与责任支付的黄金用例非得指定补摸的那张不可。
+    let scriptedWallWithRinshan
+        (ruleset: Ruleset)
+        (oya: Seat)
+        (hands: Tile list list)
+        (draws: Tile list)
+        (rinshan: Tile list)
+        : Wall =
+        let used = usedBy ruleset oya hands draws
+        let filler = fillerFor ruleset (used @ rinshan)
+        let liveSize = Ruleset.wallSize ruleset - ruleset.DeadWallSize
+        let liveFiller = List.truncate (liveSize - List.length used) filler
+        let deadFiller = List.skip (List.length liveFiller) filler
+
+        Wall.ofOrdered ruleset (used @ liveFiller @ rinshan @ deadFiller)
 
     /// 记法写的手牌。摊牌山的用例里手牌一律写 mjai 记法，读起来才像牌。
     let tilesOf (notations: string) : Tile list =
@@ -91,6 +117,21 @@ module GameStateFixtures =
 
     /// 用摊好的牌山开一局。
     let startScripted (script: Script) : GameState = startScriptedWith ruleset script
+
+    /// 用摊好的牌山开一局，**岭上牌也是摊出来的**（按补摸顺序写 mjai 记法）。
+    let startScriptedRinshanIn (ruleset: Ruleset) (rinshan: string) (script: Script) : GameState =
+        let hands = script.Hands |> List.map tilesOf
+
+        let wall =
+            scriptedWallWithRinshan ruleset context.Oya hands (tilesOf script.Draws) (tilesOf rinshan)
+
+        match GameState.startFrom ruleset context wall with
+        | Ok state -> state
+        | Error error -> failwith $"应当开得出局，却得到 {KyokuStartError.toDisplay error}"
+
+    /// 用摊好的牌山（含岭上牌）开一局。
+    let startScriptedRinshan (rinshan: string) (script: Script) : GameState =
+        startScriptedRinshanIn ruleset rinshan script
 
     /// 自摸和的剧本：Oya 听 5z 单骑，第 1 巡摸进没用的 1z 打掉，第 2 巡摸进 5z。
     /// 其余三家是一手孤张，既和不了也听不了。
@@ -171,6 +212,138 @@ module GameStateFixtures =
             Draws = "9s 9p 8p 8m 2m 9p 2m"
         }
 
+    // ---- 杠的剧本（KanTests / KanProperties 共用） ----
+
+    /// 暗杠的剧本：Oya 手里三张 9s 加一条 123456789m 与 5z 单骑，第一次自摸就摸进第四张 9s。
+    /// 岭上牌摊的是 `5z`，因此这一杠直接岭上开花（暗杠不破门清，还有门前清自摸和与一气通贯）。
+    let ankanScript =
+        {
+            Hands =
+                [
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 9s 9s 9s 5z"
+                    "1p 4p 7p 1s 4s 7s 1z 2z 3z 4z 6z 7z 2m"
+                    "2p 5p 8p 2s 5s 8s 1z 2z 3z 4z 6z 7z 3m"
+                    "3p 6p 9p 3s 6s 8s 1z 2z 3z 4z 6z 7z 4m"
+                ]
+            Draws = "9s"
+        }
+
+    /// 立直后暗杠的剧本：Oya 第一手摸进 6z，宣立直打 1z（听 6z 单骑）；
+    /// 三家各摸切一张之后，Oya 第二手摸进第四张 5z——听牌与面子构成都不变，杠得。
+    let riichiAnkanScript =
+        {
+            Hands =
+                [
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 5z 5z 5z 1z"
+                    "1p 4p 7p 1s 4s 7s 1z 2z 3z 6z 7z 2m 8m"
+                    "2p 5p 8p 2s 5s 8s 1z 2z 3z 6z 7z 3m 8m"
+                    "3p 6p 9p 3s 6s 9s 1z 2z 3z 6z 7z 4m 8m"
+                ]
+            Draws = "6z 4z 4z 4z 5z"
+        }
+
+    /// 送り杠的剧本：Oya 立直时手里就握着四张 1p（`111p + 123p`），听 9s 单骑。
+    /// 之后摸进的不是 1p，因此那四张**杠不得**——禁送り杠。
+    let okuriKanScript =
+        {
+            Hands =
+                [
+                    "1p 1p 1p 1p 2p 3p 4m 5m 6m 7m 8m 9m 9s"
+                    "4p 7p 1s 4s 7s 1z 2z 3z 6z 7z 2m 8m 9p"
+                    "5p 8p 2s 5s 8s 1z 2z 3z 6z 7z 3m 8m 9p"
+                    "6p 9p 3s 6s 9s 1z 2z 3z 6z 7z 4m 8m 1m"
+                ]
+            Draws = "3z 4z 4z 4z 5z"
+        }
+
+    /// 大明杠的剧本：Oya 第一手摸切 5s，座位 1 手里三张 5s 全亮出去大明杠；
+    /// 岭上牌摊的是 `1z`，正好给它配成雀头——大明杠后的岭上开花，责任支付落在 Oya 头上。
+    let minkanScript =
+        {
+            Hands =
+                [
+                    "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 6s 8s 6p"
+                    "5s 5s 5sr 1m 2m 3m 4m 5m 6m 7m 8m 9m 1z"
+                    "2p 5p 8p 2s 8s 9s 2z 3z 4z 6z 7z 3m 4p"
+                    "3p 6p 9p 3s 6s 9s 2z 3z 4z 6z 7z 4m 7p"
+                ]
+            Draws = "5s"
+        }
+
+    /// 加杠与抢杠的剧本：Oya 第一手摸切 5s，座位 1 碰它；一圈之后座位 1 摸进第四张 5s 加杠。
+    ///
+    /// 座位 2 一开局就听 5s / 8s（一气通贯 + 平和）：它先见逃了那张 5s（只是同巡振听，
+    /// 摸过一张就解除），因此后来抢得了那个加杠。
+    let kakanScript =
+        {
+            Hands =
+                [
+                    "5z 6z 7z 2m 4m 8m 1s 4s 7s 3p 4p 7p 9p"
+                    "5s 5sr 1m 2m 3m 4m 5m 6m 7m 8m 9m 1z 1z"
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 6s 7s 9p 9p"
+                    "2p 5p 8p 2s 3s 9s 1z 2z 3z 4z 6z 7z 6p"
+                ]
+            Draws = "5s 4z 4z 4z 5s"
+        }
+
+    /// 国士抢暗杠的剧本：座位 1 第一手摸进第四张 7z 暗杠，而座位 2 是等 7z 的国士无双。
+    /// 能不能抢看规则集（`KokushiAnkanChankan`：天凤禁、雀魂允）。
+    let kokushiChankanScript =
+        {
+            Hands =
+                [
+                    "4m 5m 6m 7m 8m 9m 2p 3p 6p 9p 2s 3s 4s"
+                    "7z 7z 7z 2m 3m 4m 5m 6m 7m 2p 3p 4p 5p"
+                    "1m 1m 9m 1p 9p 1s 9s 1z 2z 3z 4z 5z 6z"
+                    "2m 3m 5s 6s 7s 8s 5p 6p 7p 8p 4s 3s 2s"
+                ]
+            Draws = "3z 7z"
+        }
+
+    /// 三个杠的剧本（四杠前的那一个）：Oya 手里 111m 222m 333m，摸进第四张 1m 暗杠，
+    /// 补摸的岭上牌又恰好是 2m、再下一张是 3m——一口气三个暗杠。
+    /// 四杠散了是 12 票的，本票只验到第三个杠为止。
+    let threeKanScript =
+        {
+            Hands =
+                [
+                    "1m 1m 1m 2m 2m 2m 3m 3m 3m 9p 9p 5z 6z"
+                    "4m 5m 6m 1p 4p 7p 1s 4s 7s 1z 2z 3z 4z"
+                    "7m 8m 9m 2p 5p 8p 2s 5s 8s 1z 2z 3z 4z"
+                    "4m 5m 7m 3p 6p 9p 3s 6s 9s 1z 2z 3z 4z"
+                ]
+            Draws = "1m"
+        }
+
+    /// 杠撞车的剧本：Oya 第一手摸切 5s，三家各有所图——
+    /// 座位 1（下家）拿 `6s 7s` 吃得，座位 2 手里三张 5s 碰得也大明杠得，
+    /// 座位 3 听 5s / 8s 荣和得（一气通贯 + 平和）。优先级 Ron > Pon / Minkan > Chi 的两条边都在这一手上。
+    let kanRaceScript =
+        {
+            Hands =
+                [
+                    "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 8s 6p 4p"
+                    "6s 7s 1p 4p 7p 1s 4s 7s 1z 2z 3z 6z 7z"
+                    "5s 5s 5sr 2p 5p 8p 2s 9s 3m 6z 7z 4z 4z"
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 6s 7s 9p 9p"
+                ]
+            Draws = "5s"
+        }
+
+    /// 大三元包的剧本：座位 1 碰完三组三元牌，**第三组（中）是座位 2 点的**，
+    /// 因此它要为这个大三元负责；随后座位 1 自摸 9p 和了。
+    let daisangenScript =
+        {
+            Hands =
+                [
+                    "1p 2p 3p 4p 5p 6p 7p 8p 1s 2s 3s 4m 5m"
+                    "5z 5z 6z 6z 7z 7z 1m 2m 3m 9p 1z 2z 3z"
+                    "2p 5p 8p 6s 7s 8s 6m 7m 8m 1z 2z 3z 9s"
+                    "3p 6p 9p 3s 4s 5s 4m 7m 9m 1z 2z 3z 1s"
+                ]
+            Draws = "5z 6z 7z 4z 4z 4z 9p"
+        }
+
     /// 某座位摸到第几巡了：它的 `tsumo` 事件条数。引擎的 `GameState.junme` 算的是同一件事，
     /// 这里从事件流重新数一遍——两条路径对上才算数对。
     let junmeOf (seat: Seat) (state: GameState) : int =
@@ -188,6 +361,10 @@ module GameStateFixtures =
             | Riichi _
             | RiichiAccepted _
             | EndKyoku
+            | Ankan _
+            | Kakan _
+            | Minkan _
+            | Dora _
             | EndGame -> false)
         |> List.length
 
@@ -208,6 +385,10 @@ module GameStateFixtures =
             | Hora _
             | Ryuukyoku _
             | EndKyoku
+            | Ankan _
+            | Kakan _
+            | Minkan _
+            | Dora _
             | EndGame -> false)
         |> List.length
 
@@ -242,6 +423,9 @@ module GameStateFixtures =
                     | Action.Pon _
                     | Action.Chi _
                     | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> None)
 
             let chosen =
@@ -266,6 +450,9 @@ module GameStateFixtures =
                     | Action.Pon _
                     | Action.Chi _
                     | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -275,6 +462,9 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -284,6 +474,9 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -305,6 +498,9 @@ module GameStateFixtures =
                     | Action.Pon _
                     | Action.Chi _
                     | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -314,6 +510,9 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -336,6 +535,9 @@ module GameStateFixtures =
                     | Action.Pon _
                     | Action.Chi _
                     | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -345,6 +547,9 @@ module GameStateFixtures =
                         | Action.Hora _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -354,6 +559,9 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -363,6 +571,9 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -372,6 +583,9 @@ module GameStateFixtures =
                         | Action.Pon _
                         | Action.Chi _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -392,6 +606,9 @@ module GameStateFixtures =
                     | Action.Dahai _
                     | Action.Hora _
                     | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -401,6 +618,9 @@ module GameStateFixtures =
                         | Action.Dahai _
                         | Action.Hora _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -410,6 +630,9 @@ module GameStateFixtures =
                         | Action.Chi _
                         | Action.Hora _
                         | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -418,6 +641,69 @@ module GameStateFixtures =
                         | Action.Dahai _
                         | Action.Pon _
                         | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Hora _ -> false))
+                |> Option.defaultValue (List.head choice.Actions)
+
+            chosen, rng
+
+    /// 见杠就杠的选手：能杠就杠（暗杠 / 加杠 / 大明杠），能和就和（抢杠与岭上开花靠它），
+    /// 其余时候摸切，响应一律「过」。杠的不变量要一条杠密集的轨迹，
+    /// 随机选手杠得太稀（四个种子里慕得还不到一个）。
+    let kanSeeking: Player<Rng> =
+        fun rng _ choice ->
+            let pick (predicate: Action -> bool) =
+                choice.Actions |> List.tryFind predicate
+
+            let chosen =
+                pick (fun action ->
+                    match action with
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _ -> true
+                    | Action.Pon _
+                    | Action.Chi _
+                    | Action.Dahai _
+                    | Action.Hora _
+                    | Action.Riichi _
+                    | Action.None _ -> false)
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Hora _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Riichi _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai(_, _, tsumogiri) -> tsumogiri
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Riichi _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.None _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
                         | Action.Riichi _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
@@ -460,6 +746,14 @@ module GameStateFixtures =
     let trace (player: Player<Rng>) (seed: int) : GameState list =
         let state, rng = start seed
         traceFrom player rng state
+
+    /// 一局**必然出现杠**的全部局面：摊好的杠剧本（连岭上牌一起摊）+ 见杠就杠的选手。
+    ///
+    /// **光靠随机取样验不到杠**：见杠就杠的选手跑四个种子也只有一局杠得成
+    /// （杠要手里四张同种，概率就那么小）。这是备注 N-8 的同一课：
+    /// 没断言过覆盖率的属性只证明了没崩，没证明跑到过。
+    let kanTrace (rinshan: string) (script: Script) : GameState list =
+        traceFrom kanSeeking (Rng.ofSeed 1) (startScriptedRinshan rinshan script)
 
     /// 一局**以和了收尾**的全部局面。随机选手几乎永远和不了（扫过 400 个种子，一次都没有），
     /// 可达局面里必须有一批和了的，牌数守恒与手牌张数这些不变量才验得到和了这条路。
@@ -516,6 +810,13 @@ type GameStateArbitraries =
                         4, Gen.constant (GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed)
                         // 副露密集的一局：鸣牌的不变量（牌数守恒、手牌张数、河被鸣走的记号）靠它验。
                         4, Gen.constant (GameStateFixtures.trace GameStateFixtures.nakiSeeking seed)
+                        // 杠密集的一局：王牌、岭上牌与新宝牌的不变量靠它验。
+                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.kanSeeking seed)
+                        // 摊好的三局：一局三个暗杠、一局大明杠后岭上开花、一局暗杠后岭上开花。
+                        // 随机取样里杠太稀，杠的不变量非得有这几条轨迹不可。
+                        2, Gen.constant (GameStateFixtures.kanTrace "2m 3m 7z" GameStateFixtures.threeKanScript)
+                        1, Gen.constant (GameStateFixtures.kanTrace "1z" GameStateFixtures.minkanScript)
+                        1, Gen.constant (GameStateFixtures.kanTrace "5z" GameStateFixtures.ankanScript)
                         // 立直密集的一局：立直棒、供托守恒与「立直后只能摸切」靠它验。
                         4, Gen.constant (GameStateFixtures.trace GameStateFixtures.riichiSeeking seed)
                         // 摊好的两局：一局自摸和收尾、一局荣和收尾。
@@ -565,7 +866,22 @@ type GameStateArbitraries =
                         Action.Chi(actor, target, pai, consumed)
             }
 
+        let kan =
+            gen {
+                let! actor = seat
+                let! target = seat
+                let! pai = Gen.elements Tile.all
+                let! consumed = Gen.listOfLength 3 (Gen.elements Tile.all)
+                let! kind = Gen.elements [ 0; 1; 2 ]
+
+                return
+                    match kind with
+                    | 0 -> Action.Ankan(actor, pai :: consumed)
+                    | 1 -> Action.Kakan(actor, pai, consumed)
+                    | _ -> Action.Minkan(actor, target, pai, consumed)
+            }
+
         let riichi = seat |> Gen.map Action.Riichi
         let pass = seat |> Gen.map Action.None
 
-        Gen.oneof [ dahai; hora; naki; riichi; pass ] |> Arb.fromGen
+        Gen.oneof [ dahai; hora; naki; kan; riichi; pass ] |> Arb.fromGen

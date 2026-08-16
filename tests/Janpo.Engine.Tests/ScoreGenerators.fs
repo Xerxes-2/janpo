@@ -46,6 +46,9 @@ module private ScoreGeneration =
                     Oya = oya
                     Honba = honba
                     Kyotaku = kyotaku
+                    // 包（责任支付）不在这份生成器里：它会把「和了者收、付家付、旁人分文不动」
+                    // 这类既有不变量变成条件命题。包自己的不变量在 KanProperties 里单独验。
+                    Sekinin = None
                 }
         }
 

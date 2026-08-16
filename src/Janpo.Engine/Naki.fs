@@ -138,6 +138,10 @@ module Naki =
                 }
 
     /// 加杠：往自己碰出来的那组上再加一张。底必须是碰，且牌种相同。
+    ///
+    /// 字段贴 mjai 的 `kakan`：`Taken` 是加上去的那张（`pai`），`Consumed` 是原碰的三张
+    /// （`consumed`）。**`Consumed` 的第一张恒是当初被碰的那张**（它来自 `Target` 的河，
+    /// 仍留在那里），`Naki.fromKawa` / `fromHand` 靠的就是这个顺序——牌数守恒不能把它重复数一遍。
     let kakan (added: Tile) (pon: Naki) : Result<Naki, NakiError> =
         let baseTiles =
             match pon.Taken with
@@ -186,6 +190,31 @@ module Naki =
 
     /// 是不是暗的。**只有暗杠是暗的**——门清与否看的就是它。
     let isConcealed (naki: Naki) : bool = naki.Kind = NakiKind.Ankan
+
+    /// 这组副露里**来自他家河**的那一张：碰 / 吃 / 大明杠是被鸣的那张，
+    /// 加杠是**原碰**被鸣的那张（不是加上去的），暗杠没有。
+    ///
+    /// 它仍留在打牌者的河里（振听要看它），因此**牌数守恒不能把它当作副露方的牌再数一遍**。
+    let fromKawa (naki: Naki) : Tile option =
+        match naki.Kind with
+        | NakiKind.Pon
+        | NakiKind.Chi
+        | NakiKind.Minkan -> naki.Taken
+        // 加杠：`Consumed` 的第一张就是原碰被鸣的那张（见 `kakan`）。
+        | NakiKind.Kakan -> List.tryHead naki.Consumed
+        | NakiKind.Ankan -> None
+
+    /// 这组副露里**由自家暗牌出的**那几张：全部牌去掉来自他家河的那一张。
+    /// 碰 / 吃 2 张、大明杠 3 张、暗杠 4 张、加杠 3 张（原碰亮的两张加后来加上的那张）。
+    let fromHand (naki: Naki) : Tile list =
+        let all = tiles naki
+
+        match fromKawa naki with
+        | Some taken ->
+            match List.tryFindIndex ((=) taken) all with
+            | Some index -> List.take index all @ List.skip (index + 1) all
+            | None -> all
+        | None -> all
 
     /// 这组副露对应的面子。吃是顺子、碰是刻子、三种杠是杠子；只有暗杠算暗。
     let mentsu (naki: Naki) : Mentsu =

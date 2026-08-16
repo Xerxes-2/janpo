@@ -457,6 +457,8 @@ let private runYaku (arguments: string list) : int =
                             Oya = (if parsed.Context.Jikaze = Ton then 0 else 1)
                             Honba = parsed.Honba
                             Kyotaku = parsed.Kyotaku
+                            // 单手牌算点没有牌局历史，谈不上包（责任支付）。
+                            Sekinin = None
                         }
 
                     let score = Score.hora ruleset transfer reading.Value

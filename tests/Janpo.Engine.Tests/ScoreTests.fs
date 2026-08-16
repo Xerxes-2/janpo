@@ -30,6 +30,7 @@ module ScoreTests =
             Oya = 0
             Honba = 0
             Kyotaku = 0
+            Sekinin = None
         }
 
     let private koTsumo: HoraTransfer = { koRon with Target = 1 }
