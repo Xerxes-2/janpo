@@ -1,0 +1,12 @@
+{
+  "_note": "真实录制：坏 key 的 401（stopReason=error，不抛异常）。",
+  "stopReason": "error",
+  "toolCall": null,
+  "text": "",
+  "errorMessage": "401: {\"message\":\"Authentication Fails, Your api key: ****ture is invalid\",\"type\":\"authentication_error\",\"param\":null,\"code\":\"invalid_request_error\"}",
+  "latencyMs": 306,
+  "usage": {
+    "input": 0,
+    "output": 0
+  }
+}

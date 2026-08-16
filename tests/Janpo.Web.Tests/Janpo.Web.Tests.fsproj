@@ -17,6 +17,8 @@
     <Compile Include="PlaybackTests.fs" />
     <Compile Include="TableTests.fs" />
     <Compile Include="BoardTests.fs" />
+    <Compile Include="AgentTests.fs" />
+    <Compile Include="TablePageTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,6 +27,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <!-- 决策包与回执的 codec 写在 Thoth.Json.Core 上（后端无关）：浏览器里由
+         Thoth.Json.JavaScript 跑，这里由 Newtonsoft 跑，**同一份 decoder 两个后端**。 -->
+    <PackageReference Include="Thoth.Json.Newtonsoft" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>

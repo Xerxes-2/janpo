@@ -1,0 +1,206 @@
+{
+  "seat": 1,
+  "observation": {
+    "seat": 1,
+    "bakaze": "1z",
+    "kyoku": 1,
+    "honba": 0,
+    "kyotaku": 0,
+    "dora_markers": ["2s"],
+    "wall_remaining": 66,
+    "self": {
+      "seat": 1,
+      "jikaze": "2z",
+      "junme": 1,
+      "score": 25000,
+      "tehai": ["2m", "5m", "9m", "3p", "4p", "5p", "8p", "3s", "7s", "8s", "7z"],
+      "tsumo": null,
+      "kawa": [
+        {
+          "pai": "2z",
+          "tsumogiri": false
+        }
+      ],
+      "naki": [
+        {
+          "type": "pon",
+          "target": 3,
+          "pai": "3m",
+          "consumed": ["3m", "3m"]
+        }
+      ],
+      "riichi": "none",
+      "ippatsu": false,
+      "furiten": {
+        "permanent": false,
+        "doujun": false
+      }
+    },
+    "others": [
+      {
+        "seat": 2,
+        "jikaze": "3z",
+        "junme": 1,
+        "score": 25000,
+        "tehai_count": 13,
+        "relative": 1,
+        "kawa": [
+          {
+            "pai": "5p",
+            "tsumogiri": true
+          }
+        ],
+        "naki": [],
+        "riichi": "none",
+        "ippatsu": false
+      },
+      {
+        "seat": 3,
+        "jikaze": "4z",
+        "junme": 1,
+        "score": 25000,
+        "tehai_count": 13,
+        "relative": 2,
+        "kawa": [
+          {
+            "pai": "3m",
+            "tsumogiri": true
+          }
+        ],
+        "naki": [],
+        "riichi": "none",
+        "ippatsu": false
+      },
+      {
+        "seat": 0,
+        "jikaze": "1z",
+        "junme": 1,
+        "score": 25000,
+        "tehai_count": 13,
+        "relative": 3,
+        "kawa": [
+          {
+            "pai": "9p",
+            "tsumogiri": false
+          }
+        ],
+        "naki": [],
+        "riichi": "none",
+        "ippatsu": false
+      }
+    ]
+  },
+  "actions": [
+    {
+      "id": 0,
+      "label": "手切2万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "2m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 1,
+      "label": "手切5万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "5m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 2,
+      "label": "手切9万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "9m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 3,
+      "label": "手切3筒",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "3p",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 4,
+      "label": "手切4筒",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "4p",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 5,
+      "label": "手切5筒",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "5p",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 6,
+      "label": "手切8筒",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "8p",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 7,
+      "label": "手切3索",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "3s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 8,
+      "label": "手切7索",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "7s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 9,
+      "label": "手切8索",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "8s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 10,
+      "label": "手切中",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "7z",
+        "tsumogiri": false
+      }
+    }
+  ],
+  "scaffold": {}
+}

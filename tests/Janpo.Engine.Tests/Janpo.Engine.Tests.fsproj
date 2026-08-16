@@ -92,6 +92,7 @@
     <Compile Include="ObservationProperties.fs" />
     <Compile Include="DecisionPackageTests.fs" />
     <Compile Include="DecisionPackageProperties.fs" />
+    <Compile Include="FallbackTests.fs" />
   </ItemGroup>
 
   <!-- 整场对局 -->

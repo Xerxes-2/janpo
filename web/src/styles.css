@@ -287,3 +287,52 @@ h1 {
   font-size: 0.75rem;
   opacity: 0.6;
 }
+
+/* LLM 座位（23 票）。同样是「能看清就行」：配置面板不过夜。 */
+
+.llm-panel {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.25rem 1rem 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.llm-panel .controls {
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+
+.llm-panel .field {
+  gap: 0.35rem;
+}
+
+.llm-panel input,
+.llm-panel select {
+  padding: 0.3rem 0.4rem;
+  font: inherit;
+}
+
+.llm-panel input[type="password"],
+.llm-panel input[type="text"] {
+  width: 11rem;
+}
+
+.llm-panel input[type="number"] {
+  width: 6rem;
+}
+
+.llm-panel .intro {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* Agent 层的状态线。兜底代打时它红着——**不许静默替换**。 */
+.agent {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.agent.error {
+  opacity: 1;
+  font-weight: 600;
+}

@@ -1,0 +1,18 @@
+{
+  "_note": "真实录制：DeepSeek deepseek-v4-flash 对 decision-dahai.json 的单轮 tool call。",
+  "stopReason": "toolUse",
+  "toolCall": {
+    "name": "choose_action",
+    "arguments": {
+      "action_id": "2",
+      "reason": "手牌有345p顺子、3s和78s两面搭子，9万是孤立幺九牌价值最低，切9万保留更多搭子机会。"
+    }
+  },
+  "text": "",
+  "errorMessage": null,
+  "latencyMs": 2131,
+  "usage": {
+    "input": 814,
+    "output": 94
+  }
+}

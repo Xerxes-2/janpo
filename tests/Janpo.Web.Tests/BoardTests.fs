@@ -9,6 +9,10 @@ open Janpo.Web
 module BoardTests =
 
     let private ruleset = Ruleset.yonma
+
+    /// 四家都是随机选手。**票 23 之后 `Table.advance` 要一份配桌**：谁坐哪个座位不再是
+    /// 牌桌自己的事，而 LLM 座位那一半走的是 Elmish 的异步路（`Demand.Asked`），不在这里测。
+    let private roster = Roster.allRandom ruleset
     let private seed = 1177
 
     let private table (seed: int) : Table =
@@ -31,7 +35,7 @@ module BoardTests =
             match Table.pending current with
             | None -> current
             | Some _ when left <= 0 -> failwith "这一局在预算内没打完"
-            | Some _ -> loop (left - 1) (Table.advance current)
+            | Some _ -> loop (left - 1) (Table.advance roster current)
 
         loop budget start
 
@@ -103,7 +107,7 @@ module BoardTests =
             match Table.pending current with
             | None -> ()
             | Some _ when left <= 0 -> failwith "这一局在预算内没打完"
-            | Some _ -> loop (left - 1) (Table.advance current)
+            | Some _ -> loop (left - 1) (Table.advance roster current)
 
         loop 400 (table seed)
 

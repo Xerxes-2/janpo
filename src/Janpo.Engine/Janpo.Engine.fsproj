@@ -68,8 +68,10 @@
   <!-- 决策包（M1 的 F#/TS 接缝）：局面 → 某座位的合法观测 + 编号动作集。
        `GameState` 永不越界，跨界的只有决策包 JSON（单向）与一个动作 id。 -->
   <ItemGroup>
+    <Compile Include="ScaffoldTier.fs" />
     <Compile Include="Observation.fs" />
     <Compile Include="DecisionPackage.fs" />
+    <Compile Include="Fallback.fs" />
   </ItemGroup>
 
   <!-- 选手（CONTEXT.md 的 Player）：引擎自带的 bot。LLM 适配器与真人坐席是 Agent 层的事。 -->

@@ -6,9 +6,36 @@ open Feliz
 open Feliz.UseElmish
 open Janpo
 
+/// 在等哪一次问话的回执（票 23）。
+///
+/// **票号与播放控制的世代号是两件事**：那个管定时器，这个管在飞的请求。
+/// 重开一桌之后旧回执才回来是常事（一次请求动辄几秒），而它的 id 是按另一份
+/// 决策包编的号——拿它去 `tryAction` 会拿到一个语义完全不同的动作。
+type Awaiting = {
+    /// 这一次问话的票号。回执带的票号对不上就丢掉。
+    Ticket: int
+    /// 问的那一手的决策包。id 往回换动作（`tryAction`）与兜底（`Fallback.action`）都要它。
+    Package: DecisionPackage
+    /// 那个座位的配置（兜底策略按它的档位走）。
+    Config: LlmSeat
+}
+
+/// Agent 层此刻处在哪一步。**页面上要看得见**：断电演习（故意配一把坏 key）时
+/// 对局照样打得完，但不能静惄惄地打——人得知道模型早就不说话了。
+[<RequireQualifiedAccess>]
+type AgentStatus =
+    /// 没有 LLM 座位，或者还没轮到它。
+    | Idle
+    /// 正在等这个座位的回执。
+    | Asking of seat: Seat
+    /// 上一次模型自己选出了动作。
+    | Spoke of seat: Seat * reason: string option * latencyMs: int
+    /// 上一次是兜底代打的。**粘着不掉**，直到模型又能好好说话为止。
+    | Troubled of seat: Seat * reason: string
+
 /// 牌桌页面的全部状态。**没有第二份牌局状态**（ADR-0002）：牌局在 `Table` 里，
-/// 而 `Table` 里的局面是引擎的那一份；页面自己只多三样东西——种子输入框的文本、
-/// 播放控制、以及看哪一份投影。
+/// 而 `Table` 里的局面是引擎的那一份；页面自己只多种子输入框的文本、播放控制、
+/// 看哪一份投影，以及配桌与 Agent 层的那几样。
 type TableModel = {
     /// 这一桌的规则集。M1 只跑四麻默认预设，配桌是后面的票。
     Ruleset: Ruleset
@@ -20,6 +47,16 @@ type TableModel = {
     Playback: Playback
     /// 看哪一份投影。
     Viewpoint: Viewpoint
+    /// 哪个座位交给 LLM；None = 四家都是随机选手。
+    LlmAt: Seat option
+    /// 那个座位的配置（也就是配置面板里填的那份，同时落在 localStorage）。
+    Llm: LlmSeat
+    /// 在等回执吗。**等着的时候不续定时器**，否则牌桌会空转。
+    Awaiting: Awaiting option
+    /// 问话的票号，每问一次 +1。
+    Ticket: int
+    /// Agent 层的状态线。
+    Agent: AgentStatus
 }
 
 /// 牌桌上能发生的事。**一步一 Msg**：`Advanced` 与 `Ticked` 各推进一手，
@@ -41,6 +78,15 @@ type TableMsg =
     | ViewpointPicked of viewpoint: Viewpoint
     /// 这一局看完了，开下一局。
     | KyokuAdvanced
+    /// 把哪个座位交给 LLM。
+    | LlmSeatPicked of seat: Seat option
+    /// 改配置面板里的一个字段。
+    | LlmEdited of field: LlmField * value: string
+    /// Agent 层的回执回来了。`ticket` 不是在等的那一张就丢掉（见 `Awaiting`）。
+    ///
+    /// **它不会不来**：超时与 provider 报错在 Agent 层都是值，最后也会变成一条回执
+    /// （`Failure` 带着原因）——对局因此永不卡死。
+    | Answered of ticket: int * answer: AgentAnswer
 
 /// 牌桌页面：MVU 三件套加视图。
 [<RequireQualifiedAccess>]
@@ -73,11 +119,66 @@ module TablePage =
         else
             Cmd.none
 
-    /// 推进一手。**这就是驱动循环的一步**：`Table.advance` 问该出手那家要一个动作再落进引擎。
-    let private advance (model: TableModel) : TableModel = {
-        model with
-            Table = Result.map Table.advance model.Table
-    }
+    /// 把配置写进 localStorage。**走 Cmd 而不是在 update 里直接写**：MVU 的 update 是纯的，
+    /// 副作用一律由 Cmd 发——顺带让页面逻辑的用例在 dotnet 上跑得起来（那边没有 localStorage）。
+    let private save (write: unit -> unit) : Cmd<TableMsg> = Cmd.ofEffect (fun _ -> write ())
+
+    /// 续一记定时器——**除非正在等回执**。等着的时候定时器只会把牌桌空转一遍；
+    /// 那一手由 `Answered` 接着开动。
+    let private tick (model: TableModel) (playback: Playback) : Cmd<TableMsg> =
+        if Option.isSome model.Awaiting then
+            Cmd.none
+        else
+            schedule playback
+
+    /// 这一桌的配桌：一席交给 LLM（选了的话），其余随机。
+    /// **推导出来而不存下来**：配置只有 `LlmAt` 与 `Llm` 这一份，不会与第二份对不上。
+    let private rosterOf (model: TableModel) : Roster =
+        Roster.withLlm model.Ruleset model.LlmAt model.Llm
+
+    /// 发一次问话。**不用 `Cmd.OfPromise`**：它整段包在 `#if FABLE_COMPILER` 里，
+    /// 而这个文件要在 dotnet 上编得过（页面逻辑的用例跑在那边）。
+    /// 效果体只在浏览器里执行，dotnet 侧只把它编出来、不跑。
+    let private askCmd (ticket: int) (request: AgentRequest) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let answered (answer: AgentAnswer) = dispatch (Answered(ticket, answer))
+            (Agent.ask request).``then`` answered |> ignore)
+
+    /// 推进一手。**这就是驱动循环的一步**：问该出手那家要一个动作。
+    /// 随机座位当场落子；LLM 座位发一个请求出去，这一手到 `Answered` 才落子。
+    let private step (model: TableModel) : TableModel * Cmd<TableMsg> =
+        match model.Awaiting, model.Table with
+        // 上一次问话还没回来：不再问第二次（同一手会有两个请求在飞，而只有一个算数）。
+        | Some _, _ -> model, Cmd.none
+        | None, Error _ -> model, Cmd.none
+        | None, Ok table ->
+            match Table.decide (rosterOf model) table with
+            | None -> model, Cmd.none
+            | Some(Demand.Ready(action, players)) ->
+                {
+                    model with
+                        Table = Ok(Table.apply action { table with Players = players })
+                },
+                Cmd.none
+            | Some(Demand.Asked(package, config)) ->
+                let ticket = model.Ticket + 1
+
+                {
+                    model with
+                        Ticket = ticket
+                        Awaiting =
+                            Some {
+                                Ticket = ticket
+                                Package = package
+                                Config = config
+                            }
+                        Agent = AgentStatus.Asking(DecisionPackage.seat package)
+                },
+                askCmd ticket {
+                    Package = package
+                    Seat = config
+                    RetryLimit = Agent.retryLimit
+                }
 
     /// 还推得动吗（这一局没终、也没出错）。
     let private canAdvance (model: TableModel) : bool =
@@ -85,7 +186,45 @@ module TablePage =
         | Ok table -> Table.pending table |> Option.isSome
         | Error _ -> false
 
-    let init () : TableModel * Cmd<TableMsg> =
+    /// 落完一手之后：接着播还是停下来。
+    ///
+    /// **等回执的那段不续定时器**（但仍然是 `Playing`）：定时器只会把牌桌空转一遍，
+    /// 真正把它接着开动的是那条 `Answered`。一局终了也停下来：结算面板正摆在那里。
+    let private resume (cmd: Cmd<TableMsg>) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        if Option.isSome model.Awaiting then
+            model, cmd
+        elif canAdvance model then
+            model, Cmd.batch [ cmd; schedule model.Playback ]
+        else
+            {
+                model with
+                    Playback = Playback.pause model.Playback
+            },
+            cmd
+
+    /// 回执 → 落子。**兜底就在这里**：id 换不回动作（模型没给、给的越界、超时、provider 报错）
+    /// 就由 `Fallback.action` 代打，而代打这件事记在牌桌上（`Table.applyFallback`）。
+    let private settle (awaiting: Awaiting) (answer: AgentAnswer) (table: Table) : Table * AgentStatus =
+        let seat = DecisionPackage.seat awaiting.Package
+
+        match
+            answer.ActionId
+            |> Option.bind (fun id -> DecisionPackage.tryAction id awaiting.Package)
+        with
+        | Some action -> Table.apply action table, AgentStatus.Spoke(seat, answer.Reason, answer.LatencyMs)
+        | None ->
+            // Agent 层没给原因就只能是「id 不在这一包里」：它自己校过一道，能走到这里
+            // 说明两边对 id 的看法分了岔（例：回执延到了下一份包）。
+            let reason =
+                answer.Failure |> Option.defaultValue $"模型给回的动作 id 不在这一包里（{answer.ActionId}）"
+
+            let action = Fallback.action awaiting.Config.Tier awaiting.Package
+
+            Table.applyFallback reason action table, AgentStatus.Troubled(seat, reason)
+
+    /// 初次摆的那一桌，**配置从外面给**。拆出来是为了它是纯的：
+    /// 读 localStorage 在 `init` 那一层，因此页面逻辑的用例（dotnet 侧）用得上这个入口。
+    let initial (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> =
         let ruleset = Ruleset.yonma
         let seedText = string defaultSeed
 
@@ -95,51 +234,79 @@ module TablePage =
             Table = openTable ruleset seedText
             Playback = Playback.initial
             Viewpoint = Viewpoint.Seated Seat.first
+            LlmAt = llmAt
+            Llm = config
+            Awaiting = None
+            Ticket = 0
+            Agent = AgentStatus.Idle
         },
         Cmd.none
+
+    /// 页面初次打开。上一次填的配置（含 key）从 localStorage 里读回来。
+    let init () : TableModel * Cmd<TableMsg> =
+        initial (Store.readSeat Ruleset.yonma) (Store.readSeatConfig ())
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match message with
         | SeedEdited seed -> { model with SeedText = seed }, Cmd.none
         | Restarted ->
+            // 在飞的那一次问话作废：它的 id 是按旧那桌的决策包编的号。
             {
                 model with
                     Table = openTable model.Ruleset model.SeedText
                     Playback = Playback.pause model.Playback
+                    Awaiting = None
+                    Agent = AgentStatus.Idle
             },
             Cmd.none
         | Advanced ->
             {
-                advance model with
+                model with
                     Playback = Playback.pause model.Playback
-            },
-            Cmd.none
+            }
+            |> step
         | PlayToggled ->
             let playback = Playback.toggle model.Playback
-            { model with Playback = playback }, schedule playback
+            { model with Playback = playback }, tick model playback
         | SpeedPicked speed ->
             let playback = Playback.setSpeed speed model.Playback
-            { model with Playback = playback }, schedule playback
+            { model with Playback = playback }, tick model playback
         | Ticked generation when not (Playback.accepts generation model.Playback) -> model, Cmd.none
         | Ticked _ ->
-            let advanced = advance model
-
-            // 一局终了就自己停下来：结算面板正摆在那里，接着播会把它冲掉。
-            if canAdvance advanced then
-                advanced, schedule advanced.Playback
-            else
-                {
-                    advanced with
-                        Playback = Playback.pause advanced.Playback
-                },
-                Cmd.none
+            let advanced, cmd = step model
+            resume cmd advanced
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
         | KyokuAdvanced ->
             {
                 model with
                     Table = Result.map Table.nextKyoku model.Table
+                    Awaiting = None
             },
             Cmd.none
+        | LlmSeatPicked seat ->
+            {
+                model with
+                    LlmAt = seat
+                    Agent = AgentStatus.Idle
+            },
+            save (fun () -> Store.writeSeat seat)
+        | LlmEdited(field, value) ->
+            let config = LlmSeat.edit field value model.Llm
+            { model with Llm = config }, save (fun () -> Store.writeSeatConfig config)
+        | Answered(ticket, answer) ->
+            match model.Awaiting, model.Table with
+            | Some awaiting, Ok table when awaiting.Ticket = ticket ->
+                let played, status = settle awaiting answer table
+
+                {
+                    model with
+                        Table = Ok played
+                        Awaiting = None
+                        Agent = status
+                }
+                |> resume Cmd.none
+            // 过期的回执（重开过一桌、开过下一局，或者票号对不上）：丢掉。
+            | _ -> model, Cmd.none
 
     // ---- 视图：牌 ----
 
@@ -547,16 +714,194 @@ module TablePage =
             )
         ]
 
+    // ---- 视图：配置面板 ----
+
+    /// 一个文本输入框。`kind` 是 `password` 时人看不见自己填的 key。
+    let private textField
+        (testId: string)
+        (kind: string)
+        (label: string)
+        (which: LlmField)
+        (model: TableModel)
+        (dispatch: TableMsg -> unit)
+        =
+        Html.label [
+            prop.key testId
+            prop.className "field"
+            prop.children [
+                Html.span [ prop.className "label"; prop.text label ]
+                Html.input [
+                    prop.testId testId
+                    prop.type' kind
+                    prop.value (LlmSeat.field which model.Llm)
+                    prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
+                ]
+            ]
+        ]
+
+    /// 一个下拉框。`options` 是（值, 显示）对。
+    let private selectField
+        (testId: string)
+        (label: string)
+        (which: LlmField)
+        (options: (string * string) list)
+        (model: TableModel)
+        (dispatch: TableMsg -> unit)
+        =
+        Html.label [
+            prop.key testId
+            prop.className "field"
+            prop.children [
+                Html.span [ prop.className "label"; prop.text label ]
+                Html.select [
+                    prop.testId testId
+                    prop.value (LlmSeat.field which model.Llm)
+                    prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
+                    prop.children [
+                        for value, display in options ->
+                            Html.option [ prop.key value; prop.value value; prop.text display ]
+                    ]
+                ]
+            ]
+        ]
+
+    /// 配桌：哪个座位交给 LLM，以及那个座位的 provider / 模型 / key / 超时 / 思考预算。
+    ///
+    /// **key 只进 localStorage**（`Store`），不外发到本平台——本平台根本没有后端。
+    /// **不提供订阅制登录**：pi-ai 的 OAuth 流程是 Node-only（票 18），浏览器里只有 API key
+    /// 这一条路；Bedrock 同理不在 provider 列表里。
+    let private llmPanel (model: TableModel) (dispatch: TableMsg -> unit) =
+        let seats =
+            picker "table-llm-none" (Option.isNone model.LlmAt) "无" (LlmSeatPicked None) dispatch
+            :: [
+                for seat in Seat.all model.Ruleset ->
+                    picker
+                        $"table-llm-{Seat.index seat}"
+                        (model.LlmAt = Some seat)
+                        $"座位 {Seat.index seat}"
+                        (LlmSeatPicked(Some seat))
+                        dispatch
+            ]
+
+        Html.section [
+            prop.className "llm-panel"
+            prop.testId "table-llm-panel"
+            prop.children [
+                Html.div [
+                    prop.key "seat"
+                    prop.className "controls"
+                    prop.children (
+                        Html.span [ prop.key "llm-label"; prop.className "label"; prop.text "模型坐席" ]
+                        :: seats
+                    )
+                ]
+                Html.div [
+                    prop.key "config"
+                    prop.className "controls"
+                    prop.children [
+                        selectField
+                            "table-llm-provider"
+                            "provider"
+                            LlmField.Provider
+                            (LlmSeat.providers |> List.map (fun name -> name, name))
+                            model
+                            dispatch
+                        textField "table-llm-model" "text" "模型" LlmField.Model model dispatch
+                        textField "table-llm-key" "password" "API key" LlmField.ApiKey model dispatch
+                        textField "table-llm-timeout" "number" "超时 (ms)" LlmField.TimeoutMs model dispatch
+                        selectField
+                            "table-llm-thinking"
+                            "思考预算"
+                            LlmField.Thinking
+                            (Thinking.all
+                             |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level))
+                            model
+                            dispatch
+                        // 档位只有 Bare；24 / 25 号票把它换成一个选择框。
+                        Html.span [
+                            prop.key "tier"
+                            prop.className "field"
+                            prop.children [
+                                Html.span [ prop.className "label"; prop.text "脚手架" ]
+                                Html.span [
+                                    prop.testId "table-llm-tier"
+                                    prop.text (ScaffoldTier.toDisplay model.Llm.Tier)
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+                Html.p [
+                    prop.key "note"
+                    prop.className "intro"
+                    prop.text
+                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底摸切，对局不会卡住。"
+                ]
+            ]
+        ]
+
+    // ---- 视图：Agent 层的状态 ----
+
+    /// 刚落定的那一手是不是兜底代打的（`data-*` 只能是字符串）。
+    let private fallenBack (latest: Turn option) : string =
+        match latest |> Option.bind (fun turn -> turn.Fallback) with
+        | Some _ -> "true"
+        | None -> "false"
+
+    /// Agent 层此刻在干什么，以及这一桌兜底代打了几手。
+    ///
+    /// **断电演习看的就是这一行**：key 配坏了的时候对局照样打得完，但这里会一直红着
+    /// 说模型怎么了。`data-agent` 给无头验收读。
+    let private agentLine (model: TableModel) (table: Table) =
+        let state, text =
+            match model.Agent with
+            | AgentStatus.Idle when Option.isNone model.LlmAt -> "idle", "四家都是随机选手"
+            | AgentStatus.Idle -> "idle", "模型座位已就位，还没轮到它"
+            | AgentStatus.Asking seat -> "asking", $"正在等座位 {Seat.index seat} 的模型回话……"
+            | AgentStatus.Spoke(seat, reason, latency) ->
+                let said =
+                    match reason with
+                    | Some reason -> $"：{reason}"
+                    | None -> ""
+
+                "spoke", $"座位 {Seat.index seat} 的模型选完了（{latency} ms）{said}"
+            | AgentStatus.Troubled(seat, reason) -> "troubled", $"座位 {Seat.index seat} 兜底代打：{reason}"
+
+        let tally =
+            if table.Fallbacks = 0 then
+                ""
+            else
+                $"　这一桌已兜底 {table.Fallbacks} 手"
+
+        Html.p [
+            prop.key "agent"
+            prop.className (if state = "troubled" then "agent error" else "agent")
+            prop.testId "table-agent"
+            prop.custom ("data-agent", state)
+            prop.custom ("data-fallbacks", string table.Fallbacks)
+            prop.text (text + tally)
+        ]
+
     // ---- 视图：整页 ----
 
     let private tableBody (model: TableModel) (table: Table) =
         match Board.ofState model.Viewpoint table.State with
         | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
         | Some board ->
+            // 兜底代打的那一手要看得出来（票 23）：不许静默替换。
+            // `data-fallback` 给无头验收读（断电演习数的就是它）。
             let latest =
                 match table.Latest with
                 | None -> "还没走一手"
-                | Some action -> $"上一手：座位 {Seat.index (Action.actor action)} {Action.toDisplay action}"
+                | Some turn ->
+                    let who = Action.actor turn.Action |> Seat.index
+
+                    let mark =
+                        match turn.Fallback with
+                        | Some reason -> $"（兜底：{reason}）"
+                        | None -> ""
+
+                    $"上一手：座位 {who} {Action.toDisplay turn.Action}{mark}"
 
             let fault =
                 table.Fault
@@ -582,8 +927,10 @@ module TablePage =
                             prop.key "latest"
                             prop.className "latest"
                             prop.testId "table-latest"
+                            prop.custom ("data-fallback", fallenBack table.Latest)
                             prop.text latest
                         ]
+                        agentLine model table
                         Html.div [
                             prop.key "seats"
                             prop.className "seats-board"
@@ -609,10 +956,11 @@ module TablePage =
                 Html.h1 "janpo —— 最小牌桌"
                 Html.p [
                     prop.className "intro"
-                    prop.text "四家都是随机选手。牌桌上的一切都是引擎局面的投影：坐在某个座位上看时，他家的暗牌在类型层面就不存在；上帝视角是另一份独立投影。虚线的牌是摸切。"
+                    prop.text "默认四家随机选手，可以把一席交给 LLM。牌桌上的一切都是引擎局面的投影：坐在某个座位上看时，他家的暗牌在类型层面就不存在；上帝视角是另一份独立投影。虚线的牌是摸切。"
                 ]
                 controls model dispatch
                 viewpoints model dispatch
+                llmPanel model dispatch
                 match model.Table with
                 | Error message -> Html.p [ prop.className "error"; prop.testId "table-error"; prop.text message ]
                 | Ok table -> tableBody model table

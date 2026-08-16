@@ -1,0 +1,28 @@
+{
+  "//": [
+    "TS 侧的类型闸门（票 23）。ADR-0005 说好「等 23 票的 Agent 层真的有 TS 代码了再装，",
+    "届时把 src/generated 排除在外」——就是这份文件。",
+    "",
+    "include 只有 Agent 层与它的用例：`src/main.ts` 不在里面，因为它 import 的是 Fable 的",
+    "输出（`src/generated/Main.js`），而**不给 Fable 输出写 .d.ts** 是 ADR-0005 的硬约束；",
+    "把它拉进来只会逼出一个假的声明文件。那一行由 Biome 看着。",
+    "",
+    "allowImportingTsExtensions：本工程的 import 一律带 `.ts` 后缀 —— Node 的原生类型剥离",
+    "（用例用 `node --test` 直接跑 .ts）与 Vite 都要求写全后缀。"
+  ],
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom"],
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src/agent/**/*.ts", "tests/**/*.ts"]
+}

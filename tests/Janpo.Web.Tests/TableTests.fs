@@ -10,6 +10,10 @@ module TableTests =
 
     let private ruleset = Ruleset.yonma
 
+    /// 四家都是随机选手。**票 23 之后 `Table.advance` 要一份配桌**：谁坐哪个座位不再是
+    /// 牌桌自己的事，而 LLM 座位那一半走的是 Elmish 的异步路（`Demand.Asked`），不在这里测。
+    let private roster = Roster.allRandom ruleset
+
     /// 19 票挑的那个种子：单局以荣和终，整场打满 6 局（两次连庄）。
     let private seed = 1177
 
@@ -24,7 +28,7 @@ module TableTests =
             match Table.pending current with
             | None -> current
             | Some _ when left <= 0 -> failwith "这一局在预算内没打完"
-            | Some _ -> loop (left - 1) (Table.advance current)
+            | Some _ -> loop (left - 1) (Table.advance roster current)
 
         loop budget start
 
@@ -41,7 +45,7 @@ module TableTests =
     [<Fact>]
     let ``推进一手就只走一手：事件流恰好长出这一手产的那几条`` () =
         let before = table seed
-        let after = Table.advance before
+        let after = Table.advance roster before
 
         let grew =
             List.length (GameState.events after.State)
@@ -78,7 +82,7 @@ module TableTests =
         Assert.True(Table.isKyokuEnded ended)
         Assert.True((Table.pending ended).IsNone)
         // 再推也不动。
-        Assert.Equal<Event list>(GameState.events ended.State, GameState.events (Table.advance ended).State)
+        Assert.Equal<Event list>(GameState.events ended.State, GameState.events (Table.advance roster ended).State)
 
     [<Fact>]
     let ``和了那一手把役种捞了下来——结算显示只有这一个来源`` () =
@@ -147,7 +151,7 @@ module TableTests =
         Assert.True(faulted.Fault.IsSome)
         Assert.True((Table.pending faulted).IsNone)
         // 停住之后不再推进。
-        Assert.Equal<Event list>(GameState.events faulted.State, GameState.events (Table.advance faulted).State)
+        Assert.Equal<Event list>(GameState.events faulted.State, GameState.events (Table.advance roster faulted).State)
 
     [<Fact>]
     let ``开不了局是 Error，不是抛异常`` () =

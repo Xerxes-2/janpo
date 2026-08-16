@@ -1,0 +1,12 @@
+{
+  "_note": "真实录制：timeout_ms=300 时的 abort（票 18 实测：它是值不是异常）。",
+  "stopReason": "aborted",
+  "toolCall": null,
+  "text": "",
+  "errorMessage": "Request aborted",
+  "latencyMs": 302,
+  "usage": {
+    "input": 0,
+    "output": 0
+  }
+}

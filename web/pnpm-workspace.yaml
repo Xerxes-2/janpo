@@ -3,3 +3,8 @@
 allowBuilds:
   '@biomejs/biome': true
   esbuild: true
+  # pi-ai 拖进来的两个原生构建脚本。**显式拒掉**（false 也算「已表态」，pnpm 因此不再报
+  # ERR_PNPM_IGNORED_BUILDS）：我们只按 provider 分入口导入（票 18 的结论），
+  # Google 那家的 SDK 与 protobufjs 一行都不会被 import。
+  '@google/genai': false
+  protobufjs: false

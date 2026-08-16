@@ -12,9 +12,14 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
 
-  <!-- 引擎调用与 MVU。加页面放这里，牌桌组件是 22 票的事。
+  <!-- 引擎调用与 MVU。加页面放这里。
+       `Agent.fs` 是 F#/TS 的那道边界（票 23）：它 `import` 的 `web/src/agent/decide.ts`
+       是**整个工程里 F# 唯一调 TS 的地方**（ADR-0005）。
        `Golden.fs` 不在页面里，它是无头闸门（票 21）在浏览器里 `import` 的那个入口。 -->
   <ItemGroup>
+    <Compile Include="Agent.fs" />
+    <Compile Include="Roster.fs" />
+    <Compile Include="Store.fs" />
     <Compile Include="Playback.fs" />
     <Compile Include="Table.fs" />
     <Compile Include="Board.fs" />

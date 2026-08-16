@@ -1,0 +1,259 @@
+namespace Janpo.Web
+
+open Fable.Core
+open Thoth.Json.Core
+open Thoth.Json.JavaScript
+open Janpo
+
+/// 思考预算（spec 的「扩展思考」开关，pi-ai 的 `reasoning` 档位）。
+/// `Off` 就是**不传这个参数**，不是传一个 "off"——pi-ai 的 `ThinkingLevel` 里没有它。
+[<RequireQualifiedAccess>]
+type Thinking =
+    | Off
+    | Minimal
+    | Low
+    | Medium
+    | High
+
+/// 一个 LLM 座位的配置。**API key 只在这台浏览器里存在**：它从 localStorage 读出来、
+/// 随请求交给 Agent 层、由浏览器直发 provider（ADR-0003：Host 的浏览器是唯一的对局推进者），
+/// 本平台没有后端可以收它。
+type LlmSeat = {
+    /// provider id（pi-ai 的那套：`deepseek` / `anthropic` / …）。
+    Provider: string
+    /// 模型 id。
+    Model: string
+    /// API key。**不进牌谱、不进 DecisionRecord、不落任何可分享物**。
+    ApiKey: string
+    /// 一次请求最多等多久（毫秒）。到点 abort，走与 provider 报错同一条兜底路径。
+    TimeoutMs: int
+    /// 思考预算。
+    Thinking: Thinking
+    /// 脚手架档位。23 号票只实现 Bare（决策包的 `scaffold` 恒为空对象）。
+    Tier: ScaffoldTier
+}
+
+/// Agent 层的一次回执。**跨界回来的东西只有它**：一个动作 id（或者一句「我交不出来」），
+/// 外加审计要的那几个数。`Action` 永远不从这边构造（ADR-0005）。
+///
+/// **26 号票的扩展点**：DecisionRecord 要的 prompt / 模型输出 / thinking 往这个记录上加字段，
+/// 同时改 `Agent.answerDecoder` 与 TS 侧的 `DecideResponse`；`ActionId` 与 `Failure` 这两个
+/// 决定牌桌走向的字段别动。
+type AgentAnswer = {
+    /// 模型最终选定的动作 id；交不出来时是 None。
+    ActionId: int option
+    /// 模型给的一句话理由。
+    Reason: string option
+    /// 交不出来的原因（中文，给人看）。**它是「这一手要兜底」的信号**。
+    Failure: string option
+    /// 一共问了几次（首问 + 重试）。
+    Attempts: int
+    /// 端到端毫秒，含重试。
+    LatencyMs: int
+}
+
+/// 一次问话：那一手的决策包、座位配置与重试上限。
+type AgentRequest = {
+    Package: DecisionPackage
+    Seat: LlmSeat
+    RetryLimit: int
+}
+
+/// 配置面板里的一个字段。**输入框都是字符串**（连超时也是），
+/// 因此读与写各只有一条路：`LlmSeat.field` 与 `LlmSeat.edit`。
+///
+/// **加一个配置项就是加一个 case**：编辑器会把该改的几处全部指出来
+/// （`--warnaserror` 下不完整 match 是错误），localStorage 那一层连碰都不用碰——
+/// 它遍历 `LlmField.all`，键名取自 `LlmField.key`。
+[<RequireQualifiedAccess>]
+type LlmField =
+    | Provider
+    | Model
+    | ApiKey
+    | TimeoutMs
+    | Thinking
+
+/// 思考预算的取值与两个出口。
+[<RequireQualifiedAccess>]
+module Thinking =
+
+    /// 全部档位，由弱到强。配置面板的选项就是它。
+    let all: Thinking list = [ Thinking.Off; Thinking.Minimal; Thinking.Low; Thinking.Medium; Thinking.High ]
+
+    /// wire 上的名字。`off` 在 Agent 层被翻译成「不传 reasoning」。
+    let toWire (thinking: Thinking) : string =
+        match thinking with
+        | Thinking.Off -> "off"
+        | Thinking.Minimal -> "minimal"
+        | Thinking.Low -> "low"
+        | Thinking.Medium -> "medium"
+        | Thinking.High -> "high"
+
+    /// wire 名回到档位。认不出来的是 None——配置从 localStorage 读，什么都可能。
+    let ofWire (wire: string) : Thinking option =
+        all |> List.tryFind (fun thinking -> toWire thinking = wire)
+
+    /// **渲染层的单向出口**（ADR-0001）。
+    let toDisplay (thinking: Thinking) : string =
+        match thinking with
+        | Thinking.Off -> "不开"
+        | Thinking.Minimal -> "最少"
+        | Thinking.Low -> "低"
+        | Thinking.Medium -> "中"
+        | Thinking.High -> "高"
+
+/// 配置字段的全体与它们的键名。
+[<RequireQualifiedAccess>]
+module LlmField =
+
+    /// 全部字段，按配置面板上的顺序。localStorage 的读写遍历它。
+    let all: LlmField list = [
+        LlmField.Provider
+        LlmField.Model
+        LlmField.ApiKey
+        LlmField.TimeoutMs
+        LlmField.Thinking
+    ]
+
+    /// localStorage 里的键名（不带前缀）。**只有这一份**：写的与读的拼不到一块去。
+    let key (field: LlmField) : string =
+        match field with
+        | LlmField.Provider -> "provider"
+        | LlmField.Model -> "model"
+        | LlmField.ApiKey -> "api_key"
+        | LlmField.TimeoutMs -> "timeout_ms"
+        | LlmField.Thinking -> "thinking"
+
+/// LLM 座位配置的默认值与编辑。**它不碰 localStorage**：读写浏览器本地存储是页面的事，
+/// 这里只管「一个字段改成什么值」。
+[<RequireQualifiedAccess>]
+module LlmSeat =
+
+    /// 能选的 provider。**Bedrock 不在里面**（Node-only，票 18 的实测）；
+    /// 订阅制的 OAuth 登录同样只有 Node 有，因此这里只列「填一把 API key 就能用」的那几家。
+    let providers: string list = [
+        "deepseek"
+        "anthropic"
+        "openai"
+        "google"
+        "openrouter"
+        "xai"
+        "groq"
+        "mistral"
+    ]
+
+    /// 配置面板的默认值。默认 provider 取 DeepSeek：票 18 实测过的就是它（跨域 200）。
+    let initial: LlmSeat = {
+        Provider = "deepseek"
+        Model = "deepseek-v4-flash"
+        ApiKey = ""
+        // 30 秒：票 18 实测单轮 tool call 约 2.4 秒，开了思考预算会长很多。
+        TimeoutMs = 30000
+        Thinking = Thinking.Off
+        // 23 号票只有 Bare；24 号票把它变成配置面板上的一个选项。
+        Tier = ScaffoldTier.Bare
+    }
+
+    /// 字段现在的值（输入框里显示的那个）。
+    let field (which: LlmField) (seat: LlmSeat) : string =
+        match which with
+        | LlmField.Provider -> seat.Provider
+        | LlmField.Model -> seat.Model
+        | LlmField.ApiKey -> seat.ApiKey
+        | LlmField.TimeoutMs -> string seat.TimeoutMs
+        | LlmField.Thinking -> Thinking.toWire seat.Thinking
+
+    /// 改一个字段。**读不懂的值一律原样不改**（超时框里的非数字、认不出的思考档位）：
+    /// 配置是人填的，不该因为一次误输入就把设定清掉。
+    let edit (which: LlmField) (value: string) (seat: LlmSeat) : LlmSeat =
+        match which with
+        | LlmField.Provider -> { seat with Provider = value }
+        | LlmField.Model -> { seat with Model = value }
+        | LlmField.ApiKey -> { seat with ApiKey = value }
+        | LlmField.TimeoutMs ->
+            match System.Int32.TryParse(value.Trim()) with
+            | true, timeout when timeout > 0 -> { seat with TimeoutMs = timeout }
+            | _ -> seat
+        | LlmField.Thinking ->
+            match Thinking.ofWire value with
+            | Some thinking -> { seat with Thinking = thinking }
+            | None -> seat
+
+/// F#/TS 的那道边界（ADR-0005：**只有 F# 调 TS 这一个方向**）。
+///
+/// 出去的是一段 JSON（决策包 + 座位配置），回来的是一段 JSON（一个动作 id 或者一句原因）。
+/// TS 侧拿不到 `GameState`，也构造不出 `Action`；它认识的只有 id。
+[<RequireQualifiedAccess>]
+module Agent =
+
+    /// 重试上限（spec：解析失败重试上限 2 次，之后兜底）。**只有这一处**——
+    /// 它随请求过界，Agent 层不自己定。
+    let retryLimit = 2
+
+    // ---- JSON ----
+
+    /// 座位配置的 wire 形态。**key 在里面**：它只从这台浏览器走到 provider，
+    /// 不进牌谱、不进任何可分享物。
+    let private seatEncoder: Encoder<LlmSeat> =
+        fun seat ->
+            Encode.object [
+                "provider", Encode.string seat.Provider
+                "model", Encode.string seat.Model
+                "api_key", Encode.string seat.ApiKey
+                "timeout_ms", Encode.int seat.TimeoutMs
+                "thinking", Thinking.toWire seat.Thinking |> Encode.string
+                "tier", ScaffoldTier.toWire seat.Tier |> Encode.string
+            ]
+
+    /// 一次问话的 wire 形态。`decision` 就是 `DecisionPackage.encoder` 的产物，
+    /// 一个字段都不改写——Agent 层读的与 `janpo decide` 打印的是同一份东西。
+    let requestEncoder: Encoder<AgentRequest> =
+        fun request ->
+            Encode.object [
+                "decision", DecisionPackage.encoder request.Package
+                "seat", seatEncoder request.Seat
+                "retry_limit", Encode.int request.RetryLimit
+            ]
+
+    /// 回执的 wire 形态。**四个字段都可以缺**：Agent 层是另一个语言写的，
+    /// 缺字段按「没有」处理而不是整条读不动——读不动的代价是这一手兜底，太贵。
+    let answerDecoder: Decoder<AgentAnswer> =
+        Decode.object (fun get -> {
+            ActionId = get.Optional.Field "action_id" Decode.int
+            Reason = get.Optional.Field "reason" Decode.string
+            Failure = get.Optional.Field "failure" Decode.string
+            Attempts = get.Optional.Field "attempts" Decode.int |> Option.defaultValue 0
+            LatencyMs = get.Optional.Field "latency_ms" Decode.int |> Option.defaultValue 0
+        })
+
+    // ---- 构造 ----
+
+    /// 「这一手交不出来」的回执。Agent 层根本没答上话时（promise 被 reject、
+    /// 回执读不动）由这边造一条，**兜底路径因此只有一条**。
+    let refused (reason: string) : AgentAnswer = {
+        ActionId = None
+        Reason = None
+        Failure = Some reason
+        Attempts = 0
+        LatencyMs = 0
+    }
+
+    // ---- 边界 ----
+
+    /// TS 侧的入口。`web/src/agent/decide.ts` 导出的那个函数，签名就是
+    /// 「一段 JSON 进、一段 JSON 出的 Promise」——跨界只传字符串（ADR-0005）。
+    [<Import("decide", "../../web/src/agent/decide.ts")>]
+    let private decide (_request: string) : JS.Promise<string> = jsNative
+
+    /// 回执文本 → 回执。读不动就是「交不出来」，不抛。
+    let private read (text: string) : AgentAnswer =
+        match Decode.fromString answerDecoder text with
+        | Ok answer -> answer
+        | Error message -> refused $"Agent 层的回执读不动：{message}"
+
+    /// 问一次。**这个 Promise 不会 reject**：TS 侧把超时与 provider 报错都做成了值
+    /// （票 18 的实测结论），万一还是抛了，`catch` 把它也变成一条「交不出来」。
+    let ask (request: AgentRequest) : JS.Promise<AgentAnswer> =
+        let failed (error: obj) = refused $"Agent 层抛了异常：{error}"
+
+        (requestEncoder request |> Encode.toString 0 |> decide).``then``(read).catch (failed)

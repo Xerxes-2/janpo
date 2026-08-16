@@ -1,0 +1,68 @@
+/**
+ * 用例共用的固件读取与「回放录制响应」的假 `ask`（票 23）。
+ *
+ * **CI 里绝不调真实 API**（M1 增量约束 6）。`ask-*.json` 是真模型答过的话，
+ * 由 `scripts/record-agent-fixtures.mjs` 录制；这里只是把它们喂回决策循环。
+ */
+
+import { readFileSync } from "node:fs";
+import type { Ask, AskResult } from "../../src/agent/ask.ts";
+import type { DecideRequest, DecisionPackage, SeatConfig } from "../../src/agent/types.ts";
+
+function load<T>(name: string): T {
+  return JSON.parse(
+    readFileSync(new URL(`../fixtures/agent/${name}.json`, import.meta.url), "utf8"),
+  );
+}
+
+/** 打牌那一手的决策包（`janpo decide 2088 --steps 6`），11 条动作。 */
+export const dahaiPackage = load<DecisionPackage>("decision-dahai");
+
+/** 响应那一手的决策包（`janpo decide 2088 --steps 5`），只有「碰」与「过」两条。 */
+export const responsePackage = load<DecisionPackage>("decision-response");
+
+/** 合法输出：模型调 choose_action 选了 id=2。 */
+export const legal = load<AskResult>("ask-legal");
+
+/** 格式跑偏：模型没调工具，只回了一段话。 */
+export const textOnly = load<AskResult>("ask-text-only");
+
+/** 超时：abort 之后 `stopReason: "aborted"`。 */
+export const aborted = load<AskResult>("ask-aborted");
+
+/** provider 报错：坏 key 的 401。 */
+export const badKey = load<AskResult>("ask-error-bad-key");
+
+export const seat: SeatConfig = {
+  provider: "deepseek",
+  model: "deepseek-v4-flash",
+  api_key: "sk-用例里的假 key（没有请求会发出去）",
+  timeout_ms: 30000,
+  thinking: "off",
+  tier: "bare",
+};
+
+export function request(
+  decision: DecisionPackage,
+  overrides: Partial<DecideRequest> = {},
+): DecideRequest {
+  return { decision, seat, retry_limit: 2, ...overrides };
+}
+
+/**
+ * 回放录制的响应：第 N 次问话拿第 N 条，问超了就一直拿最后一条
+ * （「每次都失败」的用例靠这个）。`prompts` 记下每次问出去的 prompt。
+ */
+export function replay(...results: AskResult[]): { ask: Ask; prompts: string[] } {
+  const prompts: string[] = [];
+  let index = 0;
+
+  const ask: Ask = async (asked) => {
+    prompts.push(asked.prompt);
+    const result = results[Math.min(index, results.length - 1)];
+    index += 1;
+    return result;
+  };
+
+  return { ask, prompts };
+}

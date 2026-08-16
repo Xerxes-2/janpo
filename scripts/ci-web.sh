@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # JS 侧的关卡（M1 起）。`scripts/ci.sh` 会调它，也可以单独跑。
 #
-# 五道：TS/JS 的格式与 lint（Biome）→ Fable 编译 → Vite 产物 → **浏览器内跑引擎并与 dotnet 侧对拍**
+# 七道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
+# （node --test，回放录制的响应）→ Fable 编译 → Vite 产物 → **浏览器内跑引擎并与 dotnet 侧对拍**
 # → **浏览器内跑黄金用例**。
 #
 # 第四道是 19 票的验收：同一种子在浏览器里跑出的终局点数与顺位，必须与
@@ -30,6 +31,17 @@ echo "== pnpm install =="
 # --error-on-warnings：Biome 默认只拿 error 当失败，警告（包括它自己的配置弃用提示）会静静滑过去。
 echo "== biome ci（TS/JS 的格式与 lint）=="
 (cd web && node node_modules/@biomejs/biome/bin/biome ci --error-on-warnings .)
+
+# 票 23 装上的（ADR-0005 说好的时机）：**只管 Agent 层与它的用例**，
+# `src/generated`（Fable 的上万行输出）不在 tsconfig 的 include 里。
+echo "== tsc --noEmit（Agent 层的类型闸门）=="
+(cd web && pnpm run typecheck)
+
+# **这一道不调真实 API**：它回放 `web/tests/fixtures/agent/` 里录制下来的响应
+# （合法输出 / 越界 id / 格式跑偏 / 超时 / provider 报错）。
+# 重录用 `pnpm run record:agent`，需要一把真 key，手动跑。
+echo "== node --test（Agent 层的确定性用例）=="
+(cd web && pnpm run test)
 
 echo "== fable 编译（引擎 + Feliz 页面 → JS）=="
 (cd web && pnpm run fable)

@@ -22,7 +22,7 @@ dotnet tool restore    # 装 Fantomas 与 Fable（dotnet local tool，版本在 
 
 ```sh
 ./scripts/ci.sh                       # CI 的全部关卡：dotnet 侧 + JS 侧，一条命令两侧全绿
-./scripts/ci-web.sh                   # 只跑 JS 侧：Biome + Fable + Vite + 浏览器内对拍 + 黄金用例
+./scripts/ci-web.sh                   # 只跑 JS 侧：Biome + tsc + Agent 层用例 + Fable + Vite + 浏览器内两道
 dotnet build janpo.slnx               # 构建五个工程
 dotnet test janpo.slnx                # 跑测试（xunit + FsCheck）
 dotnet fantomas .                     # 格式化（提交前必跑）
@@ -40,8 +40,20 @@ pnpm run build     # Fable 编译 + Vite 打包 → web/dist（可静态托管�
 pnpm run verify    # 无头验收：浏览器内跑同种子的一局 / 一整场，与 CLI 逐项对照
 pnpm run verify:golden  # 无头验收：浏览器内跑黄金用例，与 tests/fixtures/golden/ 逐字段逐行对照
 pnpm run check     # Biome（TS/JS 的格式 + lint）
+pnpm run typecheck # tsc --noEmit：只管 Agent 层与它的用例（Fable 的输出不在 include 里）
+pnpm run test      # Agent 层的确定性用例（node --test，回放录制的响应，**不调真实 API**）
 pnpm run format    # Biome 写回格式
 ```
+
+**LLM 座位**（票 23）的两条手动验收要真 key，因此不进 CI：
+
+```sh
+JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-llm-seat.mjs   # 真跑一局：LLM 坐一席 + 三随机
+node scripts/verify-llm-seat.mjs --bad-key                          # 断电演习：坏 key，整局照样打完
+JANPO_KEY_FILE=/tmp/deepseek_key node scripts/record-agent-fixtures.mjs  # 重录 tests/fixtures/agent/
+```
+
+key 只从文件读、只注入浏览器的 localStorage，**绝不进代码、产物或提交**。
 
 两条 `verify` 都需要一个 Chrome/Chromium：优先 `$JANPO_CHROME`，其次 playwright 自带的，
 最后 `/usr/bin/google-chrome-stable` 一类系统路径。
@@ -72,13 +84,16 @@ src/Janpo.Cli/           无头驱动入口（dotnet only）。只做参数解�
 src/Janpo.Golden/        黄金用例：**两个目标共用**的那段「怎么跑一条用例」与「怎么对照」。同样限 Fable 子集
 src/Janpo.Web/           浏览器宿主（Fable → JS）：Feliz + useElmish 的页面。Fable 运行时后端只能在这里
 web/                     Vite 应用：index.html、一行 TS 入口、样式与无头验收脚本
+web/src/agent/           **Agent 层**（TypeScript）：prompt 渲染、单轮 tool call、重试。F# 只 import 它一个函数
+web/tests/               Agent 层的用例与固件（录制下来的模型响应，CI 回放它们）
 tests/Janpo.Engine.Tests/ 引擎测试：xunit 作 runner，FsCheck 属性测试为主力
 tests/fixtures/golden/   黄金用例的**数据**（两侧读同一份），用法见同目录 README
 scripts/ci.sh            CI 关卡，本地与 CI 同一份
-scripts/ci-web.sh        JS 侧的那五道，被 ci.sh 调，也能单跑
+scripts/ci-web.sh        JS 侧的那七道，被 ci.sh 调，也能单跑
 flake.nix                dev shell（dotnet SDK + node/pnpm + uv）
 .editorconfig            Fantomas 的 F# 格式规则（Web 工程另开 stroustrup，因为 Feliz 是嵌套 DSL）
 web/biome.json           Biome 的 TS/JS 格式与 lint 规则
+web/tsconfig.json        TS 的类型闸门（只覆盖 Agent 层，见 ADR-0005）
 Directory.Packages.props 所有 NuGet 版本集中管理
 ```
 

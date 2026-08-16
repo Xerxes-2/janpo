@@ -1677,3 +1677,57 @@ Feliz 的 DSL 不在这里测——那要一个浏览器，而浏览器侧的验
 报错印出两条 2 KB 长行，靠肉眼找 `tehai_count` 不现实（我是写脚本比对的）。而 23、24、25
 三张票每一张都会往决策包里加字段（`scaffold` 槽位就是为它们留的），也就是说这个代价还要再付三次。
 建议裁成「拆成逐字段」，代价是给 `DecisionPackage` 补一个 decoder。**调度器不自作主张改，留给你。**
+
+## 23（LLM 座位闭环：Bare 档 + 兜底）
+
+**23-1：兜底策略在引擎（`Fallback.action : ScaffoldTier -> DecisionPackage -> Action`），不在 Agent 层。**
+Agent 层拿不到 `Action`，而兜底要读规则：Bare 档的「摸切」是动作的形态，Assisted 档的
+「不退 Shanten 的安全打」还要算向听与危险度。**被否决**：让 TS 自己从决策包里挑一条摸切
+（它看得见 `action.tsumogiri`）——那等于把规则知识搬到 Agent 层，24 号票还得再搬回来。
+于是 Agent 层的产出只有两种：一个 id，或者一条「我交不出来」的原因。
+
+**23-2：跨界回来的不是裸 id，是一条五字段的回执 JSON。**
+`{action_id, reason, failure, attempts, latency_ms}`。裸 id（-1 表示交不出来）更小，
+但兜底原因就没地方放了——而票里要求「牌桌上看得出某一手是兜底出来的」。
+这五个字段也正好是 **26 号票 DecisionRecord 的落点**：往回执里加 prompt / 原始输出 / thinking
+即可，`action_id` 与 `failure` 两个决定牌桌走向的字段不动。
+
+**23-3：`Table.Latest` 从 `Action option` 变成 `Move option`（动作 + 兜底原因）。**
+22 号票留话说「`apply` 一个字节都不用动」，实际动了两行：`apply` 与新的 `applyFallback`
+共用私有的 `played`，后者把原因记在 `Latest` 上并给 `Fallbacks` 计数。
+**被否决**：把「这一手是兜底」只存在页面的 Model 里——那会有两处「上一手是什么」，
+而牌局状态只该有一份（ADR-0002 的精神）。
+
+**23-4：一次问话一张「票号」，与播放控制的世代号分开。**
+`Playback.Generation` 管定时器，`Awaiting.Ticket` 管在飞的请求。合用一个不行：
+暂停 / 换倍速会换世代，但不该作废一次已经发出去的问话；而重开一桌必须作废它——
+旧回执里的 id 是按另一份决策包编的号，拿去 `tryAction` 会换出一个语义完全不同的动作。
+
+**23-5：等回执期间保持 `Playing` 但不续定时器。**
+定时器只会把牌桌空转一遍（`step` 见 `Awaiting` 就直接返回）；把牌桌接着开动的是那条
+`Answered`。「暂停」因此仍然是人按的那个状态，不被网络延迟改写。
+
+**23-6：所有失败一视同仁地重试 2 次，包括 401。**
+超时 / provider 报错 / 格式跑偏 / id 非法走同一条路（票里明写「超时与 provider 报错走同一条兜底路径」）。
+**被否决**：认证错误不重试（401 重试必然还是 401）。理由是分支越少越好解释，
+且实测代价可接受——断电演习一局 20 手 × 3 次 = 60 个请求、24.9 s 打完。
+**留给人**：真要省，判据应当是「这个错误重试有没有意义」，那需要 provider 错误的分类，不是一个 if。
+
+**23-7：Agent 层的用例用 `node --test` + Node 原生类型剥离，不装 vitest。**
+Node 26 直接跑 `.ts`，因此这一道零新增测试依赖。类型闸门装了 `tsc --noEmit`
+（ADR-0005 说好的时机），tsconfig 只 include `src/agent` 与 `tests`——
+`src/generated` 与 `src/main.ts` 不在里面，**不给 Fable 的输出写 `.d.ts`** 那条约束不动。
+
+**23-8：录制固件的边界。**四条路径的响应是真问 DeepSeek 录下来的（`pnpm run record:agent`），
+「越界 id」那条**不单独录**：把 `ask-legal`（id=2）放到只有 id 0/1 的那一手上就是越界。
+同一条真实响应两种判读，比手编一条假响应更硬。
+
+**23-9（提案，请裁决）：新词 `Roster`（配桌）没进 `CONTEXT.md`。**
+「谁坐哪个座位」这件事术语表里没有词条（有 Seat、有 Player，没有两者的映射）。
+本票取 `Roster`，`Roster.withLlm ruleset seat config` 这样用。**不许改 `CONTEXT.md`**（RUNBOOK 第 6 条），
+所以记在这里：要么把它收进术语表，要么改名。M2 的配桌页会大量用到它，越早定越好。
+
+**23-10：牌桌上那条「刚落定的一手」按术语表叫 `Turn` 而不是 `Move`。**
+`CONTEXT.md` 的 Turn 条目已经把「手」这个概念占住了（且 `Soak` 里已有 `Turn: int` 表示第几手）。
+本票的记录是 `type Turn = { Action; Fallback }`——同一个概念的两个侧面（第几手 / 那一手是什么），
+不再引入第三个词。（这条是自审时改的：初版写的是 `Move`。）

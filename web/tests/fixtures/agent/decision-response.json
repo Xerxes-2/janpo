@@ -1,0 +1,108 @@
+{
+  "seat": 1,
+  "observation": {
+    "seat": 1,
+    "bakaze": "1z",
+    "kyoku": 1,
+    "honba": 0,
+    "kyotaku": 0,
+    "dora_markers": ["2s"],
+    "wall_remaining": 66,
+    "self": {
+      "seat": 1,
+      "jikaze": "2z",
+      "junme": 1,
+      "score": 25000,
+      "tehai": ["2m", "3m", "3m", "5m", "9m", "3p", "4p", "5p", "8p", "3s", "7s", "8s", "7z"],
+      "tsumo": null,
+      "kawa": [
+        {
+          "pai": "2z",
+          "tsumogiri": false
+        }
+      ],
+      "naki": [],
+      "riichi": "none",
+      "ippatsu": false,
+      "furiten": {
+        "permanent": false,
+        "doujun": false
+      }
+    },
+    "others": [
+      {
+        "seat": 2,
+        "jikaze": "3z",
+        "junme": 1,
+        "score": 25000,
+        "tehai_count": 13,
+        "relative": 1,
+        "kawa": [
+          {
+            "pai": "5p",
+            "tsumogiri": true
+          }
+        ],
+        "naki": [],
+        "riichi": "none",
+        "ippatsu": false
+      },
+      {
+        "seat": 3,
+        "jikaze": "4z",
+        "junme": 1,
+        "score": 25000,
+        "tehai_count": 13,
+        "relative": 2,
+        "kawa": [
+          {
+            "pai": "3m",
+            "tsumogiri": true
+          }
+        ],
+        "naki": [],
+        "riichi": "none",
+        "ippatsu": false
+      },
+      {
+        "seat": 0,
+        "jikaze": "1z",
+        "junme": 1,
+        "score": 25000,
+        "tehai_count": 13,
+        "relative": 3,
+        "kawa": [
+          {
+            "pai": "9p",
+            "tsumogiri": false
+          }
+        ],
+        "naki": [],
+        "riichi": "none",
+        "ippatsu": false
+      }
+    ]
+  },
+  "actions": [
+    {
+      "id": 0,
+      "label": "碰3万（亮3万 3万）",
+      "action": {
+        "type": "pon",
+        "actor": 1,
+        "target": 3,
+        "pai": "3m",
+        "consumed": ["3m", "3m"]
+      }
+    },
+    {
+      "id": 1,
+      "label": "过",
+      "action": {
+        "type": "none",
+        "actor": 1
+      }
+    }
+  ],
+  "scaffold": {}
+}
