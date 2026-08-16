@@ -39,6 +39,11 @@ jobs:
       - name: 装依赖
         run: nix develop --command bash -c "cd web && pnpm install --frozen-lockfile"
 
+      # Fable 是 dotnet 本地工具（.config/dotnet-tools.json 钉住版本），不 restore 就没有 `dotnet fable`。
+      # `scripts/ci.sh` 自己会 restore，而这里直接调 `pnpm run build`，所以要单独来一步。
+      - name: 恢复 dotnet 本地工具（Fable）
+        run: nix develop --command dotnet tool restore
+
       # `pnpm run build` = `dotnet fable ../src/Janpo.Web` + `vite build` → web/dist
       - name: 构建静态站（Fable + Vite）
         run: nix develop --command bash -c "cd web && pnpm run build"
