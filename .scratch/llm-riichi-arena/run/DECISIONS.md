@@ -2245,3 +2245,15 @@ the loopback address space`），用 `grantPermissions(["local-network-access"])
 **30-8：假端点留在仓库里当手验工具（`web/scripts/fake-endpoint.mjs`），CI 一个端点都不连。**
 它固定回一条 `choose_action(action_id=0)`，因此「模型答上话了」等价于「通道通了」——把模型这个变量摘掉。
 `verify-custom-endpoint.mjs` 的六种模式同理都是手验；`scripts/ci-web.sh` 一行都没改。
+
+## 集成 30 号票时的一次假红：并行 CI 撞写死端口
+
+`web/scripts/verify-{tracer,golden,llm-seat,export}.mjs` 各写死一个端口（4179–4182）且
+`strictPort: true`。调度器在 default 工作区跑 `ci.sh` 集成票 30 时，ws-a 里 29a 的 agent 也在跑 CI，
+两者撞端口 —— 失败冒在 `verify-golden.mjs` 里，长得像黄金用例挂了。第二遍单独跑全绿。
+
+**这是 19 号票留下的 nitpick（当时记作「端口写死，并行跑会撞」）第一次真正咬人。**
+修的活并进票 29b 第三之三节：端口改临时端口或允许环境变量覆盖，且撞端口的报错要一眼看得出是端口问题。
+
+**调度器的教训**：并行跑批时看到红，**先怀疑基础设施，再怀疑代码**。假红比真红危险——
+它会训练人「重跑一遍就好」，而那正是掩盖真失败的习惯。
