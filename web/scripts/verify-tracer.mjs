@@ -65,13 +65,17 @@ const DEV_TEST_IDS = ["traces", "seed-input", "rerun"];
 const DEV_WORDS = ["曳光弹", "Fable", "dotnet"];
 
 /**
- * 票 35 的反向自证：**不带开关时，默认视图里不得有开发向内容**。
+ * 票 35 的反向自证：**不带开关时，默认视图里不得有开发向内容**；
+ * 票 37 的正面：**默认视图里必须有回仓库的那一行**。
  *
  * 下面那道对拍已经证明了「带上 `?dev=1` 曳光弹还在」（它读的就是曳光弹的 testId）；
  * 只有它的话，把开关废掉、访客又看到调试页也照样全绿。两道合起来才是一个开关。
+ *
+ * 两件事分两个数组报：`leaks` 是「多了不该给访客看的」，`missing` 是「少了该给访客的」。
  */
 async function checkDefaultView(page, url) {
   const leaks = [];
+  const missing = [];
   await page.goto(`${url}/`, { waitUntil: "load" });
   // 牌桌本人必须在：否则「什么都没渲染出来」也能让下面几条断言全部通过。
   await page.getByTestId("table-board").waitFor();
@@ -86,7 +90,14 @@ async function checkDefaultView(page, url) {
     if (text.includes(word)) leaks.push(`默认视图的正文里出现了开发向的词「${word}」`);
   }
 
-  return leaks;
+  // 票 37：访客落在站点上时，页脚那条外链是回到源码与许可的**唯一一条路**。
+  // 它被谁顺手删掉、或被挪到 `?dev=1` 后面，页面看上去照常，没人会发现。
+  // 地址本身不在这里复述（真源在 `src/Janpo.Web/Footer.fs` 一处），只断言它真是一条链接。
+  const footerLinks = await page.getByTestId("site-footer").locator('a[href^="https://"]').count();
+  if (footerLinks === 0) missing.push("默认视图的页脚里没有一条指回仓库的外链（票 37）");
+  if (!text.includes("MIT")) missing.push("默认视图的正文里没提许可（MIT）（票 37）");
+
+  return { leaks, missing };
 }
 
 /**
@@ -108,7 +119,7 @@ async function readBrowser(seed, executablePath) {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    const leaks = await checkDefaultView(page, pageUrl(server));
+    const { leaks, missing } = await checkDefaultView(page, pageUrl(server));
 
     await page.goto(`${pageUrl(server)}/${DEV_QUERY}`, { waitUntil: "load" });
 
@@ -132,7 +143,7 @@ async function readBrowser(seed, executablePath) {
       kyokus: await read(`${prefix}-kyokus`),
     });
 
-    return { kyoku: await trace("kyoku"), game: await trace("game"), problems, leaks };
+    return { kyoku: await trace("kyoku"), game: await trace("game"), problems, leaks, missing };
   } finally {
     await browser.close();
     await server.close();
@@ -190,6 +201,12 @@ if (browserSide.leaks.length > 0) {
   process.exit(1);
 }
 
+if (browserSide.missing.length > 0) {
+  console.error("默认视图里少了该给访客的东西：");
+  console.error(browserSide.missing.join("\n"));
+  process.exit(1);
+}
+
 if (failures.length > 0) {
   console.error("双目标语义漂了：");
   console.error(failures.join("\n"));
@@ -197,4 +214,5 @@ if (failures.length > 0) {
 }
 
 console.log("默认视图里没有曳光弹，带上 ?dev=1 它回来了 ✓");
+console.log("默认视图的页脚里有回仓库的外链与许可（MIT）✓");
 console.log("浏览器内的引擎与 dotnet 侧逐项相同 ✓");

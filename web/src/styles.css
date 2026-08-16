@@ -340,6 +340,22 @@ h1 {
   margin: 0;
 }
 
+/* 站点页脚（37 票）：回仓库与许可的那一行。**不抢牌桌的注意力**——小字、淡色、
+   一条细线隔开，颜色全部跟着正文走（`var(--line)` 与 `inherit`），不引入新配色。 */
+.site-footer {
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+/* 链接仍然带下划线（一眼看得出可点），但**不上蓝色**：默认的链接色在这一行里比牌桌还抢眼。 */
+.site-footer a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
 /* Agent 层的状态线。兜底代打时它红着——**不许静默替换**。 */
 .agent {
   font-variant-numeric: tabular-nums;

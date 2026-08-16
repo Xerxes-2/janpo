@@ -9,7 +9,8 @@
 # 第四道是 19 票的验收：同一种子在浏览器里跑出的终局点数与顺位，必须与
 # `janpo kyoku` / `janpo game` 逐项相同（跑的是 Vite 打包后的产物）。
 # 它同时带着票 35：曳光弹现在藏在 `?dev=1` 后面，因此那一道先开不带开关的地址
-# 确认开发向内容一样不在，再带开关去读那几行数。
+# 确认开发向内容一样不在，再带开关去读那几行数。同一次打开顺带带着票 37 的反面：
+# 默认视图的页脚里**必须**有一条回仓库的外链与一句许可（访客找到源码的唯一一条路）。
 # 第五道是 21 票的验收：`tests/fixtures/golden/dual-target.json` 里的每条用例，
 # 在浏览器里跑出的每个字段的每一行都要与文件一致（跑的是 Fable 的输出本身）。
 # 同一份用例文件在 dotnet 侧由 `dotnet test` 的 `GoldenSuiteTests` 跑——**两侧读同一份数据**。
@@ -63,7 +64,7 @@ echo "== vite build =="
 if [[ "$NO_BROWSER" == "1" ]]; then
   echo "== 浏览器内的那几道（曳光弹对拍 / 黄金用例 / 牌谱导出 / 两道 key 闸门）：按 JANPO_NO_BROWSER=1 跳过 =="
 else
-  echo "== 浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带自证默认视图里没有它）=="
+  echo "== 浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带自证默认视图里没有它、却有回仓库那一行）=="
   (cd web && node scripts/verify-tracer.mjs)
 
   echo "== 浏览器内黄金用例（与 tests/fixtures/golden/ 逐字段逐行对照）=="

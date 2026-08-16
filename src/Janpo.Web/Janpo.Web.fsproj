@@ -30,6 +30,8 @@
     <Compile Include="PaifuCheck.fs" />
     <Compile Include="App.fs" />
     <Compile Include="TablePage.fs" />
+    <!-- 页脚（票 37）：仓库与许可地址的唯一真源，只被 `Main.fs` 的页面外壳用。 -->
+    <Compile Include="Footer.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
 

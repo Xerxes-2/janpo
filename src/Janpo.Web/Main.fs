@@ -16,6 +16,9 @@ let private devSurfaceRequested () : bool =
 /// 找它的输入框与那几行数（双目标语义对拍的那道 CI 关卡），那是「同一套 F# 源码编到两个
 /// 目标之后语义没漂」的第一份证据。所以是**藏**：那道闸门跟着开 `?dev=1` 的地址。
 /// 牌桌自己的种子输入框另有一个 testId（`table-seed`），两边不打架。
+///
+/// 页脚（票 37）在**开关之外**：它是给访客的那条回仓库的路，任何视图下都该在，
+/// 因此排在最后一行而不是跟着 `devSurfaceRequested ()` 走。
 [<ReactComponent>]
 let Shell () =
     Html.div [
@@ -25,6 +28,7 @@ let Shell () =
             if devSurfaceRequested () then
                 Html.hr []
                 App.TracerPage()
+            Footer.Bar()
         ]
     ]
 
