@@ -60,6 +60,35 @@ module KanProperties =
             | EndGame -> false)
         |> List.length
 
+    /// 明杠欠着还没翻的新宝牌张数，**从事件流重新数一遍**：最后一条 `dahai` 之后的明杠
+    /// 都还欠着（明杠等打牌那一刻才翻），暗杠当场就翻、一张不欠。
+    /// 引擎自己那份记在 `GameState` 里，两条路径对上才算数对。
+    ///
+    /// 前提与 `kanEvents` 同一条：被抢的那个杠不算成立（那时事件数与 `kanCount` 就对不上了，
+    /// 下面那条合取先报）。
+    let private pendingKanDora (state: GameState) : int =
+        (0, GameState.events state)
+        ||> List.fold (fun pending event ->
+            match event with
+            // 明杠：欠一张。
+            | Kakan _
+            | Minkan _ -> pending + 1
+            // 打牌：欠的那几张在这一刻一次翻光。
+            | Dahai _ -> 0
+            | StartGame _
+            | StartKyoku _
+            | Tsumo _
+            | Pon _
+            | Chi _
+            | Ankan _
+            | Dora _
+            | Riichi _
+            | RiichiAccepted _
+            | Hora _
+            | Ryuukyoku _
+            | EndKyoku
+            | EndGame -> pending)
+
     // ---- 牌山 ----
 
     [<Property>]
@@ -100,13 +129,15 @@ module KanProperties =
         Wall.remaining wall = opening - tsumos
 
     [<Property>]
-    let ``杠数与新宝牌：每个杠翻一张，翻开的指示牌恒是「1 + 杠数」`` (state: GameState) =
+    let ``杠数与新宝牌：每个杠翻一张，明杠那张欠到打牌才翻`` (state: GameState) =
         let kans = kanEvents state
         let wall = GameState.wall state
 
         kans = GameState.kanCount state
-        && doraEvents state = kans
-        && List.length (Wall.doraIndicators wall) = 1 + kans
+        // 暗杠当场翻、明杠欠到打牌那一刻：已翻开的恒是「杠数 − 欠着的」。
+        // 打完牌欠账归零，因此一局打下来每个杠仍旧恰好对应一张指示牌。
+        && doraEvents state = kans - pendingKanDora state
+        && List.length (Wall.doraIndicators wall) = 1 + doraEvents state
         // 里宝牌与表宝牌成叠翻开：杠里宝牌的张数与表的一样多。
         && List.length (Wall.uraIndicators wall) = List.length (Wall.doraIndicators wall)
         // 岭上牌有几张就最多杠几次。

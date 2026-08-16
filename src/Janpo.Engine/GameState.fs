@@ -105,6 +105,13 @@ type GameState =
             /// 场上堆着的立直棒**根数**：局初的供托加上这一局里成立的立直。
             /// 和了那一步归零（它进了和了者的 `Deltas`），流局时原样留着由 05 结转。
             Kyotaku: int
+            /// **明杠欠着还没翻的新宝牌指示牌张数**（大明杠 / 加杠）。
+            /// 暗杠当场翻，因此暗杠一张也不欠——两种时机的差别只在这一个字段上。
+            ///
+            /// **`completeKan` 置位、`applyDahai` 消费**：杠成立时加一，杠的那家打牌那一刻
+            /// 一次翻光并归零。天凤就是这个时机（13 票在 218 局真实牌谱上实证），
+            /// 于是「明杠之后当场岭上开花」压根翻不到这一张。
+            PendingKanDora: int
             Flags: KyokuFlags
             Phase: Phase
             /// 本局已产出的事件流，**倒序**（最新的在头）。对外经 `GameState.events` 取正序。
@@ -828,6 +835,7 @@ module GameState =
                 Wall = started.Wall
                 Players = players
                 Kyotaku = context.Kyotaku
+                PendingKanDora = 0
                 Flags = flags
                 Phase =
                     AwaitingDahai
@@ -1141,21 +1149,41 @@ module GameState =
         | Some reason -> endWithAbortive state reason []
         | None -> drawNext state from
 
+    /// 把明杠欠着的那几张新宝牌指示牌翻出来，并把欠账归零。**只有打牌那一刻调得到**：
+    /// 它就是「明杠等打牌才翻」这条规则本身（`PendingKanDora`）。
+    ///
+    /// 欠着不止一张只可能是「明杠之后没打牌就又杠一次」（岭上那张又成了杠）：
+    /// 那时逐张翻出来，一个杠仍旧对应一张指示牌。
+    let private revealPendingKanDora (state: GameState) : GameState * Event list =
+        let flushed, revealing =
+            ((state, []), [ 1 .. state.PendingKanDora ])
+            ||> List.fold (fun (current, revealing) _ ->
+                match Wall.reveal current.Wall with
+                | Some(marker, wall) -> { current with Wall = wall }, revealing @ [ Event.Dora marker ]
+                // 指示牌的叠数用完了：不产出 `dora` 事件（常规规则集里走不到，同 `completeKan`）。
+                | Option.None -> current, revealing)
+
+        { flushed with PendingKanDora = 0 }, revealing
+
     let private applyDahai (state: GameState) (actor: Seat) (pai: Tile) (tsumogiri: bool) : GameState * Event list =
+        // 明杠欠着的新宝牌在**打牌这一刻**翻，且 `dora` 排在 `dahai` 之前（与牌谱同形）：
+        // 这张牌被荣和时新宝牌照算，而杠完当场岭上开花时压根没走到这里。
+        let flushed, revealing = revealPendingKanDora state
+
         let discarded =
-            { state with
+            { flushed with
                 // 打完这张，自家的听牌就变了，永久振听要按新的听牌与自己的河重算。
                 Players =
-                    state.Players
+                    flushed.Players
                     |> updatePlayer
                         actor
-                        (PlayerState.discard pai >> PlayerState.refreshFuriten state.Ruleset.TileKinds)
+                        (PlayerState.discard pai >> PlayerState.refreshFuriten flushed.Ruleset.TileKinds)
                 Flags =
                     {
                         Rinshan = false
                         Haitei = false
-                        // 打出的这张之后再没有可摸的牌了，它就是河底那张。
-                        Houtei = Wall.remaining state.Wall = 0
+                        // 打出的这张之后再没有可摸的牌了，它就是河底那张。（翻指示牌不动可摸区。）
+                        Houtei = Wall.remaining flushed.Wall = 0
                         Chankan = false
                     }
             }
@@ -1182,7 +1210,7 @@ module GameState =
                 },
                 []
 
-        advanced, Event.Dahai(actor, pai, tsumogiri) :: events
+        advanced, revealing @ (Event.Dahai(actor, pai, tsumogiri) :: events)
 
     /// 还等着答复的座位。
     let private pendingSeats (waiting: AwaitingResponse) : Seat list =
@@ -1314,19 +1342,29 @@ module GameState =
     /// 杠成立之后：翻新宝牌指示牌与从王牌补摸一张岭上牌，随后由杠的那家打牌（杠完不禁食替：
     /// 那种牌四张全进了副露，根本打不出来）。
     ///
-    /// **翻开的时机区分明杠与暗杠**（按天凤，固件里 18/18 条的事件顺序就是这样）：
+    /// **翻开的时机区分明杠与暗杠**（按天凤，13 票在 218 局真实牌谱上实证）：
     ///
-    /// - 暗杠：`ankan` → `dora` → `tsumo`（先翻再补摸）；
-    /// - 明杠：`daiminkan` / `kakan` → `tsumo` → `dora`（先补摸再翻）。
+    /// - 暗杠：`ankan` → `dora` → `tsumo`（**当场翻**，先翻再补摸）；
+    /// - 明杠：`daiminkan` / `kakan` → `tsumo` → …… → `dora` → `dahai`
+    ///   （**欠着**，等打牌那一刻才翻，见 `PendingKanDora` 与 `revealPendingKanDora`）。
+    ///
+    /// 事件流的顺序两者相同（`dora` 仍在 `dahai` 之前），差别在**哪一次 `step` 吐出它**：
+    /// 明杠之后当场岭上开花时没有那一次打牌，因此新宝牌压根不翻。
     ///
     /// 补摸的那张亮起 `Rinshan` 标志（岭上开花）。**岭上牌不是海底牌**：海底往前挪一张，
     /// 由 `Wall.drawRinshan` 把可摸区的最后一张补进王牌来体现。
     let private completeKan (state: GameState) (actor: Seat) (concealed: bool) : GameState * Event list =
         let revealed, revealing =
-            match Wall.reveal state.Wall with
-            | Some(marker, wall) -> { state with Wall = wall }, [ Event.Dora marker ]
-            // 指示牌的叠数用完了：不产出 `dora` 事件，杠照样成立（可杠次数比叠数少，常规规则集里走不到）。
-            | Option.None -> state, []
+            if concealed then
+                match Wall.reveal state.Wall with
+                | Some(marker, wall) -> { state with Wall = wall }, [ Event.Dora marker ]
+                // 指示牌的叠数用完了：不产出 `dora` 事件，杠照样成立（可杠次数比叠数少，常规规则集里走不到）。
+                | Option.None -> state, []
+            else
+                { state with
+                    PendingKanDora = state.PendingKanDora + 1
+                },
+                []
 
         match Wall.drawRinshan revealed.Wall with
         // 补不到岭上牌：`canKan` 已经把这条路挡住了，走不到。
@@ -1346,12 +1384,11 @@ module GameState =
                         }
                 }
 
-            let tsumo = [ Event.Tsumo(actor, drawn) ]
-
             { drawing with
                 Phase = awaitDahaiIn drawing actor (Some drawn) []
             },
-            (if concealed then revealing @ tsumo else tsumo @ revealing)
+            // 明杠的 `revealing` 恒为空（那一张欠着），因此两种杠共用这一条。
+            revealing @ [ Event.Tsumo(actor, drawn) ]
 
     /// 鸣牌成立：亮出的那几张离开暗牌进副露，被鸣的那张**仍留在打牌者的河里**
     /// （振听要看它），只给那家打上「河被鸣走过」的记号（Nagashi Mangan 的前提，12 票消费）。

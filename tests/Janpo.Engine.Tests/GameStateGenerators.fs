@@ -294,6 +294,47 @@ module GameStateFixtures =
             Draws = "5s 4z 4z 4z 5s"
         }
 
+    /// 加杠后当场岭上开花的剧本（**明杠的新宝牌翻牌时机**，16 票）：
+    /// Oya 第一手摸切 5s，座位 1 碰它；一圈之后座位 1 摸进第四张 5s 加杠，
+    /// 岭上牌正好是它单骑听的 1z——**加杠 → 岭上开花**，中间没有任何一次打牌。
+    ///
+    /// 与 `kakanScript` 的差别就在其余三家全是孤张：**没人抢得了那个杠**，因此它当场成立。
+    /// 配套的岭上牌写 `kakanRinshan`：新宝牌指示牌摩成 4s（对应宝牌 5s），
+    /// 一旦多翻一张，那四张 5s 的杠就多出四番——真牌谱里那局就是这么算错的。
+    let kakanRinshanScript =
+        {
+            Hands =
+                [
+                    "5z 6z 7z 2m 4m 8m 1s 4s 7s 3p 4p 7p 9p"
+                    "5s 5sr 1m 2m 3m 4m 5m 6m 7m 8m 9m 1z 1z"
+                    "2p 5p 8p 2s 8s 9s 2z 3z 4z 6z 7z 3m 6p"
+                    "3p 6p 9p 3s 6s 9s 2z 3z 6z 7z 4m 7p 1p"
+                ]
+            Draws = "5s 4z 4z 4z 5s"
+        }
+
+    /// `kakanRinshanScript` 配套的王牌：头四张是岭上牌（只用得到第一张 `1z`），
+    /// **多出来的三张落进指示牌区**（`scriptedWallWithRinshan` 写明了这一点）：
+    /// 开局那叠是（表 `2z`，里 `8p`），杠那叠的表指示牌是 `4s`。
+    ///
+    /// 于是两边都是确定的事实：开局宝牌 3z（座位 1 一张没有），杠宝牌 5s（它杠了四张）。
+    let kakanRinshan = "1z 9p 9p 8p 2z 8p 4s"
+
+    /// 大明杠之后没打牌就又暗杠一次的剧本（两种翻牌时机同时在场，16 票）：
+    /// Oya 第一手摸切 5s，座位 1 三张 5s 全亮出去大明杠；补摸的岭上牌是第四张 9m，
+    /// 它接着暗杠那四张——暗杠当场翻一张，而大明杠那一张仍欠着，等着接下来的打牌。
+    let minkanAnkanScript =
+        {
+            Hands =
+                [
+                    "1z 1z 2z 3z 4z 5z 2m 4m 8m 2s 6s 8s 6p"
+                    "5s 5s 5sr 9m 9m 9m 1m 2m 3m 4m 5m 6m 1z"
+                    "2p 5p 8p 2s 8s 9s 2z 3z 4z 6z 7z 3m 4p"
+                    "3p 6p 9p 3s 6s 9s 2z 3z 4z 6z 7z 4m 7p"
+                ]
+            Draws = "5s"
+        }
+
     /// 国士抢暗杠的剧本：座位 1 第一手摸进第四张 7z 暗杠，而座位 2 是等 7z 的国士无双。
     /// 能不能抢看规则集（`KokushiAnkanChankan`：天凤禁、雀魂允）。
     let kokushiChankanScript =
