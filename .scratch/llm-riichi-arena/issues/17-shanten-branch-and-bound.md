@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 ## 研究已经做完了，别重做（`docs/research/shanten-search-alternatives.md`）
 
@@ -24,15 +24,15 @@
 
 ## 验收（研究报告 §7 的原文，逐条照做）
 
-- [ ] **只动一个函数**：`searchStandard`（含注释）。`standard` / `calculate` / `chiitoitsu` / `kokushi` / `deadQuadKinds` 与所有公开签名一字不动
-- [ ] `let mutable` 预算仍是 **2**（`scripts/check-style.sh` 会挡）
-- [ ] **注释必须改**：现有那句「它不参与剪枝，只在叶子取 min」改后即为假。新注释要写清（a）下界的两条上界怎么来，（b）`maxGain = 0 && hasHead` 里 **`hasHead` 不能省**的理由
-- [ ] **与改动前的 DLL 逐手对拍 0 差异**（`standard` 与 `calculate` 两个值都比）：
+- [x] **只动一个函数**：`searchStandard`（含注释）。`standard` / `calculate` / `chiitoitsu` / `kokushi` / `deadQuadKinds` 与所有公开签名一字不动
+- [x] `let mutable` 预算仍是 **2**（`scripts/check-style.sh` 会挡）
+- [x] **注释必须改**：现有那句「它不参与剪枝，只在叶子取 min」改后即为假。新注释要写清（a）下界的两条上界怎么来，（b）`maxGain = 0 && hasHead` 里 **`hasHead` 不能省**的理由
+- [x] **与改动前的 DLL 逐手对拍 0 差异**（`standard` 与 `calculate` 两个值都比）：
       结构化手牌 ≥ 20 万手、均匀随机 ≥ 20 万手、**满张偏置 ≥ 10 万手**、**三麻牌种集合 ≥ 10 万手**
-- [ ] `tests/.../fixtures/shanten-oracle.tsv` 4000 手 0 差异；`scripts/oracle/differential.sh 30000` 0 差异
-- [ ] 全量测试绿（543 个），且**墙钟应从 43–50 s 降到 31 s 上下**——没降说明补丁没生效，这是免费自检
-- [ ] `dotnet fantomas --check` 与 `scripts/check-style.sh` 干净
-- [ ] 报告里带**交错跑的区间**，不是单值；基准输入用真实牌谱手牌，**不许用均匀随机手牌**
+- [x] `tests/.../fixtures/shanten-oracle.tsv` 4000 手 0 差异；`scripts/oracle/differential.sh 30000` 0 差异
+- [x] 全量测试绿（543 个），且**墙钟应从 43–50 s 降到 31 s 上下**——没降说明补丁没生效，这是免费自检
+- [x] `dotnet fantomas --check` 与 `scripts/check-style.sh` 干净
+- [x] 报告里带**交错跑的区间**，不是单值；基准输入用真实牌谱手牌，**不许用均匀随机手牌**
 
 ## 研究踩过的两个坑（别重踩）
 

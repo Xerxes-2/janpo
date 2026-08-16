@@ -81,13 +81,17 @@ module Shanten =
     /// `1m3m` 不是搭子，这个判断就是四麻与三麻的分界。
     let private searchStandard (legal: bool array) (original: int array) (counts: int array) (nakiCount: int) : int =
         // `best` 是可变累加器而不是返回值，这是量过的取舍，不是懒（风格规则 5 要求注明理由）：
-        // 改成「每个分支返回子树最优、末尾 min 汇总」的纯函数写法实测 **11.98–12.42 → 13.11–13.25 µs/次（约 +10%）**，
-        // 超出噪声带。原因推测是 7 个分支值要跨过 counts 的恢复写存活着，寄存器压力变大。
-        // 它不参与剪枝，只在叶子取 min——如果将来有人想试纯函数写法，请先拿 `scripts/fsi/` 的探针量一遍。
+        // 它是**分支限界的上界**，要跨分支、跨子树一直活着——纯函数写法得把它当参数传下去再传回来，
+        // 那是另一种算法形状。剪枝之前量过一次「每个分支返回子树最优、末尾 min 汇总」的纯写法：
+        // 11.98–12.42 → 13.11–13.25 µs/次（约 +10%，超出噪声带）。那是**无剪枝**版本的数，
+        // 剪枝之后没有重测，想试纯函数写法先拿 `scripts/fsi/` 的探针重新量一遍，别沿用旧数。
         let mutable best = 8
 
         // anyFloater / allFloatersAreQuads：孤张的牌种是不是全都握满了 4 张。
         // 没有雀头时雀头只能靠某张孤张凑对，孤张全是「4 张全在手」的牌种就凑不出来，多一次替换。
+        //
+        // `rem` 是 counts.[index..] 还剩几张牌：每个分支按吃掉的张数减（面子 -3、雀头与搭子 -2、
+        // 孤张 -1），跳过空牌种时不变。它只用来算子树的下界。
         let rec search
             (index: int)
             (melds: int)
@@ -95,18 +99,34 @@ module Shanten =
             (hasHead: bool)
             (anyFloater: bool)
             (allFloatersAreQuads: bool)
+            (rem: int)
             =
-            if index >= Tile.KindCount then
-                let unpairable = not hasHead && anyFloater && allFloatersAreQuads
+            let headBonus = if hasHead then 1 else 0
+            let current = 8 - 2 * melds - partials - headBonus
+            // 子树里还能长出多少收益（面子 +2、搭子 +1、雀头 +1），两条独立上界取小者仍是上界：
+            //   按组数：面子与搭子合计最多 4 组、雀头最多再一个，即 2 * (4 - melds - partials) + 1 - headBonus
+            //   按张数：面子 3 张换 2、搭子与雀头 2 张换 1，每张最多贡献 2/3，即 2 * rem / 3
+            // 叶子值 = current - 实际收益 + (unpairable ? 1 : 0)，而 unpairable 只会把叶子抬高，
+            // 所以 current - maxGain 是整棵子树的下界：它 >= best 时子树里出不了更小的值，直接剪掉。
+            let maxGain = min (2 * (4 - melds - partials) + 1 - headBonus) (2 * rem / 3)
 
-                let candidate =
-                    8 - 2 * melds - partials - (if hasHead then 1 else 0)
-                    + (if unpairable then 1 else 0)
+            if current - maxGain >= best then
+                ()
+            elif maxGain = 0 && hasHead then
+                // 提前收敛：再也长不出收益，且有雀头（unpairable 要求无雀头，这里必为 false），
+                // 于是子树里每片叶子都恰等于 current，不必走到 index = 34。叶子数就是被这一支砍光的。
+                //
+                // `hasHead` 不能省：无雀头时 rem <= 1 同样让 2 * rem / 3 = 0，而那剩下的一张若是
+                // 握满 4 张的牌种，叶子是 current + 1（孤张凑不出雀头，unpairable 成立），少记这个 1 就是错的。
+                best <- current
+            elif index >= Tile.KindCount then
+                let unpairable = not hasHead && anyFloater && allFloatersAreQuads
+                let candidate = current + (if unpairable then 1 else 0)
 
                 if candidate < best then
                     best <- candidate
             elif counts.[index] = 0 then
-                search (index + 1) melds partials hasHead anyFloater allFloatersAreQuads
+                search (index + 1) melds partials hasHead anyFloater allFloatersAreQuads rem
             else
                 let count = counts.[index]
                 let number = numberInSuit index
@@ -117,7 +137,7 @@ module Shanten =
                 // 刻子
                 if count >= 3 && blocks < 4 then
                     counts.[index] <- count - 3
-                    search index (melds + 1) partials hasHead anyFloater allFloatersAreQuads
+                    search index (melds + 1) partials hasHead anyFloater allFloatersAreQuads (rem - 3)
                     counts.[index] <- count
 
                 // 顺子
@@ -131,7 +151,7 @@ module Shanten =
                     counts.[index] <- count - 1
                     counts.[index + 1] <- counts.[index + 1] - 1
                     counts.[index + 2] <- counts.[index + 2] - 1
-                    search index (melds + 1) partials hasHead anyFloater allFloatersAreQuads
+                    search index (melds + 1) partials hasHead anyFloater allFloatersAreQuads (rem - 3)
                     counts.[index] <- count
                     counts.[index + 1] <- counts.[index + 1] + 1
                     counts.[index + 2] <- counts.[index + 2] + 1
@@ -139,13 +159,13 @@ module Shanten =
                 // 雀头：已经成对，不必再摸
                 if count >= 2 && not hasHead then
                     counts.[index] <- count - 2
-                    search index melds partials true anyFloater allFloatersAreQuads
+                    search index melds partials true anyFloater allFloatersAreQuads (rem - 2)
                     counts.[index] <- count
 
                 // 对子搭子：要变刻子还得再摸一张，4 张全在手里就永远变不成
                 if count >= 2 && blocks < 4 && not (isQuad original index) then
                     counts.[index] <- count - 2
-                    search index melds (partials + 1) hasHead anyFloater allFloatersAreQuads
+                    search index melds (partials + 1) hasHead anyFloater allFloatersAreQuads (rem - 2)
                     counts.[index] <- count
 
                 // 两面 / 边张：补齐它的是 index-1 或 index+2，至少一个牌种存在才算搭子
@@ -156,7 +176,7 @@ module Shanten =
                     if completable then
                         counts.[index] <- count - 1
                         counts.[index + 1] <- counts.[index + 1] - 1
-                        search index melds (partials + 1) hasHead anyFloater allFloatersAreQuads
+                        search index melds (partials + 1) hasHead anyFloater allFloatersAreQuads (rem - 2)
                         counts.[index] <- count
                         counts.[index + 1] <- counts.[index + 1] + 1
 
@@ -170,16 +190,18 @@ module Shanten =
                 then
                     counts.[index] <- count - 1
                     counts.[index + 2] <- counts.[index + 2] - 1
-                    search index melds (partials + 1) hasHead anyFloater allFloatersAreQuads
+                    search index melds (partials + 1) hasHead anyFloater allFloatersAreQuads (rem - 2)
                     counts.[index] <- count
                     counts.[index + 2] <- counts.[index + 2] + 1
 
                 // 孤张：这一张谁也不搭
                 counts.[index] <- count - 1
-                search index melds partials hasHead true (allFloatersAreQuads && isQuad original index)
+
+                search index melds partials hasHead true (allFloatersAreQuads && isQuad original index) (rem - 1)
+
                 counts.[index] <- count
 
-        search 0 nakiCount 0 false false true
+        search 0 nakiCount 0 false false true (Array.sum counts)
         best
 
     /// 一般型（四面子一雀头）的向听数。副露按已成面子计入。

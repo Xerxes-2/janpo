@@ -125,7 +125,7 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 |---|---|---|---|
 | `deadQuadKinds` | 每次 `standard` 一次 | 无可测差异（紧邻的 `canJoinRun` 每次分配 list，早把那点开销吃了） | **改了** |
 | `chiitoitsu` / `kokushi` | 每次 `calculate` 一次 | 微基准 86.5 → 93.8 ns，占 `calculate`（约 12,000 ns）的 **0.06%** | **改了** |
-| `searchStandard` | 递归搜索的每个节点 | 11.98–12.42 → 13.11–13.25 µs，**约 +10%，超出噪声带** | **留着，注明理由** |
+| `searchStandard` | 递归搜索的每个节点 | `best` 是分支限界的上界，要跨子树活着（纯写法得传下去再传回来） | **留着，注明理由** |
 
 **三处写法一样丑，判据都是实测不是审美。** 顺带一条：`Array.filter |> Array.length` 是
 `Array.sumBy` 的 2 倍（178.5 vs 93.8 ns，中间数组要分配）——数个数就用 `sumBy`，别用 `filter`。
@@ -135,6 +135,16 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 而后者每次分配一个小 list——省下的那点开销早被吃光。改成 `Seq.filter |> Seq.length` 后实测
 11.83 µs → 12.00 µs，而**同版本三次跑的噪声带是 11.66–12.16 µs**，差异在带内，即无可测差异。
 （另一处 `searchStandard` 的 `let mutable best` 留着：它是递归搜索里跨调用累积的，改成纯的要换算法形状。）
+
+**上表 `searchStandard` 那一行的历史值得说清楚，别把两件事混在一起（无关写法与算法的分界）：**
+
+- 旧值写的是「11.98–12.42 → 13.11–13.25 µs，约 +10%」。那是备注 N-24 把**无剪枝**的搜索改成
+  「每个分支返回子树最优、末尾 min 汇总」的纯函数写法量到的，只比了**写法**
+- 17 票给 `searchStandard` 加了**分支限界剪枝**（真实牌谱结构化手牌上 8.58–8.77 → 1.26–1.30 µs），
+  改的是**算法**，跟那次写法实验不是一回事。剪枝之后 `best` 不再只是叶子的 min，
+  而是**剪枝用的上界**，于是留着 `let mutable` 的理由从「量过，+10%」变成了更硬的「它跨子树活着」
+- **剪枝之后纯函数写法是不是仍然 +10%，没人量过**（形状变了：上界要当参数传下去再传回来）。
+  想试就拿 `scripts/fsi/` 的探针重新量，**别沿用上面那个旧数**
 
 ## 规则 6：`.fsx` 脚本同样受这些约束
 
