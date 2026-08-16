@@ -138,10 +138,14 @@ module DecisionPackageTests =
         )
 
         // 摸切 1z（id=14）不退向听：打完听 5z 单骑，还剩 3 枚。
+        // 开局第一手没人立直也没人副露，因此危险度是 null（票 25）。
         Assert.Contains(
-            "{\"pai\":\"1z\",\"action_ids\":[14],\"shanten\":{\"value\":0,\"display\":\"听牌\"},\"shanten_delta\":0,\"ukeire\":{\"total\":3,\"kinds\":1,\"tiles\":[{\"pai\":\"5z\",\"remaining\":3}]}}",
+            "{\"pai\":\"1z\",\"action_ids\":[14],\"shanten\":{\"value\":0,\"display\":\"听牌\"},\"shanten_delta\":0,\"ukeire\":{\"total\":3,\"kinds\":1,\"tiles\":[{\"pai\":\"5z\",\"remaining\":3}]},\"danger\":null}",
             encoded
         )
+
+        // 有威胁的家（立直或副露）在脚手架上单列一项：这一手一家都没有。
+        Assert.Contains("\"threats\":[]", encoded)
 
     [<Fact>]
     let ``动作的结构化字段照 mjai 的动作消息`` () =

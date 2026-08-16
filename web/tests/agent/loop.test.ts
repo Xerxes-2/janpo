@@ -16,6 +16,8 @@ import {
   assistedSeat,
   badKey,
   dahaiPackage,
+  dangerAnswer,
+  dangerPackage,
   legal,
   replay,
   request,
@@ -146,6 +148,19 @@ test("Assisted 档：问出去的 prompt 带脚手架，回执还是那五个字
   assert.match(prompts[0], /当前向听数：3 向听/);
   // 模型真的拿它当了理由（录制下来的原话里引了有效牌与退向）。
   assert.match(response.reason ?? "", /有效牌|退向/);
+});
+
+test("Assisted 档：危险度排序也进了问出去的那份 prompt（票 25）", async () => {
+  // 录制的是模型对**带危险度那份 prompt** 的真实回答（`pnpm run record:agent ask-danger`）。
+  const { ask, prompts } = replay(dangerAnswer);
+  const response = await decideWith(ask, request(dangerPackage, { seat: assistedSeat }));
+
+  assert.equal(response.action_id, 0);
+  assert.equal(response.failure, null);
+  assert.match(prompts[0], /危险度排序（有威胁的家：对家有副露）/);
+  assert.match(prompts[0], /第1位 id=0（手切4万）：现物 —— 对家现物/);
+  // 模型真的拿它当了理由（录下来的原话里引了「对家现物」）。
+  assert.match(response.reason ?? "", /现物/);
 });
 
 test("Assisted 档：答不上话照样交不出来，兜底路径一模一样", async () => {

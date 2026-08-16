@@ -57,6 +57,18 @@ n = sum(l.count("let mutable") for f in pathlib.Path("src/Janpo.Engine").rglob("
 if n > BUDGET:
     bad.append(f"引擎里 let mutable {n} 处 > 预算 {BUDGET}（规则 5）：确有必要就改预算并在 DECISIONS.md 留一条")
 
+# ── 票 25：Danger 是**纯附件**。引擎侧由编译顺序保证（`Danger.fs` 排在全部判定文件之后，
+#    那些文件引用不到它）；**测试侧靠这道闸**：规则判定的用例里不得出现它。
+#    拿掉 Danger 对局照跑——这句话要能自证，否则它只是一句口号。
+ATTACHMENT_ONLY = {"DangerTests.fs", "DangerProperties.fs", "ScaffoldTests.fs", "FallbackTests.fs",
+                   "DecisionPackageTests.fs"}
+for f in sorted(pathlib.Path("tests/Janpo.Engine.Tests").glob("*.fs")):
+    if f.name in ATTACHMENT_ONLY:
+        continue
+    for i, line in enumerate(f.read_text().splitlines(), 1):
+        if "Danger" in line:
+            bad.append(f"{f}:{i} 规则判定的用例里出现了 Danger（票 25）：它是分析附件，判定路径不得依赖它")
+
 for b in bad:
     print(f"  ✗ {b}")
 sys.exit(1 if bad else 0)

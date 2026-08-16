@@ -307,6 +307,30 @@ module Observation =
                 Others = others
             })
 
+    // ---- 观测里看得见的牌 ----
+
+    /// 手牌之外**这个座位看得见的每一张牌**：四家的河、全部副露里各家亮出的那几张、
+    /// 宝牌指示牌。自家手牌不在里面（它在 `Self.Hand`，要不要算由读的人定）。
+    ///
+    /// **这仍然是遮蔽不是计算**：每一张都已经写在观测里，这里只是汇到一处。
+    /// 副露只数 `Naki.fromHand`：被鸣走的那张仍留在打牌者的河里（CONTEXT.md 的 Kawa），
+    /// 连 `Naki.taken` 一起数就把同一张数了两遍——`Ukeire` 会因此判可见张数越界。
+    ///
+    /// 两个消费方读的是同一份：`Scaffold` 的有效牌剩余枚数与 `Danger` 的「四张全见」。
+    /// 各数一遍必然漂。
+    let visible (observation: Observation) : Tile list =
+        let kawa (entries: KawaEntry list) =
+            entries |> List.map (fun entry -> entry.Pai)
+
+        let others =
+            observation.Others
+            |> List.collect (fun other -> kawa other.Kawa @ List.collect Naki.fromHand other.Naki)
+
+        kawa observation.Self.Kawa
+        @ List.collect Naki.fromHand observation.Self.Naki
+        @ others
+        @ observation.DoraMarkers
+
     // ---- JSON（单向出口） ----
 
     /// 观测的 wire 形态。**只有 encoder，没有 decoder**：决策包是单向出口，

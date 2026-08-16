@@ -20,6 +20,9 @@ type DahaiScaffold =
         /// 打完之后的有效牌。可见张数越界（算不出来）时是 None——那是数据出了问题，
         /// **不是「没有有效牌」**：后者是一个空的 `Ukeire`。
         Ukeire: Ukeire option
+        /// 打这一张的危险度（票 25）：档位、理由与这一手里的名次。
+        /// **没有一家立直或副露时是 None**——那时危险度没有被评价的对象（`Danger.rank`）。
+        Danger: Danger option
     }
 
 /// 决策包的脚手架数值（CONTEXT.md 的 ScaffoldTier）：引擎算得出、LLM 算不明白的那几个数。
@@ -38,6 +41,9 @@ type Scaffold =
         Ukeire: Ukeire option
         /// 逐张试打，按合法动作集里第一次出现的顺序。这一手打不了牌（响应阶段）时是空的。
         Dahai: DahaiScaffold list
+        /// 有威胁的家（立直或副露）。**危险度是对它们算的**；空表意味着这一手
+        /// 每条试打的 `Danger` 都是 None。
+        Threats: Threat list
     }
 
 /// 脚手架的计算与编码。**数值一律复用引擎既有实现**（`Shanten` / `Ukeire`），
@@ -46,23 +52,6 @@ type Scaffold =
 module Scaffold =
 
     // ---- 计算 ----
-
-    /// 手牌之外的可见牌：四家的河、全部副露里**自家亮出的**那几张、宝牌指示牌。
-    ///
-    /// 副露只数 `Naki.fromHand`：被鸣走的那张仍留在打牌者的河里（CONTEXT.md 的 Kawa），
-    /// 连 `Naki.taken` 一起数就把同一张数了两遍，剩余枚数会凭空少一张。
-    let private visible (observation: Observation) : Tile list =
-        let kawa (entries: KawaEntry list) =
-            entries |> List.map (fun entry -> entry.Pai)
-
-        let others =
-            observation.Others
-            |> List.collect (fun other -> kawa other.Kawa @ List.collect Naki.fromHand other.Naki)
-
-        kawa observation.Self.Kawa
-        @ List.collect Naki.fromHand observation.Self.Naki
-        @ others
-        @ observation.DoraMarkers
 
     /// 有效牌；算不出来（手牌不是等摸形、可见张数越界）时是 None。
     let private tryUkeire (kindSet: TileKindSet) (seen: Tile list) (hand: HandShape) : Ukeire option =
@@ -78,6 +67,7 @@ module Scaffold =
         (seen: Tile list)
         (hand: HandShape)
         (current: Shanten)
+        (danger: Danger list)
         (dahai: (int * Tile) list)
         : DahaiScaffold list =
         dahai
@@ -97,6 +87,7 @@ module Scaffold =
                         Shanten = shanten
                         ShantenDelta = Shanten.value shanten - Shanten.value current
                         Ukeire = tryUkeire kindSet (pai :: seen) after
+                        Danger = danger |> List.tryFind (fun danger -> danger.Pai = pai)
                     })
 
     /// 某座位这一手的脚手架。`actions` 是**这一包里编好号的合法动作**，
@@ -110,7 +101,7 @@ module Scaffold =
         match HandShape.create (List.length self.Naki) self.Hand with
         | Error _ -> None
         | Ok hand ->
-            let seen = visible observation
+            let seen = Observation.visible observation
             let current = Shanten.calculate kindSet hand
 
             let dahai =
@@ -120,11 +111,16 @@ module Scaffold =
                     | Action.Dahai(_, pai, _) -> Some(id, Tile.deaka pai)
                     | _ -> None)
 
+            // 危险度也只从这份遮蔽好的观测算（票 25）：他家的暗牌在 `MaskedSeat` 里
+            // 根本没有位置，因此「危险度多看了一张牌」在结构上不可能。
+            let danger = Danger.rank observation (List.map snd dahai)
+
             Some
                 {
                     Shanten = current
                     Ukeire = tryUkeire kindSet seen hand
-                    Dahai = trials kindSet seen hand current dahai
+                    Dahai = trials kindSet seen hand current danger dahai
+                    Threats = Danger.threats observation
                 }
 
     // ---- JSON（单向出口） ----
@@ -179,6 +175,7 @@ module Scaffold =
                     "shanten", shantenEncoder trial.Shanten
                     "shanten_delta", Encode.int trial.ShantenDelta
                     "ukeire", optional ukeireEncoder trial.Ukeire
+                    "danger", optional Danger.encoder trial.Danger
                 ]
 
     /// 脚手架的 wire 形态。**只有 encoder，没有 decoder**：它跟决策包一样只往外走。
@@ -189,6 +186,7 @@ module Scaffold =
                     "shanten", shantenEncoder scaffold.Shanten
                     "ukeire", optional ukeireEncoder scaffold.Ukeire
                     "dahai", scaffold.Dahai |> List.map dahaiEncoder |> Encode.list
+                    "threats", scaffold.Threats |> List.map Threat.encoder |> Encode.list
                 ]
 
     /// 决策包上那个槽位：**算不出来就是空对象**，与 23 号票留下的形状一致。

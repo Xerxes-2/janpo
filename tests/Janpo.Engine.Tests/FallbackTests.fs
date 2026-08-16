@@ -80,6 +80,86 @@ module FallbackTests =
 
         Assert.Equal(Fallback.action ScaffoldTier.Bare package, Fallback.action ScaffoldTier.Assisted package)
 
+    /// 立直的剧本（票 25）：座位 1 是听 4p / 7p 的门清形，第 1 巡摸进 1z 就宣言立直、打出 1z。
+    ///
+    /// 座位 0 是三副顺子加四张孤张字牌的 2 向听：**打掉哪张字牌都不退向听**，
+    /// 因此「不退向听」挑不出唯一一手，安全度才决定得了。
+    let private riichiAheadScript =
+        {
+            Hands =
+                [
+                    "1m 2m 3m 4p 5p 6p 7s 8s 9s 1z 2z 3z 4z"
+                    "2m 3m 4m 5m 6m 7m 2p 3p 4p 5p 6p 9s 9s"
+                    "2p 5p 8p 2s 5s 8s 1z 2z 3z 4z 6z 7z 9m"
+                    "3p 6p 9p 3s 6s 9s 1z 2z 3z 4z 6z 7z 9m"
+                ]
+            Draws = "7z 1z 6z 6z 5z"
+        }
+
+    /// 下家（座位 1）立直了，而座位 0 刚摸进 5z。
+    let private riichiAhead =
+        let asked (state: GameState) =
+            let riichi =
+                GameState.player (seat 1) state
+                |> Option.map (PlayerState.riichi >> RiichiState.isActive)
+                |> Option.defaultValue false
+
+            let drawn =
+                GameState.player (seat 0) state
+                |> Option.map (PlayerState.drawn >> Option.isSome)
+                |> Option.defaultValue false
+
+            let turn =
+                GameState.legalActions state |> List.exists (fun choice -> choice.Seat = seat 0)
+
+            riichi && drawn && turn
+
+        driveUntil riichiSeeking asked (startScripted riichiAheadScript)
+
+    [<Fact>]
+    let ``Assisted 档是安全打：不退向听的那几手里挑危险度最低的`` () =
+        let package = packageFor (seat 0) riichiAhead
+
+        // Bare 档照旧：摸切刚摸进的 5z。它不退向听，因此 24 号票的 Assisted 也打它。
+        Assert.Equal(Action.Dahai(seat 0, tile "5z", true), Fallback.action ScaffoldTier.Bare package)
+
+        // Assisted 档：下家的立直宣言牌就是 1z，打它既不退向听又是现物。
+        Assert.Equal(Action.Dahai(seat 0, tile "1z", false), Fallback.action ScaffoldTier.Assisted package)
+
+    [<Fact>]
+    let ``安全打不放宽不退向听：两个条件是串联的`` () =
+        // 候选先过「进退向为 0」这道闸，再比安全度；反过来就会为了安全而退向听。
+        let package = packageFor (seat 0) riichiAhead
+        let chosen = Fallback.action ScaffoldTier.Assisted package
+
+        let scaffold =
+            match DecisionPackage.scaffold package with
+            | Some scaffold -> scaffold
+            | None -> failwith "这一手的脚手架应当算得出来"
+
+        // 选中的那一手在不退向听的候选里，且它的危险度名次是那批候选里最小的。
+        let keeping = scaffold.Dahai |> List.filter (fun trial -> trial.ShantenDelta = 0)
+
+        let ranks =
+            keeping
+            |> List.choose (fun trial -> trial.Danger)
+            |> List.map (fun danger -> danger.Rank)
+
+        let picked =
+            keeping
+            |> List.filter (fun trial ->
+                trial.ActionIds
+                |> List.exists (fun id -> DecisionPackage.tryAction id package = Some chosen))
+
+        Assert.NotEmpty(picked)
+
+        Assert.Equal(
+            List.min ranks,
+            (List.head picked).Danger
+            |> Option.map (fun danger -> danger.Rank)
+            |> Option.get
+        )
+
     [<Fact>]
     let ``ToolSearch 暂时照 Bare 打：它是 M3 的事`` () =
         for state in [ opening; retreating ] do

@@ -28,6 +28,9 @@ const MODEL = process.env.JANPO_MODEL ?? "deepseek-v4-flash";
 
 const decision = JSON.parse(readFileSync(resolve(fixtures, "decision-dahai.json"), "utf8"));
 
+/** 带危险度的那一手（票 25）：对家有副露，排序里现物 / 筋 / 无依据三档都有。 */
+const dangerDecision = JSON.parse(readFileSync(resolve(fixtures, "decision-danger.json"), "utf8"));
+
 const seat = (overrides) => ({
   provider: "deepseek",
   model: MODEL,
@@ -73,7 +76,20 @@ await record(
     }),
 );
 
-// 3) 格式跑偏：同一段 prompt，但**不注册工具**，模型只能回一段话。
+// 3) Assisted 档的危险度（票 25）：同一档、另一手。选这一手是因为它有威胁的家（对家副露），
+// 因此 prompt 里多一节安全度排序——录它是为了看**模型用不用得上那一节**。
+await record(
+  "ask-danger",
+  `真实录制：DeepSeek ${MODEL} 对 decision-danger.json 的 Assisted 档 prompt（带危险度排序）的单轮 tool call。`,
+  () =>
+    piAsk({
+      seat: seat({ tier: "assisted" }),
+      prompt: renderPrompt(dangerDecision, "assisted", null),
+      actionIds: dangerDecision.actions.map((option) => String(option.id)),
+    }),
+);
+
+// 4) 格式跑偏：同一段 prompt，但**不注册工具**，模型只能回一段话。
 await record(
   "ask-text-only",
   "真实录制：不注册工具时模型只回文字（Agent 层判为格式跑偏）。",
@@ -103,14 +119,14 @@ await record(
   },
 );
 
-// 4) 超时：把座位的超时设成 300 ms，abort 掉一次真实请求。
+// 5) 超时：把座位的超时设成 300 ms，abort 掉一次真实请求。
 await record(
   "ask-aborted",
   "真实录制：timeout_ms=300 时的 abort（票 18 实测：它是值不是异常）。",
   () => piAsk({ seat: seat({ timeout_ms: 300 }), prompt: bare, actionIds }),
 );
 
-// 5) provider 报错：故意用一把坏 key（**断电演习**在浏览器里的等价物）。
+// 6) provider 报错：故意用一把坏 key（**断电演习**在浏览器里的等价物）。
 await record("ask-error-bad-key", "真实录制：坏 key 的 401（stopReason=error，不抛异常）。", () =>
   piAsk({ seat: seat({ api_key: "sk-invalid-key-for-fixture" }), prompt: bare, actionIds }),
 );

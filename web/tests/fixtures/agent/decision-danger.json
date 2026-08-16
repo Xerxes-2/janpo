@@ -1,34 +1,37 @@
 {
-  "seat": 1,
+  "seat": 3,
   "observation": {
-    "seat": 1,
+    "seat": 3,
     "bakaze": "1z",
     "kyoku": 1,
     "honba": 0,
     "kyotaku": 0,
-    "dora_markers": ["2s"],
-    "wall_remaining": 66,
+    "dora_markers": ["6p"],
+    "wall_remaining": 65,
     "self": {
-      "seat": 1,
-      "jikaze": "2z",
+      "seat": 3,
+      "jikaze": "4z",
       "junme": 1,
       "score": 25000,
-      "tehai": ["2m", "5m", "9m", "3p", "4p", "5p", "8p", "3s", "7s", "8s", "7z"],
-      "tsumo": null,
-      "kawa": [
-        {
-          "pai": "2z",
-          "tsumogiri": false
-        }
+      "tehai": [
+        "4m",
+        "7m",
+        "3p",
+        "5p",
+        "5pr",
+        "1s",
+        "1s",
+        "3s",
+        "4s",
+        "5s",
+        "5s",
+        "7s",
+        "3z",
+        "6z"
       ],
-      "naki": [
-        {
-          "type": "pon",
-          "target": 3,
-          "pai": "3m",
-          "consumed": ["3m", "3m"]
-        }
-      ],
+      "tsumo": "6z",
+      "kawa": [],
+      "naki": [],
       "riichi": "none",
       "ippatsu": false,
       "furiten": {
@@ -38,16 +41,16 @@
     },
     "others": [
       {
-        "seat": 2,
-        "jikaze": "3z",
+        "seat": 0,
+        "jikaze": "1z",
         "junme": 1,
         "score": 25000,
         "tehai_count": 13,
         "relative": 1,
         "kawa": [
           {
-            "pai": "5p",
-            "tsumogiri": true
+            "pai": "4p",
+            "tsumogiri": false
           }
         ],
         "naki": [],
@@ -55,32 +58,47 @@
         "ippatsu": false
       },
       {
-        "seat": 3,
-        "jikaze": "4z",
+        "seat": 1,
+        "jikaze": "2z",
         "junme": 1,
         "score": 25000,
-        "tehai_count": 13,
+        "tehai_count": 10,
         "relative": 2,
         "kawa": [
           {
-            "pai": "3m",
-            "tsumogiri": true
+            "pai": "7z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "4m",
+            "tsumogiri": false
           }
         ],
-        "naki": [],
+        "naki": [
+          {
+            "type": "pon",
+            "target": 2,
+            "pai": "1z",
+            "consumed": ["1z", "1z"]
+          }
+        ],
         "riichi": "none",
         "ippatsu": false
       },
       {
-        "seat": 0,
-        "jikaze": "1z",
-        "junme": 1,
+        "seat": 2,
+        "jikaze": "3z",
+        "junme": 2,
         "score": 25000,
         "tehai_count": 13,
         "relative": 3,
         "kawa": [
           {
-            "pai": "9p",
+            "pai": "1z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7m",
             "tsumogiri": false
           }
         ],
@@ -93,112 +111,122 @@
   "actions": [
     {
       "id": 0,
-      "label": "手切2万",
+      "label": "手切4万",
       "action": {
         "type": "dahai",
-        "actor": 1,
-        "pai": "2m",
+        "actor": 3,
+        "pai": "4m",
         "tsumogiri": false
       }
     },
     {
       "id": 1,
-      "label": "手切5万",
+      "label": "手切7万",
       "action": {
         "type": "dahai",
-        "actor": 1,
-        "pai": "5m",
+        "actor": 3,
+        "pai": "7m",
         "tsumogiri": false
       }
     },
     {
       "id": 2,
-      "label": "手切9万",
-      "action": {
-        "type": "dahai",
-        "actor": 1,
-        "pai": "9m",
-        "tsumogiri": false
-      }
-    },
-    {
-      "id": 3,
       "label": "手切3筒",
       "action": {
         "type": "dahai",
-        "actor": 1,
+        "actor": 3,
         "pai": "3p",
         "tsumogiri": false
       }
     },
     {
-      "id": 4,
-      "label": "手切4筒",
-      "action": {
-        "type": "dahai",
-        "actor": 1,
-        "pai": "4p",
-        "tsumogiri": false
-      }
-    },
-    {
-      "id": 5,
+      "id": 3,
       "label": "手切5筒",
       "action": {
         "type": "dahai",
-        "actor": 1,
+        "actor": 3,
         "pai": "5p",
         "tsumogiri": false
       }
     },
     {
-      "id": 6,
-      "label": "手切8筒",
+      "id": 4,
+      "label": "手切赤5筒",
       "action": {
         "type": "dahai",
-        "actor": 1,
-        "pai": "8p",
+        "actor": 3,
+        "pai": "5pr",
         "tsumogiri": false
       }
     },
     {
-      "id": 7,
+      "id": 5,
+      "label": "手切1索",
+      "action": {
+        "type": "dahai",
+        "actor": 3,
+        "pai": "1s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 6,
       "label": "手切3索",
       "action": {
         "type": "dahai",
-        "actor": 1,
+        "actor": 3,
         "pai": "3s",
         "tsumogiri": false
       }
     },
     {
-      "id": 8,
-      "label": "手切7索",
+      "id": 7,
+      "label": "手切4索",
       "action": {
         "type": "dahai",
-        "actor": 1,
-        "pai": "7s",
+        "actor": 3,
+        "pai": "4s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 8,
+      "label": "手切5索",
+      "action": {
+        "type": "dahai",
+        "actor": 3,
+        "pai": "5s",
         "tsumogiri": false
       }
     },
     {
       "id": 9,
-      "label": "手切8索",
+      "label": "手切7索",
       "action": {
         "type": "dahai",
-        "actor": 1,
-        "pai": "8s",
+        "actor": 3,
+        "pai": "7s",
         "tsumogiri": false
       }
     },
     {
       "id": 10,
-      "label": "手切中",
+      "label": "手切西",
       "action": {
         "type": "dahai",
-        "actor": 1,
-        "pai": "7z",
+        "actor": 3,
+        "pai": "3z",
         "tsumogiri": false
+      }
+    },
+    {
+      "id": 11,
+      "label": "摸切发",
+      "action": {
+        "type": "dahai",
+        "actor": 3,
+        "pai": "6z",
+        "tsumogiri": true
       }
     }
   ],
@@ -210,7 +238,7 @@
     "ukeire": null,
     "dahai": [
       {
-        "pai": "2m",
+        "pai": "4m",
         "action_ids": [0],
         "shanten": {
           "value": 3,
@@ -218,20 +246,12 @@
         },
         "shanten_delta": 0,
         "ukeire": {
-          "total": 66,
+          "total": 62,
           "kinds": 19,
           "tiles": [
             {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
-              "remaining": 4
-            },
-            {
               "pai": "5m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "6m",
@@ -239,7 +259,7 @@
             },
             {
               "pai": "7m",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "8m",
@@ -247,394 +267,18 @@
             },
             {
               "pai": "9m",
-              "remaining": 3
-            },
-            {
-              "pai": "6p",
               "remaining": 4
             },
             {
-              "pai": "7p",
+              "pai": "1p",
               "remaining": 4
             },
             {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
-              "pai": "1s",
+              "pai": "2p",
               "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
-            },
-            {
-              "pai": "3s",
-              "remaining": 3
-            },
-            {
-              "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
-            },
-            {
-              "pai": "6s",
-              "remaining": 4
-            },
-            {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
-              "remaining": 3
-            }
-          ]
-        },
-        "danger": null
-      },
-      {
-        "pai": "5m",
-        "action_ids": [1],
-        "shanten": {
-          "value": 3,
-          "display": "3 向听"
-        },
-        "shanten_delta": 0,
-        "ukeire": {
-          "total": 66,
-          "kinds": 19,
-          "tiles": [
-            {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "7m",
-              "remaining": 4
-            },
-            {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
-              "remaining": 3
-            },
-            {
-              "pai": "6p",
-              "remaining": 4
-            },
-            {
-              "pai": "7p",
-              "remaining": 4
-            },
-            {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
-              "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
-            },
-            {
-              "pai": "3s",
-              "remaining": 3
-            },
-            {
-              "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
-            },
-            {
-              "pai": "6s",
-              "remaining": 4
-            },
-            {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
-              "remaining": 3
-            }
-          ]
-        },
-        "danger": null
-      },
-      {
-        "pai": "9m",
-        "action_ids": [2],
-        "shanten": {
-          "value": 3,
-          "display": "3 向听"
-        },
-        "shanten_delta": 0,
-        "ukeire": {
-          "total": 66,
-          "kinds": 19,
-          "tiles": [
-            {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "5m",
-              "remaining": 3
-            },
-            {
-              "pai": "6m",
-              "remaining": 4
-            },
-            {
-              "pai": "7m",
-              "remaining": 4
-            },
-            {
-              "pai": "6p",
-              "remaining": 4
-            },
-            {
-              "pai": "7p",
-              "remaining": 4
-            },
-            {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
-              "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
-            },
-            {
-              "pai": "3s",
-              "remaining": 3
-            },
-            {
-              "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
-            },
-            {
-              "pai": "6s",
-              "remaining": 4
-            },
-            {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
-              "remaining": 3
-            }
-          ]
-        },
-        "danger": null
-      },
-      {
-        "pai": "3p",
-        "action_ids": [3],
-        "shanten": {
-          "value": 4,
-          "display": "4 向听"
-        },
-        "shanten_delta": 1,
-        "ukeire": {
-          "total": 76,
-          "kinds": 22,
-          "tiles": [
-            {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "5m",
-              "remaining": 3
-            },
-            {
-              "pai": "6m",
-              "remaining": 4
-            },
-            {
-              "pai": "7m",
-              "remaining": 4
-            },
-            {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
-              "remaining": 3
             },
             {
               "pai": "3p",
-              "remaining": 3
-            },
-            {
-              "pai": "6p",
-              "remaining": 4
-            },
-            {
-              "pai": "7p",
-              "remaining": 4
-            },
-            {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
-              "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
-            },
-            {
-              "pai": "3s",
-              "remaining": 3
-            },
-            {
-              "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
-            },
-            {
-              "pai": "6s",
-              "remaining": 4
-            },
-            {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
-              "remaining": 3
-            }
-          ]
-        },
-        "danger": null
-      },
-      {
-        "pai": "4p",
-        "action_ids": [4],
-        "shanten": {
-          "value": 4,
-          "display": "4 向听"
-        },
-        "shanten_delta": 1,
-        "ukeire": {
-          "total": 76,
-          "kinds": 22,
-          "tiles": [
-            {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "5m",
-              "remaining": 3
-            },
-            {
-              "pai": "6m",
-              "remaining": 4
-            },
-            {
-              "pai": "7m",
-              "remaining": 4
-            },
-            {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
               "remaining": 3
             },
             {
@@ -642,28 +286,20 @@
               "remaining": 3
             },
             {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
               "pai": "6p",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "7p",
               "remaining": 4
             },
             {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
               "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
+              "remaining": 2
             },
             {
               "pai": "3s",
@@ -671,79 +307,87 @@
             },
             {
               "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "6s",
               "remaining": 4
             },
             {
-              "pai": "9s",
-              "remaining": 4
+              "pai": "7s",
+              "remaining": 3
             },
             {
-              "pai": "7z",
+              "pai": "3z",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
               "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "genbutsu",
+            "display": "现物"
+          },
+          "rank": 1,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "对家现物"
+            }
+          ]
+        }
       },
       {
-        "pai": "5p",
-        "action_ids": [5],
+        "pai": "7m",
+        "action_ids": [1],
         "shanten": {
-          "value": 4,
-          "display": "4 向听"
+          "value": 3,
+          "display": "3 向听"
         },
-        "shanten_delta": 1,
+        "shanten_delta": 0,
         "ukeire": {
-          "total": 79,
-          "kinds": 23,
+          "total": 62,
+          "kinds": 19,
           "tiles": [
             {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
               "pai": "2m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
               "remaining": 4
             },
             {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
               "pai": "5m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "6m",
               "remaining": 4
             },
             {
-              "pai": "7m",
+              "pai": "1p",
               "remaining": 4
-            },
-            {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
-              "remaining": 3
             },
             {
               "pai": "2p",
               "remaining": 4
+            },
+            {
+              "pai": "3p",
+              "remaining": 3
+            },
+            {
+              "pai": "4p",
+              "remaining": 3
             },
             {
               "pai": "5p",
@@ -751,27 +395,15 @@
             },
             {
               "pai": "6p",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "7p",
               "remaining": 4
             },
             {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
               "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
+              "remaining": 2
             },
             {
               "pai": "3s",
@@ -779,30 +411,324 @@
             },
             {
               "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "6s",
               "remaining": 4
             },
             {
-              "pai": "9s",
-              "remaining": 4
+              "pai": "7s",
+              "remaining": 3
             },
             {
-              "pai": "7z",
+              "pai": "3z",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
               "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "suji",
+            "display": "筋"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "suji",
+              "display": "对家 4m 筋"
+            }
+          ]
+        }
       },
       {
-        "pai": "8p",
+        "pai": "3p",
+        "action_ids": [2],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 51,
+          "kinds": 16,
+          "tiles": [
+            {
+              "pai": "2m",
+              "remaining": 4
+            },
+            {
+              "pai": "3m",
+              "remaining": 4
+            },
+            {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
+              "pai": "5m",
+              "remaining": 4
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 4
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 3
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "7s",
+              "remaining": 3
+            },
+            {
+              "pai": "3z",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
+              "remaining": 3
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
+      },
+      {
+        "pai": "5p",
+        "action_ids": [3, 4],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 43,
+          "kinds": 13,
+          "tiles": [
+            {
+              "pai": "2m",
+              "remaining": 4
+            },
+            {
+              "pai": "3m",
+              "remaining": 4
+            },
+            {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
+              "pai": "5m",
+              "remaining": 4
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 4
+            },
+            {
+              "pai": "4p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "3z",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
+              "remaining": 3
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 11,
+          "reasons": [
+            {
+              "value": "near_dora",
+              "display": "宝牌 7p 周边"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "1s",
+        "action_ids": [5],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 76,
+          "kinds": 23,
+          "tiles": [
+            {
+              "pai": "2m",
+              "remaining": 4
+            },
+            {
+              "pai": "3m",
+              "remaining": 4
+            },
+            {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
+              "pai": "5m",
+              "remaining": 4
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 4
+            },
+            {
+              "pai": "1p",
+              "remaining": 4
+            },
+            {
+              "pai": "2p",
+              "remaining": 4
+            },
+            {
+              "pai": "3p",
+              "remaining": 3
+            },
+            {
+              "pai": "4p",
+              "remaining": 3
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 3
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 4
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 3
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "7s",
+              "remaining": 3
+            },
+            {
+              "pai": "3z",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
+              "remaining": 3
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
+      },
+      {
+        "pai": "3s",
         "action_ids": [6],
         "shanten": {
           "value": 3,
@@ -810,83 +736,50 @@
         },
         "shanten_delta": 0,
         "ukeire": {
-          "total": 59,
-          "kinds": 17,
+          "total": 19,
+          "kinds": 7,
           "tiles": [
             {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
               "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "5m",
-              "remaining": 3
-            },
-            {
-              "pai": "6m",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "7m",
-              "remaining": 4
+              "remaining": 2
             },
             {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
-              "remaining": 3
-            },
-            {
-              "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
-            },
-            {
-              "pai": "3s",
+              "pai": "3p",
               "remaining": 3
             },
             {
               "pai": "4s",
-              "remaining": 4
+              "remaining": 3
             },
             {
-              "pai": "5s",
-              "remaining": 4
+              "pai": "7s",
+              "remaining": 3
             },
             {
-              "pai": "6s",
-              "remaining": 4
+              "pai": "3z",
+              "remaining": 3
             },
             {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
+              "pai": "6z",
               "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
       },
       {
-        "pai": "3s",
+        "pai": "4s",
         "action_ids": [7],
         "shanten": {
           "value": 3,
@@ -894,79 +787,50 @@
         },
         "shanten_delta": 0,
         "ukeire": {
-          "total": 55,
-          "kinds": 16,
+          "total": 19,
+          "kinds": 7,
           "tiles": [
             {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
               "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "5m",
-              "remaining": 3
-            },
-            {
-              "pai": "6m",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "7m",
-              "remaining": 4
+              "remaining": 2
             },
             {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
+              "pai": "3p",
               "remaining": 3
             },
             {
-              "pai": "6p",
-              "remaining": 4
-            },
-            {
-              "pai": "7p",
-              "remaining": 4
-            },
-            {
-              "pai": "8p",
+              "pai": "3s",
               "remaining": 3
             },
             {
-              "pai": "9p",
+              "pai": "7s",
               "remaining": 3
             },
             {
-              "pai": "6s",
-              "remaining": 4
+              "pai": "3z",
+              "remaining": 3
             },
             {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
+              "pai": "6z",
               "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
       },
       {
-        "pai": "7s",
+        "pai": "5s",
         "action_ids": [8],
         "shanten": {
           "value": 4,
@@ -974,28 +838,24 @@
         },
         "shanten_delta": 1,
         "ukeire": {
-          "total": 79,
-          "kinds": 23,
+          "total": 86,
+          "kinds": 26,
           "tiles": [
             {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
               "pai": "2m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
               "remaining": 4
             },
             {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
               "pai": "5m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "6m",
@@ -1003,7 +863,7 @@
             },
             {
               "pai": "7m",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "8m",
@@ -1011,31 +871,43 @@
             },
             {
               "pai": "9m",
+              "remaining": 4
+            },
+            {
+              "pai": "1p",
+              "remaining": 4
+            },
+            {
+              "pai": "2p",
+              "remaining": 4
+            },
+            {
+              "pai": "3p",
               "remaining": 3
             },
             {
+              "pai": "4p",
+              "remaining": 3
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
               "pai": "6p",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "7p",
               "remaining": 4
             },
             {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
               "pai": "1s",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "2s",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "3s",
@@ -1043,11 +915,11 @@
             },
             {
               "pai": "4s",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "5s",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "6s",
@@ -1059,90 +931,53 @@
             },
             {
               "pai": "8s",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "9s",
               "remaining": 4
             },
             {
-              "pai": "7z",
+              "pai": "3z",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
               "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
       },
       {
-        "pai": "8s",
+        "pai": "7s",
         "action_ids": [9],
         "shanten": {
-          "value": 4,
-          "display": "4 向听"
+          "value": 3,
+          "display": "3 向听"
         },
-        "shanten_delta": 1,
+        "shanten_delta": 0,
         "ukeire": {
-          "total": 79,
-          "kinds": 23,
+          "total": 19,
+          "kinds": 7,
           "tiles": [
             {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
-              "pai": "2m",
-              "remaining": 3
-            },
-            {
-              "pai": "3m",
-              "remaining": 1
-            },
-            {
               "pai": "4m",
-              "remaining": 4
-            },
-            {
-              "pai": "5m",
-              "remaining": 3
-            },
-            {
-              "pai": "6m",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "7m",
-              "remaining": 4
+              "remaining": 2
             },
             {
-              "pai": "8m",
-              "remaining": 4
-            },
-            {
-              "pai": "9m",
-              "remaining": 3
-            },
-            {
-              "pai": "6p",
-              "remaining": 4
-            },
-            {
-              "pai": "7p",
-              "remaining": 4
-            },
-            {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
-              "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
+              "pai": "3p",
               "remaining": 3
             },
             {
@@ -1151,38 +986,29 @@
             },
             {
               "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
-            },
-            {
-              "pai": "6s",
-              "remaining": 4
-            },
-            {
-              "pai": "7s",
               "remaining": 3
             },
             {
-              "pai": "8s",
+              "pai": "3z",
               "remaining": 3
             },
             {
-              "pai": "9s",
-              "remaining": 4
-            },
-            {
-              "pai": "7z",
+              "pai": "6z",
               "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
       },
       {
-        "pai": "7z",
+        "pai": "3z",
         "action_ids": [10],
         "shanten": {
           "value": 3,
@@ -1190,28 +1016,24 @@
         },
         "shanten_delta": 0,
         "ukeire": {
-          "total": 70,
-          "kinds": 20,
+          "total": 69,
+          "kinds": 21,
           "tiles": [
             {
-              "pai": "1m",
-              "remaining": 4
-            },
-            {
               "pai": "2m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "3m",
-              "remaining": 1
-            },
-            {
-              "pai": "4m",
               "remaining": 4
             },
             {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
               "pai": "5m",
-              "remaining": 3
+              "remaining": 4
             },
             {
               "pai": "6m",
@@ -1219,7 +1041,7 @@
             },
             {
               "pai": "7m",
-              "remaining": 4
+              "remaining": 2
             },
             {
               "pai": "8m",
@@ -1227,31 +1049,39 @@
             },
             {
               "pai": "9m",
+              "remaining": 4
+            },
+            {
+              "pai": "1p",
+              "remaining": 4
+            },
+            {
+              "pai": "2p",
+              "remaining": 4
+            },
+            {
+              "pai": "3p",
               "remaining": 3
             },
             {
+              "pai": "4p",
+              "remaining": 3
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
               "pai": "6p",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "7p",
               "remaining": 4
             },
             {
-              "pai": "8p",
-              "remaining": 3
-            },
-            {
-              "pai": "9p",
-              "remaining": 3
-            },
-            {
               "pai": "1s",
-              "remaining": 4
-            },
-            {
-              "pai": "2s",
-              "remaining": 3
+              "remaining": 2
             },
             {
               "pai": "3s",
@@ -1259,25 +1089,147 @@
             },
             {
               "pai": "4s",
-              "remaining": 4
-            },
-            {
-              "pai": "5s",
-              "remaining": 4
+              "remaining": 3
             },
             {
               "pai": "6s",
               "remaining": 4
             },
             {
-              "pai": "9s",
-              "remaining": 4
+              "pai": "7s",
+              "remaining": 3
+            },
+            {
+              "pai": "6z",
+              "remaining": 3
             }
           ]
         },
-        "danger": null
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
+      },
+      {
+        "pai": "6z",
+        "action_ids": [11],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 69,
+          "kinds": 21,
+          "tiles": [
+            {
+              "pai": "2m",
+              "remaining": 4
+            },
+            {
+              "pai": "3m",
+              "remaining": 4
+            },
+            {
+              "pai": "4m",
+              "remaining": 2
+            },
+            {
+              "pai": "5m",
+              "remaining": 4
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 4
+            },
+            {
+              "pai": "1p",
+              "remaining": 4
+            },
+            {
+              "pai": "2p",
+              "remaining": 4
+            },
+            {
+              "pai": "3p",
+              "remaining": 3
+            },
+            {
+              "pai": "4p",
+              "remaining": 3
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 3
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 3
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "7s",
+              "remaining": 3
+            },
+            {
+              "pai": "3z",
+              "remaining": 3
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 3,
+          "reasons": []
+        }
       }
     ],
-    "threats": []
+    "threats": [
+      {
+        "seat": 1,
+        "relative": 2,
+        "riichi": false,
+        "naki": true,
+        "display": "对家有副露"
+      }
+    ]
   }
 }

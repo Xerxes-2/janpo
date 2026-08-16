@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderPrompt } from "../../src/agent/prompt.ts";
-import { dahaiPackage, responsePackage } from "./fixtures.ts";
+import { dahaiPackage, dangerPackage, responsePackage } from "./fixtures.ts";
 
 const bare = renderPrompt(dahaiPackage, "bare", null);
 
@@ -124,6 +124,66 @@ test("Assisted 档：重试的尾巴照样接得上", () => {
 
   assert.ok(retry.startsWith(assisted));
   assert.match(retry, /上一次的回答没有被采用/);
+});
+
+// ---- 危险度（票 25） ----
+
+const danger = renderPrompt(dangerPackage, "assisted", null);
+
+test("Assisted 档：危险度排序逐张写出来，理由标签照术语表", () => {
+  // 决策包（`janpo decide 99 --steps 6 --seat 3`）：对家有副露、河里有 4m。
+  assert.match(danger, /危险度排序（有威胁的家：对家有副露）/);
+  assert.match(danger, /- 第1位 id=0（手切4万）：现物 —— 对家现物/);
+  assert.match(danger, /- 第2位 id=1（手切7万）：筋 —— 对家 4m 筋/);
+  assert.match(danger, /- 第3位 id=2（手切3筒）：无依据$/m);
+  assert.match(danger, /- 第11位 id=3（手切5筒）：无依据 —— 宝牌 7p 周边/);
+
+  // 赤 5 与正 5 是两条动作、一个牌种：两条各占一行，名次相同。
+  assert.match(danger, /- 第11位 id=4（手切赤5筒）：无依据 —— 宝牌 7p 周边/);
+
+  // **它是启发式不是概率**（票里明写）：说清楚这一点，且不写任何会被读成统计结论的数。
+  assert.match(danger, /不是概率/);
+  for (const banned of ["放铳率", "%", "百分"]) {
+    assert.equal(danger.includes(banned), false, `危险度那一节不该出现「${banned}」`);
+  }
+});
+
+test("Assisted 档：名次跟着引擎走，排序从安全到危险", () => {
+  const lines = danger.split("\n").filter((line) => /^- 第\d+位 id=/.test(line));
+  const ranks = lines.map((line) => Number(/^- 第(\d+)位/.exec(line)?.[1]));
+
+  assert.equal(lines.length, dangerPackage.actions.length, "每一条打牌动作各一行");
+  assert.deepEqual(
+    ranks,
+    [...ranks].sort((left, right) => left - right),
+    "名次不下降",
+  );
+  assert.equal(ranks[0], 1);
+});
+
+test("没人立直也没人副露时不写危险度", () => {
+  // 开局第几巡那份包（`decide 2088 --steps 6`）里 `threats` 是空的，
+  // 引擎本来就不给排序（DECISIONS 25-1）。
+  assert.equal(assisted.includes("危险度排序"), false);
+  assert.match(assisted, /逐张试打/, "其余那几项照旧");
+});
+
+test("24 号票那份形状的包仍然渲染得出来：少一节不该让整包读不动", () => {
+  // 把 `threats` 与逐条 `danger` 摸掉（就是 24 号票当时的形状）。
+  const scaffold = dangerPackage.scaffold as { dahai: Record<string, unknown>[] };
+  const legacy = {
+    ...dangerPackage,
+    scaffold: {
+      ...dangerPackage.scaffold,
+      threats: undefined,
+      dahai: scaffold.dahai.map((entry) => ({ ...entry, danger: undefined })),
+    },
+  };
+
+  const rendered = renderPrompt(legacy, "assisted", null);
+
+  assert.equal(rendered.includes("危险度排序"), false);
+  assert.match(rendered, /逐张试打/);
 });
 
 test("脚手架读不动时 Assisted 退回 Bare，而不是崩", () => {

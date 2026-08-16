@@ -21,11 +21,20 @@ export const dahaiPackage = load<DecisionPackage>("decision-dahai");
 /** 响应那一手的决策包（`janpo decide 2088 --steps 5`），只有「碰」与「过」两条。 */
 export const responsePackage = load<DecisionPackage>("decision-response");
 
+/**
+ * 带危险度的决策包（`janpo decide 99 --steps 6 --seat 3`，票 25）：
+ * 对家有副露，同一手里现物 / 筋 / 无依据三档都出得来，赤 5 与正 5 还共用一条试打。
+ */
+export const dangerPackage = load<DecisionPackage>("decision-danger");
+
 /** 合法输出：模型调 choose_action 选了 id=2。 */
 export const legal = load<AskResult>("ask-legal");
 
 /** Assisted 档（票 24）：**同一份决策包**的带脚手架 prompt 问出来的那一次。 */
 export const assistedAnswer = load<AskResult>("ask-assisted");
+
+/** 危险度那一手（票 25）：**同一档、另一手**，prompt 里多了安全度排序那一节。 */
+export const dangerAnswer = load<AskResult>("ask-danger");
 
 /** 格式跑偏：模型没调工具，只回了一段话。 */
 export const textOnly = load<AskResult>("ask-text-only");

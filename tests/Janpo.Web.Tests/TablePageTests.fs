@@ -218,3 +218,28 @@ module TablePageTests =
 
         Assert.Equal("deepseek-v4", edited.Llm.Model)
         Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf edited).State)
+
+    // ---- 危险度的显示开关（票 25） ----
+
+    [<Fact>]
+    let ``牌桌上的危险度默认关，拨一下就开`` () =
+        // 「围观者也想看」，但它不是牌桌本来就该摆着的东西——票里写死了默认关。
+        let closed = llmTable ()
+        Assert.False(closed.ShowDanger)
+
+        let opened = closed |> step DangerToggled
+        Assert.True(opened.ShowDanger)
+        Assert.False((opened |> step DangerToggled).ShowDanger)
+
+    [<Fact>]
+    let ``拨危险度不动牌局：它只是个显示开关`` () =
+        let asked = llmTable () |> step Advanced
+        let toggled = asked |> step DangerToggled
+
+        Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf toggled).State)
+        Assert.Equal(asked.Ticket, toggled.Ticket)
+
+        Assert.Equal(
+            asked.Awaiting |> Option.map (fun awaiting -> awaiting.Ticket),
+            toggled.Awaiting |> Option.map (fun awaiting -> awaiting.Ticket)
+        )

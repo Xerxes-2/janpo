@@ -39,34 +39,46 @@ module Fallback =
         |> Option.orElseWith (fun () -> List.tryFind isPass options)
         |> Option.defaultWith (fun () -> List.head options)
 
-    /// Assisted 档：**不退 Shanten 的那一手**（CONTEXT.md 的 Fallback）。
+    /// Assisted 档：**不退 Shanten 的安全打**（CONTEXT.md 的 Fallback）。
     ///
-    /// 候选是脚手架里进退向为 0 的那几条试打；同为不退向听时优先摸切——它与 Bare 档同手，
+    /// 两步，顺序不能反：先取脚手架里**进退向为 0** 的那几条试打（不退向听），
+    /// 再在它们之间按**危险度名次**挑最安全的那几张；并列时优先摸切——它与 Bare 档同手，
     /// 也不多暴露手牌信息。**摸切并不必然不退向听**：刚摸进的那张让手牌进了一步时，
     /// 把它扭头扔回去就是退向（向听戻し），这一档不这么打。
     ///
-    /// 打不了牌（响应阶段）或者脚手架算不出来时是 None，由调用方退回 `bare`。
+    /// **没人立直也没人副露时每条试打的 `Danger` 都是 None**（`Danger.rank`），
+    /// 名次全相等于是保持原顺序——那时这一档与 24 号票的行为逐字相同。
     ///
-    /// **「安全打」那一半还没有**：现物 / 筋 / 壁要 `Danger`（25 号票的新分析模块），
-    /// 这一票手上没有它。25 号票落地后在**这里**按危险度给下面这批候选排序，
-    /// `bare` 与档位分派都不用动。
+    /// 打不了牌（响应阶段）或者脚手架算不出来时是 None，由调用方退回 `bare`。
     let private assisted (package: DecisionPackage) : Action option =
         DecisionPackage.scaffold package
         |> Option.bind (fun scaffold ->
-            let candidates =
-                scaffold.Dahai
-                |> List.filter (fun trial -> trial.ShantenDelta = 0)
+            let candidates = scaffold.Dahai |> List.filter (fun trial -> trial.ShantenDelta = 0)
+
+            let rank (trial: DahaiScaffold) : int =
+                match trial.Danger with
+                | Some danger -> danger.Rank
+                | None -> 0
+
+            let safest =
+                match candidates with
+                | [] -> []
+                | _ ->
+                    let best = candidates |> List.map rank |> List.min
+                    candidates |> List.filter (fun trial -> rank trial = best)
+
+            let actions =
+                safest
                 |> List.collect (fun trial -> trial.ActionIds)
                 |> List.choose (fun id -> DecisionPackage.tryAction id package)
 
-            candidates
+            actions
             |> List.tryFind isTsumogiri
-            |> Option.orElseWith (fun () -> List.tryHead candidates))
+            |> Option.orElseWith (fun () -> List.tryHead actions))
 
     /// 代打一手。**必然回一个合法动作**：候选全部取自决策包，而包里的动作列表非空。
     ///
-    /// 分档在这里，不在 `bare` 里面：Assisted 挑不退向听的那一手（25 号票再按 Danger 排序），
-    /// `bare` 一行不动。
+    /// 分档在这里，不在 `bare` 里面：Assisted 在不退向听的那几手里挑最安全的，`bare` 一行不动。
     let action (tier: ScaffoldTier) (package: DecisionPackage) : Action =
         let options = DecisionPackage.options package |> List.map ActionOption.action
 

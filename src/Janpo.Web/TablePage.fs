@@ -48,6 +48,9 @@ type TableModel = {
     Playback: Playback
     /// 看哪一份投影。
     Viewpoint: Viewpoint
+    /// 牌桌上要不要把危险度排序显示出来（票 25）。**默认关**：
+    /// 它是围观者想看的东西，不是牌桌本来就该摆着的。
+    ShowDanger: bool
     /// 哪个座位交给 LLM；None = 四家都是随机选手。
     LlmAt: Seat option
     /// 那个座位的配置（也就是配置面板里填的那份，同时落在 localStorage）。
@@ -77,6 +80,8 @@ type TableMsg =
     | Ticked of generation: int
     /// 换视角（坐到某个座位 / 上帝视角）。
     | ViewpointPicked of viewpoint: Viewpoint
+    /// 开 / 关牌桌上的危险度排序（票 25）。
+    | DangerToggled
     /// 这一局看完了，开下一局。
     | KyokuAdvanced
     /// 把哪个座位交给 LLM。
@@ -278,6 +283,8 @@ module TablePage =
             Table = openTable ruleset seedText
             Playback = Playback.initial
             Viewpoint = Viewpoint.Seated Seat.first
+            // 危险度默认关（票 25）。
+            ShowDanger = false
             LlmAt = llmAt
             Llm = config
             Awaiting = None
@@ -320,6 +327,12 @@ module TablePage =
             let advanced, cmd = step model
             resume cmd advanced
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
+        | DangerToggled ->
+            {
+                model with
+                    ShowDanger = not model.ShowDanger
+            },
+            Cmd.none
         | Exported ->
             match model.Table with
             // 牌桌都开不起来时没有牌谱可导（按钮那时也是灰的）。
@@ -753,6 +766,8 @@ module TablePage =
                         "上帝视角"
                         (ViewpointPicked Viewpoint.God)
                         dispatch
+                    // 危险度（票 25）：围观者想看就拨开，**默认关**。
+                    picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch
                     Html.span [ prop.key "seed-label"; prop.className "label"; prop.text "种子" ]
                     Html.input [
                         prop.key "seed-input"
@@ -764,6 +779,73 @@ module TablePage =
                 ]
             )
         ]
+
+    // ---- 视图：危险度（票 25） ----
+
+    /// 这一手能把谁的危险度摆出来：**只摆手牌本来就看得见的那家**。
+    ///
+    /// 危险度的候选牌就是那家的手牌，因此坐在座位上看时只显示自己那一手（显示别家的
+    /// 等于把他的暗牌摊开）；上帝视角本来就全亮着，正在被问的那家都显示得了。
+    let private dangerSeats (viewer: Seat option) (state: GameState) : Seat list =
+        let asked = GameState.legalActions state |> List.map (fun choice -> choice.Seat)
+
+        match viewer with
+        | Some seat -> asked |> List.filter (fun other -> other = seat)
+        | None -> asked
+
+    /// 一家的危险度排序。**一个判据也不在这里算**：档位、名次与理由全是引擎的
+    /// `Danger` 算好的，这里只排行（与 prompt 那一节同一份数）。
+    let private dangerPanel (seat: Seat) (state: GameState) =
+        let scaffold =
+            DecisionPackage.forSeat seat state |> Option.bind DecisionPackage.scaffold
+
+        match scaffold with
+        | None -> []
+        | Some scaffold ->
+            let ranked =
+                scaffold.Dahai
+                |> List.choose (fun trial -> trial.Danger)
+                |> List.sortBy (fun danger -> danger.Rank)
+
+            if List.isEmpty ranked then
+                []
+            else
+                let threats = scaffold.Threats |> List.map Threat.toDisplay |> String.concat "、"
+
+                [
+                    Html.section [
+                        prop.key $"danger-{Seat.index seat}"
+                        prop.className "settlement"
+                        prop.testId $"table-danger-{Seat.index seat}"
+                        prop.children [
+                            Html.h3 $"座位 {Seat.index seat} 的危险度（有威胁的家：{threats}）"
+                            Html.p [
+                                prop.key "note"
+                                prop.className "intro"
+                                prop.text "现物 / 筋 / 壁 / 宝牌周边四条规则算出来的启发式，不是概率；排在前面的更安全，同级并列。"
+                            ]
+                            Html.div [
+                                prop.key "ranking"
+                                prop.children [
+                                    for danger in ranked ->
+                                        Html.p [
+                                            prop.key (Tile.toMjai danger.Pai)
+                                            prop.text $"第{danger.Rank}位 {Danger.toDisplay danger}"
+                                        ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+
+    /// 牌桌上的危险度：**默认关**，没人立直也没人副露时开了也没东西看
+    /// （那时引擎本来就不给排序）。
+    let private dangerPanels (model: TableModel) (table: Table) (viewer: Seat option) =
+        if model.ShowDanger then
+            dangerSeats viewer table.State
+            |> List.collect (fun seat -> dangerPanel seat table.State)
+        else
+            []
 
     // ---- 视图：配置面板 ----
 
@@ -974,6 +1056,8 @@ module TablePage =
 
             let result = Table.result table |> Option.toList |> List.map resultPanel
 
+            let danger = dangerPanels model table board.Viewer
+
             Html.div [
                 prop.testId "table-board"
                 prop.children (
@@ -997,6 +1081,7 @@ module TablePage =
                         ]
                     ]
                     @ fault
+                    @ danger
                     @ settlement
                     @ result
                 )

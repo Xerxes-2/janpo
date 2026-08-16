@@ -192,3 +192,61 @@ module ScaffoldTests =
         let scaffold = synthetic (observationWith tanki "" [] "5z")
 
         Assert.Equal(2, scaffold.Ukeire |> ukeireOf |> Ukeire.total)
+
+    // ---- 危险度（票 25） ----
+
+    /// 把对家换成立直且河里摆了这几张的一家——危险度算的就是它。
+    let private riichiAt (index: int) (kawa: string) (observation: Observation) : Observation =
+        let others =
+            observation.Others
+            |> List.map (fun other ->
+                if other.Seat = seat index then
+                    { other with
+                        Kawa = tilesOf kawa |> List.map (fun pai -> { Pai = pai; Tsumogiri = false })
+                        Riichi = RiichiState.Accepted RiichiDeclaration.Riichi
+                    }
+                else
+                    other)
+
+        { observation with Others = others }
+
+    /// 听 5z 单骑那一手多摸了一张 1m（十四张），因此试得了牌。
+    let private drawn = $"{tanki} 1m"
+
+    let private dahaiActions =
+        [
+            0, Action.Dahai(seat 0, tile "1m", false)
+            1, Action.Dahai(seat 0, tile "5z", false)
+        ]
+
+    let private syntheticWith (actions: (int * Action) list) (observation: Observation) : Scaffold =
+        match Scaffold.calculate kindSet actions observation with
+        | Some scaffold -> scaffold
+        | None -> failwith "这副手牌的脚手架应当算得出来"
+
+    [<Fact>]
+    let ``逐张试打带上危险度，脆弱的那几家单列一项`` () =
+        let observation = observationWith drawn "" [] "" |> riichiAt 2 "1m"
+        let scaffold = syntheticWith dahaiActions observation
+
+        // 有威胁的家只有立直的对家。
+        Assert.Equal<string list>([ "对家已立直" ], scaffold.Threats |> List.map Threat.toDisplay)
+
+        // 危险度逐条挂在试打上，且与那一张对得上：1m 是对家的现物。
+        let danger (notation: string) =
+            match (trialOf notation scaffold).Danger with
+            | Some danger -> danger
+            | None -> failwith $"{notation} 这一条应当带着危险度"
+
+        Assert.Equal(DangerTier.Genbutsu, (danger "1m").Tier)
+        Assert.Equal(1, (danger "1m").Rank)
+        Assert.Equal(DangerTier.NoEvidence, (danger "5z").Tier)
+        Assert.True((danger "1m").Rank < (danger "5z").Rank)
+
+    [<Fact>]
+    let ``没人立直也没人副露时不给危险度`` () =
+        // 危险度没有被评价的对象时宁可不给数（DECISIONS 25-1）。
+        let scaffold = syntheticWith dahaiActions (observationWith drawn "" [] "")
+
+        Assert.Empty(scaffold.Threats)
+        Assert.All(scaffold.Dahai, fun trial -> Assert.Equal(None, trial.Danger))

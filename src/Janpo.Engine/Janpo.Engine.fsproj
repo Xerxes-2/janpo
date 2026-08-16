@@ -70,6 +70,9 @@
   <ItemGroup>
     <Compile Include="ScaffoldTier.fs" />
     <Compile Include="Observation.fs" />
+    <!-- 分析附件（票 25）。**它排在全部规则判定之后不是随便排的**：判定路径因此
+         引用不到它，「拿掉 Danger 对局照跑」是编译顺序保证的，不靠纪律。 -->
+    <Compile Include="Danger.fs" />
     <Compile Include="Scaffold.fs" />
     <Compile Include="DecisionPackage.fs" />
     <Compile Include="Fallback.fs" />

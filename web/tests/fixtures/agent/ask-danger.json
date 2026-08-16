@@ -1,0 +1,18 @@
+{
+  "_note": "真实录制：DeepSeek deepseek-v4-flash 对 decision-danger.json 的 Assisted 档 prompt（带危险度排序）的单轮 tool call。",
+  "stopReason": "toolUse",
+  "toolCall": {
+    "name": "choose_action",
+    "arguments": {
+      "action_id": "0",
+      "reason": "手切4万是对家现物，安全度高；同时保持3向听，有效牌62枚较优，且在早期巡不考虑宝牌周边的情况下选最安全的现物打出较为合理。"
+    }
+  },
+  "text": "",
+  "errorMessage": null,
+  "latencyMs": 1756,
+  "usage": {
+    "input": 2332,
+    "output": 100
+  }
+}

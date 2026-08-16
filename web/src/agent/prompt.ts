@@ -33,6 +33,35 @@ interface UkeireView {
   tiles: { pai: string; remaining: number }[];
 }
 
+/** 一条带着引擎渲染好的中文的枚举值（ADR-0005 第 2 条）。 */
+interface LabelledView {
+  /** wire 上的名字，分组用。 */
+  value: string;
+  /** 引擎渲染好的中文，直接进 prompt。 */
+  display: string;
+}
+
+/**
+ * 一张牌的危险度（票 25）。**启发式，不是概率**：档位与理由都是引擎按
+ * 现物 / 筋 / 壁 / 宝牌周边四条规则算出来的，这一层只把它们排成行。
+ */
+interface DangerView {
+  tier: LabelledView;
+  /** 这一手里的名次，1 最安全；**并列名次**（两张并列第一之后是第三）。 */
+  rank: number;
+  /** 理由标签，可以是空的（一条依据都没有）。 */
+  reasons: LabelledView[];
+}
+
+/** 有威胁的一家：立直了或者有副露。空表时整份危险度不渲染。 */
+interface ThreatView {
+  seat: number;
+  relative: number;
+  riichi: boolean;
+  naki: boolean;
+  display: string;
+}
+
 interface DahaiView {
   pai: string;
   /** 打得出这一张的动作 id。**接头处是 id 不是牌**：赤 5 与正 5 是两条动作、一个牌种。 */
@@ -41,6 +70,8 @@ interface DahaiView {
   /** 进退向：0 不变，+1 退向（向听戻し）。 */
   shanten_delta: number;
   ukeire: UkeireView | null;
+  /** 危险度。**没人立直也没人副露时是 null**（那时排序没有被评价的对象）。 */
+  danger?: DangerView | null;
 }
 
 interface ScaffoldView {
@@ -48,6 +79,8 @@ interface ScaffoldView {
   /** 只有等摸形（还没摸进）才有；已摸进的手牌看 `dahai` 里逐条给的那些。 */
   ukeire: UkeireView | null;
   dahai: DahaiView[];
+  /** 有威胁的家（票 25）。**可能没有这一项**：24 号票那份形状的包里就没有。 */
+  threats?: ThreatView[];
 }
 
 const KAZE: Record<string, string> = { "1z": "东", "2z": "南", "3z": "西", "4z": "北" };
@@ -139,11 +172,54 @@ function trial(view: DahaiView, label: string, id: number): string {
   return `- id=${id}（${label}）：打完 ${view.shanten.display}，${delta}${acceptance}`;
 }
 
+/** 一条危险度。行首是名次与动作 id——**模型要回的正是那个 id**，不必自己去配牌。 */
+function dangerLine(view: DangerView, label: string, id: number): string {
+  const reasons = view.reasons.map((reason) => reason.display).join("、");
+  const why = reasons === "" ? "" : ` —— ${reasons}`;
+  return `- 第${view.rank}位 id=${id}（${label}）：${view.tier.display}${why}`;
+}
+
 /**
- * Assisted 档多出来的那一节。措辞照 `CONTEXT.md`：**向听数 / 有效牌 / 进退向 / 退向（向听戻し）**。
+ * 危险度那几行（票 25）。**没有有威胁的家就一行也不写**：那时引擎也不给排序。
  *
- * **25 号票的落点就在这里**：Danger 是同一个 `scaffold` 槽位里的另一个字段，
- * 排序结果要么接在每条试打后面，要么在下面另起一行；骨架（`frame`）与调用点不用动。
+ * 措辞照 `CONTEXT.md` 的 Danger / Genbutsu / Suji / Kabe：**它是启发式，不是概率**。
+ * 这一层一个判据也不算，档位、名次与理由全是引擎算好递过来的。
+ */
+function dangerLines(decision: DecisionPackage, view: ScaffoldView): string[] {
+  // 跟 `readScaffold` 同一个方针：读不出来就当没有，**不把这一手卡死**。
+  const threats = Array.isArray(view.threats) ? view.threats : [];
+  if (threats.length === 0) return [];
+
+  const byId = new Map<number, DangerView>();
+  for (const entry of view.dahai) {
+    const danger = entry.danger;
+    if (danger === undefined || danger === null) continue;
+    for (const id of entry.action_ids) byId.set(id, danger);
+  }
+
+  const ranked = decision.actions.flatMap((option) => {
+    const danger = byId.get(option.id);
+    return danger === undefined ? [] : [{ danger, option }];
+  });
+
+  if (ranked.length === 0) return [];
+
+  // 排序由引擎给（名次）；同名次的按动作 id，跟上面那两节的顺序一致。
+  ranked.sort(
+    (left, right) => left.danger.rank - right.danger.rank || left.option.id - right.option.id,
+  );
+
+  const who = threats.map((threat) => threat.display).join("、");
+
+  return [
+    `危险度排序（有威胁的家：${who}）——现物 / 筋 / 壁 / 宝牌周边四条规则算出来的启发式，不是概率；排在前面的更安全，同级并列：`,
+    ...ranked.map((entry) => dangerLine(entry.danger, entry.option.label, entry.option.id)),
+  ];
+}
+
+/**
+ * Assisted 档多出来的那一节。措辞照 `CONTEXT.md`：**向听数 / 有效牌 / 进退向 / 退向（向听戻し）**，
+ * 以及危险度那一批标签（**现物 / 筋 / 壁**，票 25）。
  */
 function scaffoldBlock(decision: DecisionPackage): string | null {
   const view = readScaffold(decision.scaffold);
@@ -175,6 +251,7 @@ function scaffoldBlock(decision: DecisionPackage): string | null {
     ...head,
     "逐张试打（进退向 0 为不变，+1 为退向（向听戻し）；有效牌括号里是那张牌的剩余枚数）：",
     ...trials,
+    ...dangerLines(decision, view),
   ].join("\n");
 }
 
@@ -210,10 +287,11 @@ function bare(decision: DecisionPackage): string {
 }
 
 /**
- * Assisted 档（信息辅助）：Bare 的一切 + 决策包 `scaffold` 里的向听数、有效牌与逐张试打。
+ * Assisted 档（信息辅助）：Bare 的一切 + 决策包 `scaffold` 里的向听数、有效牌、逐张试打与危险度排序。
  *
  * **一个数都不在这里算**（票 24 的硬约束）：向听数与有效牌是引擎的 `Shanten` / `Ukeire`
- * 算好送过来的，这一层只把它们排成行。脚手架读不动时退回 Bare，**不卡住这一手**。
+ * 算好送过来的，危险度是 `Danger` 算好送过来的，这一层只把它们排成行。
+ * 脚手架读不动时退回 Bare，**不卡住这一手**。
  */
 function assisted(decision: DecisionPackage): string {
   return frame(decision, scaffoldBlock(decision));
