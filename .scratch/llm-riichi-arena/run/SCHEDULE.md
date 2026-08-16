@@ -52,6 +52,11 @@
 两条提案进了 `DECISIONS.md`：**S-A Ruleset 与 ADR-0004**（早上必看）、**S-B 三麻的门缝**。
 关键发现：spec 漏了 **Nagashi Mangan** 与 **三家和了**，且头跳默认值与两大平台相反。
 
+## 资源
+
+`RESOURCES.log` —— 看门狗每 30s 一条：负载三档 + CPU 前三名 + 自动降优先级的记录。
+`scripts/watchdog.sh` 在跑批期间常驻（`nohup setsid ./scripts/watchdog.sh &`）。
+
 ## 早上先看哪里
 
 1. 这张表 —— 谁 done、谁 parked
