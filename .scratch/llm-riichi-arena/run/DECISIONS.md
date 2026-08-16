@@ -2511,3 +2511,24 @@ RUNBOOK 不许我改术语表；票 31 获准改三处，建议一并收进去�
 **29b-10**：`ask-*.json` 不重录是对的。它是「模型真的这么答过」的证据，与 prompt 形态无关；
 重录会把答案换掉，而四条失败路径正钉在具体那几个答案上（`action_id: "2"` 放到只有 0/1 的包上才叫越界）。
 代价（那几份的 `usage` 没有缓存字段 → 声明成可缺省，缺了按 0 算）已有用例钉住。
+
+## 主人 8/17 裁决：README 只面向用户；加 Pages 部署
+
+**主人原话**：「README 我是想单纯面向用户的，不需要别人了解怎么开发以及我是怎么开发的。」
+
+1. ✅ README **砍掉**「这个仓库是怎么造出来的」整节与开发命令手册。前者一个字都不提，
+   后者搬去 `docs/development.md`，README 末尾留一行链接
+2. ✅ `.scratch/` 跑批日志**仍然公开**（文件在仓库里，想挖的挖得到），但 README 不提。
+   零成本：不必重写历史，`docs/adr/` 指向 `.scratch/` 的理由链也不会断
+3. ✅ **加 GitHub Pages 部署**。理由是砍掉开发向内容后会露出一个洞——面向用户的 README
+   必须能让人玩上，而「`nix develop` + `pnpm dev`」恰恰是开发向的。项目零后端、纯静态、
+   key 只落浏览器，Pages 天生合适且成本为零
+4. 立票 33（部署 + README 重写 + 手册搬家一票做完，因为 README 要链接到部署地址）
+
+**技术约束（写进票里）**：Pages 要求 vite 的 `base` 改成 `/janpo/`，而 `web/scripts/verify-*.mjs`
+靠 vite preview 打开页面 —— base 一写死那些闸门全断。所以 **base 必须可配**：本地默认 `/`，
+只在 Pages 构建时注入 `/janpo/`。
+
+**顺带记一条运营含义**：Pages 是 https 页面，用户若要接本地 Ollama/LM Studio，
+会撞上 Chrome 的「本地网络访问」权限提示（票 30 实测：loopback 不算 mixed content，
+但页面不在本地地址空间时要授权）。README 指向 `docs/host/custom-endpoint.md`，别重写结论。
