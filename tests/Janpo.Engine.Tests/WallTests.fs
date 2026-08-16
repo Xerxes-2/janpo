@@ -18,7 +18,7 @@ module WallTests =
     let private dealt (oya: Seat) (wall: Wall) =
         match Wall.deal ruleset oya wall with
         | Some result -> result
-        | None -> failwith $"座位 {oya} 为亲时应当发得出配牌"
+        | None -> failwith $"座位 {Seat.index oya} 为亲时应当发得出配牌"
 
     [<Fact>]
     let ``可摸区与王牌的张数取自规则集`` () =
@@ -89,12 +89,12 @@ module WallTests =
                     |> List.map (fun index -> List.item index live)
                     |> Tile.sort
 
-                Assert.Equal<Tile list>(expected, List.item seat hands)
+                Assert.Equal<Tile list>(expected, Seat.tryItem seat hands |> Option.defaultValue [])
 
     [<Fact>]
     let ``配牌后可摸区少掉发出去的张数`` () =
         let wall = built 3
-        let hands, afterDeal = dealt 0 wall
+        let hands, afterDeal = dealt Seat.first wall
 
         Assert.Equal(ruleset.SeatCount, List.length hands)
 
@@ -106,8 +106,11 @@ module WallTests =
 
     [<Fact>]
     let ``亲不是合法座位时发不出配牌`` () =
-        Assert.Equal<(Tile list list * Wall) option>(None, Wall.deal ruleset 4 (built 1))
-        Assert.Equal<(Tile list list * Wall) option>(None, Wall.deal ruleset -1 (built 1))
+        Assert.Equal<(Tile list list * Wall) option>(None, Wall.deal ruleset (seat 4) (built 1))
+
+        // 负数**在类型层就不是座位**（`Seat` 只能经 `Seat.ofIndex` 从裸整数来，晨间裁决 R-5），
+        // 所以这条判据从运行期挪到了构造处：过去这里写的是 `Wall.deal ruleset -1`。
+        Assert.Equal<Seat option>(None, Seat.ofIndex -1)
 
     [<Fact>]
     let ``牌不够发时配牌返回 None`` () =
@@ -118,7 +121,7 @@ module WallTests =
             }
 
         let wall, _ = Wall.build tiny (Rng.ofSeed 1)
-        Assert.Equal<(Tile list list * Wall) option>(None, Wall.deal tiny 0 wall)
+        Assert.Equal<(Tile list list * Wall) option>(None, Wall.deal tiny Seat.first wall)
 
     [<Fact>]
     let ``摸光可摸区之后再摸返回 None，王牌纹丝不动`` () =

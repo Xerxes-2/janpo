@@ -26,11 +26,11 @@ module ScoreProperties =
         let tsumo = transfer.Actor = transfer.Target
 
         score.Deltas
-        |> List.mapi (fun seat delta ->
+        |> Seat.indexed
+        |> List.forall (fun (seat, delta) ->
             if seat = transfer.Actor then delta > 0
             elif tsumo || seat = transfer.Target then delta < 0
             else delta = 0)
-        |> List.forall id
 
     [<Property>]
     let ``每一笔支付都是 100 的倍数`` (HoraCase(transfer, value)) =
@@ -44,7 +44,8 @@ module ScoreProperties =
         if transfer.Actor <> transfer.Target || transfer.Actor = transfer.Oya then
             true
         else
-            let paid (seat: Seat) = -List.item seat score.Deltas
+            let paid (seat: Seat) =
+                Seat.tryItem seat score.Deltas |> Option.map (~-) |> Option.defaultValue 0
 
             Seat.all engine
             |> List.filter (fun seat -> seat <> transfer.Actor && seat <> transfer.Oya)
@@ -109,14 +110,14 @@ module ScoreProperties =
         |> List.forall (fun (index, hora) ->
             let paid =
                 hora.Deltas
-                |> List.mapi (fun seat delta -> if seat = hora.Actor then 0 else -delta)
-                |> List.sum
+                |> Seat.indexed
+                |> List.sumBy (fun (seat, delta) -> if seat = hora.Actor then 0 else -delta)
 
             // 供托只归排在最前的那一家（双响时靠后的那家一根也拿不到）。
             let taken = if index = 0 then Ruleset.kyotakuScore engine sticks else 0
 
             // 收到的 = 付出去的 + 供托；和了点是其中不含本场与供托的那部分。
-            List.item hora.Actor hora.Deltas = paid + taken
+            Seat.tryItem hora.Actor hora.Deltas = Some(paid + taken)
             && hora.HoraPoints <= paid
             && hora.Fu % 5 = 0
             && hora.Fan > 0)

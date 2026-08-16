@@ -83,7 +83,7 @@ module YakuTests =
 
         // 副露之后自摸不成役。
         let opened =
-            tsumo [ AgariFixture.chi 3 "2m" "3m 4m" ] "5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z" "8s"
+            tsumo [ AgariFixture.chi (seat 3) "2m" "3m 4m" ] "5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z" "8s"
 
         Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context opened)
 
@@ -111,7 +111,7 @@ module YakuTests =
 
         // 同样的牌形，把一副顺子鸣出来就不再是一杯口。
         let opened =
-            ron [ AgariFixture.chi 3 "2m" "3m 4m" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "8s"
+            ron [ AgariFixture.chi (seat 3) "2m" "3m 4m" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "8s"
 
         Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context opened)
 
@@ -124,7 +124,7 @@ module YakuTests =
     [<Fact>]
     let ``食断关掉时副露的断幺九不成立`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "2s" "2s 2s" ] "2m 3m 4m 6m 7m 8m 5p 6p 7p 5s 5s" "4m"
+            ron [ AgariFixture.pon (seat 1) "2s" "2s 2s" ] "2m 3m 4m 6m 7m 8m 5p 6p 7p 5s 5s" "4m"
 
         Assert.Equal<Yaku list>([ Yaku.Tanyao ], yaku context hand)
         Assert.Equal(Error YakuError.NoYaku, Yaku.detect (Ruleset.withoutKuitan ruleset) context hand)
@@ -184,7 +184,7 @@ module YakuTests =
     [<Fact>]
     let ``岭上开花要自摸，抢杠要荣和`` () =
         // 副露手：把役限制在上下文役上。
-        let naki = [ AgariFixture.chi 3 "2m" "3m 4m" ]
+        let naki = [ AgariFixture.chi (seat 3) "2m" "3m 4m" ]
         let concealed = "5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z"
         let rinshan = { context with Rinshan = true }
         let chankan = { context with Chankan = true }
@@ -218,7 +218,7 @@ module YakuTests =
 
         // 副露降番：2 番变 1 番。
         let opened =
-            ron [ AgariFixture.pon 1 "3z" "3z 3z" ] "1m 2m 3m 9m 9m 7p 8p 9p 1s 2s 3s" "9m"
+            ron [ AgariFixture.pon (seat 1) "3z" "3z 3z" ] "1m 2m 3m 9m 9m 7p 8p 9p 1s 2s 3s" "9m"
 
         Assert.Equal<Yaku list>([ Yaku.Chanta ], yaku context opened)
         Assert.Equal(1, han context opened)
@@ -253,7 +253,13 @@ module YakuTests =
     [<Fact>]
     let ``对对和四组刻子`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "3p" "3p 3p"; AgariFixture.pon 2 "7s" "7s 7s" ] "1m 1m 1m 3z 3z 3z 9m 9m" "9m"
+            ron
+                [
+                    AgariFixture.pon (seat 1) "3p" "3p 3p"
+                    AgariFixture.pon (seat 2) "7s" "7s 7s"
+                ]
+                "1m 1m 1m 3z 3z 3z 9m 9m"
+                "9m"
 
         Assert.Equal<Yaku list>([ Yaku.Toitoi ], yaku context hand)
         Assert.Equal(2, han context hand)
@@ -298,13 +304,13 @@ module YakuTests =
     [<Fact>]
     let ``三色同顺与一气通贯的副露降番`` () =
         let sanshoku =
-            ron [ AgariFixture.chi 3 "2p" "3p 4p" ] "2m 3m 4m 2s 3s 4s 7s 8s 9s 3z 3z" "8s"
+            ron [ AgariFixture.chi (seat 3) "2p" "3p 4p" ] "2m 3m 4m 2s 3s 4s 7s 8s 9s 3z 3z" "8s"
 
         Assert.Equal<Yaku list>([ Yaku.SanshokuDoujun ], yaku context sanshoku)
         Assert.Equal(1, han context sanshoku)
 
         let ittsuu =
-            ron [ AgariFixture.chi 3 "1m" "2m 3m" ] "4m 5m 6m 7m 8m 9m 2p 3p 4p 3z 3z" "3p"
+            ron [ AgariFixture.chi (seat 3) "1m" "2m 3m" ] "4m 5m 6m 7m 8m 9m 2p 3p 4p 3z 3z" "3p"
 
         Assert.Equal<Yaku list>([ Yaku.Ittsuu ], yaku context ittsuu)
         Assert.Equal(1, han context ittsuu)
@@ -314,9 +320,9 @@ module YakuTests =
         let hand =
             ron
                 [
-                    AgariFixture.minkan 1 "3p" "3p 3p 3p"
+                    AgariFixture.minkan (seat 1) "3p" "3p 3p 3p"
                     AgariFixture.ankan "7s 7s 7s 7s"
-                    AgariFixture.minkan 2 "9m" "9m 9m 9m"
+                    AgariFixture.minkan (seat 2) "9m" "9m 9m 9m"
                 ]
                 "2m 3m 4m 3z 3z"
                 "4m"
@@ -358,7 +364,7 @@ module YakuTests =
     [<Fact>]
     let ``混老头全是幺九牌且没有顺子`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "1p" "1p 1p" ] "1m 1m 1m 3z 3z 3z 9s 9s 9s 9m 9m" "9m"
+            ron [ AgariFixture.pon (seat 1) "1p" "1p 1p" ] "1m 1m 1m 3z 3z 3z 9s 9s 9s 9m 9m" "9m"
 
         Assert.Equal<Yaku list>([ Yaku.Toitoi; Yaku.Sanankou; Yaku.Honroutou ], yaku context hand)
         Assert.Equal(6, han context hand)
@@ -388,7 +394,7 @@ module YakuTests =
         Assert.Equal(3, han context hand)
 
         let opened =
-            ron [ AgariFixture.pon 1 "3z" "3z 3z" ] "2m 3m 4m 6m 7m 8m 1m 1m 1m 5m 5m" "5m"
+            ron [ AgariFixture.pon (seat 1) "3z" "3z 3z" ] "2m 3m 4m 6m 7m 8m 1m 1m 1m 5m 5m" "5m"
 
         Assert.Equal(2, han context opened)
 
@@ -480,7 +486,7 @@ module YakuTests =
     [<Fact>]
     let ``字一色`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "1z" "1z 1z" ] "2z 2z 2z 3z 3z 3z 5z 5z 5z 7z 7z" "7z"
+            ron [ AgariFixture.pon (seat 1) "1z" "1z 1z" ] "2z 2z 2z 3z 3z 3z 5z 5z 5z 7z 7z" "7z"
 
         Assert.Equal<Yaku list>([ Yaku.Tsuuiisou ], yaku context hand)
         Assert.Equal(1, yakuman context hand)
@@ -488,14 +494,14 @@ module YakuTests =
     [<Fact>]
     let ``清老头`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "1p" "1p 1p" ] "1m 1m 1m 9m 9m 9m 9p 9p 9p 1s 1s" "1s"
+            ron [ AgariFixture.pon (seat 1) "1p" "1p 1p" ] "1m 1m 1m 9m 9m 9m 9p 9p 9p 1s 1s" "1s"
 
         Assert.Equal<Yaku list>([ Yaku.Chinroutou ], yaku context hand)
 
     [<Fact>]
     let ``绿一色`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "6z" "6z 6z" ] "2s 2s 2s 3s 3s 3s 4s 4s 4s 8s 8s" "8s"
+            ron [ AgariFixture.pon (seat 1) "6z" "6z 6z" ] "2s 2s 2s 3s 3s 3s 4s 4s 4s 8s 8s" "8s"
 
         Assert.Equal<Yaku list>([ Yaku.Ryuuiisou ], yaku context hand)
 
@@ -517,7 +523,7 @@ module YakuTests =
                     AgariFixture.ankan "1m 1m 1m 1m"
                     AgariFixture.ankan "2m 2m 2m 2m"
                     AgariFixture.ankan "3m 3m 3m 3m"
-                    AgariFixture.minkan 1 "4m" "4m 4m 4m"
+                    AgariFixture.minkan (seat 1) "4m" "4m 4m 4m"
                 ]
                 "9m 9m"
                 "9m"
@@ -581,7 +587,7 @@ module YakuTests =
     [<Fact>]
     let ``只有宝牌救不了无役`` () =
         let hand =
-            ron [ AgariFixture.pon 1 "3z" "3z 3z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 5m 5m" "4m"
+            ron [ AgariFixture.pon (seat 1) "3z" "3z 3z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 5m 5m" "4m"
 
         let withDora =
             { context with
@@ -598,7 +604,7 @@ module YakuTests =
         Assert.Equal(Error YakuError.NoAgariShape, Yaku.detect ruleset context notAgari)
 
         let noYaku =
-            ron [ AgariFixture.pon 1 "3z" "3z 3z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 5m 5m" "4m"
+            ron [ AgariFixture.pon (seat 1) "3z" "3z 3z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 5m 5m" "4m"
 
         Assert.Equal(Error YakuError.NoYaku, Yaku.detect ruleset context noYaku)
 

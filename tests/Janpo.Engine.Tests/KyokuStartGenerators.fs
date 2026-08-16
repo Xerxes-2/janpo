@@ -14,7 +14,7 @@ type KyokuStartArbitraries =
             let! kyoku = Gen.choose (1, 4)
             let! honba = Gen.choose (0, 5)
             let! kyotaku = Gen.choose (0, 3)
-            let! oya = Gen.choose (0, Ruleset.yonma.SeatCount - 1)
+            let! oya = Gen.choose (0, Ruleset.yonma.SeatCount - 1) |> Gen.map SeatFixtures.seat
             let! scores = Gen.listOfLength Ruleset.yonma.SeatCount (Gen.choose (0, 100000))
 
             return

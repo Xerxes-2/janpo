@@ -194,7 +194,7 @@ module KanProperties =
 
     [<Property>]
     let ``包只改谁付、不改和了点：增减之和仍等于收走的供托`` (HoraCase(transfer, value)) (liable: int) =
-        let seat = ((liable % engine.SeatCount) + engine.SeatCount) % engine.SeatCount
+        let seat = Seat.wrap engine liable
         let plain = Score.hora engine transfer value
 
         let packed = Score.hora engine { transfer with Sekinin = Some seat } value
@@ -203,18 +203,18 @@ module KanProperties =
         packed.HoraPoints = plain.HoraPoints
         && packed.Limit = plain.Limit
         && List.sum packed.Deltas = transfer.Kyotaku * engine.RiichiBou
-        && List.item transfer.Actor packed.Deltas = List.item transfer.Actor plain.Deltas
+        && Seat.tryItem transfer.Actor packed.Deltas = Seat.tryItem transfer.Actor plain.Deltas
         // 付钱的只可能是责任者与放铳者（自摸时放铳者就是和了者自己，因此只剩责任者）。
         // 和了者包不了自己：那种情形当作没包，授受照常。
         && (seat = transfer.Actor
             || packed.Deltas
-               |> List.mapi (fun each delta ->
-                   each = transfer.Actor || each = seat || each = transfer.Target || delta = 0)
-               |> List.forall id)
+               |> Seat.indexed
+               |> List.forall (fun (each, delta) ->
+                   each = transfer.Actor || each = seat || each = transfer.Target || delta = 0))
 
     [<Property>]
     let ``包在自摸时由责任者一家付光`` (HoraCase(transfer, value)) (liable: int) =
-        let seat = ((liable % engine.SeatCount) + engine.SeatCount) % engine.SeatCount
+        let seat = Seat.wrap engine liable
 
         if transfer.Actor <> transfer.Target || seat = transfer.Actor then
             true
@@ -223,6 +223,7 @@ module KanProperties =
 
             // 自摸的三家平摊变成责任者一家付：其余两家分文不动。
             packed.Deltas
-            |> List.mapi (fun each delta -> each = transfer.Actor || each = seat || delta = 0)
-            |> List.forall id
-            && -(List.item seat packed.Deltas) >= packed.HoraPoints
+            |> Seat.indexed
+            |> List.forall (fun (each, delta) -> each = transfer.Actor || each = seat || delta = 0)
+            && (Seat.tryItem seat packed.Deltas
+                |> Option.exists (fun delta -> -delta >= packed.HoraPoints))

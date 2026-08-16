@@ -26,7 +26,7 @@ module EventTests =
 
     [<Fact>]
     let ``tsumo 编码为 mjai 事件对象`` () =
-        Assert.Equal("""{"type":"tsumo","actor":2,"pai":"5mr"}""", encode (Tsumo(2, tile "5mr")))
+        Assert.Equal("""{"type":"tsumo","actor":2,"pai":"5mr"}""", encode (Tsumo(seat 2, tile "5mr")))
 
     [<Fact>]
     let ``start_kyoku 编码为 mjai 事件对象`` () =
@@ -37,7 +37,7 @@ module EventTests =
                     Kyoku = 3
                     Honba = 2
                     Kyotaku = 1
-                    Oya = 2
+                    Oya = seat 2
                     DoraMarker = tile "3s"
                     Scores = [ 25000; 24000; 26000; 25000 ]
                     Tehais =
@@ -58,11 +58,14 @@ module EventTests =
 
     [<Fact>]
     let ``dahai 编码为 mjai 事件对象`` () =
-        Assert.Equal("""{"type":"dahai","actor":1,"pai":"7s","tsumogiri":true}""", encode (Dahai(1, tile "7s", true)))
+        Assert.Equal(
+            """{"type":"dahai","actor":1,"pai":"7s","tsumogiri":true}""",
+            encode (Dahai(seat 1, tile "7s", true))
+        )
 
         Assert.Equal(
             """{"type":"dahai","actor":3,"pai":"5pr","tsumogiri":false}""",
-            encode (Dahai(3, tile "5pr", false))
+            encode (Dahai(seat 3, tile "5pr", false))
         )
 
     [<Fact>]
@@ -70,12 +73,12 @@ module EventTests =
         // F# 这侧的 case 名与 wire 同拼（术语表里就叫 Pon / Chi），红宝牌在 consumed 里原样保留。
         Assert.Equal(
             """{"type":"pon","actor":1,"target":0,"pai":"5s","consumed":["5s","5s"]}""",
-            encode (Pon(1, 0, tile "5s", [ tile "5s"; tile "5s" ]))
+            encode (Pon(seat 1, seat 0, tile "5s", [ tile "5s"; tile "5s" ]))
         )
 
         Assert.Equal(
             """{"type":"chi","actor":2,"target":1,"pai":"4p","consumed":["5pr","6p"]}""",
-            encode (Chi(2, 1, tile "4p", [ tile "5pr"; tile "6p" ]))
+            encode (Chi(seat 2, seat 1, tile "4p", [ tile "5pr"; tile "6p" ]))
         )
 
     /// 三种杠在 mjai 里是**三个分立的事件**（没有统一的 `kan`），字段也各不相同：
@@ -85,18 +88,18 @@ module EventTests =
     let ``ankan 、 kakan 与 daiminkan 是三个分立的 mjai 事件`` () =
         Assert.Equal(
             """{"type":"ankan","actor":3,"consumed":["9s","9s","9s","9s"]}""",
-            encode (Ankan(3, [ tile "9s"; tile "9s"; tile "9s"; tile "9s" ]))
+            encode (Ankan(seat 3, [ tile "9s"; tile "9s"; tile "9s"; tile "9s" ]))
         )
 
         Assert.Equal(
             """{"type":"kakan","actor":1,"pai":"7z","consumed":["7z","7z","7z"]}""",
-            encode (Kakan(1, tile "7z", [ tile "7z"; tile "7z"; tile "7z" ]))
+            encode (Kakan(seat 1, tile "7z", [ tile "7z"; tile "7z"; tile "7z" ]))
         )
 
         // 标识符按术语表拼作 `Minkan`，wire 上是 mjai 的 `daiminkan`（裁决 D-1）。
         Assert.Equal(
             """{"type":"daiminkan","actor":3,"target":0,"pai":"5s","consumed":["5s","5s","5sr"]}""",
-            encode (Minkan(3, 0, tile "5s", [ tile "5s"; tile "5s"; tile "5sr" ]))
+            encode (Minkan(seat 3, seat 0, tile "5s", [ tile "5s"; tile "5s"; tile "5sr" ]))
         )
 
     /// 新宝牌是**独立的一条事件**，不挂在杠的事件上。
@@ -107,12 +110,12 @@ module EventTests =
     [<Fact>]
     let ``pon 与 chi 能从 mjai wire 解回来`` () =
         Assert.Equal<Result<Event, string>>(
-            Ok(Pon(1, 0, tile "5s", [ tile "5s"; tile "5s" ])),
+            Ok(Pon(seat 1, seat 0, tile "5s", [ tile "5s"; tile "5s" ])),
             decode """{"type":"pon","actor":1,"target":0,"pai":"5s","consumed":["5s","5s"]}"""
         )
 
         Assert.Equal<Result<Event, string>>(
-            Ok(Chi(2, 1, tile "4p", [ tile "5pr"; tile "6p" ])),
+            Ok(Chi(seat 2, seat 1, tile "4p", [ tile "5pr"; tile "6p" ])),
             decode """{"type":"chi","actor":2,"target":1,"pai":"4p","consumed":["5pr","6p"]}"""
         )
 
@@ -121,8 +124,8 @@ module EventTests =
         let event =
             Hora
                 {
-                    Actor = 2
-                    Target = 0
+                    Actor = seat 2
+                    Target = seat 0
                     Pai = tile "4p"
                     Fu = 0
                     Fan = 0
@@ -178,14 +181,14 @@ module EventTests =
         let events =
             [
                 StartGame [ "p0"; "p1"; "p2"; "p3" ]
-                Tsumo(0, tile "1z")
+                Tsumo(seat 0, tile "1z")
                 StartKyoku
                     {
                         Bakaze = Ton
                         Kyoku = 1
                         Honba = 0
                         Kyotaku = 0
-                        Oya = 0
+                        Oya = seat 0
                         DoraMarker = tile "1p"
                         Scores = [ 25000; 25000; 25000; 25000 ]
                         Tehais = [ []; []; []; [] ]

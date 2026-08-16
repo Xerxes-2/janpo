@@ -1071,3 +1071,30 @@ ADR-0004 决定 4。字段名不变、类型从 `Tile list` 变成 `TileKindSet`
 也一并去掉（同一个函数已经收着 `ruleset`）。
 否决：加一个 `Ruleset.kindSet` 派生函数而保留 `Tile list` 字段（那就是两份表示，ADR 明确否掉）。
 封装未破：`TileKindSet` 仍是私有 record，`legalFlags` 仍是 `internal`。
+
+### R-5 / `Seat` 换成 `[<Struct>]` 私有 record，构造经函数
+
+`type Seat = int` 改成 `[<Struct>] type Seat = private { Index: int }`（与 `Tile` 同一形状）。
+构造只有三条路：`Seat.ofIndex : int -> Seat option`（外来裸整数，**负数不是座位**）、
+`Seat.first` / `Seat.all` / `Seat.orderFrom` 这类枚举、`Seat.shimocha` 这类相对位置。
+另有 `internal ofIndexUnchecked` 给引擎内部与测试固件（经既有的 `InternalsVisibleTo`，
+与 `Wall.ofOrdered` 同一道口子）。
+否决：单 case DU（`Seat of int`，模式匹配会把裸 int 又漏出来）、公开的可变构造。
+理由：`kyoku` / `honba` / 点数 / 番 / 符全是挨着的同类型标量，透明别名下传错位置编译器不吭声——
+这正是 02 票给 `StartKyoku` 立记录载荷的理由（备注 N-4 也印证过 F# 类型级检查的价值）。
+
+### R-5 / `Seat.next` 改名 `Seat.shimocha`，相对位置补齐三个
+
+一个名字一件事（裁决 D-6 的同一条）：座位序上的「下一个」就是下家，两个名字不留。
+新增 `kamicha`（上家）、`toimen`（**返回 option**：三麻没有对家）、`distanceFrom`
+（相对第几家，「打牌者下家优先」这条裁决顺序就是它）、`orderAfter`（从打牌者下家起绕一圈）、
+`wrap`（任意整数折进合法座位，属性测试取样用）、`first`（起家）。
+另加「每家一项」列表的三个拆解 `tryItem` / `mapAt` / `indexed`——点数、Deltas、配牌、
+`Players` 都是这个形状，过去散着写 `List.tryItem seat xs` / `List.mapi (fun seat -> ...)`。
+`shift` 是私有的，**全模块只有它一处取模**。
+
+### 提案 R-5-A：术语表缺「下家 / 对家 / 上家」的罗马字
+
+`CONTEXT.md` 的 Seat 条目写了「『下家 / 对家 / 上家』是相对座位的标准说法，照用」，但只给了中文。
+按 ADR-0001（标识符用罗马字日麻术语）我取了 `Shimocha` / `Toimen` / `Kamicha`，
+并把「三麻没有 Toimen」写进签名（返回 `Seat option`）。请一并裁，与 11-L 那条同批。

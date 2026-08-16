@@ -27,7 +27,7 @@ module AgariHandTests =
         Assert.Equal(
             Error(AgariConcealedCountMismatch(14, 1)),
             AgariHand.ron
-                [ AgariFixture.pon 1 "5z" "5z 5z" ]
+                [ AgariFixture.pon (seat 1) "5z" "5z 5z" ]
                 (tiles "2m 3m 4m 5p 6p 7p 2s 3s 4s 7s 8s 9s 3z 3z")
                 (tile "9s")
         )
@@ -50,7 +50,10 @@ module AgariHandTests =
     let ``同一牌种连副露一起最多四张`` () =
         Assert.Equal(
             Error(AgariKindOverflow(tile "5z", 5)),
-            AgariHand.ron [ AgariFixture.pon 1 "5z" "5z 5z" ] (tiles "5z 5z 2m 3m 4m 2s 3s 4s 7s 8s 9s") (tile "9s")
+            AgariHand.ron
+                [ AgariFixture.pon (seat 1) "5z" "5z 5z" ]
+                (tiles "5z 5z 2m 3m 4m 2s 3s 4s 7s 8s 9s")
+                (tile "9s")
         )
 
     [<Fact>]
@@ -61,7 +64,7 @@ module AgariHandTests =
         Assert.True(AgariHand.isMenzen ankan)
 
         let pon =
-            AgariFixture.ron [ AgariFixture.pon 1 "1z" "1z 1z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "9s"
+            AgariFixture.ron [ AgariFixture.pon (seat 1) "1z" "1z 1z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "9s"
 
         Assert.False(AgariHand.isMenzen pon)
 
@@ -138,7 +141,7 @@ module AgariHandTests =
     let ``副露与暗杠原样进面子表`` () =
         let hand =
             AgariFixture.ron
-                [ AgariFixture.ankan "1z 1z 1z 1z"; AgariFixture.chi 3 "3m" "4m 5m" ]
+                [ AgariFixture.ankan "1z 1z 1z 1z"; AgariFixture.chi (seat 3) "3m" "4m 5m" ]
                 "5p 6p 7p 7s 8s 9s 3z 3z"
                 "9s"
 
@@ -156,6 +159,6 @@ module AgariHandTests =
     [<Fact>]
     let ``和了牌姿的中文渲染`` () =
         let hand =
-            AgariFixture.tsumo [ AgariFixture.pon 1 "7z" "7z 7z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "9s"
+            AgariFixture.tsumo [ AgariFixture.pon (seat 1) "7z" "7z 7z" ] "2m 3m 4m 5p 6p 7p 7s 8s 9s 3z 3z" "9s"
 
         Assert.Equal("2万 3万 4万 5筒 6筒 7筒 7索 8索 9索 西 西 碰中中中（自摸9索）", AgariHand.toDisplay hand)

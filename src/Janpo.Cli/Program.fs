@@ -92,7 +92,7 @@ let private rulesetOf (akadora: bool) : Ruleset =
 
 /// 一场对局开始的 `start_game`：`names` 来自配桌，不是引擎算出来的（02 票的决定）。
 let private startGame (ruleset: Ruleset) : Event =
-    StartGame(Seat.all ruleset |> List.map (fun seat -> "p" + string seat))
+    StartGame(Seat.all ruleset |> List.map (fun seat -> "p" + string (Seat.index seat)))
 
 let private printEvents (events: Event list) : unit =
     for event in events do
@@ -281,8 +281,14 @@ type private YakuArguments =
         Kiriage: bool
     }
 
+/// CLI 的示例座位：`janpo naki` / `janpo score` 手里没有真实牌局，座位只是占位。
+/// 约定宣言者坐起家，被鸣 / 放铳的是它的下家，吃只吃上家打的（`Naki.chi` 的不变量）。
+let private declarer = Seat.first
+let private declarerShimocha = Seat.shimocha Ruleset.yonma Seat.first
+let private declarerKamicha = Seat.kamicha Ruleset.yonma Seat.first
+
 /// 副露的记法：`<种类> <牌>...`，第一张是鸣来的那张（加杠是加上去的那张）。
-/// 座位只影响 mjai 事件与责任支付，判役用不上，这里填一个合法值。
+/// 座位只影响 mjai 事件与责任支付，判役用不上，这里填示例座位。
 let private parseNakiSpec (text: string) : Result<Naki, string> =
     let tokens =
         text.Split([| ' '; '\t'; ',' |])
@@ -299,12 +305,12 @@ let private parseNakiSpec (text: string) : Result<Naki, string> =
         | Error error -> Error(TileListParseError.toDisplay error)
         | Ok tiles ->
             match kind, tiles with
-            | "pon", taken :: consumed -> described (Naki.pon 1 taken consumed)
-            | "chi", taken :: consumed -> described (Naki.chi 3 taken consumed)
+            | "pon", taken :: consumed -> described (Naki.pon declarerShimocha taken consumed)
+            | "chi", taken :: consumed -> described (Naki.chi declarerKamicha taken consumed)
             | "ankan", _ -> described (Naki.ankan tiles)
-            | "minkan", taken :: consumed -> described (Naki.minkan 1 taken consumed)
+            | "minkan", taken :: consumed -> described (Naki.minkan declarerShimocha taken consumed)
             | "kakan", added :: taken :: consumed ->
-                described (Naki.pon 1 taken consumed |> Result.bind (Naki.kakan added))
+                described (Naki.pon declarerShimocha taken consumed |> Result.bind (Naki.kakan added))
             | ("pon" | "chi" | "minkan" | "kakan"), _ -> Error $"「{kind}」后面牌太少"
             | _ -> Error $"未知的副露种类「{kind}」，只有 pon / chi / ankan / minkan / kakan"
 
@@ -453,9 +459,13 @@ let private runYaku (arguments: string list) : int =
                     // 座位约定见 usage：和了者固定在座位 0，自风为东时它就是亲。
                     let transfer =
                         {
-                            Actor = 0
-                            Target = (if parsed.Tsumo then 0 else 1)
-                            Oya = (if parsed.Context.Jikaze = Ton then 0 else 1)
+                            Actor = declarer
+                            Target = (if parsed.Tsumo then declarer else declarerShimocha)
+                            Oya =
+                                (if parsed.Context.Jikaze = Ton then
+                                     declarer
+                                 else
+                                     declarerShimocha)
                             Honba = parsed.Honba
                             Kyotaku = parsed.Kyotaku
                             // 单手牌算点没有牌局历史，谈不上包（责任支付）。

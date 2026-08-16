@@ -28,9 +28,9 @@ module KyokuStartProperties =
         | Error _ -> false
         | Ok(started, _) ->
             started.Hands
-            |> List.mapi (fun seat hand ->
+            |> Seat.indexed
+            |> List.forall (fun (seat, hand) ->
                 List.length hand = ruleset.HaipaiSize + (if seat = context.Oya then 1 else 0))
-            |> List.forall id
 
     [<Property>]
     let ``手牌就是 start_kyoku 的配牌加上 tsumo 摸进的那张`` (ruleset: Ruleset) (context: KyokuContext) (seed: int) =
@@ -41,15 +41,15 @@ module KyokuStartProperties =
             | [ StartKyoku fields; Tsumo(actor, pai) ] ->
                 actor = context.Oya
                 && fields.Tehais
-                   |> List.mapi (fun seat tehai ->
+                   |> Seat.indexed
+                   |> List.forall (fun (seat, tehai) ->
                        let expected =
                            if seat = context.Oya then
                                Tile.sort (pai :: tehai)
                            else
                                tehai
 
-                       expected = List.item seat started.Hands)
-                   |> List.forall id
+                       Some expected = Seat.tryItem seat started.Hands)
             | _ -> false
 
     [<Property>]

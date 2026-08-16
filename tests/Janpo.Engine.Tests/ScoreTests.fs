@@ -25,19 +25,23 @@ module ScoreTests =
     /// 亲固定在座位 0：`ko` 是座位 1 和了、座位 2 放铳，`oya` 是座位 0 和了、座位 1 放铳。
     let private koRon: HoraTransfer =
         {
-            Actor = 1
-            Target = 2
-            Oya = 0
+            Actor = seat 1
+            Target = seat 2
+            Oya = seat 0
             Honba = 0
             Kyotaku = 0
             Sekinin = None
         }
 
-    let private koTsumo: HoraTransfer = { koRon with Target = 1 }
+    let private koTsumo: HoraTransfer = { koRon with Target = seat 1 }
 
-    let private oyaRon: HoraTransfer = { koRon with Actor = 0; Target = 1 }
+    let private oyaRon: HoraTransfer =
+        { koRon with
+            Actor = seat 0
+            Target = seat 1
+        }
 
-    let private oyaTsumo: HoraTransfer = { oyaRon with Target = 0 }
+    let private oyaTsumo: HoraTransfer = { oyaRon with Target = seat 0 }
 
     let private scoreIn (ruleset: Ruleset) (transfer: HoraTransfer) (value: HoraValue) : HoraScore =
         Score.hora ruleset transfer value

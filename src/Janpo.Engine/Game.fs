@@ -47,12 +47,14 @@ module Game =
     /// 各家顺位：点数高的名次靠前，同点时起家方向在前的那家名次高。
     /// 名次 = 排在自己前面的家数 + 1，因此它必然是 `1 .. SeatCount` 的一个排列。
     let private juniOf (scores: int list) : int list =
-        scores
-        |> List.mapi (fun seat score ->
-            let ahead (other: Seat) (otherScore: int) =
+        let ranked = Seat.indexed scores
+
+        ranked
+        |> List.map (fun (seat, score) ->
+            let ahead (other: Seat, otherScore: int) =
                 otherScore > score || (otherScore = score && other < seat)
 
-            1 + (scores |> List.mapi ahead |> List.filter id |> List.length))
+            1 + (ranked |> List.filter ahead |> List.length))
 
     /// 终局精算：场上剩下的供托归**点数最高**的那家（同点取起家方向在前的），
     /// 再按最终点数排顺位。供托在这里只换归属不凭空增减，因此
@@ -122,7 +124,7 @@ module Game =
                     Kyoku = kyoku
                     Honba = honba
                     Kyotaku = kyotaku
-                    Oya = Seat.next ruleset context.Oya
+                    Oya = Seat.shimocha ruleset context.Oya
                     Scores = scores
                 }
 
@@ -275,7 +277,7 @@ module GameResult =
 
     /// 按名次排好的「顺位、座位、点数」，头名在前。
     let ranking (result: GameResult) : (int * Seat * int) list =
-        List.mapi2 (fun seat score juni -> juni, seat, score) result.Scores result.Juni
+        List.map2 (fun (seat, score) juni -> juni, seat, score) (Seat.indexed result.Scores) result.Juni
         |> List.sortBy (fun (juni, _, _) -> juni)
 
     // ---- 渲染层出口（ADR-0001） ----
@@ -283,5 +285,5 @@ module GameResult =
     /// **渲染层的单向出口**：中文说明，只供 CLI 与 UI 提示使用。
     let toDisplay (result: GameResult) : string =
         ranking result
-        |> List.map (fun (juni, seat, score) -> $"{juni}位 座位{seat} {score}")
+        |> List.map (fun (juni, seat, score) -> $"{juni}位 座位{Seat.index seat} {score}")
         |> String.concat "  "

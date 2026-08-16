@@ -45,12 +45,12 @@ module GameStateFixtures =
         let dealt, _ =
             (([], hands), plan)
             ||> List.fold (fun (taken, remaining) (seat, chunk) ->
-                let hand = List.item seat remaining
+                let hand = Seat.tryItem seat remaining |> Option.defaultValue []
 
                 let drawnNow = List.truncate chunk hand
                 let rest = List.skip (min chunk (List.length hand)) hand
 
-                taken @ drawnNow, remaining |> List.mapi (fun index each -> if index = seat then rest else each))
+                taken @ drawnNow, remaining |> Seat.mapAt seat (fun _ -> rest))
 
         dealt @ draws
 
@@ -833,7 +833,9 @@ type GameStateArbitraries =
     /// 和了可能既不成型也不是刚打出的那张。
     /// 「非法动作一律返回值而不抛异常」「接受一个动作当且仅当它在合法动作集里」两条属性要的就是它。
     static member Action() : Arbitrary<Action> =
-        let seat = Gen.choose (-1, Ruleset.yonma.SeatCount)
+        // 越界的座位仍要取到（属性要的就是「非法动作不抛异常」），但**负数在类型层已经不存在**
+        // 了：`Seat` 只能经 `Seat.ofIndex` 从裸整数来，负数在那里就被挡住（晨间裁决 R-5）。
+        let seat = Gen.choose (0, Ruleset.yonma.SeatCount) |> Gen.map SeatFixtures.seat
 
         let dahai =
             gen {

@@ -20,22 +20,22 @@ module AgariFixture =
         | Ok naki -> naki
         | Error error -> failwith $"副露应当合法：{NakiError.toDisplay error}"
 
-    /// 碰：`pon 1 "5z" "5z 5z"`。
+    /// 碰：`pon (seat 1) "5z" "5z 5z"`。
     let pon (target: Seat) (taken: string) (consumed: string) : Naki =
         Naki.pon target (tile taken) (tiles consumed) |> ok
 
-    /// 吃：`chi 3 "3m" "4m 5m"`。
+    /// 吃：`chi (seat 3) "3m" "4m 5m"`。
     let chi (target: Seat) (taken: string) (consumed: string) : Naki =
         Naki.chi target (tile taken) (tiles consumed) |> ok
 
     /// 暗杠：`ankan "1z 1z 1z 1z"`。
     let ankan (consumed: string) : Naki = Naki.ankan (tiles consumed) |> ok
 
-    /// 大明杠：`minkan 2 "1z" "1z 1z 1z"`。
+    /// 大明杠：`minkan (seat 2) "1z" "1z 1z 1z"`。
     let minkan (target: Seat) (taken: string) (consumed: string) : Naki =
         Naki.minkan target (tile taken) (tiles consumed) |> ok
 
-    /// 加杠：`kakan "5z" (pon 1 "5z" "5z 5z")`。
+    /// 加杠：`kakan "5z" (pon (seat 1) "5z" "5z 5z")`。
     let kakan (added: string) (basePon: Naki) : Naki = Naki.kakan (tile added) basePon |> ok
 
     let private hand (result: Result<AgariHand, AgariHandError>) : AgariHand =
@@ -80,9 +80,9 @@ module private AgariGeneration =
         | [ first; second; third ] ->
             let result =
                 if first = second then
-                    Naki.pon 1 first [ second; third ]
+                    Naki.pon (seat 1) first [ second; third ]
                 else
-                    Naki.chi 3 first [ second; third ]
+                    Naki.chi (seat 3) first [ second; third ]
 
             match result with
             | Ok naki -> Some naki

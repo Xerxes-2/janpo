@@ -87,13 +87,7 @@ module KyokuStart =
                                 Tehais = tehais
                             }
 
-                    let hands =
-                        tehais
-                        |> List.mapi (fun seat hand ->
-                            if seat = context.Oya then
-                                Tile.sort (drawn :: hand)
-                            else
-                                hand)
+                    let hands = tehais |> Seat.mapAt context.Oya (fun hand -> Tile.sort (drawn :: hand))
 
                     Ok
                         {
@@ -119,7 +113,7 @@ module KyokuContext =
             Kyoku = 1
             Honba = 0
             Kyotaku = 0
-            Oya = 0
+            Oya = Seat.first
             Scores = Seat.all ruleset |> List.map (fun _ -> ruleset.StartingScore)
         }
 
@@ -135,4 +129,4 @@ module KyokuStartError =
         | LiveWallTooSmall(required, available) -> $"牌山发不出配牌：需要 {required} 张，可摸区只有 {available} 张"
         | NoDoraIndicator deadWallSize -> $"王牌只有 {deadWallSize} 张，凑不出一叠宝牌指示牌"
         | ScoreCountMismatch(expected, actual) -> $"点数列表应有 {expected} 项（座位数），实际 {actual} 项"
-        | OyaOutOfRange(oya, seatCount) -> $"亲的座位 {oya} 不合法，座位只有 0-{seatCount - 1}"
+        | OyaOutOfRange(oya, seatCount) -> $"亲的座位 {Seat.index oya} 不合法，座位只有 0-{seatCount - 1}"

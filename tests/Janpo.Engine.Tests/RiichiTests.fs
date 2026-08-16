@@ -97,7 +97,7 @@ module RiichiTests =
     // ---- 选手 ----
 
     /// 立直的那家由 `riichiSeeking` 出手，其余各家摸切、响应「过」（`passive`）。
-    let private riichiSeat: Seat = 0
+    let private riichiSeat: Seat = Seat.first
 
     let private riichiThenPassive: Player<Rng> =
         fun rng state choice ->
@@ -236,13 +236,14 @@ module RiichiTests =
         let state = startScripted ippatsuTsumoScript
 
         // Oya 的第一手：123m 456m 789m 123p 5z 摸进 1z，打 1z 或 5z 都还听牌。
-        Assert.Contains(Action.Riichi 0, actionsOf 0 state)
+        Assert.Contains(Action.Riichi(seat 0), actionsOf (seat 0) state)
 
         let riichiIndex =
-            actionsOf 0 state |> List.findIndex (fun action -> action = Action.Riichi 0)
+            actionsOf (seat 0) state
+            |> List.findIndex (fun action -> action = Action.Riichi(seat 0))
 
         let firstDahai =
-            actionsOf 0 state
+            actionsOf (seat 0) state
             |> List.findIndex (fun action ->
                 match action with
                 | Action.Dahai _ -> true
@@ -260,10 +261,10 @@ module RiichiTests =
     [<Fact>]
     let ``宣言立直产出 reach，此时立直棒还没出`` () =
         let state = startScripted ippatsuTsumoScript
-        let declared, events = stepped state (Action.Riichi 0)
+        let declared, events = stepped state (Action.Riichi(seat 0))
 
-        Assert.Equal<Event list>([ Riichi 0 ], events)
-        Assert.Equal(RiichiState.Declared RiichiDeclaration.DoubleRiichi, riichiOf 0 declared)
+        Assert.Equal<Event list>([ Riichi(seat 0) ], events)
+        Assert.Equal(RiichiState.Declared RiichiDeclaration.DoubleRiichi, riichiOf (seat 0) declared)
         // 宣言牌还没落定：点数与供托一动不动。
         Assert.Equal<int list>(context.Scores, GameState.scores declared)
         Assert.Equal(context.Kyotaku, GameState.kyotaku declared)
@@ -271,29 +272,36 @@ module RiichiTests =
     [<Fact>]
     let ``宣言之后只能打「打完仍听牌」的那几张，自摸和与再宣言都没有了`` () =
         let state = startScripted ippatsuTsumoScript
-        let declared, _ = stepped state (Action.Riichi 0)
+        let declared, _ = stepped state (Action.Riichi(seat 0))
 
         // 手里 123m 456m 789m 123p 5z + 摸进的 1z：打 5z 留 1z 单骑、摸切 1z 留 5z 单骑，
         // 两条都仍听牌，其余每一张打下去都不听。
         Assert.Equal<Action list>(
-            [ Action.Dahai(0, pai "5z", false); Action.Dahai(0, pai "1z", true) ],
-            actionsOf 0 declared
+            [ Action.Dahai(seat 0, pai "5z", false); Action.Dahai(seat 0, pai "1z", true) ],
+            actionsOf (seat 0) declared
         )
 
-        Assert.Equal(CannotRiichi 0, rejected declared (Action.Riichi 0))
+        Assert.Equal(CannotRiichi(seat 0), rejected declared (Action.Riichi(seat 0)))
         // 牌就在手里，但打了就不听牌了——报的是立直而不是食替。
-        Assert.Equal(RiichiRestricted(0, pai "1m"), rejected declared (Action.Dahai(0, pai "1m", false)))
+        Assert.Equal(RiichiRestricted(seat 0, pai "1m"), rejected declared (Action.Dahai(seat 0, pai "1m", false)))
 
     [<Fact>]
     let ``宣言牌落定才产出 reach_accepted：立直棒出、供托进一根`` () =
         let state = startScripted ippatsuTsumoScript
-        let declared, _ = stepped state (Action.Riichi 0)
-        let accepted, events = stepped declared (Action.Dahai(0, pai "1z", true))
+        let declared, _ = stepped state (Action.Riichi(seat 0))
+        let accepted, events = stepped declared (Action.Dahai(seat 0, pai "1z", true))
 
         // 没人能响应这张 1z，因此宣言牌当场落定：dahai → reach_accepted → tsumo。
-        Assert.Equal<Event list>([ Dahai(0, pai "1z", true); RiichiAccepted 0; Tsumo(1, pai "2z") ], events)
+        Assert.Equal<Event list>(
+            [
+                Dahai(seat 0, pai "1z", true)
+                RiichiAccepted(seat 0)
+                Tsumo(seat 1, pai "2z")
+            ],
+            events
+        )
 
-        Assert.Equal(RiichiState.Accepted RiichiDeclaration.DoubleRiichi, riichiOf 0 accepted)
+        Assert.Equal(RiichiState.Accepted RiichiDeclaration.DoubleRiichi, riichiOf (seat 0) accepted)
         Assert.Equal(1, GameState.kyotaku accepted)
         Assert.Equal<int list>([ 24000; 25000; 25000; 25000 ], GameState.scores accepted)
 
@@ -302,20 +310,20 @@ module RiichiTests =
         // 第 2 巡摸进 5z 就和了，但打 5z 留 5z 单骑也仍听牌——因此自摸和与立直同时在动作集里。
         let state =
             startScripted ippatsuTsumoScript
-            |> driveUntil passive (fun state -> junmeOf 0 state = 2)
+            |> driveUntil passive (fun state -> junmeOf (seat 0) state = 2)
 
-        Assert.Contains(Action.Hora(0, 0, pai "5z"), actionsOf 0 state)
-        Assert.Contains(Action.Riichi 0, actionsOf 0 state)
+        Assert.Contains(Action.Hora(seat 0, seat 0, pai "5z"), actionsOf (seat 0) state)
+        Assert.Contains(Action.Riichi(seat 0), actionsOf (seat 0) state)
 
         // 选了立直就得把宣言牌打出去：这一手不能反悔去和。
-        let declared, _ = stepped state (Action.Riichi 0)
+        let declared, _ = stepped state (Action.Riichi(seat 0))
 
-        Assert.Equal(RiichiRestricted(0, pai "5z"), rejected declared (Action.Hora(0, 0, pai "5z")))
+        Assert.Equal(RiichiRestricted(seat 0, pai "5z"), rejected declared (Action.Hora(seat 0, seat 0, pai "5z")))
 
         // 宣言之后剩下的全是打牌（这一手的手牌四面八方都听，因此打得出去的不只一张），
         // 自摸和与再宣言一条不剩。
         Assert.All(
-            actionsOf 0 declared,
+            actionsOf (seat 0) declared,
             fun action ->
                 match action with
                 | Action.Dahai _ -> ()
@@ -329,7 +337,7 @@ module RiichiTests =
                 | Action.None _ -> failwith $"宣言之后这一手只剩打牌，却有 {action}"
         )
 
-        Assert.Contains(Action.Dahai(0, pai "5z", true), actionsOf 0 declared)
+        Assert.Contains(Action.Dahai(seat 0, pai "5z", true), actionsOf (seat 0) declared)
 
     [<Fact>]
     let ``不门清、点数不够、牌山不够都立直不了`` () =
@@ -337,7 +345,7 @@ module RiichiTests =
         let ruleset = Ruleset.yonma
 
         let pon =
-            match Naki.pon 1 (pai "2z") [ pai "2z"; pai "2z" ] with
+            match Naki.pon (seat 1) (pai "2z") [ pai "2z"; pai "2z" ] with
             | Ok naki -> naki
             | Error error -> failwith $"应当碰得成，却得到 {NakiError.toDisplay error}"
 
@@ -375,20 +383,20 @@ module RiichiTests =
     let ``一发自摸：立直后一巡内自摸，两立直与一发都成立`` () =
         let state =
             startScripted ippatsuTsumoScript
-            |> driveUntil riichiThenPassive (fun state -> junmeOf 0 state = 2)
+            |> driveUntil riichiThenPassive (fun state -> junmeOf (seat 0) state = 2)
 
-        let yaku = yakuOf 0 state
+        let yaku = yakuOf (seat 0) state
 
         Assert.Contains(Yaku.DoubleRiichi, yaku)
         Assert.Contains(Yaku.Ippatsu, yaku)
         Assert.Contains(Yaku.MenzenTsumo, yaku)
         Assert.DoesNotContain(Yaku.Riichi, yaku)
 
-        let ended, _ = stepped state (Action.Hora(0, 0, pai "5z"))
+        let ended, _ = stepped state (Action.Hora(seat 0, seat 0, pai "5z"))
         let declared, accepted = riichiEvents ended
 
-        Assert.Equal<Seat list>([ 0 ], declared)
-        Assert.Equal<Seat list>([ 0 ], accepted)
+        Assert.Equal<Seat list>(seats [ 0 ], declared)
+        Assert.Equal<Seat list>(seats [ 0 ], accepted)
 
         // 立直棒进了供托，又被自己收回：这一局的和了增减之和 = 那一根立直棒。
         Assert.Equal(0, GameState.kyotaku ended)
@@ -409,21 +417,22 @@ module RiichiTests =
         let state =
             startScripted minogashiScript
             |> driveUntil riichiThenPassive (fun state ->
-                actionsOf 0 state |> List.contains (Action.Hora(0, 1, pai "5z")))
+                actionsOf (seat 0) state
+                |> List.contains (Action.Hora(seat 0, seat 1, pai "5z")))
 
-        let yaku = yakuOf 0 state
+        let yaku = yakuOf (seat 0) state
 
         Assert.Contains(Yaku.DoubleRiichi, yaku)
         Assert.Contains(Yaku.Ippatsu, yaku)
         // 荣和不是自摸：门前清自摸和不成立。
         Assert.DoesNotContain(Yaku.MenzenTsumo, yaku)
 
-        let ended, _ = stepped state (Action.Hora(0, 1, pai "5z"))
+        let ended, _ = stepped state (Action.Hora(seat 0, seat 1, pai "5z"))
 
         match GameState.horas ended with
         | [ hora ] ->
-            Assert.Equal(0, hora.Actor)
-            Assert.Equal(1, hora.Target)
+            Assert.Equal(seat 0, hora.Actor)
+            Assert.Equal(seat 1, hora.Target)
             // 自己那一根立直棒随和了回到手里：授受的增减之和就是它。
             Assert.Equal(Ruleset.kyotakuScore ruleset 1, List.sum hora.Deltas)
             Assert.NotEmpty(hora.UraDoraMarkers)
@@ -436,17 +445,17 @@ module RiichiTests =
     let ``一发被碰打断：同一座牌山、同一次和了，只是一发没了`` () =
         let state =
             startScripted ippatsuBrokenScript
-            |> driveUntil riichiThenPon (fun state -> junmeOf 0 state = 2)
+            |> driveUntil riichiThenPon (fun state -> junmeOf (seat 0) state = 2)
 
         // 座位 2 碰走了座位 1 打的 9p：一发到此为止。
-        Assert.Equal(1, PlayerState.nakiCount (playerOf 2 state))
+        Assert.Equal(1, PlayerState.nakiCount (playerOf (seat 2) state))
 
-        let yaku = yakuOf 0 state
+        let yaku = yakuOf (seat 0) state
 
         Assert.Contains(Yaku.DoubleRiichi, yaku)
         Assert.DoesNotContain(Yaku.Ippatsu, yaku)
 
-        let ended, _ = stepped state (Action.Hora(0, 0, pai "5z"))
+        let ended, _ = stepped state (Action.Hora(seat 0, seat 0, pai "5z"))
         Assert.True(GameState.isEnded ended)
 
     [<Fact>]
@@ -454,26 +463,27 @@ module RiichiTests =
         let state =
             startScripted declarationRonnedScript
             |> driveUntil riichiThenPassive (fun state ->
-                actionsOf 1 state |> List.contains (Action.Hora(1, 0, pai "1z")))
+                actionsOf (seat 1) state
+                |> List.contains (Action.Hora(seat 1, seat 0, pai "1z")))
 
         // 宣言了，但宣言牌还悬着：立直棒没出，点数一动不动。
-        Assert.Equal(RiichiState.Declared RiichiDeclaration.DoubleRiichi, riichiOf 0 state)
+        Assert.Equal(RiichiState.Declared RiichiDeclaration.DoubleRiichi, riichiOf (seat 0) state)
         Assert.Equal<int list>(context.Scores, GameState.scores state)
 
-        let ended, _ = stepped state (Action.Hora(1, 0, pai "1z"))
+        let ended, _ = stepped state (Action.Hora(seat 1, seat 0, pai "1z"))
         let declared, accepted = riichiEvents ended
 
-        Assert.Equal<Seat list>([ 0 ], declared)
+        Assert.Equal<Seat list>(seats [ 0 ], declared)
         Assert.Empty(accepted)
 
         // 立直不成立：状态退回没立直，那 1000 点还在座位 0 手里。
-        Assert.Equal(RiichiState.none, riichiOf 0 ended)
+        Assert.Equal(RiichiState.none, riichiOf (seat 0) ended)
         Assert.Equal(context.Kyotaku, GameState.kyotaku ended)
 
         match GameState.horas ended with
         | [ hora ] ->
-            Assert.Equal(1, hora.Actor)
-            Assert.Equal(0, hora.Target)
+            Assert.Equal(seat 1, hora.Actor)
+            Assert.Equal(seat 0, hora.Target)
             // 供托是空的，因此这一次授受的增减之和为 0。
             Assert.Equal(0, List.sum hora.Deltas)
             // 放铳的那家没立直，和了的那家也没有：里宝牌不翻。
@@ -486,11 +496,11 @@ module RiichiTests =
     let ``立直后只能摸切`` () =
         let state =
             startScripted minogashiScript
-            |> driveUntil riichiNeverRon (fun state -> junmeOf 0 state = 2)
+            |> driveUntil riichiNeverRon (fun state -> junmeOf (seat 0) state = 2)
 
         // 第 2 巡摸进 2z：手里那 13 张一张都动不了，只剩摸切这一条。
-        Assert.Equal<Action list>([ Action.Dahai(0, pai "2z", true) ], actionsOf 0 state)
-        Assert.Equal(RiichiRestricted(0, pai "5z"), rejected state (Action.Dahai(0, pai "5z", false)))
+        Assert.Equal<Action list>([ Action.Dahai(seat 0, pai "2z", true) ], actionsOf (seat 0) state)
+        Assert.Equal(RiichiRestricted(seat 0, pai "5z"), rejected state (Action.Dahai(seat 0, pai "5z", false)))
 
     [<Fact>]
     let ``立直中的座位不进鸣牌的合法动作集，但仍然能荣和`` () =
@@ -498,12 +508,15 @@ module RiichiTests =
             startScripted minogashiScript
             |> driveUntil riichiNeverRon (fun state ->
                 match GameState.phase state with
-                | AwaitingResponse phase -> phase.Target = 1
+                | AwaitingResponse phase -> phase.Target = seat 1
                 | AwaitingDahai _
                 | Ended _ -> false)
 
         // 座位 1 摸切的是 5z：立直中的座位 0 单骑等它，因此被问到的只有荣和与「过」。
-        Assert.Equal<Action list>([ Action.Hora(0, 1, pai "5z"); Action.None 0 ], actionsOf 0 state)
+        Assert.Equal<Action list>(
+            [ Action.Hora(seat 0, seat 1, pai "5z"); Action.None(seat 0) ],
+            actionsOf (seat 0) state
+        )
 
     [<Fact>]
     let ``立直后见逃是永久振听，自己再摸打也解不开`` () =
@@ -511,23 +524,24 @@ module RiichiTests =
             startScripted minogashiScript
             |> driveUntil riichiNeverRon (fun state ->
                 match GameState.phase state with
-                | AwaitingResponse phase -> phase.Target = 1
+                | AwaitingResponse phase -> phase.Target = seat 1
                 | AwaitingDahai _
                 | Ended _ -> false)
 
-        Assert.False(Furiten.blocksRon (PlayerState.furiten (playerOf 0 state)))
+        Assert.False(Furiten.blocksRon (PlayerState.furiten (playerOf (seat 0) state)))
 
-        let passed, _ = stepped state (Action.None 0)
+        let passed, _ = stepped state (Action.None(seat 0))
 
         // 见逃的那张 5z 在座位 1 的河里，不在自己的河里——不立直的话这只是同巡振听。
-        let furiten = PlayerState.furiten (playerOf 0 passed)
+        let furiten = PlayerState.furiten (playerOf (seat 0) passed)
         Assert.True(furiten.Permanent)
 
         // 自己再摸一张、再打一张（重算永久振听的那一步）之后，它仍然闩着。
-        let later = passed |> driveUntil riichiNeverRon (fun state -> junmeOf 0 state = 3)
+        let later =
+            passed |> driveUntil riichiNeverRon (fun state -> junmeOf (seat 0) state = 3)
 
-        Assert.True((PlayerState.furiten (playerOf 0 later)).Permanent)
-        Assert.True(Furiten.blocksRon (PlayerState.furiten (playerOf 0 later)))
+        Assert.True((PlayerState.furiten (playerOf (seat 0) later)).Permanent)
+        Assert.True(Furiten.blocksRon (PlayerState.furiten (playerOf (seat 0) later)))
 
     // ---- 立直棒与供托 ----
 

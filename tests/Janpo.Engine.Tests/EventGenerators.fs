@@ -12,7 +12,7 @@ type EventArbitraries =
 
     static member Event() : Arbitrary<Event> =
         let tile = Gen.elements Tile.all
-        let seat = Gen.choose (0, 3)
+        let seat = Gen.choose (0, 3) |> Gen.map SeatFixtures.seat
 
         let startGame =
             gen {

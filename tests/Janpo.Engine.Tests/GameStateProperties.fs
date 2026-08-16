@@ -69,7 +69,8 @@ module GameStateProperties =
             | Ended(KyokuEnd.Ryuukyoku _) -> None
 
         GameState.players state
-        |> List.mapi (fun seat player ->
+        |> Seat.indexed
+        |> List.map (fun (seat, player) ->
             let expected =
                 if Some seat = holdingFourteen then
                     ruleset.HaipaiSize + 1
@@ -171,7 +172,7 @@ module GameStateProperties =
                     && pai = phase.Pai
                     && List.length consumed = 2
                     // 吃只能吃上家：宣言的那家恒是打牌者的下家。
-                    && Seat.next ruleset target = actor
+                    && Seat.shimocha ruleset target = actor
                     && Wall.remaining (GameState.wall state) > 0
                 // 大明杠亮三张，同样需要可摸区还有牌（补摸岭上牌要把最后一张补进王牌），
                 // 且此刻的杠数没到上限。
@@ -243,7 +244,7 @@ module GameStateProperties =
             // 和了者收、放铳者（或付家）付；自摸时其余三家都付。
             && horas
                |> List.forall (fun hora ->
-                   List.item hora.Actor hora.Deltas > 0
+                   Seat.tryItem hora.Actor hora.Deltas |> Option.exists (fun delta -> delta > 0)
                    && hora.Fu > 0
                    && hora.Fan > 0
                    && hora.HoraPoints > 0)

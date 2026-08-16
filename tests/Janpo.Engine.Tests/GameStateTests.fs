@@ -107,7 +107,7 @@ module GameStateTests =
         let choice = waiting state
         let action = List.head choice.Actions
         let next, events = stepped state action
-        let downstream = Seat.next ruleset choice.Seat
+        let downstream = Seat.shimocha ruleset choice.Seat
 
         Assert.Equal(ruleset.HaipaiSize, handOf choice.Seat next |> List.length)
         Assert.Equal<Tile list>([ paiOf action ], kawaOf choice.Seat next)
@@ -132,7 +132,7 @@ module GameStateTests =
     [<Fact>]
     let ``别家提交打牌被拒`` () =
         let state = fst (start 42)
-        let other = Seat.next ruleset context.Oya
+        let other = Seat.shimocha ruleset context.Oya
         let pai = handOf other state |> List.head
 
         Assert.Equal<IllegalAction>(
@@ -146,8 +146,8 @@ module GameStateTests =
         let pai = handOf context.Oya state |> List.head
 
         Assert.Equal<IllegalAction>(
-            SeatOutOfRange(ruleset.SeatCount, ruleset.SeatCount),
-            rejected state (Action.Dahai(ruleset.SeatCount, pai, false))
+            SeatOutOfRange(seat ruleset.SeatCount, ruleset.SeatCount),
+            rejected state (Action.Dahai(seat ruleset.SeatCount, pai, false))
         )
 
     [<Fact>]
@@ -265,16 +265,16 @@ module GameStateTests =
 
     [<Fact>]
     let ``被拒的理由有中文说明`` () =
-        Assert.Equal("座位 4 不合法，座位只有 0-3", IllegalAction.toDisplay (SeatOutOfRange(4, 4)))
-        Assert.Equal("现在不轮到座位 2 出手，等的是座位 0", IllegalAction.toDisplay (NotYourTurn(2, [ 0 ])))
-        Assert.Equal("现在不轮到座位 2 出手", IllegalAction.toDisplay (NotYourTurn(2, [])))
+        Assert.Equal("座位 4 不合法，座位只有 0-3", IllegalAction.toDisplay (SeatOutOfRange(seat 4, 4)))
+        Assert.Equal("现在不轮到座位 2 出手，等的是座位 0", IllegalAction.toDisplay (NotYourTurn(seat 2, [ seat 0 ])))
+        Assert.Equal("现在不轮到座位 2 出手", IllegalAction.toDisplay (NotYourTurn(seat 2, [])))
 
         match Tile.parse "3s" with
         | Error error -> failwith $"3s 应当是合法记法，却得到 {error}"
         | Ok tile ->
-            Assert.Equal("座位 1 手里没有 3索", IllegalAction.toDisplay (NotInHand(1, tile)))
-            Assert.Equal("座位 1 声称摸切 3索，但刚摸进的不是这张", IllegalAction.toDisplay (TsumogiriMismatch(1, tile, true)))
+            Assert.Equal("座位 1 手里没有 3索", IllegalAction.toDisplay (NotInHand(seat 1, tile)))
+            Assert.Equal("座位 1 声称摸切 3索，但刚摸进的不是这张", IllegalAction.toDisplay (TsumogiriMismatch(seat 1, tile, true)))
 
-            Assert.Equal("座位 1 声称手切 3索，但手里只有刚摸进的那一张", IllegalAction.toDisplay (TsumogiriMismatch(1, tile, false)))
+            Assert.Equal("座位 1 声称手切 3索，但手里只有刚摸进的那一张", IllegalAction.toDisplay (TsumogiriMismatch(seat 1, tile, false)))
 
         Assert.Equal("这一局已经结束了，不再接受任何动作", IllegalAction.toDisplay KyokuAlreadyEnded)

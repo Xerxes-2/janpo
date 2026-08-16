@@ -78,12 +78,12 @@ module RiichiProperties =
     [<Property>]
     let ``一发只可能亮在立直成立的那家头上，任何鸣牌之后全场都没有一发`` (state: GameState) =
         GameState.players state
-        |> List.mapi (fun seat player ->
+        |> Seat.indexed
+        |> List.forall (fun (seat, player) ->
             let ippatsu = PlayerState.ippatsu player
 
             (not ippatsu || RiichiState.isAccepted (riichiOf seat state))
             && (not (lastIsNaki state) || not ippatsu))
-        |> List.forall id
 
     [<Property>]
     let ``立直成立之后那家只剩自摸和、暗杠与摸切，宣言牌那一手只剩仍然听牌的打法`` (state: GameState) =

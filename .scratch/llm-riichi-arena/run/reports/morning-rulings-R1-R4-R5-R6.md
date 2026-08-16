@@ -105,3 +105,115 @@ wallSize = 136, wallTiles = 136
 三麻形状：牌种数 = 27, wallSize = 108, wallTiles = 108
 wallTiles 升序规范形 = true
 ```
+
+---
+
+## R-5：`Seat` 从 `int` 透明别名换成真类型
+
+### `Seat` 的最终形状
+
+```fsharp
+[<Struct>]
+type Seat =
+    private
+        {
+            /// 0 起的固定索引。
+            Index: int
+        }
+```
+
+与 `Tile` 同一形状（`[<Struct>]` + 私有 record），因此 Fable 侧零额外成本、`Map<Seat, _>` 与
+`List.sortBy` 照旧可用（结构比较自动派生，`Wall.deal` 与 `Game.juniOf` 都靠它）。
+
+**构造只有三条路**：
+
+| 入口 | 用途 |
+|---|---|
+| `Seat.ofIndex : int -> Seat option` | 外来的裸整数（mjai wire、CLI、牌谱）。**负数不是座位** |
+| `Seat.first` / `Seat.all` / `Seat.orderFrom` / `Seat.orderAfter` | 枚举 |
+| `Seat.shimocha` / `kamicha` / `toimen` / `wrap` | 相对位置 |
+
+外加 `internal Seat.ofIndexUnchecked`，给引擎内部与**测试固件**（经既有的
+`InternalsVisibleTo`，与 `Wall.ofOrdered` / `GameState.startFrom` 同一道口子）。
+测试里包了一层 `SeatFixtures.seat` / `seats`（`[<AutoOpen>]`），于是用例写 `seat 2` 而不是
+`Seat.ofIndexUnchecked 2`——**它只在测试工程里存在**。
+
+**上下界分工**：类型只守「非负」这条与规则集无关的下界；上界要座位数，由
+`Seat.isValid ruleset seat` 判。所以 `seat 4` 仍造得出来（`SeatOutOfRange` 那条路径还在），
+而 `-1` 造不出来。
+
+### 收进 `Seat` 模块的座位算术（这次重构的真正收益）
+
+`shift` 是私有的，**全仓库只有它一处对座位取模**。
+
+| 函数 | 原先散在哪 |
+|---|---|
+| `shimocha`（下家） | 原 `Seat.next`。改名的理由同裁决 D-6：座位序的「下一个」就是下家，一个名字一件事 |
+| `kamicha`（上家） | `GameState.responsesTo` 里的吃判据写作 `Seat.next ruleset target = seat`，现在是 `Seat.kamicha ruleset seat = target`（「只有上家打的能吃」，与注释同构）；`GameStateProperties` 的同一条也换了 |
+| `toimen`（对家）**返回 option** | 新立。三麻没有对家，签名把这件事说清楚，省得别人写 `(seat + 2) % 4` |
+| `distanceFrom`（相对第几家） | `GameState.nakiWinner` 原先造一遍 `orderFrom` 再 `List.tryFindIndex` 找位置；`Seat.jikaze` 原先自己写了一遍取模 |
+| `orderAfter`（从打牌者下家起绕一圈） | 3 处 `Seat.orderFrom ruleset (Seat.next ruleset target)`（`responsesTo`、`ronWinners`、`nakiWinner`）——「打牌者下家优先」这条裁决顺序 |
+| `wrap`（任意整数折进合法座位） | `KanProperties` 里的 `((liable % engine.SeatCount) + engine.SeatCount) % engine.SeatCount`，两处 |
+| `first`（起家） | `KyokuContext.initial` 的 `Oya = 0`、`Wall.deal ruleset 0`、`GameTests` 的 `Oya = tonpuusen.SeatCount - 1`（→ `Seat.kamicha tonpuusen Seat.first`） |
+| `tryItem` / `mapAt` / `indexed` | 「每家一项、按座位升序」的列表（`Scores`、`Deltas`、`Hands`、`Tenpais`、`Players`）：12 处 `List.tryItem seat xs`、`List.mapi (fun seat -> ...)`、`List.mapi2`、`List.indexed`。`GameState.updatePlayer` 现在就是 `Seat.mapAt` |
+| `encoder` / `decoder` | mjai wire 的裸整数映射（裁决 D-1）。**唯一一处**：`Event.fs` 里 17 个 `Encode.int actor` / `Decode.int` 全换成它 |
+
+`Seat.index` 只剩 **26 处**，全在渲染层（`IllegalAction.toDisplay` / `KyokuStartError.toDisplay` /
+`GameResult.toDisplay` / CLI 的玩家名）与 wire（`Seat.encoder`）。模块注释把这条写成规矩：
+**不许拿 `Seat.index` 出去做算术**。
+
+### mjai wire 没变
+
+`EventTests` 的逐字断言（`{"type":"tsumo","actor":2,...}`、`{"type":"pon","actor":1,"target":0,...}`）
+一个字都没改，全部照过。真引擎复验也确认：
+
+```
+{"type":"tsumo","actor":2,"pai":"5mr"}
+{"type":"pon","actor":2,"target":0,"pai":"5s","consumed":["5s","5s"]}
+```
+
+### 途中发现的真 bug
+
+**没有行为 bug。** 这一条我做了对照实验才敢写：把基线 commit（`okuuwpzk`）整树抽到 `/tmp` 单独构建，
+用 `dotnet fsi` 对**两个引擎**跑同样四个种子的完整对局，事件频次逐项相同：
+
+```
+基线 okuuwpzk        本次改完
+chi        76        chi        76
+dahai    1232        dahai    1232
+pon        36        pon        36
+ryukyoku   16        ryukyoku   16
+tsumo    1120        tsumo    1120
+other      20        other      20
+```
+
+（顺带纠正备注 N-8 的一个读法：那里记的 `chi 80 / pon 32` 是 **09 落地时**的数，
+10 与 11 之后随机 Player 的动作集变了、RNG 消耗也变了，所以频次本就不同。
+不是这次改动引起的。）
+
+**但类型换掉之后，有三处「过去编译器抓不住」的东西被顶了出来**——都不是运行期 bug，
+是表达方式上的漏洞：
+
+1. **负数座位过去是可表达的。** `WallTests.亲不是合法座位时发不出配牌` 里原有一行
+   `Wall.deal ruleset -1 (built 1)`，测的是运行期拒绝负数。现在负数在**类型层**就不是座位，
+   那一行改成 `Assert.Equal<Seat option>(None, Seat.ofIndex -1)`——**判据没删，只是从运行期挪到了构造处**。
+   同理 `GameStateArbitraries.Action()` 的取样从 `Gen.choose (-1, SeatCount)` 收成 `(0, SeatCount)`：
+   越界仍取得到（属性要的是「非法动作不抛异常」），负数不必再取。
+2. **`GameTests` 拿座位数当座位算**：`Oya = tonpuusen.SeatCount - 1`。它碰巧对（四家时最后一个座位就是
+   起家的上家），但那是「局数/张数」类的标量在做座位算术——正是 R-5 要挡的那一类。现在是
+   `Seat.kamicha tonpuusen Seat.first`。
+3. **属性测试自己写了一遍取模折座位**（`KanProperties` 两处）。现在是 `Seat.wrap`。
+
+### 测试
+
+493 → **502**，一条都没删。多出来的 9 条全在 `SeatTests`：原先只测 `all` / `next` / `orderFrom` /
+`isValid` 四件事，现在把新收进来的算术逐个钉住（构造的上下界分工、上家 / 对家 / 相对位置 /
+`orderAfter` / `jikaze` / 三个列表拆解 / wire 往返）。三麻（`SeatCount = 3`）在每条里都跟着测一遍，
+座位数照旧不写死 4。
+
+新增文件 `tests/Janpo.Engine.Tests/SeatFixtures.fs`（排在测试工程编译列表最前）。
+
+### 触碰面
+
+35 个文件、307 处使用点里，src 侧 8 个文件、测试侧 24 个文件、CLI 1 个。
+推进方式照票里说的「改定义 → 编译 → 修编译器指出的第一批 → 再编译」，一共十几轮。

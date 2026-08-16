@@ -20,7 +20,7 @@ module GameTests =
     let private lastKyoku =
         { tonpuusenContext with
             Kyoku = tonpuusen.SeatCount
-            Oya = tonpuusen.SeatCount - 1
+            Oya = Seat.kamicha tonpuusen Seat.first
         }
 
     // ---- 局数序列 ----
@@ -59,12 +59,12 @@ module GameTests =
     [<Fact>]
     let ``子和了则进局：亲移到下家，局数走到序列的下一项，本场归零`` () =
         let context = { tonpuusenContext with Honba = 3 }
-        let ko = Seat.next tonpuusen context.Oya
+        let ko = Seat.shimocha tonpuusen context.Oya
 
         let progress = Game.after tonpuusen context (horaBy ko carried) carried |> nextOf
 
         Assert.Equal(context.Kyoku + 1, progress.Kyoku)
-        Assert.Equal(Seat.next tonpuusen context.Oya, progress.Oya)
+        Assert.Equal(Seat.shimocha tonpuusen context.Oya, progress.Oya)
         Assert.Equal(0, progress.Honba)
 
     [<Fact>]
@@ -89,12 +89,12 @@ module GameTests =
             Game.after tonpuusen context (ryuukyokuWith tenpais carried) carried |> nextOf
 
         Assert.Equal(context.Kyoku + 1, progress.Kyoku)
-        Assert.Equal(Seat.next tonpuusen context.Oya, progress.Oya)
+        Assert.Equal(Seat.shimocha tonpuusen context.Oya, progress.Oya)
         Assert.Equal(context.Honba + 1, progress.Honba)
 
     [<Fact>]
     let ``连庄判定只有一份：亲在双响里也算连庄`` () =
-        let ko = Seat.next tonpuusen tonpuusenContext.Oya
+        let ko = Seat.shimocha tonpuusen tonpuusenContext.Oya
 
         let doubleRon =
             match horaBy ko carried, horaBy tonpuusenContext.Oya carried with
@@ -126,7 +126,8 @@ module GameTests =
         let renchan =
             Game.after tonpuusen context (horaBy context.Oya carried) carried |> nextOf
 
-        let advanced = Game.after tonpuusen context (horaBy 2 carried) carried |> nextOf
+        let advanced =
+            Game.after tonpuusen context (horaBy (seat 2) carried) carried |> nextOf
 
         Assert.Equal(0, renchan.Kyotaku)
         Assert.Equal(0, advanced.Kyotaku)
@@ -151,7 +152,7 @@ module GameTests =
         Assert.Equal<int list>([ 3; 1; 2; 4 ], result.Juni)
 
         Assert.Equal<(int * Seat * int) list>(
-            [ 1, 1, 27000; 2, 2, 25000; 3, 0, 24000; 4, 3, 22000 ],
+            [ 1, seat 1, 27000; 2, seat 2, 25000; 3, seat 0, 24000; 4, seat 3, 22000 ],
             GameResult.ranking result
         )
 
@@ -178,11 +179,12 @@ module GameTests =
 
     [<Fact>]
     let ``半庄战的东4局之后接南1局，亲回到起家`` () =
-        let progress = Game.after hanchan lastKyoku (horaBy 0 carried) carried |> nextOf
+        let progress =
+            Game.after hanchan lastKyoku (horaBy (seat 0) carried) carried |> nextOf
 
         Assert.Equal<Kaze>(Nan, progress.Bakaze)
         Assert.Equal(1, progress.Kyoku)
-        Assert.Equal(0, progress.Oya)
+        Assert.Equal(Seat.first, progress.Oya)
 
     // ---- 真打一局再推进 ----
 
@@ -228,7 +230,7 @@ module GameTests =
                 Assert.NotEqual(context.Oya, hora.Actor)
 
         Assert.Equal(context.Kyoku + 1, next.Kyoku)
-        Assert.Equal(Seat.next tonpuusen context.Oya, next.Oya)
+        Assert.Equal(Seat.shimocha tonpuusen context.Oya, next.Oya)
         Assert.Equal(0, next.Honba)
         Assert.Equal(0, next.Kyotaku)
 

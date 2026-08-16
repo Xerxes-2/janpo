@@ -29,7 +29,7 @@ module KyokuStartTests =
                 Kyoku = 1
                 Honba = 0
                 Kyotaku = 0
-                Oya = 0
+                Oya = seat 0
                 Scores = [ 25000; 25000; 25000; 25000 ]
             },
             context
@@ -37,13 +37,13 @@ module KyokuStartTests =
 
     [<Fact>]
     let ``开局产出 start_kyoku 与 Oya 的 tsumo，顺序固定`` () =
-        let start = started ruleset { context with Oya = 2 } 11
+        let start = started ruleset { context with Oya = seat 2 } 11
 
         match start.Events with
         | [ StartKyoku fields; Tsumo(actor, pai) ] ->
-            Assert.Equal(2, fields.Oya)
-            Assert.Equal(2, actor)
-            Assert.Contains(pai, List.item 2 start.Hands)
+            Assert.Equal(seat 2, fields.Oya)
+            Assert.Equal(seat 2, actor)
+            Assert.Contains(pai, Seat.tryItem (seat 2) start.Hands |> Option.defaultValue [])
         | events -> failwith $"开局应当是 start_kyoku 后跟一条 tsumo，实际是 {events}"
 
     [<Fact>]
@@ -54,7 +54,7 @@ module KyokuStartTests =
                 Kyoku = 3
                 Honba = 2
                 Kyotaku = 1
-                Oya = 1
+                Oya = seat 1
                 Scores = [ 24000; 26000; 25000; 24000 ]
             }
 
@@ -64,7 +64,7 @@ module KyokuStartTests =
         Assert.Equal(3, fields.Kyoku)
         Assert.Equal(2, fields.Honba)
         Assert.Equal(1, fields.Kyotaku)
-        Assert.Equal(1, fields.Oya)
+        Assert.Equal(seat 1, fields.Oya)
         Assert.Equal<int list>([ 24000; 26000; 25000; 24000 ], fields.Scores)
 
     [<Fact>]
@@ -78,12 +78,15 @@ module KyokuStartTests =
 
     [<Fact>]
     let ``Oya 摸过第一张后是 14 张，其余各家 13 张`` () =
-        let start = started ruleset { context with Oya = 3 } 7
+        let start = started ruleset { context with Oya = seat 3 } 7
 
-        Assert.Equal(ruleset.HaipaiSize + 1, List.item 3 start.Hands |> List.length)
+        let handAt (index: int) =
+            Seat.tryItem (seat index) start.Hands |> Option.defaultValue []
 
-        for seat in [ 0; 1; 2 ] do
-            Assert.Equal(ruleset.HaipaiSize, List.item seat start.Hands |> List.length)
+        Assert.Equal(ruleset.HaipaiSize + 1, handAt 3 |> List.length)
+
+        for index in [ 0; 1; 2 ] do
+            Assert.Equal(ruleset.HaipaiSize, handAt index |> List.length)
 
     [<Fact>]
     let ``开局翻开的宝牌指示牌来自王牌，且只翻一张`` () =
@@ -150,8 +153,8 @@ module KyokuStartTests =
     [<Fact>]
     let ``亲不是合法座位时开不了局`` () =
         Assert.Equal<Result<KyokuStart * Rng, KyokuStartError>>(
-            Error(OyaOutOfRange(4, 4)),
-            KyokuStart.create ruleset { context with Oya = 4 } (Rng.ofSeed 1)
+            Error(OyaOutOfRange(seat 4, 4)),
+            KyokuStart.create ruleset { context with Oya = seat 4 } (Rng.ofSeed 1)
         )
 
     [<Fact>]
@@ -235,4 +238,4 @@ module KyokuStartTests =
         Assert.Equal("牌山发不出配牌：需要 53 张，可摸区只有 2 张", KyokuStartError.toDisplay (LiveWallTooSmall(53, 2)))
         Assert.Equal("王牌只有 4 张，凑不出一叠宝牌指示牌", KyokuStartError.toDisplay (NoDoraIndicator 4))
         Assert.Equal("点数列表应有 4 项（座位数），实际 2 项", KyokuStartError.toDisplay (ScoreCountMismatch(4, 2)))
-        Assert.Equal("亲的座位 4 不合法，座位只有 0-3", KyokuStartError.toDisplay (OyaOutOfRange(4, 4)))
+        Assert.Equal("亲的座位 4 不合法，座位只有 0-3", KyokuStartError.toDisplay (OyaOutOfRange(seat 4, 4)))

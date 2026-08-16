@@ -11,6 +11,7 @@
 
   <!-- 牌与手牌形态 -->
   <ItemGroup>
+    <Compile Include="SeatFixtures.fs" />
     <Compile Include="TileGenerators.fs" />
     <Compile Include="TileNotationTests.fs" />
     <Compile Include="TileProperties.fs" />

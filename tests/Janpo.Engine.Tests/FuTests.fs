@@ -138,7 +138,7 @@ module FuTests =
         // 规则集：`Ruleset.yonma`（食断开着，副露的断幺九成立）。
         // 副露 20 + 明刻 2 = 22 → 30 符；同样构成的门清荣和 20 + 暗刻 4 + 门清荣和 10 = 34 → 40 符。
         let opened =
-            ron [ AgariFixture.pon 1 "2m" "2m 2m" ] "4p 5p 6p 2s 3s 4s 5s 5s 6s 7s 8s" "8s"
+            ron [ AgariFixture.pon (seat 1) "2m" "2m 2m" ] "4p 5p 6p 2s 3s 4s 5s 5s 6s 7s 8s" "8s"
 
         let closed = ron [] "2m 2m 2m 4p 5p 6p 2s 3s 4s 5s 5s 6s 7s 8s" "8s"
 
@@ -153,7 +153,7 @@ module FuTests =
             ron [ AgariFixture.ankan "1z 1z 1z 1z" ] "2m 3m 4m 4p 5p 6p 2s 3s 4s 3z 3z" "4m"
 
         let minkan =
-            ron [ AgariFixture.minkan 1 "1z" "1z 1z 1z" ] "2m 3m 4m 4p 5p 6p 2s 3s 4s 3z 3z" "4m"
+            ron [ AgariFixture.minkan (seat 1) "1z" "1z 1z 1z" ] "2m 3m 4m 4p 5p 6p 2s 3s 4s 3z 3z" "4m"
 
         Assert.Equal(70, fu (riichi context) ankan)
         Assert.Equal(40, fu context minkan)
@@ -164,7 +164,13 @@ module FuTests =
     let ``副露的平和形按 30 符算，不是 20 符`` () =
         // 规则集：`Ruleset.yonma`（副露平和形上调 30 符是通行规则，天凤同；食断开着才有役）。
         let hand =
-            ron [ AgariFixture.chi 3 "3m" "4m 5m"; AgariFixture.chi 3 "3p" "4p 5p" ] "2s 3s 4s 5s 5s 6s 7s 8s" "8s"
+            ron
+                [
+                    AgariFixture.chi (seat 3) "3m" "4m 5m"
+                    AgariFixture.chi (seat 3) "3p" "4p 5p"
+                ]
+                "2s 3s 4s 5s 5s 6s 7s 8s"
+                "8s"
 
         Assert.Equal(30, fu context hand)
         Assert.Equal("30 符（底 20 + 副露平和形 10）", Fu.toDisplay (breakdown context hand))

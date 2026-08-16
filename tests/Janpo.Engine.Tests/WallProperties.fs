@@ -21,7 +21,7 @@ module WallProperties =
     let ``任意种子：配牌之后手牌与山上的牌合起来仍是完整一副`` (ruleset: Ruleset) (seed: int) =
         let wall, _ = Wall.build ruleset (Rng.ofSeed seed)
 
-        match Wall.deal ruleset 0 wall with
+        match Wall.deal ruleset Seat.first wall with
         | None -> false
         | Some(hands, rest) -> Tile.sort (List.concat hands @ Wall.tiles rest) = Tile.sort (Ruleset.wallTiles ruleset)
 
@@ -29,7 +29,7 @@ module WallProperties =
     let ``任意种子：每家配牌张数相同且互不重叠`` (ruleset: Ruleset) (seed: int) =
         let wall, _ = Wall.build ruleset (Rng.ofSeed seed)
 
-        match Wall.deal ruleset 0 wall with
+        match Wall.deal ruleset Seat.first wall with
         | None -> false
         | Some(hands, _) ->
             List.length hands = ruleset.SeatCount
@@ -40,7 +40,7 @@ module WallProperties =
     let ``任意种子：每家配牌都按 mjai 顺序排好`` (ruleset: Ruleset) (seed: int) =
         let wall, _ = Wall.build ruleset (Rng.ofSeed seed)
 
-        match Wall.deal ruleset 0 wall with
+        match Wall.deal ruleset Seat.first wall with
         | None -> false
         | Some(hands, _) -> hands |> List.forall (fun hand -> hand = Tile.sort hand)
 

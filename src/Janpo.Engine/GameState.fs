@@ -180,7 +180,7 @@ module KyokuEnd =
     let isRenchan (oya: Seat) (kyokuEnd: KyokuEnd) : bool =
         match kyokuEnd with
         | KyokuEnd.Hora horas -> horas |> List.exists (fun hora -> hora.Actor = oya)
-        | KyokuEnd.Ryuukyoku result -> List.tryItem oya result.Tenpais |> Option.defaultValue false
+        | KyokuEnd.Ryuukyoku result -> Seat.tryItem oya result.Tenpais |> Option.defaultValue false
 
 /// 局面的构造、拆解与迁移。`step` 是引擎唯一的入口：
 /// `GameState -> Action -> Result<GameState * Event list, IllegalAction>`。
@@ -235,7 +235,7 @@ module GameState =
         (seat: Seat)
         : YakuContext =
         let firstTurn = firstTurnFor seat log
-        let player = List.tryItem seat players
+        let player = Seat.tryItem seat players
 
         { YakuContext.create kyokuContext.Bakaze (Seat.jikaze ruleset kyokuContext.Oya seat) with
             // 立直与一发都是那一家自己的状态（`PlayerState`），局面照搬，不复算。
@@ -543,7 +543,8 @@ module GameState =
             | _ -> []
 
         let chi =
-            if Seat.next ruleset target = seat then
+            // 只有下家能吃，因此被吃那家恒是宣言者的上家。
+            if Seat.kamicha ruleset seat = target then
                 chiConsumed pai hand
                 |> List.filter usable
                 |> List.map (fun consumed -> Action.Chi(seat, target, pai, consumed))
@@ -581,10 +582,10 @@ module GameState =
                 | NakiKind.Minkan
                 | NakiKind.Kakan -> true
 
-        Seat.orderFrom state.Ruleset (Seat.next state.Ruleset target)
+        Seat.orderAfter state.Ruleset target
         |> List.filter (fun seat -> seat <> target)
         |> List.choose (fun seat ->
-            match List.tryItem seat state.Players with
+            match Seat.tryItem seat state.Players with
             | Option.None -> Option.None
             | Some player ->
                 let canRon =
@@ -643,7 +644,7 @@ module GameState =
     let players (state: GameState) : PlayerState list = state.Players
 
     /// 某座位的家状态；座位不合法返回 None。
-    let player (seat: Seat) (state: GameState) : PlayerState option = List.tryItem seat state.Players
+    let player (seat: Seat) (state: GameState) : PlayerState option = Seat.tryItem seat state.Players
 
     /// 本局已经成立的杠数（三种杠合计）。上限是 `Ruleset.RinshanCount`：岭上牌有几张
     /// 就最多杠几次，合法动作集读的就是这一条。
@@ -728,7 +729,7 @@ module GameState =
     /// Hora 压根不在它的动作集里（振听另算，那是荣和才有的事）。
     /// 反过来不恒成立：立直宣言了还没打宣言牌的那一手，这里照算，但 Hora 不在动作集里。
     let horaOf (seat: Seat) (state: GameState) : Result<HoraReading, YakuError> =
-        match List.tryItem seat state.Players, state.Phase with
+        match Seat.tryItem seat state.Players, state.Phase with
         | Some player, AwaitingDahai phase when phase.Actor = seat ->
             match PlayerState.drawn player with
             | Some drawn -> horaWith state.Ruleset (yakuContext state seat) player drawn true
@@ -747,8 +748,7 @@ module GameState =
     // ---- 构造 ----
 
     let private updatePlayer (seat: Seat) (change: PlayerState -> PlayerState) (players: PlayerState list) =
-        players
-        |> List.mapi (fun index player -> if index = seat then change player else player)
+        Seat.mapAt seat change players
 
     /// 构造摸牌后阶段。`drawn` 为 None 就是鸣牌后那一手（不摸牌），
     /// `forbidden` 是那一手被食替封住的牌种，其余时候恒为空。
@@ -757,7 +757,7 @@ module GameState =
     /// 牌山剩多少（立直要够再摸一圈）与立直状态，散着传参早晚漏一项。
     let private awaitDahaiIn (state: GameState) (actor: Seat) (drawn: Tile option) (forbidden: Tile list) : Phase =
         let actions =
-            match List.tryItem actor state.Players with
+            match Seat.tryItem actor state.Players with
             | None -> []
             | Some player ->
                 awaitingDahaiActions
@@ -779,12 +779,12 @@ module GameState =
     let private ofStarted (ruleset: Ruleset) (context: KyokuContext) (started: KyokuStart) : GameState =
         // Oya 的配牌里已经含它摸进的第一张，只需补上「刚摸进的是哪张」。
         let players =
-            List.mapi2
-                (fun seat score hand ->
+            List.map2
+                (fun (seat, score) hand ->
                     let drawn = if seat = context.Oya then Some started.Tsumo else None
 
                     PlayerState.ofHaipai score drawn hand)
-                context.Scores
+                (Seat.indexed context.Scores)
                 started.Hands
 
         let flags =
@@ -888,7 +888,7 @@ module GameState =
     ///   手里的暗刻不算（它没亮出来），自己摸来的暗杠也不算（`Naki.target` 为 None）。
     let private sekininOf (state: GameState) (actor: Seat) (tsumo: bool) (reading: HoraReading) : Seat option =
         let naki =
-            List.tryItem actor state.Players
+            Seat.tryItem actor state.Players
             |> Option.map PlayerState.naki
             |> Option.defaultValue []
 
@@ -977,7 +977,7 @@ module GameState =
 
             // 里宝牌只在和了者立了直时翻（`Yaku` 也只在那时计它的番）。
             let uradora =
-                match List.tryItem actor state.Players with
+                match Seat.tryItem actor state.Players with
                 | Some player when RiichiState.isAccepted (PlayerState.riichi player) -> Wall.uraIndicators state.Wall
                 | Some _
                 | None -> []
@@ -1027,7 +1027,7 @@ module GameState =
     let private acceptRiichi (state: GameState) : GameState * Event list =
         let declared =
             state.Players
-            |> List.indexed
+            |> Seat.indexed
             |> List.filter (fun (_, player) -> RiichiState.isDeclared (PlayerState.riichi player))
             |> List.map fst
 
@@ -1051,7 +1051,7 @@ module GameState =
         match Wall.draw state.Wall with
         | None -> exhaustiveDraw state
         | Some(drawn, rest) ->
-            let next = Seat.next state.Ruleset from
+            let next = Seat.shimocha state.Ruleset from
             let players = updatePlayer next (PlayerState.draw drawn) state.Players
 
             let advanced =
@@ -1161,7 +1161,7 @@ module GameState =
                 | Action.None _ -> Option.None)
 
         let ordered =
-            Seat.orderFrom state.Ruleset (Seat.next state.Ruleset target)
+            Seat.orderAfter state.Ruleset target
             |> List.choose (fun seat -> declarers |> List.tryFind (fun (actor, _) -> actor = seat))
 
         if state.Ruleset.Atamahane then
@@ -1172,12 +1172,9 @@ module GameState =
     /// 鸣牌的裁决：先按种类（Pon / Kan > Chi），同种类再按打牌者下家优先。
     /// **只有一家能鸣成**：那张牌就一张。
     let private nakiWinner (state: GameState) (target: Seat) (declared: Action list) : Action option =
-        let order = Seat.orderFrom state.Ruleset (Seat.next state.Ruleset target)
-
+        // 打牌者的下家排 0、再下家排 1……打牌者自己排最后（座位算术全在 `Seat`）。
         let seatRank (seat: Seat) =
-            order
-            |> List.tryFindIndex (fun each -> each = seat)
-            |> Option.defaultValue (List.length order)
+            Seat.distanceFrom state.Ruleset (Seat.shimocha state.Ruleset target) seat
 
         declared
         |> List.choose (fun action ->
@@ -1507,7 +1504,7 @@ module GameState =
         let players =
             updatePlayer actor (PlayerState.declareRiichi declaration) state.Players
 
-        let drawn = List.tryItem actor players |> Option.bind PlayerState.drawn
+        let drawn = Seat.tryItem actor players |> Option.bind PlayerState.drawn
 
         let declared = { state with Players = players }
 
@@ -1529,7 +1526,7 @@ module GameState =
         elif actor <> waiting.Actor then
             Error(NotYourTurn(actor, [ waiting.Actor ]))
         else
-            match List.tryItem actor state.Players with
+            match Seat.tryItem actor state.Players with
             | Option.None -> Error(SeatOutOfRange(actor, state.Ruleset.SeatCount))
             | Some player ->
                 /// 宣言暗杠 / 加杠：合法性就是「在不在合法动作集里」，不在就是 `CannotKan`。
@@ -1668,37 +1665,38 @@ module IllegalAction =
     /// **渲染层的单向出口**：中文说明，只供 CLI 与 UI 提示使用。
     let toDisplay (illegal: IllegalAction) : string =
         match illegal with
-        | SeatOutOfRange(actor, seatCount) -> $"座位 {actor} 不合法，座位只有 0-{seatCount - 1}"
+        | SeatOutOfRange(actor, seatCount) -> $"座位 {Seat.index actor} 不合法，座位只有 0-{seatCount - 1}"
         | NotYourTurn(actor, awaiting) ->
-            let waiting = awaiting |> List.map string |> String.concat "、"
+            let waiting = awaiting |> List.map (Seat.index >> string) |> String.concat "、"
 
             if List.isEmpty awaiting then
-                $"现在不轮到座位 {actor} 出手"
+                $"现在不轮到座位 {Seat.index actor} 出手"
             else
-                $"现在不轮到座位 {actor} 出手，等的是座位 {waiting}"
-        | NotInHand(actor, pai) -> $"座位 {actor} 手里没有 {Tile.toDisplay pai}"
+                $"现在不轮到座位 {Seat.index actor} 出手，等的是座位 {waiting}"
+        | NotInHand(actor, pai) -> $"座位 {Seat.index actor} 手里没有 {Tile.toDisplay pai}"
         | TsumogiriMismatch(actor, pai, tsumogiri) ->
             if tsumogiri then
-                $"座位 {actor} 声称摸切 {Tile.toDisplay pai}，但刚摸进的不是这张"
+                $"座位 {Seat.index actor} 声称摸切 {Tile.toDisplay pai}，但刚摸进的不是这张"
             else
-                $"座位 {actor} 声称手切 {Tile.toDisplay pai}，但手里只有刚摸进的那一张"
-        | Kuikae(actor, pai) -> $"座位 {actor} 刚鸣完，这一手不能打 {Tile.toDisplay pai}（禁食替）"
+                $"座位 {Seat.index actor} 声称手切 {Tile.toDisplay pai}，但手里只有刚摸进的那一张"
+        | Kuikae(actor, pai) -> $"座位 {Seat.index actor} 刚鸣完，这一手不能打 {Tile.toDisplay pai}（禁食替）"
         | HoraTileMismatch(actor, target, pai) ->
             if actor = target then
-                $"座位 {actor} 声称自摸和 {Tile.toDisplay pai}，但刚摸进的不是这张"
+                $"座位 {Seat.index actor} 声称自摸和 {Tile.toDisplay pai}，但刚摸进的不是这张"
             else
-                $"座位 {actor} 声称荣和座位 {target} 打出的 {Tile.toDisplay pai}，但刚打出的不是这张"
-        | IllegalAction.NotAgari(actor, pai) -> $"座位 {actor} 的手牌加上 {Tile.toDisplay pai} 不成和了型"
-        | RonWhileFuriten(actor, pai) -> $"座位 {actor} 振听，不能荣和 {Tile.toDisplay pai}"
-        | IllegalAction.NoYaku(actor, pai) -> $"座位 {actor} 的手牌加上 {Tile.toDisplay pai} 一个役都没有，不能和"
-        | NakiTileMismatch(actor, target, pai) -> $"座位 {actor} 声称鸣座位 {target} 打出的 {Tile.toDisplay pai}，但刚打出的不是这张"
+                $"座位 {Seat.index actor} 声称荣和座位 {Seat.index target} 打出的 {Tile.toDisplay pai}，但刚打出的不是这张"
+        | IllegalAction.NotAgari(actor, pai) -> $"座位 {Seat.index actor} 的手牌加上 {Tile.toDisplay pai} 不成和了型"
+        | RonWhileFuriten(actor, pai) -> $"座位 {Seat.index actor} 振听，不能荣和 {Tile.toDisplay pai}"
+        | IllegalAction.NoYaku(actor, pai) -> $"座位 {Seat.index actor} 的手牌加上 {Tile.toDisplay pai} 一个役都没有，不能和"
+        | NakiTileMismatch(actor, target, pai) ->
+            $"座位 {Seat.index actor} 声称鸣座位 {Seat.index target} 打出的 {Tile.toDisplay pai}，但刚打出的不是这张"
         | CannotNaki(actor, kind, pai, consumed) ->
             let tiles = consumed |> List.map Tile.toDisplay |> String.concat ""
-            $"座位 {actor} 用 {tiles} {NakiKind.toDisplay kind}不了 {Tile.toDisplay pai}"
+            $"座位 {Seat.index actor} 用 {tiles} {NakiKind.toDisplay kind}不了 {Tile.toDisplay pai}"
         | CannotKan(actor, kind, consumed) ->
             let tiles = consumed |> List.map Tile.toDisplay |> String.concat ""
-            $"座位 {actor} 此刻用 {tiles} {NakiKind.toDisplay kind}不了"
-        | CannotRiichi actor -> $"座位 {actor} 此刻立直不了（不门清、没听牌、点数不够或牌山不够再摸一圈）"
-        | RiichiRestricted(actor, pai) -> $"座位 {actor} 立直中，这一手动不了 {Tile.toDisplay pai}"
-        | NothingToRespond actor -> $"现在没有可响应的牌，座位 {actor} 无从响应起"
+            $"座位 {Seat.index actor} 此刻用 {tiles} {NakiKind.toDisplay kind}不了"
+        | CannotRiichi actor -> $"座位 {Seat.index actor} 此刻立直不了（不门清、没听牌、点数不够或牌山不够再摸一圈）"
+        | RiichiRestricted(actor, pai) -> $"座位 {Seat.index actor} 立直中，这一手动不了 {Tile.toDisplay pai}"
+        | NothingToRespond actor -> $"现在没有可响应的牌，座位 {Seat.index actor} 无从响应起"
         | KyokuAlreadyEnded -> "这一局已经结束了，不再接受任何动作"

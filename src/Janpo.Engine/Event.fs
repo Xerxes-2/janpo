@@ -200,16 +200,16 @@ module Event =
                         "kyoku", Encode.int fields.Kyoku
                         "honba", Encode.int fields.Honba
                         "kyotaku", Encode.int fields.Kyotaku
-                        "oya", Encode.int fields.Oya
+                        "oya", Seat.encoder fields.Oya
                         "scores", fields.Scores |> List.map Encode.int |> Encode.list
                         "tehais", fields.Tehais |> List.map encodeTiles |> Encode.list
                     ]
-            | Tsumo(actor, pai) -> mjaiEvent "tsumo" [ "actor", Encode.int actor; "pai", Tile.encoder pai ]
+            | Tsumo(actor, pai) -> mjaiEvent "tsumo" [ "actor", Seat.encoder actor; "pai", Tile.encoder pai ]
             | Dahai(actor, pai, tsumogiri) ->
                 mjaiEvent
                     "dahai"
                     [
-                        "actor", Encode.int actor
+                        "actor", Seat.encoder actor
                         "pai", Tile.encoder pai
                         "tsumogiri", Encode.bool tsumogiri
                     ]
@@ -217,8 +217,8 @@ module Event =
                 mjaiEvent
                     "pon"
                     [
-                        "actor", Encode.int actor
-                        "target", Encode.int target
+                        "actor", Seat.encoder actor
+                        "target", Seat.encoder target
                         "pai", Tile.encoder pai
                         "consumed", encodeTiles consumed
                     ]
@@ -226,18 +226,18 @@ module Event =
                 mjaiEvent
                     "chi"
                     [
-                        "actor", Encode.int actor
-                        "target", Encode.int target
+                        "actor", Seat.encoder actor
+                        "target", Seat.encoder target
                         "pai", Tile.encoder pai
                         "consumed", encodeTiles consumed
                     ]
             | Ankan(actor, consumed) ->
-                mjaiEvent "ankan" [ "actor", Encode.int actor; "consumed", encodeTiles consumed ]
+                mjaiEvent "ankan" [ "actor", Seat.encoder actor; "consumed", encodeTiles consumed ]
             | Kakan(actor, pai, consumed) ->
                 mjaiEvent
                     "kakan"
                     [
-                        "actor", Encode.int actor
+                        "actor", Seat.encoder actor
                         "pai", Tile.encoder pai
                         "consumed", encodeTiles consumed
                     ]
@@ -245,8 +245,8 @@ module Event =
                 mjaiEvent
                     "daiminkan"
                     [
-                        "actor", Encode.int actor
-                        "target", Encode.int target
+                        "actor", Seat.encoder actor
+                        "target", Seat.encoder target
                         "pai", Tile.encoder pai
                         "consumed", encodeTiles consumed
                     ]
@@ -255,8 +255,8 @@ module Event =
                 mjaiEvent
                     "hora"
                     [
-                        "actor", Encode.int fields.Actor
-                        "target", Encode.int fields.Target
+                        "actor", Seat.encoder fields.Actor
+                        "target", Seat.encoder fields.Target
                         "pai", Tile.encoder fields.Pai
                         "fu", Encode.int fields.Fu
                         "fan", Encode.int fields.Fan
@@ -265,8 +265,8 @@ module Event =
                         "scores", fields.Scores |> List.map Encode.int |> Encode.list
                         "uradora_markers", encodeTiles fields.UraDoraMarkers
                     ]
-            | Riichi actor -> mjaiEvent "reach" [ "actor", Encode.int actor ]
-            | RiichiAccepted actor -> mjaiEvent "reach_accepted" [ "actor", Encode.int actor ]
+            | Riichi actor -> mjaiEvent "reach" [ "actor", Seat.encoder actor ]
+            | RiichiAccepted actor -> mjaiEvent "reach_accepted" [ "actor", Seat.encoder actor ]
             | EndKyoku -> mjaiEvent "end_kyoku" []
             | EndGame -> mjaiEvent "end_game" []
             | Ryuukyoku fields ->
@@ -289,7 +289,7 @@ module Event =
                     Kyoku = get.Required.Field "kyoku" Decode.int
                     Honba = get.Required.Field "honba" Decode.int
                     Kyotaku = get.Required.Field "kyotaku" Decode.int
-                    Oya = get.Required.Field "oya" Decode.int
+                    Oya = get.Required.Field "oya" Seat.decoder
                     DoraMarker = get.Required.Field "dora_marker" Tile.decoder
                     Scores = get.Required.Field "scores" (Decode.list Decode.int)
                     Tehais = get.Required.Field "tehais" (Decode.list tilesDecoder)
@@ -299,8 +299,8 @@ module Event =
     let private nakiDecoder (build: Seat -> Seat -> Tile -> Tile list -> Event) : Decoder<Event> =
         Decode.object (fun get ->
             build
-                (get.Required.Field "actor" Decode.int)
-                (get.Required.Field "target" Decode.int)
+                (get.Required.Field "actor" Seat.decoder)
+                (get.Required.Field "target" Seat.decoder)
                 (get.Required.Field "pai" Tile.decoder)
                 (get.Required.Field "consumed" tilesDecoder))
 
@@ -308,8 +308,8 @@ module Event =
         Decode.object (fun get ->
             Hora
                 {
-                    Actor = get.Required.Field "actor" Decode.int
-                    Target = get.Required.Field "target" Decode.int
+                    Actor = get.Required.Field "actor" Seat.decoder
+                    Target = get.Required.Field "target" Seat.decoder
                     Pai = get.Required.Field "pai" Tile.decoder
                     Fu = get.Required.Field "fu" Decode.int
                     Fan = get.Required.Field "fan" Decode.int
@@ -339,12 +339,12 @@ module Event =
             | "tsumo" ->
                 Decode.map2
                     (fun actor pai -> Tsumo(actor, pai))
-                    (Decode.field "actor" Decode.int)
+                    (Decode.field "actor" Seat.decoder)
                     (Decode.field "pai" Tile.decoder)
             | "dahai" ->
                 Decode.map3
                     (fun actor pai tsumogiri -> Dahai(actor, pai, tsumogiri))
-                    (Decode.field "actor" Decode.int)
+                    (Decode.field "actor" Seat.decoder)
                     (Decode.field "pai" Tile.decoder)
                     (Decode.field "tsumogiri" Decode.bool)
             | "pon" -> nakiDecoder (fun actor target pai consumed -> Pon(actor, target, pai, consumed))
@@ -353,17 +353,17 @@ module Event =
             | "ankan" ->
                 Decode.map2
                     (fun actor consumed -> Ankan(actor, consumed))
-                    (Decode.field "actor" Decode.int)
+                    (Decode.field "actor" Seat.decoder)
                     (Decode.field "consumed" tilesDecoder)
             | "kakan" ->
                 Decode.map3
                     (fun actor pai consumed -> Kakan(actor, pai, consumed))
-                    (Decode.field "actor" Decode.int)
+                    (Decode.field "actor" Seat.decoder)
                     (Decode.field "pai" Tile.decoder)
                     (Decode.field "consumed" tilesDecoder)
             | "dora" -> Decode.field "dora_marker" Tile.decoder |> Decode.map Dora
-            | "reach" -> Decode.field "actor" Decode.int |> Decode.map Riichi
-            | "reach_accepted" -> Decode.field "actor" Decode.int |> Decode.map RiichiAccepted
+            | "reach" -> Decode.field "actor" Seat.decoder |> Decode.map Riichi
+            | "reach_accepted" -> Decode.field "actor" Seat.decoder |> Decode.map RiichiAccepted
             | "hora" -> horaDecoder
             | "ryukyoku" -> ryuukyokuDecoder
             | "end_kyoku" -> Decode.succeed EndKyoku
