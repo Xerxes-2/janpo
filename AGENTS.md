@@ -7,6 +7,12 @@ LLM 日麻对战平台 —— F# 规则引擎（Fable → JS，浏览器内运�
 This is a **colocated `jj` repo** (`.jj/` alongside `.git/`). Use `jj` exclusively for version-control
 operations — running `git` commands here can corrupt or confuse state. There is no remote.
 
+## F# 风格
+
+写 F# 前读 `docs/agents/fsharp-style.md`。核心一条：**不许写从里往外读的嵌套应用**——
+`f (g (h x))` 要写成 `x |> h |> g |> f` 或 `(h >> g >> f) x`。但**不要为了管道而管道**，
+那份文档第 4 条列了三种不许强行管道的情况。
+
 ## Agent skills
 
 ### Issue tracker

@@ -82,3 +82,10 @@ load average 冲到 32，把另一个 agent 的 dotnet 测试挤慢了。**它�
 
 Python 该用在两处：跑**现成的第三方** oracle（`scripts/oracle/`，PyPI `mahjong` 库），以及牌谱数据的解析与统计。
 **别用它重写我们自己的逻辑。**
+
+## F# 风格
+
+写代码前读 `docs/agents/fsharp-style.md`。它从既有代码提取，不是通用建议。
+最常犯的一条：`fun x -> f (g x)` 该写成 `g >> f`；`A (B (C x))` 该拆成管道或命名中间值。
+反过来也有约束——boolean 条件里的两层「谓词套取值器」、算术与分支、类型定义文件，
+**都不许为了管道而改写**。
