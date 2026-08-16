@@ -47,6 +47,18 @@ pnpm run test      # Agent 层的确定性用例（node --test，回放录制的
 pnpm run format    # Biome 写回格式
 ```
 
+### 开发向内容的开关：`?dev=1`
+
+页面默认只摆牌桌——README 那条「单纯面向用户」的标准同样管页面本身。
+**地址后面加 `?dev=1`** 才把开发向的那块挂在牌桌下面：
+
+```sh
+http://localhost:5173/?dev=1          # 曳光弹（同种子的一局 / 一整场，与 CLI 对拍的那几行数）
+```
+
+判据只有一处：`src/Janpo.Web/Main.fs` 的 `devSurfaceRequested`。加新的开发向部件就挂在它后面。
+`pnpm run verify` 跑的就是带开关的地址，它另外先开一遍不带开关的地址、确认那块真的不在。
+
 **LLM 座位**的两条手动验收要真 key，因此不进 CI：
 
 ```sh

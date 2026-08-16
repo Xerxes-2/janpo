@@ -144,6 +144,8 @@ module App =
             ]
         ]
 
+    /// 曳光弹页面。**它是开发向的自检页，默认不挂**（票 35）：只有地址带 `?dev=1` 时
+    /// `Main.Shell` 才把它摆在牌桌下面。访客看到的只该是牌桌。
     [<ReactComponent>]
     let TracerPage () =
         let model, dispatch = React.useElmish (init, update, [||])
@@ -151,10 +153,11 @@ module App =
         Html.div [
             prop.className "page"
             prop.children [
-                Html.h1 "janpo —— 浏览器里的第一颗曳光弹"
+                Html.h1 "janpo —— 浏览器里的第一颗曳光弹（开发页）"
                 Html.p [
                     prop.className "intro"
-                    prop.text "同一套 F# 引擎源码，经 Fable 编成 JS 在这里跑。下面的点数与顺位由浏览器算出，应与 dotnet 侧同种子的 CLI 输出逐项相同。"
+                    prop.text
+                        "开发向的自检页，地址带 `?dev=1` 才出现。同一套 F# 引擎源码，经 Fable 编成 JS 在这里跑；下面的点数与顺位由浏览器算出，应与 dotnet 侧同种子的 CLI 输出逐项相同。"
                 ]
                 Html.div [
                     prop.className "controls"

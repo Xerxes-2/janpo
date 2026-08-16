@@ -105,8 +105,9 @@ module TablePage =
     /// 页面初次打开时摆的那一桌。挑它两个理由：东 1 局里既有碰吃也有杠（副露的形态看得到），
     /// 且以和了终（结算面板才有役种与番符可看）。挑种子的探针见报告 22。
     ///
-    /// **刻意不用曳光弹那个种子**：曳光弹把原始 mjai 事件打在同一张文档里，
-    /// 而 `start_kyoku` 带着四家配牌——两边同种子的话，牌桌遮起来的那几家手牌就在下面躺着。
+    /// **刻意不用曳光弹那个种子**：`?dev=1` 把曳光弹挂出来时，它把原始 mjai 事件
+    /// 打在同一张文档里，而 `start_kyoku` 带着四家配牌——两边同种子的话，
+    /// 牌桌遮起来的那几家手牌就在下面躺着。
     let private defaultSeed = 2088
 
     let private parseSeed (text: string) : Result<int, string> =
@@ -1213,10 +1214,13 @@ module TablePage =
         Html.div [
             prop.className "page table-page"
             prop.children [
-                Html.h1 "janpo —— 最小牌桌"
+                // h1 抄的是 `web/index.html` 那个 `<title>`（票 33 定的稿）：
+                // 标签页上与页面上不该各说各的。改品牌语先改那一行，再抄过来。
+                Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场"
                 Html.p [
                     prop.className "intro"
-                    prop.text "默认四家随机选手，可以把一席交给 LLM。牌桌上的一切都是引擎局面的投影：坐在某个座位上看时，他家的暗牌在类型层面就不存在；上帝视角是另一份独立投影。虚线的牌是摸切。"
+                    prop.text
+                        "默认四家随机选手；在下面挑一个座位交给模型，按「播放」看它一手一手打。他家那几行看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
                 ]
                 controls model dispatch
                 viewpoints model dispatch

@@ -3,16 +3,29 @@ module Janpo.Web.Main
 open Browser.Dom
 open Feliz
 
-/// 页面外壳：**牌桌在上，19 票的曳光弹在下，两个都挂着**。
+/// 开发向内容的开关：地址里带 `?dev=1` 才把它们挂出来。
 ///
-/// 曳光弹不是可以切走的一页——`web/scripts/verify-tracer.mjs` 打开 `/` 就直接按 testId
-/// 找它的输入框与那几行数（双目标语义对拍的那道 CI 关卡）。做成标签页的话它会拿不到，
-/// 因此两页共存；牌桌自己的种子输入框另有一个 testId（`table-seed`），两边不打架。
+/// **访客看到的只该是牌桌**（票 35）——README 那条「单纯面向用户」的标准同样管页面本身。
+/// 判据只有这一处，加新的开发向部件时挂到它后面即可。
+let private devSurfaceRequested () : bool =
+    window.location.search.TrimStart('?').Split('&') |> Array.contains "dev=1"
+
+/// 页面外壳：**牌桌永远在，19 票的曳光弹只在 `?dev=1` 时跟在下面**。
+///
+/// 曳光弹删不掉也不能做成标签页——`web/scripts/verify-tracer.mjs` 打开页面就直接按 testId
+/// 找它的输入框与那几行数（双目标语义对拍的那道 CI 关卡），那是「同一套 F# 源码编到两个
+/// 目标之后语义没漂」的第一份证据。所以是**藏**：那道闸门跟着开 `?dev=1` 的地址。
+/// 牌桌自己的种子输入框另有一个 testId（`table-seed`），两边不打架。
 [<ReactComponent>]
 let Shell () =
     Html.div [
         prop.className "shell"
-        prop.children [ TablePage.Page(); Html.hr []; App.TracerPage() ]
+        prop.children [
+            TablePage.Page()
+            if devSurfaceRequested () then
+                Html.hr []
+                App.TracerPage()
+        ]
     ]
 
 /// 浏览器入口。**F# 只暴露这一个函数给 JS**（`mount`），JS 侧一行 import 就够：
