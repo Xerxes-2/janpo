@@ -234,7 +234,7 @@ module Tile =
     // ---- JSON（mjai wire） ----
 
     /// mjai wire 上牌就是一个 JSON 字符串。
-    let encoder: Encoder<Tile> = fun tile -> Encode.string (toMjai tile)
+    let encoder: Encoder<Tile> = toMjai >> Encode.string
 
     /// 解码失败是 Decoder 的错误值，不抛异常。
     /// 诊断文案用英文——中文只属于渲染层（ADR-0001）。

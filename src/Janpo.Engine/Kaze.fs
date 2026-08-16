@@ -48,7 +48,7 @@ module Kaze =
     // ---- JSON（mjai wire） ----
 
     /// mjai wire 上场风就是一个字符串，与牌同形。
-    let encoder: Encoder<Kaze> = fun kaze -> Encode.string (toMjai kaze)
+    let encoder: Encoder<Kaze> = toMjai >> Encode.string
 
     /// 解码失败是 Decoder 的错误值，不抛异常。诊断文案用英文（ADR-0001）。
     let decoder: Decoder<Kaze> =

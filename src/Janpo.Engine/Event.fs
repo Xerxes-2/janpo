@@ -215,7 +215,7 @@ module RyuukyokuReason =
 
     // ---- JSON（mjai wire） ----
 
-    let encoder: Encoder<RyuukyokuReason> = fun reason -> Encode.string (toMjai reason)
+    let encoder: Encoder<RyuukyokuReason> = toMjai >> Encode.string
 
     /// 解码失败是 Decoder 的错误值，不抛异常。诊断文案用英文（ADR-0001）。
     let decoder: Decoder<RyuukyokuReason> =

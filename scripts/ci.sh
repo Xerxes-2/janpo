@@ -46,6 +46,9 @@ dotnet tool restore
 echo "== fantomas --check =="
 dotnet fantomas --check .
 
+echo "== 风格闸门 =="
+bash "$(dirname "$0")/check-style.sh"
+
 echo "== build =="
 dotnet build janpo.slnx --configuration Release
 
