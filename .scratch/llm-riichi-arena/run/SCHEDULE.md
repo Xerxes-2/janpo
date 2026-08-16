@@ -42,7 +42,7 @@
 | 09 | **done** | vmurqows | 463 测试；reach/reach_accepted 两事件、一发、给 11 的 allowsAnkan 判据 |
 | 10 | **done** | nzlvxmur | 437 测试；禁止食替判据三处共用；一发钩子留给 09 |
 | 11 | **done** | wqzppokx | 493 测试；岭上/抢杠/新宝牌/责任支付；kanCount 给 12 |
-| 12 | pending | | |
+| 12 | dispatched | | ws-a |
 | 13 | pending | | 数据与固件已就位（D-7 前置），票已按缺口清单重写 |
 | 14 | pending | | |
 
@@ -51,6 +51,11 @@
 未派工的 8 张票已打补丁：02 03 05 08 10 11 小改，12 13 重写。
 两条提案进了 `DECISIONS.md`：**S-A Ruleset 与 ADR-0004**（早上必看）、**S-B 三麻的门缝**。
 关键发现：spec 漏了 **Nagashi Mangan** 与 **三家和了**，且头跳默认值与两大平台相反。
+
+## 晨间裁决代码化（R-1/R-4/R-5/R-6）
+
+四条分四个 commit 落地，每条之间 CI 绿：qxukuowm(R-6 改名) → ussuvuyx(R-1 默认双响) → xkmulykq(R-4 Ruleset 携带 TileKindSet) → pqvvzuku(R-5 Seat 换真类型)。
+502 测试（R-5 新增 9 条 SeatTests，一条未删）。宽改动的验证方式：把基线整树抽到 /tmp 单独构建，用 fsi 对两个引擎跑同种子对局比事件频次——逐项相同。
 
 ## 资源纪律
 

@@ -9,9 +9,13 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
-  <!-- 牌与手牌形态 -->
+  <!-- 座位固件。排在最前是因为几乎每个测试都写 `seat 2`；不许往后挪。 -->
   <ItemGroup>
     <Compile Include="SeatFixtures.fs" />
+  </ItemGroup>
+
+  <!-- 牌与手牌形态 -->
+  <ItemGroup>
     <Compile Include="TileGenerators.fs" />
     <Compile Include="TileNotationTests.fs" />
     <Compile Include="TileProperties.fs" />
