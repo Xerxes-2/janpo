@@ -2623,3 +2623,24 @@ PHP / Beam = Experimental。我们钉的是 Fable 5.13。
 **唯一会改主意的场景**：脚手架从「规则化」变成「模拟型」（如「打这张，n 次模拟的期望收益」），
 浏览器内引擎才可能成为瓶颈，那时 Rust→WASM 值得量一量。但 spec 的三档脚手架全是规则化的，
 M3 的工具搜索档也是「模型主动查询」而非跑模拟。真到那天，**先量 JS 侧性能，再谈换语言**。
+
+## 主人 8/17：仓库已推上 GitHub，Pages 已上线
+
+- 仓库：https://github.com/Xerxes-2/janpo （public，默认分支 `main`）
+- 站点：https://xerxes-2.github.io/janpo/ （Pages source = GitHub Actions）
+
+**发布前调度器做的两件事**：
+1. **全历史密钥扫描**（114 个修订，走 git 只读命令）：真 key 零命中、其它凭据形状
+   （`gh[pousr]_`/`AIza`/`AKIA`/`sk-ant-(oat|ort)`）零命中、无凭据类文件入库。
+   历史里只有三把明显是假的字面量（`sk-deliberately-broken-key` 等）
+2. **修 pages.yml**：第一次部署失败在 `dotnet fable` 找不到——Fable 是 dotnet **本地工具**，
+   `scripts/ci.sh` 自己会 `dotnet tool restore`，而 pages.yml 直接调 `pnpm run build` 跳过了它。
+   补一步即绿。（这一处是调度器自己动手的 CI 管道修补，不值得开票。）
+
+**上线核对**（调度器亲手做，不只读报告）：线上 200、资源前缀 `/janpo/` 正确、
+真浏览器走 12 步无 console 错误（座位 0 碰中、四家牌背 0/10/13/13、导出按钮可见）、
+截图亲眼看过。
+
+**发现并立票 35**：牌桌下面紧接着就是 19 号票的调试页「浏览器里的第一颗曳光弹」，
+对所有访客可见。主人对 README 的「纯用户向」裁决**同样适用于页面本身**；
+曳光弹删不掉（CI 对拍闸门依赖它），所以藏到开关后面。
