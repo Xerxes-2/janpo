@@ -11,3 +11,18 @@
 
 - `Tile.toDisplay` 一类的渲染函数是**单向出口**：改 prompt 措辞或换展示语言不碰引擎、不碰牌谱、不使已存牌谱失效。
 - 不懂日麻的读者（含未来的 agent）读引擎代码需要术语表，因此 `CONTEXT.md` 的罗马字↔中文对照表是必读前置，不是可选装饰。
+- **标识符照术语表，wire 照 mjai，两者不一致时在编解码处映射，不改标识符去迁就 wire。**
+  这条是本决定的直接推论，M0 实施中反复用到，因此写进来免得每票再议一次：
+  - `Event.Ryuukyoku` 的 wire 是 `"ryukyoku"`（mjai 的实际拼法，少一个 u）
+  - `Minkan` 的 wire 是 `"daiminkan"`
+  - 五种途中流局的 reason 是 `sufonrenta` / `sukaikan` / `suchareach` / `sanchaho` / `kyushukyuhai`
+    （取值出自 mjai 参考实现 gimite `mjai` gem 的 `active_game.rb`，**不是照规则书拼的**——
+    wiki 只举了 `fanpai`，Mortal 干脆丢了 `reason`）
+  - 场风的 wire 写 `1z`-`4z`
+
+  理由与「人类可读形式隔离在渲染层」是同一条：**外部协议的既有拼写是事实，不是我们的命名权**。
+  隔离渲染层挡的是展示语言，隔离编解码层挡的是协议拼写；放任任何一边渗进来，
+  内部就会出现两套写法并存。
+- 罗马字用于**领域概念**，英文用于**修饰词**：`Furiten.Permanent` 的 `Permanent`、
+  `Limit`（满贯档，日麻没有涵盖这一整档的单一名词）都保持英文。
+  自造的复合词（如 `KawaTaken`）允许，但要在 `CONTEXT.md` 里明标是自造。
