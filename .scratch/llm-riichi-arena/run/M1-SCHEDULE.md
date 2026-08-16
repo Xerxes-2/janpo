@@ -50,10 +50,10 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 | 26 | **done** | mwuloxvq | ws-b；Paifu 版本 1，thinking 是「值上的一次变换」可省；200 场回放逐条相同 |
 | 28 | 待派 | | 裁决落地（21-c 逐字段 + 23-A Roster），阻塞于 25、26；PendingKan 与立直宣言牌已抽给 29 |
 | 29a | **done** | unvvslns | ws-a；一条掩蔽法则 `MaskedEvent.forSeat`；`Observation.ofState` 签名未变 → 22/24/25 一行没改、黄金用例一字未动；增量 fold 0.56 ms | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
-| 29b | 派工中 | ws-a | 历史过接缝 + prompt 翻转 + 前缀稳定性 + 缓存指标 + 端口债 | | 前缀可缓存 prompt + **prompt 降为数据 + system 槽位/人格** + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
+| 29b | **done** | qtrpknku | ws-a；**真跑实测缓存命中 48%**（逐手 21%→70%）；三段形态 `promptSections`；端口债已清 | 历史过接缝 + prompt 翻转 + 前缀稳定性 + 缓存指标 + 端口债 | | 前缀可缓存 prompt + **prompt 降为数据 + system 槽位/人格** + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
 | 32 | 派工中 | ws-b | 牌背隐形（22 号票逃逸缺陷）+ 重出 README 截图 |
 | README | **done** | twporvny | ws-b；七条声称核到出处，六条核不实的删/写弱；发现牌背隐形 → 票 32 |
-| 31 | 待派 | | prompt 降为数据 + system/人格 + 牌谱只存尾部 + 术语表，阻塞于 29b |
+| 31 | 派工中 | ws-a | prompt 降为数据 + system/人格 + 牌谱只存尾部 + 术语表，阻塞于 29b |
 | 30 | **done** | nrkwlpuo | ws-b；**实测推翻了票面对 mixed content 的假设**（见下）；新开 `docs/host/` 面向主持人的手册 | | 自定义 baseUrl 接本地端点（含 CORS 与 mixed-content 实证），无阻塞 |
 | 27 | 待派 | | 阻塞于 21、24、25、26、28、29a、29b、30、31 |
 
