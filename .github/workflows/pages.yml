@@ -30,7 +30,7 @@ jobs:
       #    它经 vite.config.ts 的 JANPO_BASE 变成打包产物里的资源前缀。
       JANPO_BASE: /janpo/
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # 与 ci.yml 同一套工具链：dotnet（跑 Fable）与 node/pnpm（打包）都由 flake.lock 钉住版本，
       # 因此 Pages 上跑的那份产物与本地 `pnpm run build` 出来的是同一条链路。
@@ -53,7 +53,8 @@ jobs:
 
       # v4 起隐藏文件（dotfile）不再进包。web/dist 里没有 dotfile（vite 只出 index.html 与 assets/），
       # 且 Actions 部署不经 Jekyll、不需要 .nojekyll——将来若有 dotfile 要发布，得显式开 include-hidden-files。
-      - uses: actions/upload-pages-artifact@v4
+      # 用 v5 而不是 v4：v4 内部钉的 upload-artifact 是 v4.6.2（Node 20，每跑必印弃用告警），v5 内部是 v7.0.0。
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web/dist
 

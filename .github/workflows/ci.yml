@@ -12,7 +12,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # 钉在发布 tag 上而不是 @main：@main 是移动靶，每次跑的都是别人主干上的最新代码
       # ——既不可复现，也是一条无人看守的供应链入口。

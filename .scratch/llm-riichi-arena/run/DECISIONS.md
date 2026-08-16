@@ -2862,3 +2862,20 @@ M3 的工具搜索档也是「模型主动查询」而非跑模拟。真到那�
 7. **牌谱里的 `prompt_tail` 因此是打码后的那一份**，与真发出去的那一次差这几个字。
    真发出去的不打码是有意的：那把 key 本来就是这个端点给回来的，抄回去它不多知道一个字节，
    而牌谱是要发给别人的。（`PaifuCheck.rebuildable` 查的是「指得回一份 preamble」，不受影响。）
+
+## 教训：查「最新版本」要问权威源，web 搜索给的是过时数据
+
+升级 actions 时我用 web 搜索查最新版，得到「`checkout` 最新 v5.1.0、`upload-pages-artifact` 最新 v4.0.0」
+——**两条都是过时的**。主人贴出一条 CI 告警（`upload-artifact@ea165f8d…` 仍是 Node 20）后，
+改用 `gh api repos/<owner>/<repo>/releases/latest` 重核，真相是：
+`checkout` **v7.0.1**（2026-07-20）、`upload-pages-artifact` **v5.0.0**（2026-04-10）。
+我上一版把 checkout 升到 v5、pages-artifact 升到 v4，**各差两个大版本**。
+
+那条告警的来源也搞清了：它不是我们写的 action，而是 `upload-pages-artifact@v4` **内部**钉的
+`upload-artifact@v4.6.2`（Node 20）。`@v5` 内部换成了 `upload-artifact@v7.0.0`，告警随之消失
+（顺带多一个 `include-hidden-files` 输入）。checkout v6/v7 的变更（凭据存单独文件、
+禁止在 `pull_request_target`/`workflow_run` 里 checkout fork PR、ESM 化）与本仓库无关。
+
+**规矩**：查版本、查 API 形状这类「当下事实」，用**仓库/包的 API 或官方 changelog**，
+不用搜索结果的转述。搜索适合找「有没有这个东西、怎么用」，不适合回答「现在最新是几」。
+这与本里程碑反复出现的那条判据同源：**证据要来自权威源，不是二手转述。**
