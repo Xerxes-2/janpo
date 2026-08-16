@@ -10,6 +10,30 @@
 
 <!-- agent 从这里往下追加 -->
 
+
+> **本文件已由调度器整理**：去掉 8 个重复小节（三方合并的产物），并把提案分成
+> 「已裁决」与「待裁决」两堆。决策记录部分原样保留。
+
+
+## 待你裁决的东西，一共在三个地方
+
+| 在哪 | 是什么 | 数量 |
+|---|---|---|
+| **本文件 §三.1** | 术语表增补——都是「某票用到但 `CONTEXT.md` 没有的罗马字词」 | **10 条，建议一次性批量处理** |
+| **本文件 §三.2** | 其余待裁：`04-B`（ADR-0001 缺「wire 与标识符分离」一条，已核实）、`12-C`、`13-C` | 3 条 |
+| **`reports/*.md` 的「留给人的待审项」一节** | 各票实现细节的取舍，agent 挑了最保守的一种并说明理由 | **17 份报告都有** |
+
+第三处最容易漏——它们在 DECISIONS 里是以**决策**（已做了选择）的形式记录的，不是提案，
+所以不在 §三。典型如 `16-B`（明杠后没打牌又杠一次时欠账 ≥2 的排法，语料零出现取最保守解）。
+
+另有两条不在上表、但要你拍板的：
+- **15 票该不该关掉** —— 它的立票依据（`tenpaiDahai` 2.1 ms）被 17 票的剪枝改成约 0.3 ms
+- **`docs/research/` 的三份报告**（听牌边界、`searchStandard` 五方向、libriichi 对比）里各有结论建议
+
+---
+
+# 一、决策记录（agent 自主决定，供审阅）
+
 ### 01 / Tile 的内部表示私有
 
 `Tile` 是 `[<Struct>]` 私有 record（`Kind: int` 0-33 + `Akadora: bool`），只能经 `Tile.parse` /
@@ -147,14 +171,6 @@ GameState 单独记，不靠手牌顺序。
 `Seat`、`Event`，而规则长尾一律罗马字。ADR-0001 反对的是把**日麻术语**意译（`AcceptanceTiles`），
 不是禁止英文结构词。`Event` 的字段名另当别论：它跟 mjai wire 1:1，所以是 `tehais` 不是 `hands`。
 
-## 提案（需人裁决，勿自行落地）
-
-<!-- 涉及 CONTEXT.md / ADR 变更的提案写在这里 -->
-
-### 提案 01-A：把牌相关的几个罗马字词补进 CONTEXT.md
-
-01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
-`Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
 ### 03 / 形态判定的输入类型叫 `HandShape`（暗牌 + 副露数）
 
 Shanten / Ukeire / 和了型共用一个输入：`HandShape`（34 长计数 + `nakiCount` 0-4，构造时验张数与
@@ -205,90 +221,6 @@ oracle 是 PyPI 的 `mahjong==2.0.0`，`uv run scripts/oracle/shanten_oracle.py`
 `refresh-fixture.sh` 生成），所以 CI 不需要 Python，引擎依赖白名单也不受影响；
 十万量级的现跑对拍走 `scripts/oracle/differential.sh`（经 `janpo shanten --batch` 管道）。
 否决：测试里直接 shell 出去调 Python（`dotnet test` 从此要联网 + 装包，CI 不可重现）。
-
-## 提案（需人裁决，勿自行落地）
-
-<!-- 涉及 CONTEXT.md / ADR 变更的提案写在这里 -->
-
-### 提案 01-A：把牌相关的几个罗马字词补进 CONTEXT.md
-
-01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
-`Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
-`deaka`（去红）、`kindIndex`（0-33 的牌种索引）。建议在「牌与手牌」一节补齐，
-否则后续票各写各的（`Honor` / `Red` / `tileId`）就会散掉。
-
-### 提案 01-B：渲染出口的统一命名 `toDisplay`
-## 提案（需人裁决，勿自行落地）
-
-<!-- 涉及 CONTEXT.md / ADR 变更的提案写在这里 -->
-
-### 提案 01-A：把牌相关的几个罗马字词补进 CONTEXT.md
-
-01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
-`Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
-`deaka`（去红）、`kindIndex`（0-33 的牌种索引）。建议在「牌与手牌」一节补齐，
-否则后续票各写各的（`Honor` / `Red` / `tileId`）就会散掉。
-
-### 提案 01-B：渲染出口的统一命名 `toDisplay`
-
-ADR-0001 只举了 `Tile.toDisplay` 一个例子。01 票把它扩成了约定：
-**所有产出中文的函数一律叫 `toDisplay`，集中在文件末尾的渲染段**（`TileParseError.toDisplay`、
-`TileListParseError.toDisplay` 已照此落地）。建议把这句写进 ADR-0001 的 Consequences，
-让「渲染层是单向出口」有一个可 grep 的判据。
-
-### 提案 S-A（调度器）：引入 Ruleset（规则集），并重裁 Atamahane 的默认值
-
-调研牌谱来源时发现，spec 与 CONTEXT.md 的两处规则假设与两大平台不符：
-
-| 项 | 天凤 | 雀魂段位战 | 我们现在 |
-|---|---|---|---|
-| 双响 | あり | あり | 头跳**默认开** ← 与两家都相反 |
-| 三响 | 三家和了 → 途中流局 | 三响成立、不流局 | 未覆盖 |
-| 切上满贯 | なし | なし | 开关（原以为雀魂有，错） |
-| 流し満貫 | あり | あり | **完全没提** |
-| 连风牌雀头 | 4 符 | 未核 | 未定 |
-| 国士暗杠抢杠 | 禁止 | 允许 | 未覆盖 |
-
-出处：`tenhou.net/man/` 官方手册（「ダブロンあり」、途中流局列表含三家和了、「流し満貫あり」）、
-riichi.wiki Tenhou rules、mahjongsoul.info 段位战规则表（「切り上げ満貫なし」「トリプルロンは流局なし」）、
-天鳳雑スレ Wiki（「連風牌は4符」）、`smly/RiichiEnv` issue #43（国士暗杠抢杠）。
-切上满贯那条是次级源，落地前再核一次。
-
-**提案**：把这些开关打成命名规则集 `Ruleset`（`Tenhou` / `MahjongSoul` / 项目默认），
-新增术语进 CONTEXT.md，并重裁 Atamahane 默认值（建议默认双响，与两大平台一致，头跳保留为开关）。
-ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下文时费解：为何默认双响；真实取舍：
-对拍可行性 vs 竞技规则纯度）→ 建议立 **ADR-0004**。
-
-已按此调整的票：08（切上默认关、符的规则集项）、11（国士暗杠抢杠）、12（三家和了 + Nagashi Mangan）、
-13（对拍前按来源选规则集）。**CONTEXT.md 与 ADR 未动，留人裁决。**
-
-### 提案 S-B（调度器）：三麻这道门今晚不做，但已按几处零成本参数化留缝
-
-用户提出三麻是 bonus。调研结论：三麻不是一个开关，是整套规则集变体——
-3 家 / 108 张（无 2-8m）/ 无红 5m / 禁吃 / 拔北（mjai 需 `nukidora` 扩展事件）/ 自摸损 /
-半庄 6 局 / Mortal 官方不支持需 `libriichi3p` fork（证据：`Mateces/mortal-sanma` README 差异表）。
-
-最要命一条：**三麻的向听数在 corner case 下与四麻不同**（`smly/RiichiEnv` issue #30）——
-`1m3m` 在四麻是嵌张搭子，三麻永远补不上。这打的是 03 票，全引擎风险最高的模块。
-
-已加的三处零成本参数化：02（座位数与牌山构成不写死字面量）、03（合法牌种集合作显式入参）、
-05（局数序列从规则配置读）。**没有**预留 Nukidora 事件或抽象点数表——F# DU 加 case 时编译器
-会把所有 match 点找出来，那是优点，提前抽象反而是投机性泛化。
-
-若早上决定把三麻纳入范围，CONTEXT.md 的 `Seat`（现定义为固定索引 0-3）需要改。
-
-### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
-
-02 与 03 并行时各造了一份「本规则集里存在哪些牌种」：02 的 `Ruleset.TileKinds : Tile list`，
-03 的 `TileKindSet`（内部 34 长存在标志数组，`internal` 快路径）。编译器不会抗议，但 04 起的每张票
-都要同时面对两者。
-
-集成时**没有**动它们——重新设计不是调度器的职权，而且 04 的 agent 需要一个不动的靶子。
-已在派工时要求 04 用 `TileKindSet.ofTiles ruleset.TileKinds` 派生，**不许造第三份**。
-
-早上可考虑：让 `Ruleset` 直接携带 `TileKindSet`（编译顺序已经为此留好——03 的模块排在 `Ruleset.fs` 之前）。
-
----
 
 ### 04 / `Ryuukyoku` 的拼法：标识符照术语表，wire 照 mjai
 
@@ -358,18 +290,6 @@ LLM 与真人坐席是 Agent 层的事（它们的决策要 await），引擎侧
 `GameState.start` 需要知道「Oya 摸进的是哪张」才能建摸牌后阶段；从 `Events` 里反解要多一条
 不可能分支。否决：从 14 张手牌里减去 13 张配牌反推（更绕，且 `Hands` 已排序）。
 
-### 提案 04-A：把摸打循环的几个词补进 CONTEXT.md
-
-本票落地、术语表里没有的词：`Kawa`（河）、`NotenBappu`（听牌料 / ノーテン罰符）、
-`Haitei` / `Houtei`（海底 / 河底，术语表只在 Ippatsu 条目里顺带提过）、`Phase`（阶段）、
-`Tsumogiri`（摸切）/ `Tedashi`（手切）。建议分别补进「牌与牌河」与「引擎接缝」两节。
-
-### 提案 04-B：把「标识符照术语表、wire 照 mjai」写进 ADR-0001
-
-ADR-0001 只说了记法（`1z` vs `E`）。罗马字**拼法**同样会分叉：mjai 写 `ryukyoku`，术语表写
-`Ryuukyoku`。建议在 Consequences 补一句：wire 上的字符串一律照抄 mjai，F# 标识符一律照 CONTEXT.md，
-两者不一致时由编码器承担映射（`Kaze`、`Ryuukyoku` 已经是这样）。
-
 ### 07 / 「已分解的和了形」是三个新类型，`HandShape` 与 `AgariShape` 一字未动
 
 `Naki`（副露的**内容**）→ `AgariHand`（暗牌 + 副露 + 和了牌 + 自摸/荣和）→
@@ -436,36 +356,6 @@ SPEC 的规则开关只有「红宝牌有无、食断有无」，02 的决策也
 流し満貫（12 票的流局范畴）、人和（非通行役，SPEC 的「古役与地方役」排除）、
 双倍役满（见上）、役满的包牌与点数（08 / 11）。符与点数全部不在本票，`YakuTally`
 只到「役 + 番 + 宝牌 + 选中的分解」为止。
-
-## 提案（需人裁决，勿自行落地）
-
-### 提案 07-A：把和了形相关的罗马字词补进 CONTEXT.md
-
-07 落地时用到、但术语表里没有的词：`Mentsu`（面子）与 `Shuntsu` / `Koutsu` / `Kantsu`
-（顺子 / 刻子 / 杠子）、`Jantou`（雀头）、`Menzen`（门清）、`Yakuman`（役满）、
-`Han`（番）、`Kuitan`（食断）、`WaitKind` 的五种听牌型（`Ryanmen` / `Penchan` / `Kanchan` /
-`Shanpon` / `Tanki`）、`RiichiDeclaration`。术语表现在只有 `Yaku` 与 `Fu` 两条，
-08（符）与 10/11（副露）会继续用这批词，建议在「规则判定」一节补齐。
-
-### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
-
-02 与 03 并行开发，各自独立造了「这个规则集里存在哪些牌种」的表示：
-
-- 02：`Ruleset.TileKinds : Tile list`（记录字段）
-- 03：`TileKindSet`（私有类型，内部 34 长存在标志数组，`internal` 快路径；`ofTiles` / `fourPlayer`）
-
-编译器不会抗议，两者也不冲突——但它们是同一个领域概念。集成时**没有合并**，因为
-重新设计不是集成该做的事，且 04/07 票正在并行开发，接口不能变。
-
-已给 04 票的指令：用 `TileKindSet.ofTiles ruleset.TileKinds` 派生，**不许造第三份**。
-
-**提案**：把 `Ruleset` 的字段直接改成 `TileKindSet`（编译顺序已在集成时安排好——
-`TileKindSet.fs` 排在 `Ruleset.fs` 之前，正是为这个可能性留的），或明确记录
-「`Ruleset.TileKinds` 是配置面，`TileKindSet` 是计算面」这一分工。二选一，别放着不管。
-
-这条是并行开发的可预期产物：无人值守下两个 agent 看不见对方，语义重复只能在集成时发现。
-
----
 
 ### 06 / 头跳裁决的是**实际宣言**，不是「谁有资格宣言」
 
@@ -536,16 +426,6 @@ wire 形态照 gimite/mjai 的 `hora`：`actor` / `target` / `pai` / `fu` / `fan
 
 `ronWinners` 对宣言者数目不设上限，头跳关掉时几家宣言就成立几家（票的验收「关闭时双响/三响都成立」）。
 天凤把三家和了判成途中流局——那是 12 票的规则集字段（提案 S-A 已记），06 不提前替它决定。
-
-### 提案 06-A：把和了与振听的几个词补进 CONTEXT.md
-
-本票落地、术语表里没有的词：`Hora`（和了，术语表只有 Yaku / Fu，没有和了本身）、
-`Minogashi`（见逃，`PlayerState.minogashi`）、`Doujun`（同巡，术语表在 Furiten 与 Junme 条目里
-提过「同巡」但没给罗马字）、`KyokuEnd`（终局形态）、`Renchan`（连庄，术语表在 Oya 条目里
-提过中文「连庄」没给词）。另：振听「永久」那一位现在叫 `Furiten.Permanent`（英文），
-因为「永久振听」没有通行的罗马字短词——若术语表想统一，请一并裁。
-
----
 
 ### 08 / 符与点数是两个文件、两个纯函数模块：`Fu` 与 `Score`
 
@@ -639,17 +519,6 @@ mjai 的 `fan` 是个 int，役满没有番。记 13（数え役满同值，点�
 `Score.sekininBarai : HoraScore -> ... -> HoraScore`），
 `Fu` / `basePoints` / `limit` 一行都不必动。跨局的 Honba 递增与 Kyotaku 结转仍归 05。
 
-### 提案 08-A：把符与点数的几个词补进 CONTEXT.md
-
-08 落地时用到、术语表里没有的词：`Fu` 的分项（底符 / 面子符 / 雀头符 / 听牌型符 /
-门清荣和符 / 自摸符）、`Honba` 与 `Kyotaku` 的**点数换算**（术语表只说了它们是什么，
-没说一本场 300 点、一根立直棒 1000 点）、`Limit`（满贯 / 跳满 / 倍满 / 三倍满 / 数え役满
-这一档的统称，本票取英文 `Limit`）、`HoraPoints`（和了点，mjai wire 的 `hora_points`）。
-
-另外两个**英汉混拼**的字段名请一并裁：`DoubleKazeJantouFu`（连风牌雀头符）与
-`RiichiStick`（立直棒点数）。「連風牌」没有通行且无歧义的罗马字短词，
-「立直棒」的罗马字 `RiichiBou` 又不像这仓库里别的名字。
-
 ### 05 / 一整场对局是 `GameState` **之上**的一层：`Game`
 
 `Game = private { Ruleset; Played: GameState list; Progress: GameProgress }`，
@@ -720,16 +589,6 @@ mjai 的 `fan` 是个 int，役满没有番。记 13（数え役满同值，点�
 序关系（顺位是 `1..SeatCount` 的排列，点数高的靠前）。用例里出现的点数全是用例自己喂进去的输入。
 「一局**之内**」的总和不变没有写进本票的属性：09 之前引擎里没有局内增加供托这回事，
 硬写会在 09 落地时红给别人看；它是 08 的验收项与 14 的 soak 全集。
-
-### 提案 05-A：把对局层的几个词补进 CONTEXT.md
-
-本票落地、术语表里没有的词：`Juni`（顺位，`GameResult.Juni`——术语表没有「顺位」这个条目，
-按 ADR-0001 取了罗马字，但它与 `Junme`（巡）只差一个字母，读起来容易晃眼，
-若要换成英文 `Rank` 改一个字段名即可）、`GameLength`（对局长度，术语表有 `Tonpuusen` / `Hanchan`
-两个取值却没有这个上位词）、`GameResult`（终局精算）、`GameProgress`（对局进程）、
-`RiichiBou`（立直棒，术语表的 `Kyotaku` 条目提了「立直棒」没给罗马字）。
-
----
 
 ### 13-prep / 牌谱取样走 HTTP Range 局部取 zip，不下整包
 
@@ -817,12 +676,6 @@ mjai 的 `fan` 是个 int，役满没有番。记 13（数え役满同值，点�
 **全局唯一调用点是 `applyNaki`**（碰 / 吃现在走它，11 的三种杠也会走它）。
 09 只需在函数体里把各家一发标志置 false，不必再找调用点。
 否决：等 09 自己去找所有鸣牌路径（那正是这种标志漏置的典型来源）。
-
-### 提案 10-I：把「食替」与「河被鸣走」补进 CONTEXT.md
-
-`Kuikae`（食替：鸣完不能马上打回鸣进来的那张，两面搭子吃时另一端也不能打）是通行的日麻术语，
-术语表里没有；`KawaTaken`（这家的河被人鸣走过，Nagashi Mangan 的前提）没有通行的罗马字短词，
-是我按术语表的构词法起的（Kawa + 英文动词），请一并裁。
 
 ### 09-A / 立直棒在**宣言牌落定**时才出，不在宣言时出
 
@@ -936,31 +789,6 @@ wire 名取 mjai 官方规格的 `uradora_markers`；13 票那批牌谱写的是
   04 与 09 会一起错，而现有固件与用例里没有纯空听样本、抓不到。
   建议在 `Ukeire.live` 的注释里写死「不得用于听牌判定」，或在 `UkeireTests.fs` 补一条纯空听用例。
 
-## 提案（需人裁决，勿自行落地）
-
-### 提案 R-A：把「听牌的口径」写进 CONTEXT.md，并把已知的规则分歧记进 ADR-0004
-
-调研（`docs/research/shanten-tenpai-boundaries.md`）证实引擎当前行为与天凤一致，但两件事只活在
-代码注释里，别的票读不到，将来加雀魂 / 竞技预设时会直接踩：
-
-**（一）CONTEXT.md 的 `Tenpai` 条目**现在只有「差一张即可和了的状态，即 Shanten 为 0」。建议补：
-
-> 判定只看手牌形态与规则集的合法牌种，**不看牌河 / 副露 / 宝牌指示牌上还剩几枚**——
-> 纯空听（純カラ）算听牌（天凤 `tenhou.net/man/`「形式聴牌あり」）。唯一的例外是「等第 5 张」：
-> **暗牌**里已经握满 4 张的牌种不能当待ち（天凤「純手牌で４枚使用していなければ成立」；
-> 副露与杠出去的牌不计入暗牌）。
-
-**（二）ADR-0004 的规则差异清单**建议加一行（它已经写了「规则变体……甚至向听数的合法牌种」，
-这条同属一类，但严重程度更高——引擎结构上无法表达另一侧）：
-
-> **「5 枚目を待つ聴牌」的口径**：天凤只看暗牌（碰了 `999m` 再单骑 `9m` = 听牌，手册明文），
-> EMA 竞技规则看整手牌含副露（同一手 = 不听，规则书 §3.3.8 例 1）。引擎取天凤口径；
-> 因为 `HandShape` 只有 `nakiCount`、没有副露牌面，**当前无法配置成 EMA 口径**。
-> 实测影响 4 / 72 204 座位（0.006%）。要支持竞技预设得给 `HandShape` 带上副露牌面，
-> 或给 `Ruleset` 加 `TenpaiRule` 开关。雀魂取哪一边**未找到一手资料**。
-
-两条都只是把已经落地的事实显式化，不改任何代码行为。
-
 ### 11-A / 三种杠的标识符照术语表，wire 照 mjai：`Minkan` ↔ `daiminkan`
 
 `Action` / `Event` 的 case 是 `Ankan` / `Kakan` / `Minkan`（CONTEXT.md 的 Naki 条目就是这三个词，
@@ -1039,12 +867,6 @@ mjai 的 `kakan` 是 `pai`（加上去的那张）+ `consumed`（原碰的三张
 一局暗杠后岭上开花），并把「那些轨迹里真的有杠」钉成一条用例。
 这是备注 N-8 的同一课：没断言过覆盖率的属性只证明了没崩，没证明跑到过。
 
-### 提案 11-L：术语表里没有「杠」与「岭上」的词条
-
-`CONTEXT.md` 的 Naki 条目列了 Ankan / Minkan / Kakan，但没有 **Kan**（杠这个动作 / `NakiKind` 的上位词）、
-**Kantsu**（杠子这个面子，`Mentsu` 里已经在用）、**Rinshan**（岭上牌与岭上开花，Ippatsu 条目里
-提过中文「岭上」没给罗马字）、**Chankan**（同上）。本票这四个词都进了标识符。请一并裁。
-
 ### R-6 / `YakuError.NotAgari` → `NoAgariShape`，并给 `YakuError` 加 `RequireQualifiedAccess`
 
 裁决 D-3 只把 8 处使用点显式限定，两个层仍各有一个 `NotAgari`。现在形态那条改名
@@ -1093,14 +915,6 @@ ADR-0004 决定 4。字段名不变、类型从 `Tile list` 变成 `TileKindSet`
 `Players` 都是这个形状，过去散着写 `List.tryItem seat xs` / `List.mapi (fun seat -> ...)`。
 `shift` 是私有的，**全模块只有它一处取模**。
 
-### 提案 R-5-A：术语表缺「下家 / 对家 / 上家」的罗马字
-
-`CONTEXT.md` 的 Seat 条目写了「『下家 / 对家 / 上家』是相对座位的标准说法，照用」，但只给了中文。
-按 ADR-0001（标识符用罗马字日麻术语）我取了 `Shimocha` / `Toimen` / `Kamicha`，
-并把「三麻没有 Toimen」写进签名（返回 `Seat option`）。请一并裁，与 11-L 那条同批。
-
----
-
 ### 12 / 流局的判据单独成文件 `Ryuukyoku.fs`，是纯函数
 
 途中流局的四条判据、三家和了、流し満貫的成立与清算，全部放进新的 `Ryuukyoku.fs`
@@ -1120,14 +934,6 @@ gimite 的 mjai wiki 页只举了 `fanpai` 一个例子，Mortal 的 `libriichi`
 `fanpai` / `nagashimangan` / `kyushukyuhai` / `sufonrenta` / `sukaikan` / `suchareach` / `sanchaho`。
 标识符按术语表拼作 `Fanpai` / `NagashiMangan` / `KyuushuKyuuhai` / `SuufonRenda` / `Suukaikan` /
 `SuuchaRiichi` / `SanchaHora`——**七个里有五个与 wire 不一致**，全在 `toMjai` 一处映射（裁决 D-1）。
-
-### 提案 12-A：`CONTEXT.md` 的 Ryuukyoku 条目缺五个罗马字
-
-术语表的 Ryuukyoku 条目只写了中文「四风连打、四杠散了、九种九牌、四家立直」，三家和了没进条目，
-流し満貫另有条目（`Nagashi Mangan`，有罗马字）。本票取的是
-`SuufonRenda` / `Suukaikan` / `SuuchaRiichi` / `KyuushuKyuuhai` / `SanchaHora`
-（`Suukaikan` 取 riichi.wiki 的「四開槓」读法，中文的「四杠散了」是同一件事的另一个说法）。
-与 11-L、R-5-A 同批待裁。
 
 ### 12 / 规则集新增 `SanchaHoraRyuukyoku`（默认 true）与 `KyuushuKinds`（默认 9）
 
@@ -1150,12 +956,6 @@ gimite 的 mjai wiki 页只举了 `fanpai` 一个例子，Mortal 的 `libriichi`
 本场供托都为 0 → Oya `+12000 / −4000 ×3`、Ko `+8000 / −4000(Oya) / −2000 ×2`，
 与 mjai 参考实现逐项相同，且引擎里不出现 `4000` / `8000` 这类字面量。
 多家同时成立逐家累加（和恒为 0）。它**替代**听牌料清算（`exhaustiveDraw` 里一个 match，不叠加）。
-
-### 提案 12-C：`Ryuukyoku` 记录没有 `actor`，九种九牌的宣言者不上 wire
-
-mjai 参考实现在九种九牌那条 `ryukyoku` 上带 `actor`，本票没加：`Ryuukyoku` 的形状因此保持稳定，
-且宣言者可以从前一条 `tsumo` 的 `actor` 读出来（13-prep 报告的 A5 用的正是这条判据）。
-若 13 票的对拍需要它，加一个 `Actor: Seat option` 是小改动。
 
 ### 12 / `HoraTests` 的「三响都成立」改用雀魂规则集，断言一字未动
 
@@ -1192,22 +992,6 @@ mjai 参考实现在九种九牌那条 `ryukyoku` 上带 `actor`，本票没加�
 引擎从此不给那家荣和。真实牌谱实证 2/2110 kyoku（天凤让荣和成立）。
 立直**成立之后**照旧只置位不清除（那之后手牌不再变），`minogashi` 一字未动，536 个测试全绿、
 一条既有断言都没改。**修它是因为它不需要改任何既有期望值**——这条界线同时也是不修提案 13-B 的理由。
-
-### 提案 13-B（需人裁）：明杠的新宝牌指示牌翻早了，岭上开花时多算宝牌
-
-真实牌谱 218 局实证天凤的时机是「**暗杠立刻翻，明杠等到打牌那一刻才翻**」：
-`ankan → dora → tsumo`（116 次，含岭上开花 6 次照翻）、`kakan/daiminkan → tsumo → dora → dahai`（87 次），
-而**加杠后当场岭上开花的 2 次，牌谱里根本没有 `dora`**。我们的 `GameState.completeKan` 三种杠一律
-补摸后立刻翻，于是那 2 局多翻一张，其中 1 局把 40符2飜(2700) 算成了满贯(8000)。
-改法要给 `GameState` 加「欠着几张明杠宝牌」的状态并在 `applyDahai` 开头补翻，
-**且要改 `KanTests` 两条断言的期望值**（整条事件流顺序不变，变的只是哪一次 `step` 吐出 `Dora`）——
-那是改 11 票的既有断言，按 RUNBOOK 不自作主张。影响面 2/2110 kyoku（0.09%）。
-
-### 提案 13-C（需人裁）：上游牌谱把双响的 `ura_markers` 抄在两条 `hora` 上
-
-6/2110 kyoku，全是双响，后一家根本没立直，而两边**钱流一字不差**——我们的处理是对的。
-对拍时按牌谱**自己的** `reach_accepted` 把这份噪声抹掉（`PaifuReplay.denoiseUra`），
-判据取自牌谱而不是引擎。若将来换数据源，这一处可以删。
 
 ### 16 / 提案 13-B 落地：明杠的新宝牌欠到打牌那一刻才翻
 
@@ -1369,3 +1153,241 @@ CLI 收种子区间（`janpo soak 1 1500`，239 秒，0 问题），测试读环
 一条随机流），与跑批**不是同一场**。于是给 `game` 加 `--covering`：换成跑批那个选手与那对
 发生器（`Soak.playerRng` 因此从 private 提成公开）。有一条用例逐事件类型比对钉住这条等价。
 否决：把整条事件流塞进 `SoakIssue`（一场 654 手，报告会被淹没）。
+
+---
+
+# 二、提案：已裁决（无需再看，仅存档）
+
+### 提案 01-B：渲染出口的统一命名 `toDisplay`
+
+**处置：✅ 已作为**裁决 D-1** 执行全程（`toDisplay` 统一命名），风格文档规则 3 也写了**
+
+
+ADR-0001 只举了 `Tile.toDisplay` 一个例子。01 票把它扩成了约定：
+**所有产出中文的函数一律叫 `toDisplay`，集中在文件末尾的渲染段**（`TileParseError.toDisplay`、
+`TileListParseError.toDisplay` 已照此落地）。建议把这句写进 ADR-0001 的 Consequences，
+让「渲染层是单向出口」有一个可 grep 的判据。
+
+### 提案 13-B（需人裁）：明杠的新宝牌指示牌翻早了，岭上开花时多算宝牌
+
+**处置：✅ **16 票已修**，扩样本对拍差异 8 → 0**
+
+
+真实牌谱 218 局实证天凤的时机是「**暗杠立刻翻，明杠等到打牌那一刻才翻**」：
+`ankan → dora → tsumo`（116 次，含岭上开花 6 次照翻）、`kakan/daiminkan → tsumo → dora → dahai`（87 次），
+而**加杠后当场岭上开花的 2 次，牌谱里根本没有 `dora`**。我们的 `GameState.completeKan` 三种杠一律
+补摸后立刻翻，于是那 2 局多翻一张，其中 1 局把 40符2飜(2700) 算成了满贯(8000)。
+改法要给 `GameState` 加「欠着几张明杠宝牌」的状态并在 `applyDahai` 开头补翻，
+**且要改 `KanTests` 两条断言的期望值**（整条事件流顺序不变，变的只是哪一次 `step` 吐出 `Dora`）——
+那是改 11 票的既有断言，按 RUNBOOK 不自作主张。影响面 2/2110 kyoku（0.09%）。
+
+### 提案 R-A：把「听牌的口径」写进 CONTEXT.md，并把已知的规则分歧记进 ADR-0004
+
+**处置：✅ 已落成 **ADR-0004 决定 6**（按天凤口径，并明确记下「当前结构上不可配置」）**
+
+
+调研（`docs/research/shanten-tenpai-boundaries.md`）证实引擎当前行为与天凤一致，但两件事只活在
+代码注释里，别的票读不到，将来加雀魂 / 竞技预设时会直接踩：
+
+**（一）CONTEXT.md 的 `Tenpai` 条目**现在只有「差一张即可和了的状态，即 Shanten 为 0」。建议补：
+
+> 判定只看手牌形态与规则集的合法牌种，**不看牌河 / 副露 / 宝牌指示牌上还剩几枚**——
+> 纯空听（純カラ）算听牌（天凤 `tenhou.net/man/`「形式聴牌あり」）。唯一的例外是「等第 5 张」：
+> **暗牌**里已经握满 4 张的牌种不能当待ち（天凤「純手牌で４枚使用していなければ成立」；
+> 副露与杠出去的牌不计入暗牌）。
+
+**（二）ADR-0004 的规则差异清单**建议加一行（它已经写了「规则变体……甚至向听数的合法牌种」，
+这条同属一类，但严重程度更高——引擎结构上无法表达另一侧）：
+
+> **「5 枚目を待つ聴牌」的口径**：天凤只看暗牌（碰了 `999m` 再单骑 `9m` = 听牌，手册明文），
+> EMA 竞技规则看整手牌含副露（同一手 = 不听，规则书 §3.3.8 例 1）。引擎取天凤口径；
+> 因为 `HandShape` 只有 `nakiCount`、没有副露牌面，**当前无法配置成 EMA 口径**。
+> 实测影响 4 / 72 204 座位（0.006%）。要支持竞技预设得给 `HandShape` 带上副露牌面，
+> 或给 `Ruleset` 加 `TenpaiRule` 开关。雀魂取哪一边**未找到一手资料**。
+
+两条都只是把已经落地的事实显式化，不改任何代码行为。
+
+### 提案 S-A（调度器）：引入 Ruleset（规则集），并重裁 Atamahane 的默认值
+
+**处置：✅ 用户裁决「默认值对齐天凤」→ 落成 **ADR-0004** 决定 1-3 + R-1 代码化（`Atamahane=false`）**
+
+
+调研牌谱来源时发现，spec 与 CONTEXT.md 的两处规则假设与两大平台不符：
+
+| 项 | 天凤 | 雀魂段位战 | 我们现在 |
+|---|---|---|---|
+| 双响 | あり | あり | 头跳**默认开** ← 与两家都相反 |
+| 三响 | 三家和了 → 途中流局 | 三响成立、不流局 | 未覆盖 |
+| 切上满贯 | なし | なし | 开关（原以为雀魂有，错） |
+| 流し満貫 | あり | あり | **完全没提** |
+| 连风牌雀头 | 4 符 | 未核 | 未定 |
+| 国士暗杠抢杠 | 禁止 | 允许 | 未覆盖 |
+
+出处：`tenhou.net/man/` 官方手册（「ダブロンあり」、途中流局列表含三家和了、「流し満貫あり」）、
+riichi.wiki Tenhou rules、mahjongsoul.info 段位战规则表（「切り上げ満貫なし」「トリプルロンは流局なし」）、
+天鳳雑スレ Wiki（「連風牌は4符」）、`smly/RiichiEnv` issue #43（国士暗杠抢杠）。
+切上满贯那条是次级源，落地前再核一次。
+
+**提案**：把这些开关打成命名规则集 `Ruleset`（`Tenhou` / `MahjongSoul` / 项目默认），
+新增术语进 CONTEXT.md，并重裁 Atamahane 默认值（建议默认双响，与两大平台一致，头跳保留为开关）。
+ADR 三条标准都过（难以回退：渗透点数与流局判定；无上下文时费解：为何默认双响；真实取舍：
+对拍可行性 vs 竞技规则纯度）→ 建议立 **ADR-0004**。
+
+已按此调整的票：08（切上默认关、符的规则集项）、11（国士暗杠抢杠）、12（三家和了 + Nagashi Mangan）、
+13（对拍前按来源选规则集）。**CONTEXT.md 与 ADR 未动，留人裁决。**
+
+### 提案 S-B（调度器）：三麻这道门今晚不做，但已按几处零成本参数化留缝
+
+**处置：✅ 用户未纳入范围 → ADR-0004「取舍」记了三处零成本参数化；12 票的三麻测试守着**
+
+
+用户提出三麻是 bonus。调研结论：三麻不是一个开关，是整套规则集变体——
+3 家 / 108 张（无 2-8m）/ 无红 5m / 禁吃 / 拔北（mjai 需 `nukidora` 扩展事件）/ 自摸损 /
+半庄 6 局 / Mortal 官方不支持需 `libriichi3p` fork（证据：`Mateces/mortal-sanma` README 差异表）。
+
+最要命一条：**三麻的向听数在 corner case 下与四麻不同**（`smly/RiichiEnv` issue #30）——
+`1m3m` 在四麻是嵌张搭子，三麻永远补不上。这打的是 03 票，全引擎风险最高的模块。
+
+已加的三处零成本参数化：02（座位数与牌山构成不写死字面量）、03（合法牌种集合作显式入参）、
+05（局数序列从规则配置读）。**没有**预留 Nukidora 事件或抽象点数表——F# DU 加 case 时编译器
+会把所有 match 点找出来，那是优点，提前抽象反而是投机性泛化。
+
+若早上决定把三麻纳入范围，CONTEXT.md 的 `Seat`（现定义为固定索引 0-3）需要改。
+
+### 提案 S-C（调度器）：`Ruleset.TileKinds` 与 `TileKindSet` 是同一概念的两套表示
+
+**处置：✅ 用户裁决「Ruleset 该带这个」→ **R-4 已落地**，`Ruleset.TileKinds : TileKindSet`**
+
+
+02 与 03 并行开发，各自独立造了「这个规则集里存在哪些牌种」的表示：
+
+- 02：`Ruleset.TileKinds : Tile list`（记录字段）
+- 03：`TileKindSet`（私有类型，内部 34 长存在标志数组，`internal` 快路径；`ofTiles` / `fourPlayer`）
+
+编译器不会抗议，两者也不冲突——但它们是同一个领域概念。集成时**没有合并**，因为
+重新设计不是集成该做的事，且 04/07 票正在并行开发，接口不能变。
+
+已给 04 票的指令：用 `TileKindSet.ofTiles ruleset.TileKinds` 派生，**不许造第三份**。
+
+**提案**：把 `Ruleset` 的字段直接改成 `TileKindSet`（编译顺序已在集成时安排好——
+`TileKindSet.fs` 排在 `Ruleset.fs` 之前，正是为这个可能性留的），或明确记录
+「`Ruleset.TileKinds` 是配置面，`TileKindSet` 是计算面」这一分工。二选一，别放着不管。
+
+这条是并行开发的可预期产物：无人值守下两个 agent 看不见对方，语义重复只能在集成时发现。
+
+---
+
+
+---
+
+# 三、提案：待裁决
+
+## 3.1 术语表增补（10 条，**建议一次性批量处理**）
+
+这 10 条都是同一件事：某票落地时用到、但 `CONTEXT.md` 里没有的罗马字词。
+它们不是 10 个独立决策，是一个批量任务。
+
+### 提案 01-A：把牌相关的几个罗马字词补进 CONTEXT.md
+
+01 票落地时用到、但术语表里没有的词：`Manzu` / `Pinzu` / `Souzu` / `Jihai`（花色）、
+`Akadora`（红宝牌，术语表现有条目只在 Dora 里提了一句「含里宝牌与红宝牌」）、
+`deaka`（去红）、`kindIndex`（0-33 的牌种索引）。建议在「牌与手牌」一节补齐，
+否则后续票各写各的（`Honor` / `Red` / `tileId`）就会散掉。
+
+### 提案 04-A：把摸打循环的几个词补进 CONTEXT.md
+
+本票落地、术语表里没有的词：`Kawa`（河）、`NotenBappu`（听牌料 / ノーテン罰符）、
+`Haitei` / `Houtei`（海底 / 河底，术语表只在 Ippatsu 条目里顺带提过）、`Phase`（阶段）、
+`Tsumogiri`（摸切）/ `Tedashi`（手切）。建议分别补进「牌与牌河」与「引擎接缝」两节。
+
+### 提案 05-A：把对局层的几个词补进 CONTEXT.md
+
+本票落地、术语表里没有的词：`Juni`（顺位，`GameResult.Juni`——术语表没有「顺位」这个条目，
+按 ADR-0001 取了罗马字，但它与 `Junme`（巡）只差一个字母，读起来容易晃眼，
+若要换成英文 `Rank` 改一个字段名即可）、`GameLength`（对局长度，术语表有 `Tonpuusen` / `Hanchan`
+两个取值却没有这个上位词）、`GameResult`（终局精算）、`GameProgress`（对局进程）、
+`RiichiBou`（立直棒，术语表的 `Kyotaku` 条目提了「立直棒」没给罗马字）。
+
+---
+
+### 提案 06-A：把和了与振听的几个词补进 CONTEXT.md
+
+本票落地、术语表里没有的词：`Hora`（和了，术语表只有 Yaku / Fu，没有和了本身）、
+`Minogashi`（见逃，`PlayerState.minogashi`）、`Doujun`（同巡，术语表在 Furiten 与 Junme 条目里
+提过「同巡」但没给罗马字）、`KyokuEnd`（终局形态）、`Renchan`（连庄，术语表在 Oya 条目里
+提过中文「连庄」没给词）。另：振听「永久」那一位现在叫 `Furiten.Permanent`（英文），
+因为「永久振听」没有通行的罗马字短词——若术语表想统一，请一并裁。
+
+---
+
+### 提案 07-A：把和了形相关的罗马字词补进 CONTEXT.md
+
+07 落地时用到、但术语表里没有的词：`Mentsu`（面子）与 `Shuntsu` / `Koutsu` / `Kantsu`
+（顺子 / 刻子 / 杠子）、`Jantou`（雀头）、`Menzen`（门清）、`Yakuman`（役满）、
+`Han`（番）、`Kuitan`（食断）、`WaitKind` 的五种听牌型（`Ryanmen` / `Penchan` / `Kanchan` /
+`Shanpon` / `Tanki`）、`RiichiDeclaration`。术语表现在只有 `Yaku` 与 `Fu` 两条，
+08（符）与 10/11（副露）会继续用这批词，建议在「规则判定」一节补齐。
+
+### 提案 08-A：把符与点数的几个词补进 CONTEXT.md
+
+08 落地时用到、术语表里没有的词：`Fu` 的分项（底符 / 面子符 / 雀头符 / 听牌型符 /
+门清荣和符 / 自摸符）、`Honba` 与 `Kyotaku` 的**点数换算**（术语表只说了它们是什么，
+没说一本场 300 点、一根立直棒 1000 点）、`Limit`（满贯 / 跳满 / 倍满 / 三倍满 / 数え役满
+这一档的统称，本票取英文 `Limit`）、`HoraPoints`（和了点，mjai wire 的 `hora_points`）。
+
+另外两个**英汉混拼**的字段名请一并裁：`DoubleKazeJantouFu`（连风牌雀头符）与
+`RiichiStick`（立直棒点数）。「連風牌」没有通行且无歧义的罗马字短词，
+「立直棒」的罗马字 `RiichiBou` 又不像这仓库里别的名字。
+
+### 提案 10-I：把「食替」与「河被鸣走」补进 CONTEXT.md
+
+`Kuikae`（食替：鸣完不能马上打回鸣进来的那张，两面搭子吃时另一端也不能打）是通行的日麻术语，
+术语表里没有；`KawaTaken`（这家的河被人鸣走过，Nagashi Mangan 的前提）没有通行的罗马字短词，
+是我按术语表的构词法起的（Kawa + 英文动词），请一并裁。
+
+### 提案 11-L：术语表里没有「杠」与「岭上」的词条
+
+`CONTEXT.md` 的 Naki 条目列了 Ankan / Minkan / Kakan，但没有 **Kan**（杠这个动作 / `NakiKind` 的上位词）、
+**Kantsu**（杠子这个面子，`Mentsu` 里已经在用）、**Rinshan**（岭上牌与岭上开花，Ippatsu 条目里
+提过中文「岭上」没给罗马字）、**Chankan**（同上）。本票这四个词都进了标识符。请一并裁。
+
+### 提案 12-A：`CONTEXT.md` 的 Ryuukyoku 条目缺五个罗马字
+
+术语表的 Ryuukyoku 条目只写了中文「四风连打、四杠散了、九种九牌、四家立直」，三家和了没进条目，
+流し満貫另有条目（`Nagashi Mangan`，有罗马字）。本票取的是
+`SuufonRenda` / `Suukaikan` / `SuuchaRiichi` / `KyuushuKyuuhai` / `SanchaHora`
+（`Suukaikan` 取 riichi.wiki 的「四開槓」读法，中文的「四杠散了」是同一件事的另一个说法）。
+与 11-L、R-5-A 同批待裁。
+
+### 提案 R-5-A：术语表缺「下家 / 对家 / 上家」的罗马字
+
+`CONTEXT.md` 的 Seat 条目写了「『下家 / 对家 / 上家』是相对座位的标准说法，照用」，但只给了中文。
+按 ADR-0001（标识符用罗马字日麻术语）我取了 `Shimocha` / `Toimen` / `Kamicha`，
+并把「三麻没有 Toimen」写进签名（返回 `Seat option`）。请一并裁，与 11-L 那条同批。
+
+---
+
+
+## 3.2 其余待裁（3 条）
+
+### 提案 04-B：把「标识符照术语表、wire 照 mjai」写进 ADR-0001
+
+⚠️ **仍待办**：ADR-0001 正文只写了「标识符用罗马字」，**没有写 wire 与标识符分离**这条。已核查。
+
+
+ADR-0001 只说了记法（`1z` vs `E`）。罗马字**拼法**同样会分叉：mjai 写 `ryukyoku`，术语表写
+`Ryuukyoku`。建议在 Consequences 补一句：wire 上的字符串一律照抄 mjai，F# 标识符一律照 CONTEXT.md，
+两者不一致时由编码器承担映射（`Kaze`、`Ryuukyoku` 已经是这样）。
+
+### 提案 12-C：`Ryuukyoku` 记录没有 `actor`，九种九牌的宣言者不上 wire
+
+mjai 参考实现在九种九牌那条 `ryukyoku` 上带 `actor`，本票没加：`Ryuukyoku` 的形状因此保持稳定，
+且宣言者可以从前一条 `tsumo` 的 `actor` 读出来（13-prep 报告的 A5 用的正是这条判据）。
+若 13 票的对拍需要它，加一个 `Actor: Seat option` 是小改动。
+
+### 提案 13-C（需人裁）：上游牌谱把双响的 `ura_markers` 抄在两条 `hora` 上
+
+6/2110 kyoku，全是双响，后一家根本没立直，而两边**钱流一字不差**——我们的处理是对的。
+对拍时按牌谱**自己的** `reach_accepted` 把这份噪声抹掉（`PaifuReplay.denoiseUra`），
+判据取自牌谱而不是引擎。若将来换数据源，这一处可以删。
+
