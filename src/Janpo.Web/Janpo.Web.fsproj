@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 浏览器侧的宿主工程（Fable → JS）。**引擎源码一行不改地被两个目标共用**：
+       dotnet 侧由 Janpo.Cli / 测试工程引用，Fable 侧由这里引用。
+       Fable 运行时后端（Thoth.Json.JavaScript）与 React 封装（Feliz）只准出现在这里，
+       不得进 Janpo.Engine.fsproj —— scripts/ci.sh 的依赖白名单守着这条。
+
+       构建：`dotnet fable src/Janpo.Web -o web/src/generated`（web/package.json 已包好）。
+       它不产出 .NET 运行时资产，`dotnet build` 只当类型检查用。 -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <!-- 引擎调用与 MVU。加页面放这里，牌桌组件是 22 票的事。 -->
+  <ItemGroup>
+    <Compile Include="Tracer.fs" />
+    <Compile Include="App.fs" />
+    <Compile Include="Main.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Janpo.Engine/Janpo.Engine.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" />
+    <PackageReference Include="Fable.Elmish" />
+    <PackageReference Include="Feliz" />
+    <PackageReference Include="Feliz.UseElmish" />
+    <!-- Thoth.Json.Core 只是抽象层，JS 侧需要一个具体后端（dotnet 侧的对应物是 Newtonsoft）。 -->
+    <PackageReference Include="Thoth.Json.JavaScript" />
+  </ItemGroup>
+
+</Project>

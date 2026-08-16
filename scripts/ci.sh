@@ -55,4 +55,9 @@ dotnet build janpo.slnx --configuration Release
 echo "== test =="
 dotnet test janpo.slnx --configuration Release --no-build
 
+# JS 侧（M1 起）：Biome + Fable + Vite + 浏览器内与 dotnet 侧的曳光弹对拍。
+# 拆成单独一个脚本是为了能单跑（`./scripts/ci-web.sh`），不用每次重跑整套 dotnet 关卡。
+echo "== web =="
+bash "$(dirname "$0")/ci-web.sh"
+
 echo "== CI 全绿 =="

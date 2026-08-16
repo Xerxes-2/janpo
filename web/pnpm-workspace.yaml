@@ -1,0 +1,5 @@
+# pnpm 11 默认不跑依赖的构建脚本。这里显式放行本工程需要原生二进制的那几个，
+# 否则 `pnpm exec` 会直接失败（它检出「ignored build scripts」就拒绝跑）。
+allowBuilds:
+  '@biomejs/biome': true
+  esbuild: true

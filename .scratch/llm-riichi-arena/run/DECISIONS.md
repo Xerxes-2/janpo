@@ -1455,3 +1455,79 @@ M1 的决策与提案从这里往下追加。格式与 M0 同：票号、决定�
 **顺带纠正 spec 一处**：包名是 `@earendil-works/pi-ai`（spec 写的 `@mariozechner/pi-ai` 是旧 scope）。
 **顺带发现一处会影响产品措辞的**：pi-ai 的 OAuth 登录流程是 Node-only，因此浏览器里**只能用 API key**，
 Claude / ChatGPT 订阅制登录在本项目里不可用。配置面板不要给用户这个幻觉（已写进 23 号票）。
+
+## 19 Fable 工具链与浏览器里的第一颗曳光弹
+
+### 19-A：引擎源码零改动通过 Fable，`#if FABLE_COMPILER` 一处没用
+
+**决定**：不加任何条件编译。8,028 行引擎一行没改就被 Fable 5.13.0 编过了（0 error 0 warning）。
+预期会踩的坑逐条落空：`[<Struct>]`（`Rng` / `Seat` / `Shanten` / `Tile`）编成普通 class；
+`System.String.IsNullOrEmpty` Fable 有实现；`Rng` 是 xorshift32，只有 `^^^` / `<<<` / `>>>` / `%`，
+**没有 uint32 乘法**（JS 的 double 会在乘法上丢精度，那才是真雷）；34 长计数数组的原地循环照编。
+**被否决**：先给热路径加 `#if FABLE_COMPILER` 探路——没必要，也会立刻违反「不许为 Fable 分叉」。
+**语义差异**：实测为 0。24 个种子 × 两种跑法（单局 / 整场东风战）共 120 次运行、约 9,000 行
+mjai JSON，dotnet 与 JS 两侧**逐字相同**（含 `fu` / `fan` / `hora_points` / `deltas` / `scores`）。
+
+### 19-B：TS/JS 格式化器取 **Biome**，不取 Prettier
+
+**决定**：`@biomejs/biome` 2.5.8，配置在 `web/biome.json`，闸门是 `biome ci --error-on-warnings .`。
+**被否决**：Prettier。它只管格式，lint 还要再装 ESLint 加一串插件与第二份配置；
+Biome 一个二进制同时给格式 + lint + import 排序，CI 里是一条命令。
+**理由补充**：`--error-on-warnings` 是必须的——Biome 默认让 warning（含它自己的配置弃用提示）
+静默通过，那样闸门会慢慢腐烂。已实测：故意写坏一个 `.ts` 会 exit 1。
+
+### 19-C：Feliz 视图的格式用 stroustrup，**只对 `src/Janpo.Web/`**
+
+**决定**：`.editorconfig` 加一段 `[src/Janpo.Web/*.fs]`，把 `fsharp_multiline_bracket_style`
+从仓库默认的 `aligned` 改成 `stroustrup`。
+**理由**：Feliz 是嵌套 list DSL（`Html.div [ prop.children [ ... ] ]`），aligned 会把每层的 `[`
+另起一行并多缩进 8 格，三层就推到 120 列。实测同一份 `App.fs`：aligned 下 `TracerPage` 的最深处
+缩进 32 格，stroustrup 下 16 格。Fantomas 官方对这类 DSL 的建议值就是 stroustrup。
+**代价**：Web 工程里的 record 定义写成 `type Model = {` 而不是引擎那种 `type Model =` 换行 `{`，
+**一个仓库两种 record 形状**。接受它，因为 Web 工程里 record 只有 3 个而视图会越来越多（22 票）。
+**被否决**：全仓库改 stroustrup（会重排整个引擎，与本票无关的巨大 diff）；
+或不改、靠拆小组件压嵌套（治标：Feliz 的属性列表本身就是一层）。
+
+### 19-D：曳光弹跑**两条**，一局 + 一整场；种子取 1177
+
+**决定**：页面同时跑 `Tracer.kyoku`（对 `janpo kyoku`）与 `Tracer.game`（对 `janpo game`），
+两组都显示 scores 与 juni。票面只要求一局，多跑一整场是因为**顺位只在终局精算里才是一等概念**，
+而且整场覆盖到连庄、本场、供托结转这些跨局逻辑。
+**种子 1177 的理由**（用 `dotnet fsi` 直调引擎扫 1..2000 挑的）：单局以荣和终（30符3飜5800点，
+点数 30800/25000/19200/25000，四家互异），整场打满 6 局（两次连庄），终局有两家同为 24000
+（顺位靠起家方向拆分）。一句话：它同时踩到和了、符点、听牌料、连庄与同点顺位。
+**被否决**：种子 42（两侧都是 25000×4，对拍等于什么都没验）。
+
+### 19-E：`janpo kyoku` 多打一行 `juni:`
+
+**决定**：CLI 的 `kyoku` 子命令在 `scores:` 之后再打一行 `juni:`，取 `Game.settle ruleset 0 scores`
+的 `Juni`（**供托传 0**，因此点数不动，只排名次）。
+**理由**：票的验收要求「终局点数与顺位与 `janpo kyoku <同一种子>` 逐项相同」，而原来的 `kyoku`
+只打点数，顺位在 dotnet 侧没有可比的东西。加这一行比在报告里手算顺位诚实。
+**被否决**：只跑整场、拿 `janpo game` 的 juni 交差（偏离票面）；在浏览器侧自己排名次
+（顺位规则就该只有一处实现，即 `Game.settle`）。
+
+### 19-F：TS 侧暂不装 `tsc --noEmit`，只有 Biome
+
+**决定**：JS 侧的闸门只有 Biome（格式 + lint）；类型闸门留给 23 票。
+**理由**：今天 TS 的全部内容是 `web/src/main.ts` 里的一行 `mount("janpo-root")`。
+装 tsc 要么把 Fable 的上万行输出拖进 program（慢），要么排除 `src/generated` 之后那行 import
+直接 TS2307 解析不到。等 23 票的 Agent 层真有 TS 代码，再连同 `paths` 配置一起装。
+已写进 ADR-0005 的「后果」，不是忘了。
+
+### 19-G：布局按票面建议，另加 `scripts/ci-web.sh`
+
+**决定**：`src/Janpo.Web`（Feliz 工程，已进 `janpo.slnx`）+ `web/`（Vite 应用），
+Fable 输出到 `web/src/generated/`（gitignore）。JS 侧四道关卡拆成单独的 `scripts/ci-web.sh`，
+由 `scripts/ci.sh` 在 `dotnet test` 之后调用。
+**理由**：拆开之后改 UI 时能只跑 JS 侧（约 10s），不用陪跑 30s 的 dotnet 测试。
+`ci.sh` 仍是「一条命令两侧全绿」。
+
+### 19-H（偏离记录）：无头验收需要一个宿主机上的 Chrome
+
+**事实**：`web/scripts/verify-tracer.mjs` 用 playwright-core 驱动浏览器，
+浏览器按 `$JANPO_CHROME` → playwright 自带 chromium → `/usr/bin/google-chrome-stable` 顺序找。
+**没有**把 chromium 塞进 nix flake：那是一次大几百 MB 的下载，违反资源预算，且 dev shell 会变重。
+**逃生口**：`JANPO_NO_BROWSER=1 ./scripts/ci-web.sh` 跳过这一道（其余三道照跑）。
+**但那样 19 票的验收就没被验**，`ci-web.sh` 的注释里写明了这一点。
+nix dev shell 本身没有偏离——`nix develop --command ./scripts/ci.sh` 实测 47s 全绿。

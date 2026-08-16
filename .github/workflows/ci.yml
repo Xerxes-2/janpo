@@ -16,5 +16,8 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@main
 
-      - name: fantomas --check、构建三个工程、跑测试
+      # ci.sh 的 JS 段要一个 Chrome/Chromium 跑无头验收（浏览器内的引擎与 dotnet 侧对拍）。
+      # ubuntu-latest 自带 Google Chrome；换镜像时用 JANPO_CHROME 指路径，
+      # 实在没浏览器的环境可 JANPO_NO_BROWSER=1 跳过那一道（其余关卡照跑）。
+      - name: fantomas --check、构建四个工程、跑测试、JS 侧关卡
         run: nix develop --command ./scripts/ci.sh

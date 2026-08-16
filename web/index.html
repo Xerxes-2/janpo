@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- 空 data URI：不做图标，也不让浏览器去请求一个不存在的 /favicon.ico
+         （无头验收把 console.error 当失败，那个 404 会误报）。 -->
+    <link rel="icon" href="data:," />
+    <title>janpo —— 浏览器里的第一颗曳光弹</title>
+  </head>
+  <body>
+    <div id="janpo-root"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

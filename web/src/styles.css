@@ -1,0 +1,117 @@
+:root {
+  color-scheme: light dark;
+  font-family: ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif;
+  --line: color-mix(in srgb, currentcolor 20%, transparent);
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1.5rem;
+}
+
+.page {
+  max-width: 52rem;
+  margin: 0 auto;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+.intro {
+  opacity: 0.75;
+  line-height: 1.7;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 1.5rem 0;
+}
+
+.controls input {
+  width: 8rem;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+}
+
+.controls button {
+  padding: 0.35rem 1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cards {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.card h2 {
+  font-size: 1.05rem;
+  margin-top: 0;
+}
+
+.command {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.label {
+  min-width: 4.5rem;
+  opacity: 0.6;
+  font-size: 0.85rem;
+}
+
+.values {
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.seats {
+  margin-top: 1rem;
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.seats th,
+.seats td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.25rem 0.5rem;
+  text-align: right;
+}
+
+.seats th:first-child,
+.seats td:first-child {
+  text-align: left;
+}
+
+.events {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+.events pre {
+  overflow-x: auto;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.error {
+  color: #c0392b;
+}

@@ -10,15 +10,15 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Fable 工程（Feliz）引用引擎工程编译出 JS；引擎源码**一行不改**地被两个目标共用
-- [ ] Vite + pnpm 起来：`pnpm dev` 有 HMR，`pnpm build` 出可静态托管的产物
-- [ ] 浏览器内跑固定种子的一局，页面显示终局点数与顺位，与 dotnet 侧同种子的 `janpo kyoku` 结果**逐项相同**
+- [x] Fable 工程（Feliz）引用引擎工程编译出 JS；引擎源码**一行不改**地被两个目标共用
+- [x] Vite + pnpm 起来：`pnpm dev` 有 HMR，`pnpm build` 出可静态托管的产物
+- [x] 浏览器内跑固定种子的一局，页面显示终局点数与顺位，与 dotnet 侧同种子的 `janpo kyoku` 结果**逐项相同**
       （这一条就是双目标语义没漂的第一份证据，系统化的版本是 21 号票）
-- [ ] CI 增加 JS 侧关卡：Fable 编译 + `pnpm build` 必须绿；nix dev shell 里有 node 与 pnpm
-- [ ] 引擎依赖白名单闸门仍然绿（Fable 侧的运行时后端 `Thoth.Json.JavaScript` 属于 Web 工程，不得进引擎工程）
-- [ ] ADR-0005 记下 UI 形态 B 的决定与被否决的 A，以及「TS 只剩 Agent 层」的边界
+- [x] CI 增加 JS 侧关卡：Fable 编译 + `pnpm build` 必须绿；nix dev shell 里有 node 与 pnpm
+- [x] 引擎依赖白名单闸门仍然绿（Fable 侧的运行时后端 `Thoth.Json.JavaScript` 属于 Web 工程，不得进引擎工程）
+- [x] ADR-0005 记下 UI 形态 B 的决定与被否决的 A，以及「TS 只剩 Agent 层」的边界
 
 **风险与纪律**：引擎从未被 Fable 编译过，踩坑是预期内的（`[<Struct>]`、`System.String.IsNullOrEmpty`、
 整数除法与溢出语义、`List.item` 的复杂度）。原则：**不许为 Fable 分叉引擎逻辑**。真的必须分叉时用

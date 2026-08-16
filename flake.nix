@@ -1,5 +1,5 @@
 {
-  description = "janpo — LLM 日麻对战平台的开发环境（dotnet SDK + uv）";
+  description = "janpo — LLM 日麻对战平台的开发环境（dotnet SDK + node/pnpm + uv）";
 
   # nixpkgs-weekly 是 Determinate Nix 默认的 nixpkgs 快照源，纯 tarball URL，
   # 任何现代 Nix 都能取；版本由 flake.lock 钉死，不依赖宿主机上装了什么。
@@ -27,6 +27,10 @@
             # 测试期的外部 Python 工具入口（03 的向听 oracle、13 的牌谱转换）。
             # 只在测试/构建期用 `uv run --with <pkg>`，不得成为引擎或 CLI 的运行时依赖。
             pkgs.uv
+            # M1 起：Fable 的输出要经 Vite 打包，无头验收要跑 node 脚本。
+            # 包版本钉在 web/pnpm-lock.yaml，pnpm 本体的版本由 flake.lock 钉。
+            pkgs.nodejs_22
+            pkgs.pnpm
           ];
 
           env = {
@@ -39,7 +43,7 @@
           # Fantomas 是 dotnet local tool（.config/dotnet-tools.json），
           # `dotnet tool restore` 后用 `dotnet fantomas` 调用，shell 内外同一版本。
           shellHook = ''
-            echo "janpo dev shell — dotnet $(dotnet --version), uv $(uv --version)"
+            echo "janpo dev shell — dotnet $(dotnet --version), node $(node --version), pnpm $(pnpm --version), uv $(uv --version)"
           '';
         };
       });

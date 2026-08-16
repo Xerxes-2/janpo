@@ -16,6 +16,15 @@
     <PackageVersion Include="Thoth.Json.Core" Version="0.9.1" />
   </ItemGroup>
 
+  <!-- Web 工程（Fable → JS）：Feliz + useElmish 与 JSON 的 JS 后端。**不得进引擎工程** -->
+  <ItemGroup>
+    <PackageVersion Include="Fable.Core" Version="5.0.0" />
+    <PackageVersion Include="Fable.Elmish" Version="4.0.0" />
+    <PackageVersion Include="Feliz" Version="3.3.3" />
+    <PackageVersion Include="Feliz.UseElmish" Version="5.0.0" />
+    <PackageVersion Include="Thoth.Json.JavaScript" Version="0.5.0" />
+  </ItemGroup>
+
   <!-- dotnet 侧运行时后端与测试工具（不进引擎工程） -->
   <ItemGroup>
     <PackageVersion Include="Thoth.Json.Newtonsoft" Version="0.4.0" />

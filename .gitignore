@@ -10,10 +10,13 @@ artifacts/
 result
 result-*
 
-# Fable（M1 起）
+# Fable（M1 起）。Fable 的输出与 Vite 的产物都是生成物，不入版本控制：
+# `cd web && pnpm run build` 一条命令重建。
 .fable/
 fable_modules/
 node_modules/
+web/src/generated/
+web/dist/
 
 # 编辑器
 .vscode/

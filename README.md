@@ -8,11 +8,11 @@ LLM 日麻对战平台 —— F# 规则引擎（Fable → JS，浏览器内运�
 
 ## 开发环境
 
-工具链由 nix flake 钉住（dotnet SDK 与 uv），CI 与本地用同一个 shell：
+工具链由 nix flake 钉住（dotnet SDK、node/pnpm 与 uv），CI 与本地用同一个 shell：
 
 ```sh
-nix develop            # 进 dev shell：dotnet、uv
-dotnet tool restore    # 装 Fantomas（dotnet local tool，版本在 .config/dotnet-tools.json）
+nix develop            # 进 dev shell：dotnet、node、pnpm、uv
+dotnet tool restore    # 装 Fantomas 与 Fable（dotnet local tool，版本在 .config/dotnet-tools.json）
 ```
 
 宿主机上若已有匹配 `global.json` 的 dotnet SDK（10.0.1xx 及以上特性带），不进 dev shell 也能跑；
@@ -21,13 +21,29 @@ dotnet tool restore    # 装 Fantomas（dotnet local tool，版本在 .config/do
 ## 常用命令
 
 ```sh
-./scripts/ci.sh                       # CI 的全部关卡：依赖名单 + fantomas --check + build + test
-dotnet build janpo.slnx               # 构建三个工程
+./scripts/ci.sh                       # CI 的全部关卡：dotnet 侧 + JS 侧，一条命令两侧全绿
+./scripts/ci-web.sh                   # 只跑 JS 侧：Biome + Fable + Vite + 浏览器内对拍
+dotnet build janpo.slnx               # 构建四个工程
 dotnet test janpo.slnx                # 跑测试（xunit + FsCheck）
 dotnet fantomas .                     # 格式化（提交前必跑）
 dotnet fantomas --check .             # 只检查，CI 用这个
 dotnet run --project src/Janpo.Cli -- --help
 ```
+
+浏览器侧（M1 起）—— 命令都在 `web/` 下跑：
+
+```sh
+cd web
+pnpm install
+pnpm run dev       # Fable watch + Vite dev server（HMR），改 .fs 约 6s 后页面更新
+pnpm run build     # Fable 编译 + Vite 打包 → web/dist（可静态托管）
+pnpm run verify    # 无头验收：浏览器内跑同种子的一局 / 一整场，与 CLI 逐项对照
+pnpm run check     # Biome（TS/JS 的格式 + lint）
+pnpm run format    # Biome 写回格式
+```
+
+`pnpm run verify` 需要一个 Chrome/Chromium：优先 `$JANPO_CHROME`，其次 playwright 自带的，
+最后 `/usr/bin/google-chrome-stable` 一类系统路径。
 
 CLI 目前的能力：
 
@@ -43,10 +59,14 @@ display: 3万 5索 赤5索 9索 东
 ```
 src/Janpo.Engine/        规则引擎库。**限 Fable 兼容的 F# 子集**，JSON 走 Thoth.Json.Core
 src/Janpo.Cli/           无头驱动入口（dotnet only）。只做参数解析与打印，逻辑一律回引擎库
+src/Janpo.Web/           浏览器宿主（Fable → JS）：Feliz + useElmish 的页面。Fable 运行时后端只能在这里
+web/                     Vite 应用：index.html、一行 TS 入口、样式与无头验收脚本
 tests/Janpo.Engine.Tests/ 引擎测试：xunit 作 runner，FsCheck 属性测试为主力
 scripts/ci.sh            CI 关卡，本地与 CI 同一份
-flake.nix                dev shell（dotnet SDK + uv）
-.editorconfig            Fantomas 的 F# 格式规则
+scripts/ci-web.sh        JS 侧的那四道，被 ci.sh 调，也能单跑
+flake.nix                dev shell（dotnet SDK + node/pnpm + uv）
+.editorconfig            Fantomas 的 F# 格式规则（Web 工程另开 stroustrup，因为 Feliz 是嵌套 DSL）
+web/biome.json           Biome 的 TS/JS 格式与 lint 规则
 Directory.Packages.props 所有 NuGet 版本集中管理
 ```
 

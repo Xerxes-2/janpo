@@ -21,3 +21,9 @@ max_line_length = 120
 fsharp_bar_before_discriminated_union_declaration = true
 fsharp_multiline_bracket_style = aligned
 fsharp_keep_max_number_of_blank_lines = 2
+
+# Feliz 的视图是嵌套的 list DSL（`Html.div [ prop.children [ ... ] ]`）。aligned 会把每一层
+# 的 `[` 另起一行并多缩 8 格，三层就推到行尾；stroustrup 是 Fantomas 对这类 DSL 的建议值。
+# **只对 Web 工程开**：引擎与 CLI 里没有 DSL，继续用 aligned（记录见 DECISIONS.md 的 19-C）。
+[src/Janpo.Web/*.fs]
+fsharp_multiline_bracket_style = stroustrup

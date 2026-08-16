@@ -15,7 +15,7 @@ python3 - <<'PY' || fail=1
 import pathlib, re, sys
 bad = []
 
-DIRS = ("src/Janpo.Engine", "src/Janpo.Cli", "tests/Janpo.Engine.Tests", "scripts/fsi")
+DIRS = ("src/Janpo.Engine", "src/Janpo.Cli", "src/Janpo.Web", "tests/Janpo.Engine.Tests", "scripts/fsi")
 def files():
     for d in DIRS:
         for f in sorted(pathlib.Path(d).glob("*.fs*")):

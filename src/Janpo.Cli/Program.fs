@@ -13,7 +13,8 @@ let private usage =
   janpo deal <种子> [--no-akadora]
                                  用给定种子开一局，每行打印一个 mjai JSON 事件
   janpo kyoku <种子> [--no-akadora]
-                                 用给定种子让四个随机选手打完一局，打印完整事件流与结算后点数
+                                 用给定种子让四个随机选手打完一局，打印完整事件流、
+                                 结算后点数与按该点数排出的顺位
   janpo game <种子> [--no-akadora] [--hanchan] [--covering]
                                  用给定种子让四个随机选手打完一整场（默认东风战），
                                  打印完整事件流、终局点数与顺位。
@@ -132,7 +133,10 @@ let private runDeal (arguments: string list) : int =
 
 /// `janpo kyoku <种子> [--no-akadora]`：四个随机选手把一局打到终
 /// （随机选手几乎总是打成荒牌流局，和了也是一种终局形态）。
-/// 输出是每行一个 mjai JSON 事件，最后一行是结算后的点数。同一种子必然跑出同一局。
+/// 输出是每行一个 mjai JSON 事件，随后是结算后的点数与顺位。同一种子必然跑出同一局。
+///
+/// `juni` 那一行是**按这一局终了时的点数**排的名次，不是终局精算：一局打完时场上可能
+/// 还剩立直棒，而它要到终局才归属，所以借 `Game.settle` 排名次时供托传 0（点数不动）。
 let private runKyoku (arguments: string list) : int =
     match parseSeedArguments arguments with
     | Error token ->
@@ -150,8 +154,11 @@ let private runKyoku (arguments: string list) : int =
             eprintfn "%s" (KyokuError.toDisplay error)
             1
         | Ok(state, _) ->
+            let scores = GameState.scores state
+            let juni = (Game.settle ruleset 0 scores).Juni
             printEvents (startGame ruleset :: GameState.events state)
-            printfn "scores: %s" (GameState.scores state |> List.map string |> String.concat " ")
+            printfn "scores: %s" (scores |> List.map string |> String.concat " ")
+            printfn "juni: %s" (juni |> List.map string |> String.concat " ")
             0
 
 /// `<种子> [--no-akadora] [--hanchan] [--covering]`：game 的参数形态，
