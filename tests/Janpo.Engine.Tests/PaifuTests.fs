@@ -32,6 +32,14 @@ module PaifuTests =
                 LatencyMs = 2131
                 Applied = Some 1
                 Fallback = None
+                Usage =
+                    Some
+                        {
+                            Input = 812
+                            Output = 96
+                            CacheRead = 1344
+                            CacheWrite = 0
+                        }
             }
             {
                 Turn = 7
@@ -45,6 +53,8 @@ module PaifuTests =
                 LatencyMs = 812
                 Applied = Some 0
                 Fallback = Some "provider 报错：401（重试 2 次仍无结果）"
+                // 一次都没问成的那一手没有账单：`usage` 整个不写。
+                Usage = None
             }
         ]
 

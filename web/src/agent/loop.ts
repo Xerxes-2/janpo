@@ -87,13 +87,30 @@ function rawOutput(result: AskResult | null): string {
   });
 }
 
-/** 一轮问话里审计要的那四项。一次都没问成时 `result` 是 null。 */
+/**
+ * 一轮问话里审计要的那几项。一次都没问成时 `result` 是 null。
+ *
+ * **token 账单也在这里过界**（票 29b）：`cache_read` 是「前缀真的命中了」的唯一证据，
+ * 由 `TablePage.settle` 收进这一手的 `DecisionRecord`，页面上看得见。
+ * 记的是**最后一轮**那次（与 prompt / 输出同一轮，裁决 26-16）。
+ */
 function audited(prompt: string, tools: string, result: AskResult | null) {
+  const usage = result?.usage ?? null;
+
   return {
     prompt,
     tools,
     output: rawOutput(result),
     thinking: result?.thinking ?? null,
+    usage:
+      usage === null
+        ? null
+        : {
+            input: usage.input,
+            output: usage.output,
+            cache_read: usage.cacheRead ?? 0,
+            cache_write: usage.cacheWrite ?? 0,
+          },
   };
 }
 

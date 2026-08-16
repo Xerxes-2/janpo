@@ -27,11 +27,12 @@ export async function decide(requestJson: string): Promise<string> {
       failure: `Agent 层读不动这份请求：${String(error)}`,
       attempts: 0,
       latency_ms: 0,
-      // 连请求都没读懂，审计那四项无从谈起（票 26）。
+      // 连请求都没读懂，审计那几项无从谈起（票 26）；一个 token 都没花，也就没有账单（票 29b）。
       prompt: "",
       tools: "",
       output: "",
       thinking: null,
+      usage: null,
     };
     return JSON.stringify(broken);
   }

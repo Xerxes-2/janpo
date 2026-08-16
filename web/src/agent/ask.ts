@@ -35,7 +35,20 @@ export interface AskResult {
   thinking: string | null;
   errorMessage: string | null;
   latencyMs: number;
-  usage: { input: number; output: number } | null;
+  /**
+   * token 账单（票 29b）。字段名照 pi-ai 的 `Usage`：`cacheRead` 是**命中前缀缓存**、
+   * 按折扣价计的那部分输入 token（DeepSeek 的 `prompt_cache_hit_tokens` 由 pi-ai 的
+   * `openai-completions` 适配器读进来），`input` 已经把它减掉了。
+   *
+   * **它是「前缀可缓存的 prompt 真的省下钱了没有」的唯一证据**，一路进 `DecisionRecord`。
+   */
+  usage: {
+    input: number;
+    output: number;
+    /** **票 29b 之前录下来的固件没有这两项**，因此可缺省；真跑起来 pi-ai 恒给。 */
+    cacheRead?: number;
+    cacheWrite?: number;
+  } | null;
 }
 
 /** 问一次模型。真实现在 `piai.ts`，用例里是回放录制响应的假实现。 */

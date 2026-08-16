@@ -10,15 +10,14 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { preview } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { pageUrl, startPreview } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
 
 // 默认种子与 F# 侧的 `Tracer.defaultSeed` 一致（挑它的理由见 src/Janpo.Web/Tracer.fs）。
 const DEFAULT_SEED = 1177;
-const PORT = 4179;
 
 function parseSeed(argv) {
   const index = argv.indexOf("--seed");
@@ -61,11 +60,7 @@ function summaryLines(text) {
  * 「输入框没生效」与「输入框生效了」两种情况读到的数一模一样，这条验收就名存实亡。
  */
 async function readBrowser(seed, executablePath) {
-  const server = await preview({
-    root: webRoot,
-    preview: { port: PORT, strictPort: true },
-    logLevel: "warn",
-  });
+  const server = await startPreview(webRoot);
   const browser = await chromium.launch({ executablePath, headless: true });
   const problems = [];
 
@@ -76,7 +71,7 @@ async function readBrowser(seed, executablePath) {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    await page.goto(`http://localhost:${PORT}/`, { waitUntil: "load" });
+    await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
 
     const rerunWith = async (value) => {
       await page.getByTestId("seed-input").fill(String(value));

@@ -22,12 +22,15 @@ let private usage =
                                  打印完整事件流、终局点数与顺位。
                                  --covering 换成跑批用的那个带偏好的选手，
                                  跑出来的就是 `janpo soak` 在这个种子上看到的那一场
-  janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god]
+  janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence]
                                  用给定种子开一局、让随机选手先走 --steps 手（默认 0），
                                  再把那一手的**决策包 JSON** 打出来：某座位的合法观测
                                  加带 id 与中文 label 的动作列表。不给 --seat 就取正在被问的那家；
                                  --god 改打上帝视角（全部暗牌与里宝牌，围观与复盘用）。
-                                 走的选手与 `janpo kyoku <种子>` 同一个，因此第 N 手就是那一局的第 N 手
+                                 走的选手与 `janpo kyoku <种子>` 同一个，因此第 N 手就是那一局的第 N 手。
+                                 --sequence 改打**一个 JSON 数组**：那一局里 --seat 每一次被问的决策包，
+                                 按手序（--steps 这时是「最多收几份」，0 表示收满一局）。
+                                 prompt 的前缀稳定性（票 29b）要的正是连续的几手
   janpo golden check <文件>          跑一份黄金用例文件，逐条逐字段逐行对照期望。
                                  对不上就退出码 1，每条报错指得出是哪条用例的哪个字段的第几行。
                                  **同一份文件浏览器里也要跑**（web/scripts/verify-golden.mjs）
@@ -74,6 +77,7 @@ yaku 的选项:
   janpo decide 42
   janpo decide 42 --steps 8 --seat 1
   janpo decide 42 --steps 8 --god
+  janpo decide 2088 --seat 1 --sequence
   janpo game 42
   janpo game 42 --hanchan
   janpo game 42 --covering
@@ -375,6 +379,8 @@ type private DecideArguments =
         Steps: int
         /// 改打上帝视角。
         God: bool
+        /// 收**同一座位在这一局里连续的每一份**决策包（票 29b）。
+        Sequence: bool
     }
 
 let private parseDecideArguments (arguments: string list) : Result<DecideArguments, string> =
@@ -383,6 +389,7 @@ let private parseDecideArguments (arguments: string list) : Result<DecideArgumen
         | [] -> Ok parsed
         | "--no-akadora" :: tail -> parse { parsed with Akadora = false } tail
         | "--god" :: tail -> parse { parsed with God = true } tail
+        | "--sequence" :: tail -> parse { parsed with Sequence = true } tail
         | "--seat" :: value :: tail ->
             match System.Int32.TryParse value with
             | true, index -> parse { parsed with Seat = Some index } tail
@@ -403,11 +410,46 @@ let private parseDecideArguments (arguments: string list) : Result<DecideArgumen
             Seat = None
             Steps = 0
             God = false
+            Sequence = false
         }
         arguments
 
-/// `janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god]`：
-/// 把一局推到第 N 手，打出那一手的决策包 JSON（或上帝视角）。
+/// `--sequence`：把这一局从头打到底（四家随机选手），把**点名那一座位每一次被问**的
+/// 决策包按手序收成一串。`limit` 为正时收满就停。
+///
+/// **前缀可缓存的 prompt（票 29b）只有连续的几手才验得了**：一手一份包看不出前缀在不在长。
+/// 每一份包与 `janpo decide <种子> --steps N` 打出来的那一份是同一个 encoder 的产物。
+let private decideSequence
+    (seat: Seat)
+    (limit: int)
+    (rng: Rng)
+    (state: GameState)
+    : Result<DecisionPackage list, string> =
+    let rec loop (collected: DecisionPackage list) (rng: Rng) (state: GameState) =
+        if limit > 0 && List.length collected >= limit then
+            Ok(List.rev collected)
+        else
+            match GameState.legalActions state with
+            | [] -> Ok(List.rev collected)
+            | choice :: _ ->
+                // **只收「正在被问的那一手」**：牌桌问的也是合法动作集的头一家
+                // （`Table.pending`），因此这一串与真跑起来那一串逐份相同。
+                let asked =
+                    if choice.Seat = seat then
+                        DecisionPackage.forSeat seat state |> Option.toList
+                    else
+                        []
+
+                let action, advanced = Kyoku.randomPlayer rng state choice
+
+                match GameState.step state action with
+                | Error illegal -> Error(IllegalAction.toDisplay illegal)
+                | Ok(next, _) -> loop (asked @ collected) advanced next
+
+    loop [] rng state
+
+/// `janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence]`：
+/// 把一局推到第 N 手，打出那一手的决策包 JSON（或上帝视角，或连续几手的那一串）。
 /// **这就是跨 F#/TS 边界的那个包**：肉眼查它有没有多给一张牌。
 let private runDecide (arguments: string list) : int =
     match parseDecideArguments arguments with
@@ -422,43 +464,69 @@ let private runDecide (arguments: string list) : int =
         let context = KyokuContext.initial ruleset
         let seed = Option.defaultValue 0 parsed.Seed
 
+        let opened =
+            GameState.start ruleset context (Rng.ofSeed seed)
+            |> Result.mapError KyokuStartError.toDisplay
+
         // 走的选手与 `janpo kyoku` 同一个，因此同一种子的第 N 手两边对得上。
         let advanced =
-            match GameState.start ruleset context (Rng.ofSeed seed) with
-            | Error error -> Error(KyokuStartError.toDisplay error)
-            | Ok(state, rng) ->
+            opened
+            |> Result.bind (fun (state, rng) ->
                 Kyoku.runSteps parsed.Steps Kyoku.randomPlayer rng state
                 |> Result.map fst
-                |> Result.mapError IllegalAction.toDisplay
+                |> Result.mapError IllegalAction.toDisplay)
 
-        match advanced with
-        | Error message ->
-            eprintfn "%s" message
-            1
-        | Ok state when parsed.God ->
-            printfn "%s" (Encode.toString 2 (GodView.encoder (GodView.ofState state)))
-            0
-        | Ok state ->
-            let asked = GameState.legalActions state |> List.map (fun choice -> choice.Seat)
-
-            let wanted =
-                match parsed.Seat with
-                | Some index -> Seat.ofIndex index
-                | None -> List.tryHead asked
-
-            match wanted |> Option.bind (fun seat -> DecisionPackage.forSeat seat state) with
-            | Some package ->
-                printfn "%s" (Encode.toString 2 (DecisionPackage.encoder package))
-                0
+        // `--sequence` 是另一条出口：它要的是**这一局从头到底**，不是某一手的局面。
+        if parsed.Sequence then
+            match parsed.Seat with
             | None ->
-                let waiting = asked |> List.map (Seat.index >> string) |> String.concat " "
+                eprintfn "--sequence 要点名一个座位：连续的几手是某一家的几手，例如 janpo decide 2088 --seat 1 --sequence"
+                2
+            | Some index ->
+                let collected =
+                    opened
+                    |> Result.bind (fun (state, rng) ->
+                        match Seat.ofIndex index with
+                        | None -> Error $"这个规则集里没有座位 {index}"
+                        | Some seat -> decideSequence seat parsed.Steps rng state)
 
-                if List.isEmpty asked then
-                    eprintfn "这一局已终（走了 %d 手），没有人在被问；--god 仍然看得了" parsed.Steps
-                else
-                    eprintfn "这一手等的是座位 %s，不是你要的那家" waiting
+                match collected with
+                | Error message ->
+                    eprintfn "%s" message
+                    1
+                | Ok packages ->
+                    printfn "%s" (Encode.toString 2 (packages |> List.map DecisionPackage.encoder |> Encode.list))
+                    0
+        else
 
+            match advanced with
+            | Error message ->
+                eprintfn "%s" message
                 1
+            | Ok state when parsed.God ->
+                printfn "%s" (Encode.toString 2 (GodView.encoder (GodView.ofState state)))
+                0
+            | Ok state ->
+                let asked = GameState.legalActions state |> List.map (fun choice -> choice.Seat)
+
+                let wanted =
+                    match parsed.Seat with
+                    | Some index -> Seat.ofIndex index
+                    | None -> List.tryHead asked
+
+                match wanted |> Option.bind (fun seat -> DecisionPackage.forSeat seat state) with
+                | Some package ->
+                    printfn "%s" (Encode.toString 2 (DecisionPackage.encoder package))
+                    0
+                | None ->
+                    let waiting = asked |> List.map (Seat.index >> string) |> String.concat " "
+
+                    if List.isEmpty asked then
+                        eprintfn "这一局已终（走了 %d 手），没有人在被问；--god 仍然看得了" parsed.Steps
+                    else
+                        eprintfn "这一手等的是座位 %s，不是你要的那家" waiting
+
+                    1
 
 /// 四麻：全 34 牌种，**从规则集读**（ADR-0004 决定 4：牌种全集由 `Ruleset` 携带）。
 /// 三麻的牌种集合是另一张票的事，这里只把接缝留出来。

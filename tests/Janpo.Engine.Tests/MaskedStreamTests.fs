@@ -1,6 +1,8 @@
 namespace Janpo.Engine.Tests
 
 open Xunit
+open Thoth.Json.Core
+open Thoth.Json.Newtonsoft
 open Janpo
 open Janpo.Engine.Tests.GameStateFixtures
 
@@ -235,6 +237,62 @@ module MaskedStreamTests =
             match List.item (index + 1) events, List.item (index + 2) events with
             | Dora _, Tsumo _ -> ()
             | first, second -> failwith $"暗杠之后应当是 dora → tsumo，却是 {first} → {second}"
+
+    // ---- wire 形态（票 29b：历史要过 F#→TS 的接缝） ----
+
+    let private json (masked: MaskedEvent) : string =
+        Encode.toString 0 (MaskedEvent.encoder masked)
+
+    [<Fact>]
+    let ``公开那十四条逐字节就是 Event.encoder 的产物——掩蔽流没有第二种事件记法`` () =
+        // 裁决（第六次）的硬约束：`Public` 那一半复用 `Event.encoder`。
+        // 拿一整局的流对，每一条公开事件都要与它未掩蔽时逐字节相同。
+        let ended = trace Kyoku.randomPlayer 7 |> List.last
+        let masked = Observation.stream (seat 1) ended
+
+        let publics =
+            masked
+            |> List.choose (fun each -> MaskedEvent.publicEvent each |> Option.map (fun event -> each, event))
+
+        Assert.NotEmpty publics
+
+        publics
+        |> List.iter (fun (masked, event) -> Assert.Equal(Encode.toString 0 (Event.encoder event), json masked))
+
+    [<Fact>]
+    let ``他家摸的那张在 wire 上是 mjai 的问号，自家那条照旧是牌面`` () =
+        let state, _ = start 1177
+        let viewer = seat 0
+
+        let draws =
+            Observation.stream viewer state
+            |> List.filter (fun each ->
+                match each with
+                | MaskedEvent.Tsumo _ -> true
+                | _ -> false)
+
+        // 亲（座位 0）自己摸的那张看得见。
+        Assert.Equal<string list>([ """{"type":"tsumo","actor":0,"pai":"2z"}""" ], draws |> List.map json)
+
+        let outsider =
+            Observation.stream (seat 2) state
+            |> List.filter (fun each ->
+                match each with
+                | MaskedEvent.Tsumo _ -> true
+                | _ -> false)
+
+        Assert.Equal<string list>([ """{"type":"tsumo","actor":0,"pai":"?"}""" ], outsider |> List.map json)
+
+    [<Fact>]
+    let ``开局那一条只带自家配牌：mjai 的四家 tehais 在 wire 上没有位置`` () =
+        let state, _ = start 1177
+        let encoded = Observation.stream (seat 2) state |> List.head |> json
+
+        Assert.Contains("\"type\":\"start_kyoku\"", encoded)
+        Assert.Contains("\"dora_marker\":", encoded)
+        // **自家那一手写在 `tehai` 上**（不是 mjai 的 `tehais`）：他家那三格没有内容可放。
+        Assert.Contains("\"tehai\":[", encoded)
+        Assert.DoesNotContain("\"tehais\"", encoded)
 
     // ---- 上帝视角那条流 ----
 

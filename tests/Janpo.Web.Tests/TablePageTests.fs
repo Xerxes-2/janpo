@@ -49,6 +49,14 @@ module TablePageTests =
             Tools = """{"name":"choose_action"}"""
             Output = """{"stop_reason":"toolUse"}"""
             Thinking = Some "先数向听……"
+            Usage =
+                Some
+                    {
+                        Input = 812
+                        Output = 96
+                        CacheRead = 1344
+                        CacheWrite = 0
+                    }
         }
 
     /// 模型交不出来（超时 / provider 报错 / 格式跑偏，走的都是这一条）。
@@ -63,6 +71,8 @@ module TablePageTests =
             Tools = """{"name":"choose_action"}"""
             Output = ""
             Thinking = None
+            // 一次都没问成：没有账单可记。
+            Usage = None
         }
 
     // ---- 分派 ----

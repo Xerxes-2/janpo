@@ -1,5 +1,7 @@
 namespace Janpo
 
+open Thoth.Json.Core
+
 /// 掩蔽之后的 `start_kyoku`：**他家的配牌在这个记录里没有位置**。
 ///
 /// 与 `MaskedSeat` 同源（DECISIONS 20-1）：看不见的东西不给它字段，
@@ -138,3 +140,45 @@ module MaskedEvent =
             | Event.Ryuukyoku _
             | Event.EndKyoku
             | Event.EndGame -> []
+
+    // ---- JSON（单向出口） ----
+
+    /// mjai 里「这一格看不见」的写法。上游的 mjai 服务端发给某一家的事件流就是这么写的：
+    /// 他家摸的那张是 `"pai": "?"`，他家的配牌是一串 `"?"`。
+    /// **掩蔽流因此不需要第二种记法**，读的人拿 mjai 的眼睛就看得懂。
+    [<Literal>]
+    let private hidden = "?"
+
+    /// 掩蔽事件的 wire 形态。**只有 encoder，没有 decoder**（票 29b）：
+    /// 历史只往外走一个方向（引擎 → prompt 的前缀），回来的仍然只有一个动作 id。
+    ///
+    /// **`Public` 那一半原样复用 `Event.encoder`**（裁决：第六次裁决的约束）：
+    /// 十四条公开事件在 wire 上与 mjai 逐字段相同，掩蔽流里不新造第二种事件记法。
+    /// 掩蔽掉了东西的那两条也仍然是 mjai 的形状，只是看不见的那一格写 `"?"`：
+    /// - `tsumo`：他家摸的那张是 `"?"`（自家那条照旧是牌面）
+    /// - `start_kyoku`：mjai 的 `tehais` 是四家的配牌，掩蔽之后他家那三格**没有内容可放**
+    ///   （`MaskedStartKyoku` 里没有字段装得下），因此写作 `tehai` —— 自家那一手。
+    let encoder: Encoder<MaskedEvent> =
+        fun masked ->
+            match masked with
+            | MaskedEvent.StartKyoku fields ->
+                Encode.object
+                    [
+                        "type", Encode.string "start_kyoku"
+                        "bakaze", Kaze.encoder fields.Bakaze
+                        "dora_marker", Tile.encoder fields.DoraMarker
+                        "kyoku", Encode.int fields.Kyoku
+                        "honba", Encode.int fields.Honba
+                        "kyotaku", Encode.int fields.Kyotaku
+                        "oya", Seat.encoder fields.Oya
+                        "scores", fields.Scores |> List.map Encode.int |> Encode.list
+                        "tehai", fields.Tehai |> List.map Tile.encoder |> Encode.list
+                    ]
+            | MaskedEvent.Tsumo(actor, pai) ->
+                Encode.object
+                    [
+                        "type", Encode.string "tsumo"
+                        "actor", Seat.encoder actor
+                        "pai", pai |> Option.map Tile.toMjai |> Option.defaultValue hidden |> Encode.string
+                    ]
+            | MaskedEvent.Public event -> Event.encoder event

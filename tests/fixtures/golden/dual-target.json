@@ -1323,6 +1323,204 @@
         "package.seat": [
           "3"
         ],
+        "package.history.0.type": [
+          "start_kyoku"
+        ],
+        "package.history.0.bakaze": [
+          "1z"
+        ],
+        "package.history.0.dora_marker": [
+          "1m"
+        ],
+        "package.history.0.kyoku": [
+          "1"
+        ],
+        "package.history.0.honba": [
+          "0"
+        ],
+        "package.history.0.kyotaku": [
+          "0"
+        ],
+        "package.history.0.oya": [
+          "0"
+        ],
+        "package.history.0.scores": [
+          "25000",
+          "25000",
+          "25000",
+          "25000"
+        ],
+        "package.history.0.tehai": [
+          "1m",
+          "1m",
+          "3m",
+          "7m",
+          "3p",
+          "4p",
+          "7p",
+          "8p",
+          "1s",
+          "3s",
+          "1z",
+          "4z",
+          "4z"
+        ],
+        "package.history.1.type": [
+          "tsumo"
+        ],
+        "package.history.1.actor": [
+          "0"
+        ],
+        "package.history.1.pai": [
+          "?"
+        ],
+        "package.history.2.type": [
+          "dahai"
+        ],
+        "package.history.2.actor": [
+          "0"
+        ],
+        "package.history.2.pai": [
+          "6z"
+        ],
+        "package.history.2.tsumogiri": [
+          "false"
+        ],
+        "package.history.3.type": [
+          "tsumo"
+        ],
+        "package.history.3.actor": [
+          "1"
+        ],
+        "package.history.3.pai": [
+          "?"
+        ],
+        "package.history.4.type": [
+          "dahai"
+        ],
+        "package.history.4.actor": [
+          "1"
+        ],
+        "package.history.4.pai": [
+          "7s"
+        ],
+        "package.history.4.tsumogiri": [
+          "false"
+        ],
+        "package.history.5.type": [
+          "tsumo"
+        ],
+        "package.history.5.actor": [
+          "2"
+        ],
+        "package.history.5.pai": [
+          "?"
+        ],
+        "package.history.6.type": [
+          "dahai"
+        ],
+        "package.history.6.actor": [
+          "2"
+        ],
+        "package.history.6.pai": [
+          "2s"
+        ],
+        "package.history.6.tsumogiri": [
+          "true"
+        ],
+        "package.history.7.type": [
+          "tsumo"
+        ],
+        "package.history.7.actor": [
+          "3"
+        ],
+        "package.history.7.pai": [
+          "3s"
+        ],
+        "package.history.8.type": [
+          "dahai"
+        ],
+        "package.history.8.actor": [
+          "3"
+        ],
+        "package.history.8.pai": [
+          "8p"
+        ],
+        "package.history.8.tsumogiri": [
+          "false"
+        ],
+        "package.history.9.type": [
+          "tsumo"
+        ],
+        "package.history.9.actor": [
+          "0"
+        ],
+        "package.history.9.pai": [
+          "?"
+        ],
+        "package.history.10.type": [
+          "dahai"
+        ],
+        "package.history.10.actor": [
+          "0"
+        ],
+        "package.history.10.pai": [
+          "8m"
+        ],
+        "package.history.10.tsumogiri": [
+          "false"
+        ],
+        "package.history.11.type": [
+          "tsumo"
+        ],
+        "package.history.11.actor": [
+          "1"
+        ],
+        "package.history.11.pai": [
+          "?"
+        ],
+        "package.history.12.type": [
+          "dahai"
+        ],
+        "package.history.12.actor": [
+          "1"
+        ],
+        "package.history.12.pai": [
+          "9p"
+        ],
+        "package.history.12.tsumogiri": [
+          "false"
+        ],
+        "package.history.13.type": [
+          "tsumo"
+        ],
+        "package.history.13.actor": [
+          "2"
+        ],
+        "package.history.13.pai": [
+          "?"
+        ],
+        "package.history.14.type": [
+          "dahai"
+        ],
+        "package.history.14.actor": [
+          "2"
+        ],
+        "package.history.14.pai": [
+          "5z"
+        ],
+        "package.history.14.tsumogiri": [
+          "false"
+        ],
+        "package.history.15.type": [
+          "tsumo"
+        ],
+        "package.history.15.actor": [
+          "3"
+        ],
+        "package.history.15.pai": [
+          "2m"
+        ],
         "package.observation.seat": [
           "3"
         ],
@@ -3020,6 +3218,57 @@
         ],
         "package.seat": [
           "0"
+        ],
+        "package.history.0.type": [
+          "start_kyoku"
+        ],
+        "package.history.0.bakaze": [
+          "1z"
+        ],
+        "package.history.0.dora_marker": [
+          "1z"
+        ],
+        "package.history.0.kyoku": [
+          "1"
+        ],
+        "package.history.0.honba": [
+          "0"
+        ],
+        "package.history.0.kyotaku": [
+          "0"
+        ],
+        "package.history.0.oya": [
+          "0"
+        ],
+        "package.history.0.scores": [
+          "25000",
+          "25000",
+          "25000",
+          "25000"
+        ],
+        "package.history.0.tehai": [
+          "5m",
+          "5m",
+          "5mr",
+          "7m",
+          "8m",
+          "6p",
+          "9p",
+          "9p",
+          "5s",
+          "9s",
+          "1z",
+          "5z",
+          "7z"
+        ],
+        "package.history.1.type": [
+          "tsumo"
+        ],
+        "package.history.1.actor": [
+          "0"
+        ],
+        "package.history.1.pai": [
+          "7p"
         ],
         "package.observation.seat": [
           "0"
@@ -4772,6 +5021,169 @@
         ],
         "package.seat": [
           "3"
+        ],
+        "package.history.0.type": [
+          "start_kyoku"
+        ],
+        "package.history.0.bakaze": [
+          "1z"
+        ],
+        "package.history.0.dora_marker": [
+          "6p"
+        ],
+        "package.history.0.kyoku": [
+          "1"
+        ],
+        "package.history.0.honba": [
+          "0"
+        ],
+        "package.history.0.kyotaku": [
+          "0"
+        ],
+        "package.history.0.oya": [
+          "0"
+        ],
+        "package.history.0.scores": [
+          "25000",
+          "25000",
+          "25000",
+          "25000"
+        ],
+        "package.history.0.tehai": [
+          "4m",
+          "7m",
+          "3p",
+          "5p",
+          "5pr",
+          "1s",
+          "1s",
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "7s",
+          "3z"
+        ],
+        "package.history.1.type": [
+          "tsumo"
+        ],
+        "package.history.1.actor": [
+          "0"
+        ],
+        "package.history.1.pai": [
+          "?"
+        ],
+        "package.history.2.type": [
+          "dahai"
+        ],
+        "package.history.2.actor": [
+          "0"
+        ],
+        "package.history.2.pai": [
+          "4p"
+        ],
+        "package.history.2.tsumogiri": [
+          "false"
+        ],
+        "package.history.3.type": [
+          "tsumo"
+        ],
+        "package.history.3.actor": [
+          "1"
+        ],
+        "package.history.3.pai": [
+          "?"
+        ],
+        "package.history.4.type": [
+          "dahai"
+        ],
+        "package.history.4.actor": [
+          "1"
+        ],
+        "package.history.4.pai": [
+          "7z"
+        ],
+        "package.history.4.tsumogiri": [
+          "false"
+        ],
+        "package.history.5.type": [
+          "tsumo"
+        ],
+        "package.history.5.actor": [
+          "2"
+        ],
+        "package.history.5.pai": [
+          "?"
+        ],
+        "package.history.6.type": [
+          "dahai"
+        ],
+        "package.history.6.actor": [
+          "2"
+        ],
+        "package.history.6.pai": [
+          "1z"
+        ],
+        "package.history.6.tsumogiri": [
+          "false"
+        ],
+        "package.history.7.type": [
+          "pon"
+        ],
+        "package.history.7.actor": [
+          "1"
+        ],
+        "package.history.7.target": [
+          "2"
+        ],
+        "package.history.7.pai": [
+          "1z"
+        ],
+        "package.history.7.consumed": [
+          "1z",
+          "1z"
+        ],
+        "package.history.8.type": [
+          "dahai"
+        ],
+        "package.history.8.actor": [
+          "1"
+        ],
+        "package.history.8.pai": [
+          "4m"
+        ],
+        "package.history.8.tsumogiri": [
+          "false"
+        ],
+        "package.history.9.type": [
+          "tsumo"
+        ],
+        "package.history.9.actor": [
+          "2"
+        ],
+        "package.history.9.pai": [
+          "?"
+        ],
+        "package.history.10.type": [
+          "dahai"
+        ],
+        "package.history.10.actor": [
+          "2"
+        ],
+        "package.history.10.pai": [
+          "7m"
+        ],
+        "package.history.10.tsumogiri": [
+          "false"
+        ],
+        "package.history.11.type": [
+          "tsumo"
+        ],
+        "package.history.11.actor": [
+          "3"
+        ],
+        "package.history.11.pai": [
+          "6z"
         ],
         "package.observation.seat": [
           "3"

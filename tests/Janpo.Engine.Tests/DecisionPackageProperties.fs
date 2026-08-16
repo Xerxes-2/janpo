@@ -66,3 +66,22 @@ module DecisionPackageProperties =
             let labels = DecisionPackage.options package |> List.map ActionOption.label
 
             List.length (List.distinct labels) = List.length labels)
+
+    [<Property>]
+    let ``任意局面，包里的历史 fold 出来的就是包里的那份观测`` (state: GameState) =
+        // **两种形态构造性一致**（票 29b 第零节）：前缀是掩蔽事件流，尾部是它的 fold。
+        // 对不上就意味着模型看到的是自相矛盾的输入，而我们无从判断该信哪个。
+        packagesOf state
+        |> List.forall (fun package ->
+            let folded =
+                DecisionPackage.history package
+                |> Observation.ofMasked ruleset (DecisionPackage.seat package)
+
+            folded = Some(DecisionPackage.observation package))
+
+    [<Property>]
+    let ``任意局面，包里的历史就是那条唯一的掩蔽流`` (state: GameState) =
+        // 没有第二处判断「某座位能看见什么」（29a 的一条掩蔽法则）。
+        packagesOf state
+        |> List.forall (fun package ->
+            DecisionPackage.history package = Observation.stream (DecisionPackage.seat package) state)

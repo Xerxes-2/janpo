@@ -118,6 +118,16 @@ module Table =
         table.Decisions
         |> List.sumBy (fun record -> if Option.isSome record.Fallback then 1 else 0)
 
+    /// 这一桌到此刻为止的 token 账单（票 29b）：**逐条决策记录累加**，不另存一份。
+    /// **跨局累计**，与 `fallbacks` 同一个做法（两份计数只会漂，裁决 26-6）。
+    ///
+    /// 它是「前缀可缓存的 prompt 真的省下钱了没有」的记账：`CacheRead` 占输入侧的比例
+    /// 就是缓存命中率（`Usage.cacheHitPercent`）。
+    let usage (table: Table) : Usage =
+        table.Decisions
+        |> List.choose (fun record -> record.Usage)
+        |> List.fold Usage.add Usage.zero
+
     /// 某座位此刻的观测（票 29a）：**取自增量维护的那条掩蔽流**，不重头 fold。
     /// 座位不在这个规则集里时是 None。
     let observation (seat: Seat) (table: Table) : Observation option =

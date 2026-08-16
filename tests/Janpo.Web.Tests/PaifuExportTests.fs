@@ -52,6 +52,14 @@ module PaifuExportTests =
             Tools = """{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":["0"]}}}}"""
             Output = """{"stop_reason":"toolUse","content":[{"type":"toolCall","name":"choose_action"}]}"""
             Thinking = Some "先数向听：现在是 2 向听……"
+            Usage =
+                Some
+                    {
+                        Input = 812
+                        Output = 96
+                        CacheRead = 1344
+                        CacheWrite = 0
+                    }
         }
 
     /// 模型交不出来（超时 / provider 报错 / 格式跑偏走的都是这一条）。
@@ -66,6 +74,7 @@ module PaifuExportTests =
             Tools = """{"name":"choose_action"}"""
             Output = ""
             Thinking = None
+            Usage = None
         }
 
     /// 把一整场对局打完：轮到模型就喂 `answer`，其余座位随机，一局终了就开下一局。

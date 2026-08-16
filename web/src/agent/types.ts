@@ -57,6 +57,21 @@ export interface MaskedSeat {
   ippatsu: boolean;
 }
 
+/**
+ * 一条**掩蔽事件**（票 29a 的 `MaskedEvent`，票 29b 送过接缝）：那个座位亲眼看得见的一件事。
+ *
+ * **形状就是 mjai 的事件**（`type` + 那几个字段），公开的十四条逐字段与 `Event.encoder`
+ * 出来的一模一样——掩蔽流没有第二种事件记法。掩掉的两条也仍是 mjai 的写法：
+ * 他家摸的那张是 `"pai": "?"`，`start_kyoku` 只带自家那一手（`tehai`，不是四家的 `tehais`）。
+ *
+ * **这一侧不给它写十七个接口**：Agent 层认识 id 不认识动作（ADR-0005），历史只是拿来
+ * 渲染成一行中文（`history.ts`）。字段按需读，读不出来就退回占位，不抛。
+ */
+export interface MaskedEvent {
+  type: string;
+  [field: string]: unknown;
+}
+
 /** 某座位的合法观测。 */
 export interface Observation {
   seat: number;
@@ -85,6 +100,14 @@ export interface ActionOption {
  */
 export interface DecisionPackage {
   seat: number;
+  /**
+   * 这个座位在这一局里亲眼看得见的那条历史（掩蔽事件流，票 29a）。
+   *
+   * **它与 `observation` 是同一件事的两种形态**：观测就是这条流的 fold。
+   * prompt 把流放在可缓存的**前缀**里（append-only），把 fold 出来的场况放在
+   * 每手付全价的**尾部**（票 29b）。重复是故意的：记账负担不是我们想测的能力。
+   */
+  history: MaskedEvent[];
   observation: Observation;
   actions: ActionOption[];
   scaffold: Record<string, unknown>;
@@ -143,4 +166,27 @@ export interface DecideResponse {
   output: string;
   /** 扩展思考全文。**它是可省略的那一段**：URL 分享（M2）会把它抹掉。 */
   thinking: string | null;
+  /**
+   * 这一手的 token 账单（票 29b）。**一次都没问成时是 null**（没有账单可记）。
+   *
+   * **它是「前缀真的命中了没有」的唯一证据**：`cache_read` 是命中前缀缓存的输入 token，
+   * 数出来的就是缓存命中率。字段名与 F# 的 `Usage.encoder` 逐字段对应。
+   */
+  usage: TokenUsage | null;
+}
+
+/**
+ * 一次问话的 token 账单（票 29b）。**四个数都是 provider 报的**：pi-ai 的 `usage` 已经
+ * 把各家的字段名统一好了（DeepSeek 的 `prompt_cache_hit_tokens` 由它的
+ * `openai-completions` 适配器读进 `cacheRead`），这一层不自己拼。
+ */
+export interface TokenUsage {
+  /** 新付全价的输入 token（**不含**命中缓存与写缓存的那两部分）。 */
+  input: number;
+  /** 输出 token（含思考）。 */
+  output: number;
+  /** 命中前缀缓存、按折扣价计的输入 token。 */
+  cache_read: number;
+  /** 写进前缀缓存的输入 token。DeepSeek 不单独报（恒 0），Anthropic 报。 */
+  cache_write: number;
 }

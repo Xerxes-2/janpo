@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { renderPrompt } from "../../src/agent/prompt.ts";
+import { PREAMBLE, promptSections, renderPrompt } from "../../src/agent/prompt.ts";
 import { dahaiPackage, dangerPackage, responsePackage } from "./fixtures.ts";
 
 const bare = renderPrompt(dahaiPackage, "bare", null);
@@ -28,9 +28,46 @@ test("局面该有的都在：场况、自家手牌、他家、合法动作", ()
 });
 
 test("副露与摸切标记：都是公开信息，都写出来", () => {
-  // 自家有一组碰（3m），他家河里有摸切。
-  assert.match(bare, /副露：pon 鸣3m\[3m 3m\]（来自座位 3）/);
+  // 自家有一组碰（3m），他家河里有摸切。**措辞与前缀那一段同一套**（票 29b）：
+  // 种类写中文、来源写相对位置、牌照 mjai 记法。
+  assert.match(bare, /副露：碰 3m（来自对家，亮出 3m 3m）/);
   assert.match(bare, /5p\*/, "摸切的那张后面缀 `*`");
+});
+
+test("三段：固定 preamble → 【到目前为止你看到的】 → 【现在】", () => {
+  // 形态是票 29b 定死的：前两段可缓存，第三段每手付全价。
+  // **三段是分开取得出来的**（票 31 要在这上面做槽位注入），拼起来才是整份 prompt。
+  const sections = promptSections(dahaiPackage, "bare", null);
+
+  assert.equal(sections.preamble, PREAMBLE, "preamble 逐字不变，与局面无关");
+  assert.ok(sections.history.startsWith("【到目前为止你看到的】\n"));
+  assert.ok(sections.present.startsWith("【现在】\n"));
+  assert.equal([sections.preamble, sections.history, sections.present].join("\n\n"), bare);
+
+  // 历史那一段渲的就是决策包里那条掩蔽事件流，一条一行。
+  assert.equal(
+    sections.history.split("\n").length,
+    dahaiPackage.history.length + 1,
+    "标题一行 + 每条事件一行",
+  );
+
+  // 尾部的先后：【现在】→【可选动作】→（脚手架）→（重试原因）。
+  const assistedRetry = promptSections(dahaiPackage, "assisted", "上次那个 id 不在包里").present;
+  assert.ok(
+    assistedRetry.indexOf("【可选动作】") < assistedRetry.indexOf("【引擎算好的数】"),
+    "算好的数排在可选动作之后",
+  );
+  assert.ok(
+    assistedRetry.indexOf("【引擎算好的数】") < assistedRetry.indexOf("【上一次的回答没有被采用】"),
+    "重试原因排在最后",
+  );
+});
+
+test("事件流带来的东西真的进了 prompt：巡目、鸣的来源与时序", () => {
+  // 快照里河是一串牌、副露是另一串组，两条串接不上；这一段把它们接上了。
+  assert.match(bare, /你 第1巡 打 2z/);
+  assert.match(bare, /你 第1巡 碰 对家打的 3m（亮出 3m 3m）/);
+  assert.match(bare, /上家 第1巡 摸牌/, "他家摸了看得见，摸的是什么看不见");
 });
 
 test("他家的暗牌在 prompt 里根本无从写起——决策包里就没有", () => {

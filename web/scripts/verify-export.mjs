@@ -21,11 +21,10 @@ import { copyFileSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { createServer } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { pageUrl, retryOnReload, startDevServer } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PORT = 4182;
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -53,12 +52,7 @@ if (!executablePath) {
 
 // 用 dev server 而不是 preview：闸门要在页面里点名 `import` Fable 输出的 `PaifuCheck.js`，
 // 而 `dist/` 里的模块被打成一坨、文件名带哈希（与 verify-golden 同一个理由）。
-const server = await createServer({
-  root: webRoot,
-  server: { port: PORT, strictPort: true },
-  logLevel: "warn",
-});
-await server.listen();
+const server = await startDevServer(webRoot);
 const browser = await chromium.launch({ executablePath, headless: true });
 const problems = [];
 
@@ -87,7 +81,7 @@ try {
     );
   }
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: "load" });
+  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
 
   const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
 
@@ -113,6 +107,11 @@ try {
   console.log(`走完之后：${await readText("table-latest")}`);
   console.log(`Agent 状态：${await readText("table-agent")}`);
 
+  // token 账单（票 29b）：四家随机选手的那一档没有这一行（一个 token 都没花）。
+  if (await page.getByTestId("table-usage").count()) {
+    console.log(await readText("table-usage"));
+  }
+
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 30000 }),
     page.getByTestId("table-export").click(),
@@ -129,10 +128,12 @@ try {
 
   // 下下来的那份字节交回浏览器里的引擎：fold 一遍，与它自己记的事件流逐条对照。
   const report = JSON.parse(
-    await page.evaluate(async (paifu) => {
-      const check = await import("/src/generated/PaifuCheck.js");
-      return check.check(paifu);
-    }, text),
+    await retryOnReload(() =>
+      page.evaluate(async (paifu) => {
+        const check = await import("/src/generated/PaifuCheck.js");
+        return check.check(paifu);
+      }, text),
+    ),
   );
 
   if (report.error) {

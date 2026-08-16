@@ -2,6 +2,93 @@ namespace Janpo
 
 open Thoth.Json.Core
 
+/// 一次问话的 token 账单（票 29b）。**四个数都是 provider 报的，不是我们算的**：
+/// pi-ai 的 `usage` 已经把各家的字段名统一好了（DeepSeek 的 `prompt_cache_hit_tokens`
+/// 由它的 `openai-completions` 适配器读进 `cacheRead`）。
+///
+/// **不存钱，只存 token**：单价随 provider 的价表漂，而牌谱是可分享物（ADR-0002），
+/// 存一个半年后就错的金额不如存两个永远对的 token 数。
+type Usage =
+    {
+        /// 新付全价的输入 token。**不含**命中缓存与写缓存的那两部分（pi-ai 已经减过）。
+        Input: int
+        /// 输出 token（含思考）。
+        Output: int
+        /// **命中前缀缓存**而按折价计的输入 token。
+        CacheRead: int
+        /// **写进前缀缓存**的输入 token。DeepSeek 不单独报它（恒 0，写缓存不额外收费），
+        /// Anthropic 报。
+        CacheWrite: int
+    }
+
+/// token 账单的加法与两个出口。
+[<RequireQualifiedAccess>]
+module Usage =
+
+    /// 一笔都没有。累加的起点。
+    let zero: Usage =
+        {
+            Input = 0
+            Output = 0
+            CacheRead = 0
+            CacheWrite = 0
+        }
+
+    /// 两笔相加。牌桌上那句「缓存命中……」累的就是它。
+    let add (left: Usage) (right: Usage) : Usage =
+        {
+            Input = left.Input + right.Input
+            Output = left.Output + right.Output
+            CacheRead = left.CacheRead + right.CacheRead
+            CacheWrite = left.CacheWrite + right.CacheWrite
+        }
+
+    /// 这一笔的**输入侧合计**：付全价的 + 命中的 + 写缓存的。
+    /// 它就是 provider 报的 `prompt_tokens`（pi-ai 把它拆成了三份）。
+    let promptTokens (usage: Usage) : int =
+        usage.Input + usage.CacheRead + usage.CacheWrite
+
+    /// 缓存命中率的百分数（向下取整）：命中的输入 token 占输入侧合计的多少。
+    /// 一个 token 都没问过时是 0（不是除零）。
+    let cacheHitPercent (usage: Usage) : int =
+        let prompt = promptTokens usage
+
+        if prompt = 0 then 0 else usage.CacheRead * 100 / prompt
+
+    // ---- JSON ----
+
+    /// token 账单的 wire 形态（票 29b）。字段名照 pi-ai 的 `usage`，转 snake_case。
+    /// **牌谱与 Agent 层的回执共用这一份**：两边写的是同一件事，没有第二种记法。
+    let encoder: Encoder<Usage> =
+        fun usage ->
+            Encode.object
+                [
+                    "input", Encode.int usage.Input
+                    "output", Encode.int usage.Output
+                    "cache_read", Encode.int usage.CacheRead
+                    "cache_write", Encode.int usage.CacheWrite
+                ]
+
+    /// **四个字段各自可缺省**：provider 报不报是它的事，缺了按 0 算而不是整条读不动
+    /// （与 `Agent.answerDecoder` 同一个方针）。
+    let decoder: Decoder<Usage> =
+        Decode.object (fun get ->
+            let field (name: string) =
+                get.Optional.Field name Decode.int |> Option.defaultValue 0
+
+            {
+                Input = field "input"
+                Output = field "output"
+                CacheRead = field "cache_read"
+                CacheWrite = field "cache_write"
+            })
+
+    // ---- 渲染层的单向出口（ADR-0001） ----
+
+    /// 给人看的一句话。
+    let toDisplay (usage: Usage) : string =
+        $"输入 {promptTokens usage} tok（缓存命中 {usage.CacheRead}，{cacheHitPercent usage}%%）、输出 {usage.Output} tok"
+
 /// 一次决策的完整审计数据（CONTEXT.md 的 DecisionRecord）：输入（prompt、工具定义）、
 /// 输出（含 thinking）、延迟、重试次数，以及这一手最后落定的是哪个动作、是不是兜底代打的。
 ///
@@ -51,6 +138,12 @@ type DecisionRecord =
         /// 兜底代打的原因（中文，给人看）；模型自己决出来的那一手是 None。
         /// **「是否兜底」就是它是不是 None**。
         Fallback: string option
+        /// 这一手的 token 账单（票 29b）。**可缺省**：Agent 层没答上话（没配 key、
+        /// 抛了异常）那几手本就没有账单，provider 不报 usage 时同理。
+        ///
+        /// **它是「前缀真的命中了没有」的唯一证据**：票 29b 把 prompt 翻成
+        /// 「固定 preamble + append-only 历史 + 尾部现况」，值不值只有这四个数说了算。
+        Usage: Usage option
     }
 
 /// 牌谱（CONTEXT.md 的 Paifu）：一场对局的完整记录，也是本项目**唯一的可分享物**（ADR-0002）。
@@ -134,10 +227,12 @@ module Paifu =
                 ]
                 @ optional Encode.int "applied" record.Applied
                 @ optional Encode.string "fallback" record.Fallback
+                @ optional Usage.encoder "usage" record.Usage
             )
 
-    /// **可缺省的四个字段**：`reason` / `thinking` / `applied` / `fallback`。
-    /// thinking 缺省是分享路径的硬需求（ADR-0002），其余三个缺省分别是
+    /// **可缺省的五个字段**：`reason` / `thinking` / `applied` / `fallback` / `usage`。
+    /// **加可缺省的字段不涨版本号**（裁决 26）：旧牌谱没有 `usage`，照样读得动。
+    /// thinking 缺省是分享路径的硬需求（ADR-0002），其余四个缺省分别是
     /// 「模型没说」「换不回 id」与「这一手不是兜底」。
     let recordDecoder: Decoder<DecisionRecord> =
         Decode.object (fun get ->
@@ -153,6 +248,7 @@ module Paifu =
                 LatencyMs = get.Required.Field "latency_ms" Decode.int
                 Applied = get.Optional.Field "applied" Decode.int
                 Fallback = get.Optional.Field "fallback" Decode.string
+                Usage = get.Optional.Field "usage" Usage.decoder
             })
 
     /// 牌谱的 wire 形态。**导出与分享是同一个编码器**（分享那条先 `stripThinking`）。

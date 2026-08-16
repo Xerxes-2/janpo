@@ -63,6 +63,11 @@ type AgentAnswer = {
     Output: string
     /// 扩展思考全文；没开、provider 不给、或这一次根本没答上话时是 None。
     Thinking: string option
+    /// 这一手的 token 账单（票 29b）。**一次都没问成时是 None**（没有账单可记）。
+    ///
+    /// **它是「前缀真的命中了没有」的唯一证据**：`CacheRead` 大头意味着这一手的
+    /// 固定 preamble 与 append-only 历史被 provider 的前缀缓存吃到了。
+    Usage: Usage option
 }
 
 /// 一次问话：那一手的决策包、座位配置与重试上限。
@@ -267,7 +272,7 @@ module Agent =
                 "retry_limit", Encode.int request.RetryLimit
             ]
 
-    /// 回执的 wire 形态。**四个字段都可以缺**：Agent 层是另一个语言写的，
+    /// 回执的 wire 形态。**每个字段都可以缺**：Agent 层是另一个语言写的，
     /// 缺字段按「没有」处理而不是整条读不动——读不动的代价是这一手兜底，太贵。
     let answerDecoder: Decoder<AgentAnswer> =
         Decode.object (fun get -> {
@@ -280,6 +285,7 @@ module Agent =
             Tools = get.Optional.Field "tools" Decode.string |> Option.defaultValue ""
             Output = get.Optional.Field "output" Decode.string |> Option.defaultValue ""
             Thinking = get.Optional.Field "thinking" Decode.string
+            Usage = get.Optional.Field "usage" Usage.decoder
         })
 
     // ---- 构造 ----
@@ -299,6 +305,7 @@ module Agent =
         Tools = ""
         Output = ""
         Thinking = None
+        Usage = None
     }
 
     // ---- 边界 ----

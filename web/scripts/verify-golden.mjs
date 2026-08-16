@@ -12,14 +12,13 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { createServer } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { pageUrl, retryOnReload, startDevServer } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
 
 const DEFAULT_CASES = resolve(repoRoot, "tests/fixtures/golden/dual-target.json");
-const PORT = 4180;
 
 /**
  * 用 vite 的 dev server 托管**源码形态**的 Fable 输出，再在页面里 `import` 那个模块。
@@ -29,12 +28,7 @@ const PORT = 4180;
  * 两道合起来「Fable 的输出」与「Vite 的产物」都被跑过。
  */
 async function runInBrowser(casesText, executablePath) {
-  const server = await createServer({
-    root: webRoot,
-    server: { port: PORT, strictPort: true },
-    logLevel: "warn",
-  });
-  await server.listen();
+  const server = await startDevServer(webRoot);
   const browser = await chromium.launch({ executablePath, headless: true });
   const problems = [];
 
@@ -45,12 +39,14 @@ async function runInBrowser(casesText, executablePath) {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    await page.goto(`http://localhost:${PORT}/`, { waitUntil: "load" });
+    await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
 
-    const payload = await page.evaluate(async (text) => {
-      const golden = await import("/src/generated/Golden.js");
-      return golden.check(text);
-    }, casesText);
+    const payload = await retryOnReload(() =>
+      page.evaluate(async (text) => {
+        const golden = await import("/src/generated/Golden.js");
+        return golden.check(text);
+      }, casesText),
+    );
 
     return { report: JSON.parse(payload), problems };
   } finally {

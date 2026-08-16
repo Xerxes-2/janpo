@@ -208,7 +208,13 @@ export const piAsk: Ask = async (request) => {
           ? null
           : explainFailure(request.seat, message.errorMessage),
       latencyMs: elapsed(),
-      usage: { input: message.usage.input, output: message.usage.output },
+      // 缓存那两项是票 29b 的验收数据：前缀命中了多少 token，账单上看得见。
+      usage: {
+        input: message.usage.input,
+        output: message.usage.output,
+        cacheRead: message.usage.cacheRead,
+        cacheWrite: message.usage.cacheWrite,
+      },
     };
   } catch (error) {
     // 实测里 abort 与坏 key 都不抛，但适配器层真抛了也不能把牌桌卡住。

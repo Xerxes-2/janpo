@@ -14,11 +14,10 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { preview } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { pageUrl, startPreview } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PORT = 4181;
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -44,11 +43,7 @@ if (!executablePath) {
   process.exit(1);
 }
 
-const server = await preview({
-  root: webRoot,
-  preview: { port: PORT, strictPort: true },
-  logLevel: "warn",
-});
+const server = await startPreview(webRoot);
 const browser = await chromium.launch({ executablePath, headless: true });
 const problems = [];
 const resourceErrors = [];
@@ -72,7 +67,8 @@ try {
   const calls = [];
   page.on("response", async (response) => {
     const url = response.url();
-    if (url.startsWith("http://localhost")) return;
+    // 页面自己的请求不算：它托管在内核挑的那个端口上（`serve.mjs`）。
+    if (url.startsWith(pageUrl(server))) return;
     calls.push({ url, status: response.status(), at: Date.now() });
   });
 
@@ -90,7 +86,7 @@ try {
     [seat, model, apiKey, tier],
   );
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: "load" });
+  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
 
   if (seed !== null) {
     await page.getByTestId("table-seed").fill(String(seed));
@@ -123,6 +119,17 @@ try {
   console.log(`Agent 状态（data-agent=${await readAttr("table-agent", "data-agent")}）：`);
   console.log(`  ${await readText("table-agent")}`);
   console.log(`兜底代打：${fallbacks} 手`);
+
+  // token 账单（票 29b）：前缀可缓存的 prompt 值不值，只有这几个数说了算。
+  if (await page.getByTestId("table-usage").count()) {
+    console.log(await readText("table-usage"));
+    console.log(
+      `  输入 ${await readAttr("table-usage", "data-prompt-tokens")} tok、` +
+        `命中 ${await readAttr("table-usage", "data-cache-read")} tok、` +
+        `写缓存 ${await readAttr("table-usage", "data-cache-write")} tok、` +
+        `命中率 ${await readAttr("table-usage", "data-cache-percent")}%`,
+    );
+  }
   console.log(`provider 请求：${provider.length} 次，其中 4xx/5xx ${failed.length} 次`);
 
   if (provider.length > 0) {

@@ -16,6 +16,15 @@ import { aborted, dahaiPackage, legal, replay, request, seat, textOnly } from ".
 /** 带一段思考的合法输出（`thinking` 由 `piai.ts` 收 `thinking_delta` 拼出来）。 */
 const thoughtful: AskResult = { ...legal, thinking: "先数向听：现在是 1 向听，打 9m 不退向听。" };
 
+/**
+ * 命中了前缀缓存的那一次（票 29b）。DeepSeek 报的 `prompt_cache_hit_tokens` 由 pi-ai 的
+ * `openai-completions` 适配器读进 `cacheRead`，`input` 已经把它减掉了。
+ */
+const cached: AskResult = {
+  ...legal,
+  usage: { input: 212, output: 96, cacheRead: 1344, cacheWrite: 0 },
+};
+
 test("回执带着这一手的 prompt 全文与工具定义", async () => {
   const { ask, prompts } = replay(legal);
   const response = await decideWith(ask, request(dahaiPackage));
@@ -92,4 +101,40 @@ test("连请求都没发出去时，审计那几项是空的而不是编的", as
   assert.equal(response.tools, "");
   assert.equal(response.output, "");
   assert.equal(response.thinking, null);
+});
+
+// ---- token 账单（票 29b） ----
+
+test("回执带着这一手的 token 账单：缓存命中了多少，账单上看得见", async () => {
+  const { ask } = replay(cached);
+  const response = await decideWith(ask, request(dahaiPackage));
+
+  // 字段名与 F# 的 `Usage.decoder` 逐字段对应，由 `TablePage.settle` 收进 DecisionRecord。
+  assert.deepEqual(response.usage, {
+    input: 212,
+    output: 96,
+    cache_read: 1344,
+    cache_write: 0,
+  });
+});
+
+test("29b 之前录下来的响应没有缓存那两项：按 0 算，不是 undefined", async () => {
+  const { ask } = replay(legal);
+  const response = await decideWith(ask, request(dahaiPackage));
+
+  assert.equal(response.usage?.cache_read, 0);
+  assert.equal(response.usage?.cache_write, 0);
+});
+
+test("一次都没问成的那一手没有账单：`usage` 是 null 而不是一排 0", async () => {
+  // 没配 key 那条路连请求都不发（`missingConfig`），编一份 0 出来等于说「问过了但没花钱」。
+  const response = await decideWith(
+    async () => {
+      throw new Error("这条路不该发请求");
+    },
+    request(dahaiPackage, { seat: { ...seat, api_key: "" } }),
+  );
+
+  assert.equal(response.usage, null);
+  assert.match(response.failure ?? "", /key/);
 });

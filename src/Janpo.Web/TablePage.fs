@@ -265,6 +265,7 @@ module TablePage =
             // 兜底代打挑的那条也取自这一包（`Fallback.action`），因此 id 恒找得回。
             Applied = DecisionPackage.tryId action awaiting.Package
             Fallback = fallback
+            Usage = answer.Usage
         }
 
         let played = Table.applyRecorded record action table
@@ -1040,6 +1041,31 @@ module TablePage =
             prop.text (text + tally)
         ]
 
+    /// 这一桌的 token 账单（票 29b）。**「缓存真的命中了」在页面上看得见**：
+    /// prompt 翻成「固定 preamble + append-only 历史 + 尾部现况」之后，
+    /// 同一局里越往后打，命中的那一段越长。
+    ///
+    /// 一个 token 都还没花掉时不占位（四家随机选手的那一桌永远不长出这一行）。
+    /// `data-*` 那几项给无头验收读。
+    let private usageLine (table: Table) =
+        let usage = Table.usage table
+
+        if Usage.promptTokens usage = 0 then
+            []
+        else
+            [
+                Html.p [
+                    prop.key "usage"
+                    prop.className "agent"
+                    prop.testId "table-usage"
+                    prop.custom ("data-prompt-tokens", string (Usage.promptTokens usage))
+                    prop.custom ("data-cache-read", string usage.CacheRead)
+                    prop.custom ("data-cache-write", string usage.CacheWrite)
+                    prop.custom ("data-cache-percent", string (Usage.cacheHitPercent usage))
+                    prop.text ("这一桌累计：" + Usage.toDisplay usage)
+                ]
+            ]
+
     // ---- 视图：整页 ----
 
     let private tableBody (model: TableModel) (table: Table) =
@@ -1091,6 +1117,9 @@ module TablePage =
                             prop.text latest
                         ]
                         agentLine model table
+                    ]
+                    @ usageLine table
+                    @ [
                         Html.div [
                             prop.key "seats"
                             prop.className "seats-board"

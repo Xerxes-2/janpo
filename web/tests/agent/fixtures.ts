@@ -28,6 +28,14 @@ export const responsePackage = load<DecisionPackage>("decision-response");
  */
 export const dangerPackage = load<DecisionPackage>("decision-danger");
 
+/**
+ * **同一局里连续的 12 手**，同一个座位（`janpo decide 7 --seat 1 --sequence --steps 12`，票 29b）。
+ *
+ * 前缀的字节稳定性只有连续的几手才验得了：一手一份包看不出前缀在不在长。
+ * 这一局里碰、吃、大明杠与杠宝牌都出得来，因此历史那一段的每种行都被真数据走过一遍。
+ */
+export const sequencePackages = load<DecisionPackage[]>("decision-sequence");
+
 /** 合法输出：模型调 choose_action 选了 id=2。 */
 export const legal = load<AskResult>("ask-legal");
 

@@ -29,6 +29,13 @@ type DecisionPackage =
         {
             /// 正在被问的座位。
             Seat: Seat
+            /// 这个座位在这一局里**亲眼看得见的那条历史**（掩蔽事件流，票 29a）。
+            ///
+            /// **它与 `Observation` 是同一件事的两种形态**：观测就是这条流的 fold
+            /// （`Observation.ofMasked`），因此两者不可能对不上。prompt 把流放在
+            /// **可缓存的前缀**里（append-only），把 fold 出来的场况放在**每手付全价的尾部**
+            /// （票 29b）。重复是故意的：记账负担不是我们想测的能力。
+            History: MaskedEvent list
             /// 这个座位的合法观测。
             Observation: Observation
             /// 它此刻能提交的全部动作，按合法动作集的既定顺序编号。非空。
@@ -84,6 +91,10 @@ module DecisionPackage =
 
         match asked, Observation.ofState seat state with
         | Some choice, Some observation ->
+            // 历史与观测同出一源：`Observation.ofState` 内部就是「掩蔽 + fold」，
+            // 这里取的正是它 fold 之前那条流（票 29a 的唯一一条掩蔽法则）。
+            let history = Observation.stream seat state
+
             let options =
                 choice.Actions
                 |> List.mapi (fun index action ->
@@ -100,6 +111,7 @@ module DecisionPackage =
             Some
                 {
                     Seat = seat
+                    History = history
                     Observation = observation
                     Options = options
                     Scaffold = Scaffold.calculate (GameState.ruleset state).TileKinds numbered observation
@@ -111,6 +123,9 @@ module DecisionPackage =
 
     /// 正在被问的座位。
     let seat (package: DecisionPackage) : Seat = package.Seat
+
+    /// 这个座位看得见的那条历史（掩蔽事件流）。**观测就是它的 fold**。
+    let history (package: DecisionPackage) : MaskedEvent list = package.History
 
     /// 这个座位的合法观测。
     let observation (package: DecisionPackage) : Observation = package.Observation
@@ -152,11 +167,15 @@ module DecisionPackage =
     /// `scaffold` 是分析附件（24 号票填的向听数、有效牌与逐张试打的进退向，
     /// 25 号票再往里加 Danger），**与 `observation` 分开放**：投影只做遮蔽不做计算，
     /// 两件事不混在一起。算不出来时它退回空对象。
+    ///
+    /// **`history` 排在 `observation` 之前**（票 29b）：它是 prompt 里可缓存的那一段前缀，
+    /// 而 `observation` 是它 fold 出来的尾部。wire 上的前后因此与 prompt 里的前后同向。
     let encoder: Encoder<DecisionPackage> =
         fun package ->
             Encode.object
                 [
                     "seat", Seat.encoder package.Seat
+                    "history", package.History |> List.map MaskedEvent.encoder |> Encode.list
                     "observation", Observation.encoder package.Observation
                     "actions", package.Options |> List.map ActionOption.encoder |> Encode.list
                     "scaffold", Scaffold.slotEncoder package.Scaffold
