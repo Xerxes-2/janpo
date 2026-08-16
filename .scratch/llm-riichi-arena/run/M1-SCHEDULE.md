@@ -49,8 +49,8 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 | 25 | **done** | txxznwps | ws-a；Assisted 四项齐；无人立直也无人副露时整份危险度是 None |
 | 26 | **done** | mwuloxvq | ws-b；Paifu 版本 1，thinking 是「值上的一次变换」可省；200 场回放逐条相同 |
 | 28 | 待派 | | 裁决落地（21-c 逐字段 + 23-A Roster），阻塞于 25、26；PendingKan 与立直宣言牌已抽给 29 |
-| 29a | 派工中 | ws-a | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
-| 29b | 待派 | | 前缀可缓存 prompt + **prompt 降为数据 + system 槽位/人格** + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
+| 29a | **done** | unvvslns | ws-a；一条掩蔽法则 `MaskedEvent.forSeat`；`Observation.ofState` 签名未变 → 22/24/25 一行没改、黄金用例一字未动；增量 fold 0.56 ms | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
+| 29b | 派工中 | ws-a | | 前缀可缓存 prompt + **prompt 降为数据 + system 槽位/人格** + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
 | 30 | **done** | nrkwlpuo | ws-b；**实测推翻了票面对 mixed content 的假设**（见下）；新开 `docs/host/` 面向主持人的手册 | | 自定义 baseUrl 接本地端点（含 CORS 与 mixed-content 实证），无阻塞 |
 | 27 | 待派 | | 阻塞于 21、24、25、26、28、29a、29b、30 |
 
@@ -86,6 +86,10 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 - **30 集成**（调度器）：无文本冲突。但**第一遍 CI 假红**——`web/scripts/verify-*.mjs` 写死端口且
   `strictPort: true`，与 ws-a 里 29a 的 agent 同时跑 CI 撞了端口，报错长得像用例挂了。第二遍全绿。
   修端口的活并进票 29b 第三之三节。**教训：并行跑批时的红要先怀疑基础设施，再怀疑代码。**
+
+- **29a 集成**（调度器）：一处纯追加冲突，脚本解，CI 全绿 75s。
+  **换供给方的预测兑现了**：`Observation` 类型与 `ofState` 签名都没变，24/25/22 一行未改、黄金用例一字未动。
+  29a 纠正了票面一处麻将常识错误（暗杠不该掩，见 29a-2）。
 
 ## 主人回来先看哪里
 
