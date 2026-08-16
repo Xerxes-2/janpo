@@ -7,7 +7,7 @@ open Janpo.Engine.Tests.GameStateFixtures
 /// 杠的不变量。**最值钱的三条是牌山那三条**：杠要从王牌补摸一张、同时把可摸区的最后一张
 /// 补进王牌，因此「王牌恒 14 张、可摸区每杠少一张、总牌数守恒」三者必须同时成立——
 /// 少一条就意味着有牌凭空多出来或者蒸发了。具名用例见 KanTests。
-[<Properties(Arbitrary = [| typeof<GameStateArbitraries>; typeof<ScoreArbitraries> |])>]
+[<Properties(Arbitrary = [| typeof<GameStateArbitraries>; typeof<ScoreArbitraries> |], Parallelism = 8)>]
 module KanProperties =
 
     let private engine = Ruleset.yonma

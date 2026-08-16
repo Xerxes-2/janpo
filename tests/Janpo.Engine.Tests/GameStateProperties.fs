@@ -7,7 +7,7 @@ open Janpo.Engine.Tests.GameStateFixtures
 
 /// 摸打循环的不变量：合法动作集非空、牌数守恒、回放确定性、非法动作是值不是异常。
 /// 局面取自**可达**局面（随机开一局再随机走若干步），具名用例见 GameStateTests。
-[<Properties(Arbitrary = [| typeof<GameStateArbitraries> |])>]
+[<Properties(Arbitrary = [| typeof<GameStateArbitraries> |], Parallelism = 8)>]
 module GameStateProperties =
 
     let private allActions (state: GameState) =

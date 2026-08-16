@@ -145,3 +145,31 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 | `fun x -> f (g x)` 可改 `>>` | 3（`Tile.fs:237`、`Kaze.fs:51`、`Event.fs:167`） |
 | 深度 ≥3 嵌套 | 63（多数是管道内 lambda 体；已修 `AgariShape.fs:38`、`KyokuStart.fs:75`、`RiichiState.fs:121`） |
 | 连续中间 `let` 串接集合变换 | 1（`Wall.fs:42`，两行有先后依赖，保留） |
+
+## 规则 7：重量级属性测试必须加 `Parallelism`
+
+xunit 并行的粒度是 **collection**，而默认一个类就是一个 collection——**类内的用例串行跑**。
+所以一个有十几条重属性的模块会成为整个测试套的关键路径，其余几十个类在旁边早已跑完。
+
+实测（2026-08-16，502 用例）：
+
+| | 墙钟 | 说明 |
+|---|---|---|
+| 改前 | 103s | ≈ `GameStateProperties` 一个类的累计 106.6s |
+| 改后 | **34s** | 四个胖模块各加 `Parallelism = 8` |
+
+```fsharp
+// 驱动整局/多步局面的属性模块，一律这么写
+[<Properties(Arbitrary = [| typeof<GameStateArbitraries> |], Parallelism = 8)>]
+module GameStateProperties =
+```
+
+`Parallelism` 是 FsCheck 3 的 `PropertyAttribute` 参数，在**单条属性内部**并行跑那 100 个 case。
+官方说明就是给「heavy number crunching」用的。**`MaxTest` 不要动**——降 case 数是拿覆盖换时间，
+这条是白拿。
+
+前提：生成器与被测代码无可变共享状态。本仓库引擎是纯函数 + 不可变状态，生成器也没有 `mutable`，
+所以安全。**新增可变状态时要重新评估这条。**
+
+取值 8 而不是 `Environment.ProcessorCount`：四个胖模块本身还在类级别并行，8 × 4 = 32 恰好等于本机核数，
+再高就是超订。

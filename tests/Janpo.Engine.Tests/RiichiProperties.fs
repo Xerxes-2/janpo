@@ -10,7 +10,7 @@ open Janpo.Engine.Tests.GameStateFixtures
 ///
 /// 最值钱的两条：**供托的根数恒等于「局初供托 + `reach_accepted` 的条数」**（立直棒不会
 /// 凭空多出来也不会漏记），以及**一发只可能亮在立直成立的那家头上**。
-[<Properties(Arbitrary = [| typeof<GameStateArbitraries> |])>]
+[<Properties(Arbitrary = [| typeof<GameStateArbitraries> |], Parallelism = 8)>]
 module RiichiProperties =
 
     let private riichiOf (seat: Seat) (state: GameState) : RiichiState =

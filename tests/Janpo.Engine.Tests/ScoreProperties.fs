@@ -7,7 +7,7 @@ open Janpo.Engine.Tests.GameStateFixtures
 /// 点数授受的不变量。**最值钱的一条是「任一次授受后四家点数与供托之和不变」**——
 /// 它比任何单个点数用例都强：点数只在四家与供托之间搬，凭空多出来或少掉都会被它抓住。
 /// 具名用例见 ScoreTests / FuTests / HoraTests。
-[<Properties(Arbitrary = [| typeof<ScoreArbitraries>; typeof<GameStateArbitraries> |])>]
+[<Properties(Arbitrary = [| typeof<ScoreArbitraries>; typeof<GameStateArbitraries> |], Parallelism = 8)>]
 module ScoreProperties =
 
     let private engine = Ruleset.yonma
