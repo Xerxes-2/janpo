@@ -119,6 +119,17 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 **不满足这两条的命令式代码按坏味道处理。** 新增 `let mutable` 要在 `DECISIONS.md` 留一条，
 并且 `scripts/check-style.sh` 的预算会挡住你——改预算这个动作本身就是让你停下来想一想。
 
+**判断某处 `mutable` 值不值，先量它在整体里占多少。** 同一个文件里量出过三个不同结论：
+
+| 位置 | 调用频率 | 改成函数式的代价 | 结论 |
+|---|---|---|---|
+| `deadQuadKinds` | 每次 `standard` 一次 | 无可测差异（紧邻的 `canJoinRun` 每次分配 list，早把那点开销吃了） | **改了** |
+| `chiitoitsu` / `kokushi` | 每次 `calculate` 一次 | 微基准 86.5 → 93.8 ns，占 `calculate`（约 12,000 ns）的 **0.06%** | **改了** |
+| `searchStandard` | 递归搜索的每个节点 | 11.98–12.42 → 13.11–13.25 µs，**约 +10%，超出噪声带** | **留着，注明理由** |
+
+**三处写法一样丑，判据都是实测不是审美。** 顺带一条：`Array.filter |> Array.length` 是
+`Array.sumBy` 的 2 倍（178.5 vs 93.8 ns，中间数组要分配）——数个数就用 `sumBy`，别用 `filter`。
+
 **判断某处 `mutable` 值不值，看它省下的开销有没有被紧邻的代码吃掉。** 真实例子：
 `Shanten.fs` 的 `deadQuadKinds` 原本用可变累加器数「死张种数」，但它每次循环都要调 `canJoinRun`，
 而后者每次分配一个小 list——省下的那点开销早被吃光。改成 `Seq.filter |> Seq.length` 后实测
@@ -149,7 +160,7 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 | 指标 | 现值 | 有闸门吗 |
 |---|---|---|
 | 引擎行数 / `\|>` | 7261 行 / 364 个 | 无（密度不是指标） |
-| 引擎 `let mutable` | 6（`Shanten.fs` 5 + `Rng.fs` 1，全部有理由） | **有**，预算 6 |
+| 引擎 `let mutable` | **2**（`Shanten.searchStandard` 递归累加器 + `Rng` 原地洗牌） | **有**，预算 2 |
 | `fun x -> Encode.* (…)` | 0（原 3 处已改 `>>`） | **有**，锁零 |
 | `f (atom)` 多余括号 | 0 | **有**，锁零 |
 | `.NET` 方法调用的括号 | 10（`Assert.Empty(x)` 等，按规则 8 保留） | 无（惯例，不该管） |

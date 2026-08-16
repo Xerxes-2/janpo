@@ -205,15 +205,8 @@ module Shanten =
             None
         else
             let counts = HandShape.counts hand
-            let mutable pairs = 0
-            let mutable kinds = 0
-
-            for index in 0 .. Tile.KindCount - 1 do
-                if counts.[index] >= 1 then
-                    kinds <- kinds + 1
-
-                if counts.[index] >= 2 then
-                    pairs <- pairs + 1
+            let kinds = counts |> Array.sumBy (fun count -> if count >= 1 then 1 else 0)
+            let pairs = counts |> Array.sumBy (fun count -> if count >= 2 then 1 else 0)
 
             // 牌种数不足 7 时，每缺一种就多要一次替换。
             Some(Shanten(6 - pairs + max 0 (7 - kinds)))
@@ -234,15 +227,12 @@ module Shanten =
             None
         else
             let counts = HandShape.counts hand
-            let mutable kinds = 0
-            let mutable hasPair = false
 
-            for index in yaochuuIndexes do
-                if counts.[index] >= 1 then
-                    kinds <- kinds + 1
+            let kinds =
+                yaochuuIndexes
+                |> Array.sumBy (fun index -> if counts.[index] >= 1 then 1 else 0)
 
-                if counts.[index] >= 2 then
-                    hasPair <- true
+            let hasPair = yaochuuIndexes |> Array.exists (fun index -> counts.[index] >= 2)
 
             Some(Shanten(13 - kinds - (if hasPair then 1 else 0)))
 
