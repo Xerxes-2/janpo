@@ -1044,3 +1044,12 @@ mjai 的 `kakan` 是 `pai`（加上去的那张）+ `consumed`（原碰的三张
 `CONTEXT.md` 的 Naki 条目列了 Ankan / Minkan / Kakan，但没有 **Kan**（杠这个动作 / `NakiKind` 的上位词）、
 **Kantsu**（杠子这个面子，`Mentsu` 里已经在用）、**Rinshan**（岭上牌与岭上开花，Ippatsu 条目里
 提过中文「岭上」没给罗马字）、**Chankan**（同上）。本票这四个词都进了标识符。请一并裁。
+
+### R-6 / `YakuError.NotAgari` → `NoAgariShape`，并给 `YakuError` 加 `RequireQualifiedAccess`
+
+裁决 D-3 只把 8 处使用点显式限定，两个层仍各有一个 `NotAgari`。现在形态那条改名
+`YakuError.NoAgariShape`（与 `AgariShape` 术语对齐），类型加 `[<RequireQualifiedAccess>]`。
+`IllegalAction` **保持不限定**：它的 case 是「拒绝理由」，`NotAgari(actor, pai)` 与
+`NotYourTurn` / `NotInHand` 同一风格。
+否决：两边都限定（读拒绝理由时要多写一截前缀）、把 `IllegalAction.NotAgari` 也改名（它没歧义了）。
+理由：不限定的 `NotAgari` / `NoYaku` 从此只可能是 `IllegalAction` 的，读代码不用停。零语义变化。

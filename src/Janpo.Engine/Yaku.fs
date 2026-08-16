@@ -173,12 +173,14 @@ type YakuTally =
 
 /// 判定为不可和的原因。是值，不是异常。
 ///
-/// 两个 case 在 `IllegalAction` 那层都有同名的投影（引擎拒绝一个动作的理由），
-/// 因此**两边的使用点一律写全**：`YakuError.NotAgari` / `IllegalAction.NotAgari`，
-/// `YakuError.NoYaku` / `IllegalAction.NoYaku`。不靠「就近定义优先」碰运气（裁决 D-3）。
+/// `IllegalAction` 那层也有「这手不成和了型」与「无役」两条**拒绝理由**。为了让读代码的人
+/// 不必停下来分辨，这里做两件事：形态那条改名 `NoAgariShape`（与 `AgariShape` 这个术语对齐），
+/// 并给本类型加 `[<RequireQualifiedAccess>]`。结果：不限定的 `NotAgari` / `NoYaku`
+/// 从此只可能是 `IllegalAction` 的（裁决 D-3 的收尾，晨间裁决 R-6）。
+[<RequireQualifiedAccess>]
 type YakuError =
     /// 牌姿根本不成和了型（`AgariShape.classify` 为空）。
-    | NotAgari
+    | NoAgariShape
     /// 型成立但一个役都没有：不能和（役无し）。宝牌不是役，救不了。
     | NoYaku
 
@@ -701,7 +703,7 @@ module Yaku =
             let kindSet = TileKindSet.ofKinds ruleset.TileKinds
 
             if List.isEmpty (AgariShape.classify kindSet (AgariHand.toHandShape hand)) then
-                Error YakuError.NotAgari
+                Error YakuError.NoAgariShape
             else
                 Error YakuError.NoYaku
 
@@ -879,5 +881,5 @@ module YakuError =
     /// **渲染层的单向出口**：错误原因的中文说明，只供 CLI 与 UI 提示使用。
     let toDisplay (error: YakuError) : string =
         match error with
-        | YakuError.NotAgari -> "牌型不成和了"
+        | YakuError.NoAgariShape -> "牌型不成和了"
         | YakuError.NoYaku -> "无役，不能和"

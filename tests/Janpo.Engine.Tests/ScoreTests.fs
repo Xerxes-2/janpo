@@ -243,7 +243,10 @@ module ScoreTests =
         // 根本不成和了型。
         let notAgari = AgariFixture.ron [] "1m 2m 3m 5p 6p 7p 3s 4s 5s 7s 9s 1z 2z 3z" "2m"
 
-        Assert.Equal(Error YakuError.NotAgari, Score.best ruleset context notAgari |> Result.map (fun one -> one.Value))
+        Assert.Equal(
+            Error YakuError.NoAgariShape,
+            Score.best ruleset context notAgari |> Result.map (fun one -> one.Value)
+        )
 
     // ---- 渲染 ----
 

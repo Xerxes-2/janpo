@@ -139,8 +139,8 @@ type IllegalAction =
     | RonWhileFuriten of actor: Seat * pai: Tile
     /// 型成立但一个役都没有：无役不可和。宝牌不是役，救不了。
     ///
-    /// **与 `YakuError.NoYaku` 同名**（两层对同一件事的投影），因此这个 case 的使用点
-    /// 一律写全 `IllegalAction.NoYaku`；`YakuError` 那侧同样限定（裁决 D-3 的处置）。
+    /// 与 `YakuError.NoYaku` 是同一件事在两层的投影。`YakuError` 已限定（`RequireQualifiedAccess`），
+    /// 因此不限定的 `NoYaku` 恒指本 case——它与 `NotYourTurn` / `NotInHand` 一样是**拒绝理由**。
     | NoYaku of actor: Seat * pai: Tile
     /// 宣言鸣牌的来源与牌与当前局面不符：`target` 必须是刚打牌那家、`pai` 必须是刚打出那张。
     | NakiTileMismatch of actor: Seat * target: Seat * pai: Tile
@@ -269,7 +269,7 @@ module GameState =
         : Result<HoraReading, YakuError> =
         match PlayerState.agari tsumo winning player with
         // 张数凑不成和了牌姿：连和了型都谈不上。
-        | Error _ -> Error YakuError.NotAgari
+        | Error _ -> Error YakuError.NoAgariShape
         | Ok hand -> Score.best ruleset context hand
 
     // ---- 合法动作集 ----
@@ -733,10 +733,10 @@ module GameState =
         | Some player, AwaitingDahai phase when phase.Actor = seat ->
             match PlayerState.drawn player with
             | Some drawn -> horaWith state.Ruleset (yakuContext state seat) player drawn true
-            | Option.None -> Error YakuError.NotAgari
+            | Option.None -> Error YakuError.NoAgariShape
         | Some player, AwaitingResponse phase when phase.Target <> seat ->
             horaWith state.Ruleset (yakuContext state seat) player phase.Pai false
-        | _ -> Error YakuError.NotAgari
+        | _ -> Error YakuError.NoAgariShape
 
     /// 终局的和了；不是和了收尾（或还没终）则为空列表。头跳关掉时的双响会有两条。
     let horas (state: GameState) : Hora list =
@@ -1565,7 +1565,7 @@ module GameState =
                         Error(RiichiRestricted(actor, pai))
                     else
                         match horaOf actor state with
-                        | Error YakuError.NotAgari -> Error(IllegalAction.NotAgari(actor, pai))
+                        | Error YakuError.NoAgariShape -> Error(IllegalAction.NotAgari(actor, pai))
                         | Error YakuError.NoYaku -> Error(IllegalAction.NoYaku(actor, pai))
                         | Ok _ -> Ok(applyHora state actor [ actor, pai ])
                 | Action.Riichi _ ->
@@ -1628,7 +1628,7 @@ module GameState =
                 else
                     // 牌对得上却没进合法动作集，只能是三个原因之一：型不成、无役、振听。
                     match horaOf actor state with
-                    | Error YakuError.NotAgari -> Error(IllegalAction.NotAgari(actor, pai))
+                    | Error YakuError.NoAgariShape -> Error(IllegalAction.NotAgari(actor, pai))
                     | Error YakuError.NoYaku -> Error(IllegalAction.NoYaku(actor, pai))
                     | Ok _ -> Error(RonWhileFuriten(actor, pai))
             | Action.Pon(_, target, pai, consumed) -> rejectNaki NakiKind.Pon target pai consumed
