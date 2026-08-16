@@ -9,19 +9,34 @@
  * - 工具定义在 `tools.ts`（票 18 实测的 `StringEnum` + `constrainedSampling` 都在那里）。
  * - **OAuth 登录是 Node-only**，因此这里只有 API key 一条路；Bedrock 同理不在 provider 表里。
  * - 超时与报错都是**值**：abort → `stopReason: "aborted"`，坏 key → `"error"` + `errorMessage`。
+ * - **自定义端点**（票 30）不在那张 provider 表里：它按主持人填的 baseUrl 现搭一家，
+ *   接本地 Ollama / LM Studio / 自建网关。CORS 与 mixed content 两个坑写在
+ *   `docs/host/custom-endpoint.md`，判读与错误话术在 `endpoint.ts`。
  * - 走 **`streamSimple`** 而不是 `completeSimple`（票 26）：后者就是
  *   `streamSimple(…).result()`，而前者多给一条 `thinking_delta` 流——思考全文要进牌谱，
  *   M2 的思考气泡还要实时显示它。
  */
 
 import {
+  type Api,
   type AssistantMessage,
   type Context,
   createModels,
+  createProvider,
+  type Model,
+  type MutableModels,
   type Provider,
   type ThinkingLevel,
 } from "@earendil-works/pi-ai";
 import type { Ask, AskResult } from "./ask.ts";
+import {
+  CUSTOM_PROVIDER,
+  customModel,
+  explainFailure,
+  isCustom,
+  keyFor,
+  readBaseUrl,
+} from "./endpoint.ts";
 import { chooseAction } from "./tools.ts";
 import type { SeatConfig } from "./types.ts";
 
@@ -31,7 +46,8 @@ import type { SeatConfig } from "./types.ts";
  *
  * 这里没有 Amazon Bedrock（Node-only），也没有靠订阅制 OAuth 登录的那几家
  * （openai-codex / github-copilot / …）：浏览器里它们必然失败，列出来只会骗人。
- * 与 `LlmSeat.providers`（F# 侧配置面板的选项）保持同一份名单。
+ * 与 `LlmSeat.providers`（F# 侧配置面板的选项）保持同一份名单。**自定义端点不在这里**：
+ * 它不是“支持的一家”，而是一个现搭的工厂（见 `customProvider`）。
  */
 const PROVIDERS: Record<string, () => Promise<Provider>> = {
   deepseek: async () =>
@@ -46,6 +62,68 @@ const PROVIDERS: Record<string, () => Promise<Provider>> = {
   groq: async () => (await import("@earendil-works/pi-ai/providers/groq")).groqProvider(),
   mistral: async () => (await import("@earendil-works/pi-ai/providers/mistral")).mistralProvider(),
 };
+
+/**
+ * 自定义端点（票 30）：**按主持人填的 baseUrl 现搭一家**，接本地 Ollama / LM Studio /
+ * 自建 OpenAI 兼容网关。它不在 `PROVIDERS` 表里——那张表是「本平台支持哪几家」的清单，
+ * 而这一项支持的是「你自己那一家」。
+ *
+ * 与官方八家的两处不同：
+ * - **模型目录是空的**，因此模型由 `customModel` 当场造（名字保持自由文本）；
+ * - **auth 不查环境变量**（浏览器里根本没有），空 key 也照样 resolve ——
+ *   本地端点通常不校验它，真要 key 的网关就在配置面板里填。
+ */
+async function customProvider(baseUrl: string): Promise<Provider> {
+  const { openAICompletionsApi } = await import(
+    "@earendil-works/pi-ai/api/openai-completions.lazy"
+  );
+
+  return createProvider({
+    id: CUSTOM_PROVIDER,
+    name: "自定义端点",
+    baseUrl,
+    auth: {
+      apiKey: {
+        name: "自定义端点的 API key",
+        resolve: async ({ credential }) => ({
+          auth: { apiKey: credential?.key ?? "" },
+          source: "配置面板",
+        }),
+      },
+    },
+    models: [],
+    api: openAICompletionsApi(),
+  });
+}
+
+/** 接上一家的结果：要么拿到那个模型，要么一句中文原因（与 `readBaseUrl` 同一个形状）。 */
+type Wired = { ok: true; model: Model<Api> } | { ok: false; why: string };
+
+/**
+ * 接上这个座位那一家，并找出它要的那个模型。**认不出来时回一句中文原因**（不抛）。
+ *
+ * 官方八家走的是原来那三步（工厂 → `setProvider` → 查目录），一个字节没变；
+ * 自定义端点那条路查不了目录，因此现搭 provider、现造模型。
+ */
+async function wire(models: MutableModels, seat: SeatConfig): Promise<Wired> {
+  if (isCustom(seat)) {
+    const url = readBaseUrl(seat.base_url);
+    if (!url.ok) return url;
+
+    models.setProvider(await customProvider(url.baseUrl));
+    return { ok: true, model: customModel(url.baseUrl, seat.model) };
+  }
+
+  const factory = PROVIDERS[seat.provider];
+  if (factory === undefined) return { ok: false, why: `不认识的 provider：${seat.provider}` };
+
+  models.setProvider(await factory());
+  const model = models.getModel(seat.provider, seat.model);
+  if (model === undefined) {
+    return { ok: false, why: `${seat.provider} 的模型目录里没有 ${seat.model}` };
+  }
+  return { ok: true, model };
+}
 
 function failed(message: string, latencyMs: number): AskResult {
   return {
@@ -85,17 +163,10 @@ export const piAsk: Ask = async (request) => {
   const started = performance.now();
   const elapsed = () => Math.round(performance.now() - started);
 
-  const factory = PROVIDERS[request.seat.provider];
-  if (factory === undefined) {
-    return failed(`不认识的 provider：${request.seat.provider}`, elapsed());
-  }
-
   const models = createModels();
-  models.setProvider(await factory());
-  const model = models.getModel(request.seat.provider, request.seat.model);
-  if (model === undefined) {
-    return failed(`${request.seat.provider} 的模型目录里没有 ${request.seat.model}`, elapsed());
-  }
+  const wired = await wire(models, request.seat);
+  if (!wired.ok) return failed(wired.why, elapsed());
+  const model = wired.model;
 
   const context: Context = {
     messages: [{ role: "user", content: request.prompt, timestamp: Date.now() }],
@@ -108,7 +179,8 @@ export const piAsk: Ask = async (request) => {
 
   try {
     const stream = models.streamSimple(model, context, {
-      apiKey: request.seat.api_key,
+      // 自定义端点没填 key 时带一个占位串（官方八家原样交出去）。
+      apiKey: keyFor(request.seat),
       signal: controller.signal,
       reasoning: reasoningOf(request.seat),
     });
@@ -130,7 +202,11 @@ export const piAsk: Ask = async (request) => {
       toolCall: call === undefined ? null : { name: call.name, arguments: call.arguments },
       text: textOf(message),
       thinking: thinking === "" ? null : thinking,
-      errorMessage: message.errorMessage ?? null,
+      // 自定义端点的“Connection error.”在这里变成一句说得清的话（官方八家原样透传）。
+      errorMessage:
+        message.errorMessage === undefined
+          ? null
+          : explainFailure(request.seat, message.errorMessage),
       latencyMs: elapsed(),
       usage: { input: message.usage.input, output: message.usage.output },
     };
@@ -138,7 +214,7 @@ export const piAsk: Ask = async (request) => {
     // 实测里 abort 与坏 key 都不抛，但适配器层真抛了也不能把牌桌卡住。
     const aborted = controller.signal.aborted;
     return {
-      ...failed(String(error), elapsed()),
+      ...failed(explainFailure(request.seat, String(error)), elapsed()),
       stopReason: aborted ? "aborted" : "error",
     };
   } finally {

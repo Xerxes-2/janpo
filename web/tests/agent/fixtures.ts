@@ -7,6 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import type { Ask, AskResult } from "../../src/agent/ask.ts";
+import { CUSTOM_PROVIDER } from "../../src/agent/endpoint.ts";
 import type { DecideRequest, DecisionPackage, SeatConfig } from "../../src/agent/types.ts";
 
 function load<T>(name: string): T {
@@ -52,10 +53,21 @@ export const seat: SeatConfig = {
   timeout_ms: 30000,
   thinking: "off",
   tier: "bare",
+  // 官方八家用不上 baseUrl（票 30）。
+  base_url: "",
 };
 
 /** 同一个座位，**只把脚手架档位拨到 Assisted**（票 24：档位是座位级配置）。 */
 export const assistedSeat: SeatConfig = { ...seat, tier: "assisted" };
+
+/** 接本地 Ollama 的座位（票 30）：**provider 是 `custom`、没有 key、有 baseUrl**。 */
+export const localSeat: SeatConfig = {
+  ...seat,
+  provider: CUSTOM_PROVIDER,
+  model: "qwen3:8b",
+  api_key: "",
+  base_url: "http://localhost:11434/v1",
+};
 
 export function request(
   decision: DecisionPackage,

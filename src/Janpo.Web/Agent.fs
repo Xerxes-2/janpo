@@ -31,6 +31,10 @@ type LlmSeat = {
     Thinking: Thinking
     /// 脚手架档位。它决定 Agent 层渲哪一份 prompt，以及兜底怎么代打（`Fallback`）。
     Tier: ScaffoldTier
+    /// OpenAI 兼容端点的 baseUrl（票 30），形如 `http://localhost:11434/v1`。
+    /// **只有 `Provider` 是 `LlmSeat.customProvider` 时用得上**：官方那八家走自己的地址，
+    /// 这一项填了也一字不看。**这一层不判读它**（读不读得懂在 `endpoint.ts`）。
+    BaseUrl: string
 }
 
 /// Agent 层的一次回执。**跨界回来的东西只有它**：一个动作 id（或者一句「我交不出来」），
@@ -78,6 +82,7 @@ type AgentRequest = {
 type LlmField =
     | Provider
     | Model
+    | BaseUrl
     | ApiKey
     | TimeoutMs
     | Thinking
@@ -120,6 +125,7 @@ module LlmField =
     let all: LlmField list = [
         LlmField.Provider
         LlmField.Model
+        LlmField.BaseUrl
         LlmField.ApiKey
         LlmField.TimeoutMs
         LlmField.Thinking
@@ -131,6 +137,7 @@ module LlmField =
         match field with
         | LlmField.Provider -> "provider"
         | LlmField.Model -> "model"
+        | LlmField.BaseUrl -> "base_url"
         | LlmField.ApiKey -> "api_key"
         | LlmField.TimeoutMs -> "timeout_ms"
         | LlmField.Thinking -> "thinking"
@@ -141,8 +148,14 @@ module LlmField =
 [<RequireQualifiedAccess>]
 module LlmSeat =
 
+    /// 自定义端点那一项的 provider id（票 30）。**它不是 pi-ai 认识的一家**：
+    /// 选中它时 Agent 层按 `BaseUrl` 现搭一个 OpenAI 兼容 provider。
+    /// TS 侧的同名常量在 `web/src/agent/endpoint.ts` 的 `CUSTOM_PROVIDER`——**改一处要改两处**。
+    let customProvider = "custom"
+
     /// 能选的 provider。**Bedrock 不在里面**（Node-only，票 18 的实测）；
     /// 订阅制的 OAuth 登录同样只有 Node 有，因此这里只列「填一把 API key 就能用」的那几家。
+    /// **自定义端点排在最后**：它不是又一家，而是「你自己那一家」。
     let providers: string list = [
         "deepseek"
         "anthropic"
@@ -152,12 +165,29 @@ module LlmSeat =
         "xai"
         "groq"
         "mistral"
+        customProvider
     ]
+
+    /// 这个座位走自定义端点吗。**只看 provider**：官方八家填了 baseUrl 也不走（票 30）。
+    let isCustom (seat: LlmSeat) : bool = seat.Provider = customProvider
+
+    /// provider 列表上的显示名。**渲染层的单向出口**（ADR-0001）：
+    /// 官方八家就是它们自己的 id，只有自定义端点要一句中文说清它是什么。
+    ///
+    /// 名字带 `toDisplay` 是故意的（README 的「渲染层出口」约定），前缀是因为它渲的
+    /// 不是 `LlmSeat` 而是里面那个 provider id（它至今只是一个 `string`）。
+    let providerToDisplay (provider: string) : string =
+        if provider = customProvider then
+            "自定义端点（OpenAI 兼容）"
+        else
+            provider
 
     /// 配置面板的默认值。默认 provider 取 DeepSeek：票 18 实测过的就是它（跨域 200）。
     let initial: LlmSeat = {
         Provider = "deepseek"
         Model = "deepseek-v4-flash"
+        // 官方八家用不上它（票 30）。
+        BaseUrl = ""
         ApiKey = ""
         // 30 秒：票 18 实测单轮 tool call 约 2.4 秒，开了思考预算会长很多。
         TimeoutMs = 30000
@@ -171,6 +201,7 @@ module LlmSeat =
         match which with
         | LlmField.Provider -> seat.Provider
         | LlmField.Model -> seat.Model
+        | LlmField.BaseUrl -> seat.BaseUrl
         | LlmField.ApiKey -> seat.ApiKey
         | LlmField.TimeoutMs -> string seat.TimeoutMs
         | LlmField.Thinking -> Thinking.toWire seat.Thinking
@@ -182,6 +213,9 @@ module LlmSeat =
         match which with
         | LlmField.Provider -> { seat with Provider = value }
         | LlmField.Model -> { seat with Model = value }
+        // baseUrl 原样存着，这一层不判读：合法与否是 Agent 层的事（`endpoint.ts`），
+        // 而且人边打边存的中间态（`http://`）不该被吐回去。
+        | LlmField.BaseUrl -> { seat with BaseUrl = value }
         | LlmField.ApiKey -> { seat with ApiKey = value }
         | LlmField.TimeoutMs ->
             match System.Int32.TryParse(value.Trim()) with
@@ -216,6 +250,7 @@ module Agent =
             Encode.object [
                 "provider", Encode.string seat.Provider
                 "model", Encode.string seat.Model
+                "base_url", Encode.string seat.BaseUrl
                 "api_key", Encode.string seat.ApiKey
                 "timeout_ms", Encode.int seat.TimeoutMs
                 "thinking", Thinking.toWire seat.Thinking |> Encode.string

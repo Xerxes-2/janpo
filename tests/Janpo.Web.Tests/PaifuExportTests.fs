@@ -17,6 +17,7 @@ module PaifuExportTests =
         {
             Provider = "deepseek"
             Model = "deepseek-v4-flash"
+            BaseUrl = ""
             ApiKey = "sk-测试用的假 key"
             TimeoutMs = 12000
             Thinking = Thinking.Medium

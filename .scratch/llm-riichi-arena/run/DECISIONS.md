@@ -2197,3 +2197,51 @@ prompt 是代码不是数据（改一句要重编）；同档位措辞全局唯�
 新判据说 Bare 该同时有「事件序列」与「场况」，而**事件序列那一半要等 29b 才真的进 prompt**——
 现在把注释改成「两种都给」就是撒谎。两处措辞与新判据不冲突（观测＝感知，「一个算好的数都不给」
 ＝排除计算），差的只是尚未落地的那一半。29b 落地时顺手改。
+
+## 30（自定义端点：接本地模型与自建兼容网关）
+
+**30-1：自定义端点是 provider 列表里多出来的一项 `custom`，不是「给每一家都加一个 baseUrl 覆盖」。**
+`LlmSeat.isCustom` 只看 provider；**官方八家填了 baseUrl 也一个字节都不看它**（两侧各有一条用例守着）。
+**被否决**：让 baseUrl 对所有 provider 生效（「把 DeepSeek 改道到自建代理」）。
+两条理由：(a) 它会把新路径的判读逻辑接进既有路径，票面明写不许污染；
+(b) 官方那八家在 pi-ai 里各带鉴权与模型目录，半覆盖一个 baseUrl 之后「这一次到底发去哪」不再看得出来。
+真要走代理，`openrouter` 那一项与自定义端点两条路都在。
+
+**30-2：判读与话术落在新文件 `web/src/agent/endpoint.ts`（纯的，不 import pi-ai）。**
+`loop.ts` 要问「这一次发不发得出去」，而它不该为此拖进 provider SDK；用例也因此几十毫秒跑完边界情况。
+`piai.ts` 只留「真接线」那一段（`createProvider` + 当场造的 `Model`）。
+**被否决**：全塞进 `piai.ts`。那样 `missingConfig` 这类纯判断就只能连着 SDK 一起测。
+
+**30-3：本地端点**没有 key 也照发请求**，空 key 时替换成占位串 `unused`。**
+实测：pi-ai 的 OpenAI 适配器空 key 直接抛 `No API key for provider: custom`，而 Ollama / LM Studio
+根本不看这个头。**被否决**：要求主持人随便填一个字符串——那是把实现细节转嫁给人。
+官方八家那条「没填 key 就不发请求」的短路**一字未改**（消息文本被用例钉住）。
+
+**30-4：`Connection error.` 与 404 在自定义端点这条路上被翻成人话，其余原样透传。**
+OpenAI SDK 把「端点没起 / 地址写错 / CORS 没放行 / 被本地网络访问规则拦下」统一成一句
+`Connection error.`，光看它谁也不知道该查什么。因此 `explainFailure` 只在 `isCustom` 时改写，
+且**原始报错一律留在末尾**。官方八家的 401 原文因此仍与票 23 报告里的一模一样（断电演习复跑确认）。
+
+**30-5：不为了降低 CORS 门槛去抹掉 OpenAI SDK 的 `x-stainless-*` 请求头。**
+实测预检要放行的是 `authorization, content-type` 加 7 个 `x-stainless-*`；
+pi-ai 支持传 `headers: { "x-stainless-os": null }` 把它们逐个抹掉。**没做**：那份名单会随 SDK 版本漂，
+而 Ollama 的放行名单里本来就列全了这些头（读过它 `server/routes.go` 的源码），LM Studio 一开 CORS 也过。
+代价转成文档：`docs/host/custom-endpoint.md` 把要放行的头逐条列了出来，自建网关照抄即可。
+
+**30-6：面向主持人的文档新开 `docs/host/`，不塞进 `docs/research/` 或 ADR。**
+`docs/adr` 是「为什么这么决定」、`docs/research` 是 spike 的实测报告、`docs/agents` 是给 agent 的约定，
+三者都不是给人照着操作的。`CONTEXT.md` 里 **Host（主持人）** 本来就是一等角色，
+因此 `docs/host/custom-endpoint.md` = 给 Host 看的操作手册，README 里有链接。
+
+**30-7：mixed content 那条「https 页面调 http 本地端点会被拦」的老说法，实测**不成立**（Chrome 151）。**
+真正拦人的是 Chrome 的**本地网络访问**权限，且只在**页面自己不在本地地址空间**时才拦：
+`https://localhost` 页面调 `http://127.0.0.1` 与 `http://192.168.x.x` 全通；
+`https://example.com` 调 `http://127.0.0.1` 被拒（`Permission was denied for this request to access
+the loopback address space`），用 `grantPermissions(["local-network-access"])` 授权后立刻通。
+五种组合的原始输出在 `reports/30-custom-endpoint.md`，结论写进了主持人文档的表格。
+**因此对策不是「给端点上 https」**（自签证书实测死在 `net::ERR_CERT_AUTHORITY_INVALID`），
+而是「页面开在 localhost」或「在真浏览器里点允许」。
+
+**30-8：假端点留在仓库里当手验工具（`web/scripts/fake-endpoint.mjs`），CI 一个端点都不连。**
+它固定回一条 `choose_action(action_id=0)`，因此「模型答上话了」等价于「通道通了」——把模型这个变量摘掉。
+`verify-custom-endpoint.mjs` 的六种模式同理都是手验；`scripts/ci-web.sh` 一行都没改。

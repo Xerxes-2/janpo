@@ -20,6 +20,16 @@ module AgentTests =
             TimeoutMs = 12000
             Thinking = Thinking.Low
             Tier = ScaffoldTier.Bare
+            BaseUrl = ""
+        }
+
+    /// 接本地 Ollama 的那一座（票 30）：**provider 是自定义端点、没有 key、有 baseUrl**。
+    let private localConfig: LlmSeat =
+        { config with
+            Provider = LlmSeat.customProvider
+            Model = "qwen3:8b"
+            ApiKey = ""
+            BaseUrl = "http://localhost:11434/v1"
         }
 
     let private package () : DecisionPackage =
@@ -181,9 +191,54 @@ module AgentTests =
         let keys = LlmField.all |> List.map LlmField.key
 
         Assert.Equal<string list>(List.distinct keys, keys)
-        Assert.Equal(6, List.length keys)
+        Assert.Equal(7, List.length keys)
 
     [<Fact>]
     let ``provider 列表里没有 Bedrock——它是 Node-only`` () =
         Assert.DoesNotContain("amazon-bedrock", LlmSeat.providers)
         Assert.Contains("deepseek", LlmSeat.providers)
+
+    // ---- 自定义端点（票 30）----
+
+    [<Fact>]
+    let ``自定义端点是 provider 列表里多出来的那一项，排在最后`` () =
+        // 它不是 pi-ai 认识的一家，而是「你自己那一家」；Agent 侧的同名常量在 `endpoint.ts`。
+        Assert.Equal("custom", LlmSeat.customProvider)
+        Assert.Contains(LlmSeat.customProvider, LlmSeat.providers)
+        Assert.Equal(Some LlmSeat.customProvider, List.tryLast LlmSeat.providers)
+
+    [<Fact>]
+    let ``走不走自定义端点只看 provider：官方八家填了 baseUrl 也不走`` () =
+        Assert.True(LlmSeat.isCustom localConfig)
+        Assert.False(LlmSeat.isCustom config)
+
+        Assert.False(
+            LlmSeat.isCustom
+                { config with
+                    BaseUrl = "http://localhost:11434/v1"
+                }
+        )
+
+    [<Fact>]
+    let ``baseUrl 随请求过界，且默认是空串`` () =
+        let json =
+            Agent.requestEncoder
+                {
+                    Package = package ()
+                    Seat = localConfig
+                    RetryLimit = 2
+                }
+            |> Encode.toString 0
+
+        Assert.Contains("\"provider\":\"custom\"", json)
+        Assert.Contains("\"base_url\":\"http://localhost:11434/v1\"", json)
+        Assert.Contains("\"model\":\"qwen3:8b\"", json)
+        // 官方座位：字段在，值是空串——Agent 侧一字不看它。
+        Assert.Equal("", LlmSeat.initial.BaseUrl)
+
+    [<Fact>]
+    let ``baseUrl 是自由文本：填什么存什么，读不读得懂是 Agent 层的事`` () =
+        // 开头空白、少了 scheme——都原样存着，不在这一层报错：
+        // 判读写在 `endpoint.ts`（它才知道什么叫合法），错了会变成一句读得懂的 failure。
+        for value in [ "http://127.0.0.1:1234/v1"; " localhost:11434 "; "" ] do
+            Assert.Equal({ config with BaseUrl = value }, LlmSeat.edit LlmField.BaseUrl value config)

@@ -55,6 +55,18 @@ JANPO_KEY_FILE=/tmp/deepseek_key node scripts/record-agent-fixtures.mjs  # 重�
 
 key 只从文件读、只注入浏览器的 localStorage，**绝不进代码、产物或提交**。
 
+**自定义端点**（票 30：本地 Ollama / LM Studio / 自建 OpenAI 兼容网关）不要 key，但同样不进 CI：
+
+```sh
+cd web
+node scripts/fake-endpoint.mjs --cors http://localhost:4173   # 最小的 OpenAI 兼容假端点（手验用）
+node scripts/verify-custom-endpoint.mjs --mode allowed        # CORS 放行之后：模型座位真的答上话
+node scripts/verify-custom-endpoint.mjs --mode blocked        # 不放行：页面红着说「连不上端点」
+```
+
+主持人怎么接本地模型（baseUrl 怎么填、CORS 怎么放行、https 页面调 http 端点拦不拦）看
+[`docs/host/custom-endpoint.md`](./docs/host/custom-endpoint.md)——那里的结论全是实测的。
+
 两条 `verify` 都需要一个 Chrome/Chromium：优先 `$JANPO_CHROME`，其次 playwright 自带的，
 最后 `/usr/bin/google-chrome-stable` 一类系统路径。
 
@@ -86,6 +98,7 @@ src/Janpo.Web/           浏览器宿主（Fable → JS）：Feliz + useElmish �
 web/                     Vite 应用：index.html、一行 TS 入口、样式与无头验收脚本
 web/src/agent/           **Agent 层**（TypeScript）：prompt 渲染、单轮 tool call、重试。F# 只 import 它一个函数
 web/tests/               Agent 层的用例与固件（录制下来的模型响应，CI 回放它们）
+docs/host/               **面向主持人的操作文档**（怎么配），与 docs/adr（为什么）、docs/research（实测）分开
 tests/Janpo.Engine.Tests/ 引擎测试：xunit 作 runner，FsCheck 属性测试为主力
 tests/fixtures/golden/   黄金用例的**数据**（两侧读同一份），用法见同目录 README
 scripts/ci.sh            CI 关卡，本地与 CI 同一份

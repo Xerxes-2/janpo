@@ -19,6 +19,7 @@ import {
   dangerAnswer,
   dangerPackage,
   legal,
+  localSeat,
   replay,
   request,
   responsePackage,
@@ -174,6 +175,29 @@ test("Assisted 档：答不上话照样交不出来，兜底路径一模一样",
   assert.match(response.failure ?? "", /模型超时/);
   assert.match(prompts[2], /【引擎算好的数】/, "重问的那几遍也是同一档");
   assert.match(prompts[2], /上一次的回答没有被采用/);
+});
+
+test("自定义端点：没填 key 照发请求（本地端点不校验它）", async () => {
+  // 票 30。换成官方那八家时这一句仍然拦住（上面那条用例），**两条路不互相污染**。
+  const { ask, prompts } = replay(legal);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: localSeat }));
+
+  assert.equal(prompts.length, 1, "请求真的发了出去");
+  assert.equal(response.action_id, 2);
+  assert.equal(response.failure, null);
+});
+
+test("自定义端点：baseUrl 没填就不发请求，说的是端点不是模型", async () => {
+  const { ask, prompts } = replay(legal);
+  const response = await decideWith(
+    ask,
+    request(dahaiPackage, { seat: { ...localSeat, base_url: "   " } }),
+  );
+
+  assert.equal(prompts.length, 0);
+  assert.equal(response.attempts, 0);
+  assert.match(response.failure ?? "", /没有填 baseUrl/);
+  assert.doesNotMatch(response.failure ?? "", /API key/, "这不是 key 的错");
 });
 
 test("合法动作集是空的（不该发生）也不抛", async () => {

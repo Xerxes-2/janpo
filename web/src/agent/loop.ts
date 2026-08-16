@@ -13,6 +13,7 @@
  */
 
 import type { Ask, AskResult } from "./ask.ts";
+import { missingConfig } from "./endpoint.ts";
 import { renderPrompt } from "./prompt.ts";
 import { CHOOSE_ACTION, toolsJson } from "./tools.ts";
 import type { DecideRequest, DecideResponse } from "./types.ts";
@@ -118,11 +119,13 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
     // 引擎给的合法动作集非空，走到这里说明契约破了。仍然不抛。
     return refuse("这一手没有合法动作", 0, 0);
   }
-  if (request.seat.api_key.trim() === "") {
-    // 不发这一次请求：没有 key 时 provider 必然 401，白等一个来回。
+  const missing = missingConfig(request.seat);
+  if (missing !== null) {
+    // 不发这一次请求：没有 key 时 provider 必然 401，白等一个来回；
+    // 自定义端点没填 baseUrl 同理（它反而不要求 key，本地端点通常不校验）。
     // 这两条路上连 prompt 都没渲染过，因此审计那四项全是空的——记录仍然留一条，
     // 内容就是那句原因。
-    return refuse(`没有填 ${request.seat.provider} 的 API key`, 0, 0);
+    return refuse(missing, 0, 0);
   }
 
   const ids = new Set(options.map((option) => option.id));

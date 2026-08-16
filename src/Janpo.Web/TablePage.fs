@@ -913,6 +913,9 @@ module TablePage =
     /// **key 只进 localStorage**（`Store`），不外发到本平台——本平台根本没有后端。
     /// **不提供订阅制登录**：pi-ai 的 OAuth 流程是 Node-only（票 18），浏览器里只有 API key
     /// 这一条路；Bedrock 同理不在 provider 列表里。
+    ///
+    /// **baseUrl 那一格只在选了自定义端点时出现**（票 30）：官方八家根本不看它，
+    /// 摆在那里只会让人以为能把 DeepSeek 改道。
     let private llmPanel (model: TableModel) (dispatch: TableMsg -> unit) =
         let seats =
             picker "table-llm-none" (Option.isNone model.LlmAt) "无" (LlmSeatPicked None) dispatch
@@ -946,10 +949,15 @@ module TablePage =
                             "table-llm-provider"
                             "provider"
                             LlmField.Provider
-                            (LlmSeat.providers |> List.map (fun name -> name, name, true))
+                            (LlmSeat.providers
+                             |> List.map (fun name -> name, LlmSeat.providerToDisplay name, true))
                             model
                             dispatch
+                        // 模型名一直是自由文本：本地模型叫 `qwen3:8b` 的叫 `gpt-oss-20b@q4` 的都有，
+                        // 下拉框只会挡路。
                         textField "table-llm-model" "text" "模型" LlmField.Model model dispatch
+                        if LlmSeat.isCustom model.Llm then
+                            textField "table-llm-base-url" "text" "baseUrl" LlmField.BaseUrl model dispatch
                         textField "table-llm-key" "password" "API key" LlmField.ApiKey model dispatch
                         textField "table-llm-timeout" "number" "超时 (ms)" LlmField.TimeoutMs model dispatch
                         selectField
@@ -979,6 +987,16 @@ module TablePage =
                     prop.text
                         "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的），对局不会卡住。"
                 ]
+                // 自定义端点那段话只在选中它时出现：两个坑（CORS、mixed content）说清楚要一整段，
+                // 而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
+                if LlmSeat.isCustom model.Llm then
+                    Html.p [
+                        prop.key "custom-note"
+                        prop.className "intro"
+                        prop.testId "table-llm-custom-note"
+                        prop.text
+                            "自定义端点：baseUrl 填到含 /v1 那一层（Ollama 是 http://localhost:11434/v1，LM Studio 是 http://localhost:1234/v1），本地端点通常不用填 key，模型名照端点里的实名填。两个坑要先踩平：端点默认不放行浏览器跨域（Ollama 设 OLLAMA_ORIGINS，LM Studio 在设置里开 CORS），且 https 页面调 http 端点会被浏览器拦掉——配法见 docs/host/custom-endpoint.md。接不上时上面那行会直说「连不上自定义端点」，那不是模型不肯选。"
+                    ]
             ]
         ]
 

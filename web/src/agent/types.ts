@@ -104,6 +104,11 @@ export interface SeatConfig {
   timeout_ms: number;
   thinking: ThinkingLevel;
   tier: ScaffoldTier;
+  /**
+   * OpenAI 兼容端点的 baseUrl（票 30）。**只有 `provider` 是 `custom` 时用得上**：
+   * 官方那八家走自己的地址，这一项填了也一字不看。形如 `http://localhost:11434/v1`。
+   */
+  base_url: string;
 }
 
 /** 一次问话。 */
