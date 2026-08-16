@@ -4,7 +4,7 @@
 Kyoku —— spec 的下限是一局，但引擎 M0 已经能跑整场，局间推进在 UI 层也该跑一遍），导出 Paifu，
 再把导出的事件流 fold 回来验证一致。跑完这一票，spec 的 M1 四项逐条成立。
 
-**Blocked by:** 21, 24, 25, 26
+**Blocked by:** 21, 24, 25, 26, 28
 
 **Status:** ready-for-agent
 
