@@ -5,8 +5,11 @@
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningLevel>5</WarningLevel>
-    <!-- 1182: 未使用变量。F# 默认关闭，这里打开当错误用。 -->
-    <OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>
+    <!-- F# 默认关闭的警告，这里打开当错误用（两个都已实测：全量重编 0 处，打开是免费的）。
+         1182: 未使用变量。
+         3390: XML 文档注释的语法与 <param> 名字校验——`///` 里写错参数名或标签不闭合，
+               默认是静默的，而本仓库几乎每个公开 API 都有 `///`。 -->
+    <OtherFlags>$(OtherFlags) --warnon:1182 --warnon:3390</OtherFlags>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <DOTNET_CLI_TELEMETRY_OPTOUT>1</DOTNET_CLI_TELEMETRY_OPTOUT>
