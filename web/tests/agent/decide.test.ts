@@ -18,14 +18,19 @@ test("请求读不动时回一条「交不出来」，而不是 reject", async (
   assert.match(response.failure ?? "", /读不动这份请求/);
 });
 
-test("回执的形状就是 F# 侧 answerDecoder 认的那五个字段", async () => {
+test("回执的形状就是 F# 侧 answerDecoder 认的那几个字段", async () => {
   const response = JSON.parse(await decide("{")) as DecideResponse;
 
+  // 后四个是审计那几项（票 26）：它们过界之后组装成牌谱里的 `DecisionRecord`。
   assert.deepEqual(Object.keys(response).sort(), [
     "action_id",
     "attempts",
     "failure",
     "latency_ms",
+    "output",
+    "prompt",
     "reason",
+    "thinking",
+    "tools",
   ]);
 });

@@ -27,6 +27,19 @@ module GameLength =
         | Tonpuusen -> [ Ton ]
         | Hanchan -> [ Ton; Nan ]
 
+    // ---- wire 记法 ----
+
+    /// wire 上的名字（牌谱里的规则集写的就是它）。**不是渲染出口**：
+    /// 它进 JSON、进牌谱，中文形态在 `toDisplay`（ADR-0001）。
+    let toWire (length: GameLength) : string =
+        match length with
+        | Tonpuusen -> "tonpuusen"
+        | Hanchan -> "hanchan"
+
+    /// wire 名回到长度；不认识的是 None（牌谱是外面来的，什么都可能）。
+    let ofWire (wire: string) : GameLength option =
+        all |> List.tryFind (fun length -> toWire length = wire)
+
     // ---- 渲染层出口（ADR-0001） ----
 
     /// **渲染层的单向出口**：中文说明，只供 CLI 与 UI 提示使用。

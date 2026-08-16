@@ -120,8 +120,9 @@ export interface DecideRequest {
  * 后者是「我交不出来」——那一手由 F# 侧的 `Fallback` 代打。兜底策略要读规则
  * （Bare 档摸切、Assisted 档不退向听的安全打），因此它在引擎里，不在这一层。
  *
- * **26 号票的扩展点**：DecisionRecord 要的 prompt / 原始输出 / thinking 加在这里，
- * 同时改 `src/Janpo.Web/Agent.fs` 的 `answerDecoder`。
+ * **审计的那四项**（票 26）：prompt / 工具定义 / 原始输出 / thinking。它们过界之后由
+ * `TablePage.settle` 组装成牌谱里的一条 `DecisionRecord`。改字段要同时改
+ * `src/Janpo.Web/Agent.fs` 的 `AgentAnswer` 与 `answerDecoder`。
  */
 export interface DecideResponse {
   action_id: number | null;
@@ -129,4 +130,12 @@ export interface DecideResponse {
   failure: string | null;
   attempts: number;
   latency_ms: number;
+  /** 最后一次问出去的 prompt 全文（重试的那几次只多一句「上次为什么不行」）。 */
+  prompt: string;
+  /** 工具定义的 JSON 全文（`tools.ts` 那一份，与真发出去的同一个）。 */
+  tools: string;
+  /** 模型最后一次的原始输出，JSON 全文，**不含 thinking**。 */
+  output: string;
+  /** 扩展思考全文。**它是可省略的那一段**：URL 分享（M2）会把它抹掉。 */
+  thinking: string | null;
 }

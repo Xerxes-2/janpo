@@ -40,9 +40,12 @@ type Table = {
     /// 刚落定的那一手。给牌桌显示「上一手是谁做了什么」用（`Action.toDisplay`），
     /// 并且看得出它是不是兜底代打的（`Turn.Fallback`）。
     Latest: Turn option
-    /// 这一桌至今兜底代打了几手。**跨局累计**：断电演习（key 故意配坏）时
-    /// 它就是那一局到底走了几手兜底的证据。
-    Fallbacks: int
+    /// 这一桌至今落定了几手（CONTEXT.md 的 Turn）。**手序编号的唯一出处**（票 26）：
+    /// 跨局累计，随机座位的手也占号——它们不产生决策记录，但不能因此把编号弄断。
+    Turns: int
+    /// 这一桌至今的决策记录，按手序（票 26）。**只有问过模型的那几手在里面**：
+    /// 随机选手没有可审计的推理，写一条空记录只会把牌谱撑胖。
+    Decisions: DecisionRecord list
     /// 引擎拒绝了某个动作。**不该发生**（提交的动作都取自合法动作集），
     /// 落在这里就停住不再推进，把话说给人看，而不是静静地卡住。
     Fault: string option
@@ -85,11 +88,19 @@ module Table =
                 Players = players
                 Readings = []
                 Latest = None
-                Fallbacks = 0
+                Turns = 0
+                Decisions = []
                 Fault = None
             })
 
     // ---- 拆解 ----
+
+    /// 这一桌兜底代打了几手。**从决策记录数出来而不另存一份**（票 26）：
+    /// 兜底只发生在问过模型的那几手上，而那几手恒有记录，两份计数只会漂。
+    /// **跨局累计**：断电演习（key 故意配坏）时它就是走了几手兜底的证据。
+    let fallbacks (table: Table) : int =
+        table.Decisions
+        |> List.sumBy (fun record -> if Option.isSome record.Fallback then 1 else 0)
 
     /// 现在等哪一家、它能提交什么；这一局已终或出过错则为 None。
     ///
@@ -124,11 +135,13 @@ module Table =
                 | Some package -> Demand.Asked(package, config)
                 | None -> Kyoku.randomPlayer table.Players table.State choice |> Demand.Ready)
 
-    /// 把一个动作落进引擎。**决策者是谁与这一半无关**——`fallback` 只是记在
-    /// `Latest` 上给牌桌看的一句话，引擎那边一分待遇都不变。
+    /// 把一个动作落进引擎。**决策者是谁与这一半无关**——`record` 只是审计数据：
+    /// 它里的兜底原因记在 `Latest` 上给牌桌看，引擎那边一分待遇都不变。
     ///
     /// 和了那一手先把引擎的读法捞下来再 `step`：役种只有这一刻问得到（见 `Readings`）。
-    let private played (fallback: string option) (action: Action) (table: Table) : Table =
+    let private played (record: DecisionRecord option) (action: Action) (table: Table) : Table =
+        let fallback = record |> Option.bind (fun record -> record.Fallback)
+
         let readings =
             match action with
             | Action.Hora(actor, _, _) ->
@@ -151,15 +164,21 @@ module Table =
                 Game = Game.advance next table.Game
                 Readings = readings
                 Latest = Some { Action = action; Fallback = fallback }
-                Fallbacks = table.Fallbacks + (if Option.isSome fallback then 1 else 0)
+                // 手序只在真的落定了一手时往前走（被引擎拒掉的那一条走上面那支）。
+                Turns = table.Turns + 1
+                Decisions = table.Decisions @ Option.toList record
           }
 
-    /// 选手自己决出来的一手。
+    /// 选手自己决出来的一手，**没有可审计的推理**（随机座位）。
     let apply (action: Action) (table: Table) : Table = played None action table
 
-    /// 兜底代打的一手（`Fallback.action` 挑的那个），`reason` 是为什么代打。
-    /// **与 `apply` 同一条路**：代打的动作同样取自合法动作集，引擎不会因此放宽任何判定。
-    let applyFallback (reason: string) (action: Action) (table: Table) : Table = played (Some reason) action table
+    /// 问过模型的那一手：动作加它的决策记录（票 26）。
+    ///
+    /// **兜底与否写在记录里**（`DecisionRecord.Fallback`），牌桌上那句「兜底：……」与
+    /// 兜底计数都取自同一处。**与 `apply` 同一条路**：代打的动作同样取自合法动作集，
+    /// 引擎不会因此放宽任何判定。
+    let applyRecorded (record: DecisionRecord) (action: Action) (table: Table) : Table =
+        played (Some record) action table
 
     /// 推进一手：决策 + 落子。已终或出过错则原样返回（没有事情发生，不是错误）。
     ///
@@ -191,3 +210,25 @@ module Table =
                     Latest = None
               }
         | _ -> table
+
+    // ---- 牌谱 ----
+
+    /// 这一桌到此刻为止的 mjai 事件流，开头那条 `start_game` 的 `names` 来自配桌。
+    ///
+    /// **打到一半也取得出来**：已经打完的局在 `Game` 里，正在打的那一局在 `State` 里。
+    /// 这一局刚终了时它已经被 `Game.advance` 收进去了，因此不能再拼一遍。
+    let events (roster: Roster) (table: Table) : Event list =
+        let current =
+            if GameState.isEnded table.State then
+                []
+            else
+                GameState.events table.State
+
+        StartGame(Roster.names roster) :: (Game.events table.Game @ current)
+
+    /// 这一桌到此刻为止的牌谱（ADR-0002：**唯一的可分享物**）：
+    /// 规则集 + 事件流 + 决策记录 + 版本号。
+    ///
+    /// **局面不在里面**：它是对事件流 fold 出来的（`Replay.ofPaifu`），不存第二份。
+    let paifu (roster: Roster) (table: Table) : Paifu =
+        Paifu.create (Game.ruleset table.Game) (events roster table) table.Decisions

@@ -6,10 +6,15 @@
  * 那在引擎的 `Fallback` 里。这一层的产出只有「选了 id」或者「我交不出来，原因是……」。
  *
  * `ask` 是注入的：CI 里喂录制的响应，浏览器里喂 `piai.ts`。
+ *
+ * **审计数据也在这一层收**（票 26）：问出去的 prompt 与工具定义、收回来的原始输出与
+ * thinking 随回执一起过界，由 F# 侧组装成 `DecisionRecord`。记的是**最后一次**那轮：
+ * 它才是产出这条回答的那一次，问了几次看 `attempts`。
  */
 
 import type { Ask, AskResult } from "./ask.ts";
 import { renderPrompt } from "./prompt.ts";
+import { CHOOSE_ACTION, toolsJson } from "./tools.ts";
 import type { DecideRequest, DecideResponse } from "./types.ts";
 
 /** 一次回答的判读。 */
@@ -45,10 +50,10 @@ function judge(result: AskResult, ids: Set<number>): Verdict {
   if (call === null) {
     return {
       ok: false,
-      why: `模型没有调用 choose_action，只回了一段话：「${excerpt(result.text)}」`,
+      why: `模型没有调用 ${CHOOSE_ACTION}，只回了一段话：「${excerpt(result.text)}」`,
     };
   }
-  if (call.name !== "choose_action") {
+  if (call.name !== CHOOSE_ACTION) {
     return { ok: false, why: `模型调了别的工具：${call.name}` };
   }
 
@@ -64,8 +69,43 @@ function judge(result: AskResult, ids: Set<number>): Verdict {
   return { ok: true, id, reason };
 }
 
+/**
+ * 模型这一次的**原始输出**，进决策记录。
+ *
+ * **thinking 不在里面**：它单独一个字段，因为 URL 分享（M2）要能只省掉它那一段。
+ * `null` （一次都没问成）时给空串：牌谱里的字符串字段不写 null。
+ */
+function rawOutput(result: AskResult | null): string {
+  if (result === null) return "";
+  return JSON.stringify({
+    stop_reason: result.stopReason,
+    text: result.text,
+    tool_call: result.toolCall,
+    error_message: result.errorMessage,
+    usage: result.usage,
+  });
+}
+
+/** 一轮问话里审计要的那四项。一次都没问成时 `result` 是 null。 */
+function audited(prompt: string, tools: string, result: AskResult | null) {
+  return {
+    prompt,
+    tools,
+    output: rawOutput(result),
+    thinking: result?.thinking ?? null,
+  };
+}
+
+/** 一条「我交不出来」。审计那四项默认是空的，真问过的那几条路上再盖上去。 */
 function refuse(why: string, attempts: number, latencyMs: number): DecideResponse {
-  return { action_id: null, reason: null, failure: why, attempts, latency_ms: latencyMs };
+  return {
+    action_id: null,
+    reason: null,
+    failure: why,
+    attempts,
+    latency_ms: latencyMs,
+    ...audited("", "", null),
+  };
 }
 
 /**
@@ -80,27 +120,34 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
   }
   if (request.seat.api_key.trim() === "") {
     // 不发这一次请求：没有 key 时 provider 必然 401，白等一个来回。
+    // 这两条路上连 prompt 都没渲染过，因此审计那四项全是空的——记录仍然留一条，
+    // 内容就是那句原因。
     return refuse(`没有填 ${request.seat.provider} 的 API key`, 0, 0);
   }
 
   const ids = new Set(options.map((option) => option.id));
   const actionIds = options.map((option) => String(option.id));
+  const tools = toolsJson(actionIds);
   const rounds = Math.max(1, request.retry_limit + 1);
 
   let attempts = 0;
   let latencyMs = 0;
   let why = "没问出结果";
   let note: string | null = null;
+  let prompt = "";
+  let last: AskResult | null = null;
 
   while (attempts < rounds) {
-    const prompt = renderPrompt(request.decision, request.seat.tier, note);
+    prompt = renderPrompt(request.decision, request.seat.tier, note);
     let verdict: Verdict;
     try {
       const result = await ask({ seat: request.seat, prompt, actionIds });
+      last = result;
       latencyMs += result.latencyMs;
       verdict = judge(result, ids);
     } catch (error) {
       // 不该发生（超时与报错都是值），但真抛了也只是这一次失败，不是整局崩掉。
+      last = null;
       verdict = { ok: false, why: `Agent 层抛了异常：${String(error)}` };
     }
     attempts += 1;
@@ -112,6 +159,7 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
         failure: null,
         attempts,
         latency_ms: latencyMs,
+        ...audited(prompt, tools, last),
       };
     }
 
@@ -119,5 +167,8 @@ export async function decideWith(ask: Ask, request: DecideRequest): Promise<Deci
     note = verdict.why;
   }
 
-  return refuse(`${why}（重试 ${rounds - 1} 次仍无结果）`, attempts, latencyMs);
+  return {
+    ...refuse(`${why}（重试 ${rounds - 1} 次仍无结果）`, attempts, latencyMs),
+    ...audited(prompt, tools, last),
+  };
 }

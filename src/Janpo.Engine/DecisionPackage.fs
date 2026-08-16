@@ -130,6 +130,16 @@ module DecisionPackage =
         |> List.tryFind (fun option -> option.Id = id)
         |> Option.map (fun option -> option.Action)
 
+    /// `tryAction` 的反向：一个动作 → 它在这一包里的 id。包里没有这个动作时是 None。
+    ///
+    /// **决策记录用它**（26 号票）：兜底代打的那一手要记下「最终采用的是哪一条」，
+    /// 而 `Fallback.action` 给回的是动作本身。牌谱里存的是 id 不是动作——动作是意图，
+    /// 意图不上牌谱（`Action.encoder` 那条「单向出口」）。
+    let tryId (action: Action) (package: DecisionPackage) : int option =
+        package.Options
+        |> List.tryFind (fun option -> option.Action = action)
+        |> Option.map (fun option -> option.Id)
+
     // ---- JSON（单向出口） ----
 
     /// 决策包的 wire 形态。**只有 encoder，没有 decoder**：包只往外走，回来的是一个 id。

@@ -17,7 +17,8 @@
     "record:agent": "node scripts/record-agent-fixtures.mjs",
     "verify:llm": "node scripts/verify-llm-seat.mjs",
     "verify": "node scripts/verify-tracer.mjs",
-    "verify:golden": "node scripts/verify-golden.mjs"
+    "verify:golden": "node scripts/verify-golden.mjs",
+    "verify:export": "node scripts/verify-export.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

@@ -1,5 +1,7 @@
 namespace Janpo
 
+open Thoth.Json.Core
+
 /// 规则集：一场对局的规则配置。
 ///
 /// **座位数、牌山构成与规则开关的唯一出处**——引擎别处不得再出现 `4`（座位数）、`136`（牌山张数）、
@@ -176,3 +178,76 @@ module Ruleset =
             loop [] tiles
 
         List.fold replaceOne normals ruleset.Akadora |> Tile.sort
+
+    // ---- JSON ----
+
+    /// 规则集的 wire 形态，牌谱里的那一段（ADR-0002：Paifu = 事件流 + 决策记录 + **规则集**）。
+    ///
+    /// **逐字段写而不是写个预设名**：回放要照这一场真正的规则重算符与点数，
+    /// 而预设会随版本漂移（今天的 `yonma` 与半年后的 `yonma` 不必相同）。牌谱是归用户的，
+    /// 它得自己站得住。
+    ///
+    /// `tile_kinds` 上 wire 的是牌种列表（`TileKindSet.kinds` 的逆向是 `ofKinds`）。
+    ///
+    /// **加一条规则开关要同时改这里与 `decoder`**：后者构造一条完整记录，漏了编译不过（它是那道闸门）。
+    let encoder: Encoder<Ruleset> =
+        fun ruleset ->
+            Encode.object
+                [
+                    "seat_count", Encode.int ruleset.SeatCount
+                    "length", GameLength.toWire ruleset.Length |> Encode.string
+                    "tile_kinds", TileKindSet.kinds ruleset.TileKinds |> List.map Tile.encoder |> Encode.list
+                    "copies_per_kind", Encode.int ruleset.CopiesPerKind
+                    "akadora", ruleset.Akadora |> List.map Tile.encoder |> Encode.list
+                    "kuitan", Encode.bool ruleset.Kuitan
+                    "haipai_size", Encode.int ruleset.HaipaiSize
+                    "dead_wall_size", Encode.int ruleset.DeadWallSize
+                    "rinshan_count", Encode.int ruleset.RinshanCount
+                    "starting_score", Encode.int ruleset.StartingScore
+                    "riichi_bou", Encode.int ruleset.RiichiBou
+                    "noten_bappu", Encode.int ruleset.NotenBappu
+                    "atamahane", Encode.bool ruleset.Atamahane
+                    "sancha_hora_ryuukyoku", Encode.bool ruleset.SanchaHoraRyuukyoku
+                    "kyuushu_kinds", Encode.int ruleset.KyuushuKinds
+                    "kiriage_mangan", Encode.bool ruleset.KiriageMangan
+                    "double_kaze_jantou_fu", Encode.int ruleset.DoubleKazeJantouFu
+                    "rinshan_tsumo_fu", Encode.bool ruleset.RinshanTsumoFu
+                    "kokushi_ankan_chankan", Encode.bool ruleset.KokushiAnkanChankan
+                    "honba_points", Encode.int ruleset.HonbaPoints
+                ]
+
+    let private lengthDecoder: Decoder<GameLength> =
+        Decode.string
+        |> Decode.andThen (fun wire ->
+            match GameLength.ofWire wire with
+            | Some length -> Decode.succeed length
+            | None -> Decode.fail ("unknown game length: " + wire))
+
+    /// 规则集的解码。**字段都是必需的**：缺一项就是读不动，而不是惄惄地用本机的默认值
+    /// 把别人的牌谱回放成另一场对局。诊断文案用英文（ADR-0001）。
+    let decoder: Decoder<Ruleset> =
+        Decode.object (fun get ->
+            {
+                SeatCount = get.Required.Field "seat_count" Decode.int
+                Length = get.Required.Field "length" lengthDecoder
+                TileKinds =
+                    get.Required.Field "tile_kinds" (Decode.list Tile.decoder)
+                    |> TileKindSet.ofKinds
+                CopiesPerKind = get.Required.Field "copies_per_kind" Decode.int
+                Akadora = get.Required.Field "akadora" (Decode.list Tile.decoder)
+                Kuitan = get.Required.Field "kuitan" Decode.bool
+                HaipaiSize = get.Required.Field "haipai_size" Decode.int
+                DeadWallSize = get.Required.Field "dead_wall_size" Decode.int
+                RinshanCount = get.Required.Field "rinshan_count" Decode.int
+                StartingScore = get.Required.Field "starting_score" Decode.int
+                RiichiBou = get.Required.Field "riichi_bou" Decode.int
+                NotenBappu = get.Required.Field "noten_bappu" Decode.int
+                Atamahane = get.Required.Field "atamahane" Decode.bool
+                SanchaHoraRyuukyoku = get.Required.Field "sancha_hora_ryuukyoku" Decode.bool
+                KyuushuKinds = get.Required.Field "kyuushu_kinds" Decode.int
+                KiriageMangan = get.Required.Field "kiriage_mangan" Decode.bool
+                DoubleKazeJantouFu = get.Required.Field "double_kaze_jantou_fu" Decode.int
+                RinshanTsumoFu = get.Required.Field "rinshan_tsumo_fu" Decode.bool
+                KokushiAnkanChankan = get.Required.Field "kokushi_ankan_chankan" Decode.bool
+                HonbaPoints = get.Required.Field "honba_points" Decode.int
+            })

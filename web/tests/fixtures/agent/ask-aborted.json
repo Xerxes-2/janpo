@@ -3,6 +3,7 @@
   "stopReason": "aborted",
   "toolCall": null,
   "text": "",
+  "thinking": null,
   "errorMessage": "Request aborted",
   "latencyMs": 302,
   "usage": {

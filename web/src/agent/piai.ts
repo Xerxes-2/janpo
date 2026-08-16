@@ -6,23 +6,23 @@
  * - **按 provider 分入口动态导入**，不碰 `providers/all` 与 `/compat`：provider SDK 因此落在
  *   各自的懒加载 chunk 里（实测核心 9 KB gzip、OpenAI 兼容 SDK 44 KB 独立 chunk），
  *   没选的那几家一个字节都不下载。
- * - 工具参数用 **`StringEnum`** 而不是 `Type.Enum`（后者生成的 `anyOf/const` Google 不吃），
- *   配 `constrainedSampling: { type: "json_schema", strict: "prefer" }`：支持的 provider 走
- *   服务端强制 schema，不支持的自动退回普通 tool call。
+ * - 工具定义在 `tools.ts`（票 18 实测的 `StringEnum` + `constrainedSampling` 都在那里）。
  * - **OAuth 登录是 Node-only**，因此这里只有 API key 一条路；Bedrock 同理不在 provider 表里。
  * - 超时与报错都是**值**：abort → `stopReason: "aborted"`，坏 key → `"error"` + `errorMessage`。
+ * - 走 **`streamSimple`** 而不是 `completeSimple`（票 26）：后者就是
+ *   `streamSimple(…).result()`，而前者多给一条 `thinking_delta` 流——思考全文要进牌谱，
+ *   M2 的思考气泡还要实时显示它。
  */
 
 import {
+  type AssistantMessage,
   type Context,
   createModels,
   type Provider,
-  StringEnum,
   type ThinkingLevel,
-  type Tool,
-  Type,
 } from "@earendil-works/pi-ai";
 import type { Ask, AskResult } from "./ask.ts";
+import { chooseAction } from "./tools.ts";
 import type { SeatConfig } from "./types.ts";
 
 /**
@@ -47,33 +47,32 @@ const PROVIDERS: Record<string, () => Promise<Provider>> = {
   mistral: async () => (await import("@earendil-works/pi-ai/providers/mistral")).mistralProvider(),
 };
 
-/** 合法动作集 → 工具的参数 schema。**enum 是这一手动态生成的**，不是固定表。 */
-function chooseAction(actionIds: string[]): Tool {
-  return {
-    name: "choose_action",
-    description: "从这一手的合法动作集中选择一个动作。只能选列出的 action_id。",
-    parameters: Type.Object(
-      {
-        action_id: StringEnum(actionIds as [string, ...string[]], {
-          description: "所选动作的 id",
-        }),
-        reason: Type.String({ description: "一句话理由（中文）" }),
-      },
-      { additionalProperties: false },
-    ),
-    constrainedSampling: { type: "json_schema", strict: "prefer" },
-  };
-}
-
 function failed(message: string, latencyMs: number): AskResult {
   return {
     stopReason: "error",
     toolCall: null,
     text: "",
+    thinking: null,
     errorMessage: message,
     latencyMs,
     usage: null,
   };
+}
+
+/** 模型说的话（一段话可能被拆成好几块）。 */
+function textOf(message: AssistantMessage): string {
+  return message.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+}
+
+/** 末态里的思考块（provider 常常只在流结束时给齐一块）。 */
+function thinkingOf(message: AssistantMessage): string {
+  return message.content
+    .filter((block) => block.type === "thinking")
+    .map((block) => block.thinking)
+    .join("");
 }
 
 /** `off` 就是不传 `reasoning`（pi-ai 的 `ThinkingLevel` 里没有 "off"）。 */
@@ -108,22 +107,29 @@ export const piAsk: Ask = async (request) => {
   const timer = setTimeout(() => controller.abort(), request.seat.timeout_ms);
 
   try {
-    const message = await models.completeSimple(model, context, {
+    const stream = models.streamSimple(model, context, {
       apiKey: request.seat.api_key,
       signal: controller.signal,
       reasoning: reasoningOf(request.seat),
     });
 
+    // 收流是为了 **thinking**：`completeSimple` 就是 `streamSimple(…).result()`，
+    // 少的正是这条增量。M2 的思考气泡要边下边显示，接的也是这里。
+    let streamed = "";
+    for await (const event of stream) {
+      if (event.type === "thinking_delta") streamed += event.delta;
+    }
+
+    const message = await stream.result();
     const call = message.content.find((block) => block.type === "toolCall");
-    const text = message.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
-      .join("");
+    // 收齐的思考块优先（provider 可能只在末态给），流里拼的那份兜底。
+    const thinking = thinkingOf(message) || streamed;
 
     return {
       stopReason: message.stopReason,
       toolCall: call === undefined ? null : { name: call.name, arguments: call.arguments },
-      text,
+      text: textOf(message),
+      thinking: thinking === "" ? null : thinking,
       errorMessage: message.errorMessage ?? null,
       latencyMs: elapsed(),
       usage: { input: message.usage.input, output: message.usage.output },

@@ -44,6 +44,10 @@ module TablePageTests =
             Failure = None
             Attempts = 1
             LatencyMs = 640
+            Prompt = "东1局 0 本场……（prompt 全文）"
+            Tools = """{"name":"choose_action"}"""
+            Output = """{"stop_reason":"toolUse"}"""
+            Thinking = Some "先数向听……"
         }
 
     /// 模型交不出来（超时 / provider 报错 / 格式跑偏，走的都是这一条）。
@@ -54,6 +58,10 @@ module TablePageTests =
             Failure = Some "模型超时（重试 2 次仍无结果）"
             Attempts = 3
             LatencyMs = 91000
+            Prompt = "东1局 0 本场……（prompt 全文）"
+            Tools = """{"name":"choose_action"}"""
+            Output = ""
+            Thinking = None
         }
 
     // ---- 分派 ----
@@ -93,7 +101,7 @@ module TablePageTests =
         Assert.Equal(expected, table.Latest |> Option.map (fun turn -> turn.Action))
         // 自己决出来的一手不带兜底记号。
         Assert.Equal(None, table.Latest |> Option.bind (fun turn -> turn.Fallback))
-        Assert.Equal(0, table.Fallbacks)
+        Assert.Equal(0, Table.fallbacks table)
         Assert.True(Option.isNone played.Awaiting)
         Assert.Equal(AgentStatus.Spoke(Seat.first, Some "就它了", 640), played.Agent)
 
@@ -108,7 +116,7 @@ module TablePageTests =
 
         Assert.Equal(Some expected, table.Latest |> Option.map (fun turn -> turn.Action))
         Assert.Equal(refused.Failure, table.Latest |> Option.bind (fun turn -> turn.Fallback))
-        Assert.Equal(1, table.Fallbacks)
+        Assert.Equal(1, Table.fallbacks table)
         Assert.Equal(AgentStatus.Troubled(Seat.first, "模型超时（重试 2 次仍无结果）"), played.Agent)
 
     [<Fact>]
@@ -150,7 +158,7 @@ module TablePageTests =
 
         Assert.Equal(Some expected, table.Latest |> Option.map (fun turn -> turn.Action))
         Assert.True(table.Latest |> Option.bind (fun turn -> turn.Fallback) |> Option.isSome)
-        Assert.Equal(1, table.Fallbacks)
+        Assert.Equal(1, Table.fallbacks table)
 
     // ---- 过期的回执 ----
 
@@ -195,7 +203,7 @@ module TablePageTests =
         Assert.True(Table.isKyokuEnded table)
         Assert.True(Option.isNone table.Fault)
         // 座位 0 的每一手都是兜底代打的，因此这个数必然大于 0。
-        Assert.True(table.Fallbacks > 0, "断电演习里必然有兜底代打的手")
+        Assert.True(Table.fallbacks table > 0, "断电演习里必然有兜底代打的手")
 
         match ended.Agent with
         | AgentStatus.Troubled(seat, _) -> Assert.Equal(Seat.first, seat)

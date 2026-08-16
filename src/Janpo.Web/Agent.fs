@@ -36,9 +36,9 @@ type LlmSeat = {
 /// Agent 层的一次回执。**跨界回来的东西只有它**：一个动作 id（或者一句「我交不出来」），
 /// 外加审计要的那几个数。`Action` 永远不从这边构造（ADR-0005）。
 ///
-/// **26 号票的扩展点**：DecisionRecord 要的 prompt / 模型输出 / thinking 往这个记录上加字段，
-/// 同时改 `Agent.answerDecoder` 与 TS 侧的 `DecideResponse`；`ActionId` 与 `Failure` 这两个
-/// 决定牌桌走向的字段别动。
+/// **审计那几样全在这里**（26 号票）：prompt / 工具定义 / 模型原始输出 / thinking
+/// 过界之后由 `TablePage.settle` 组装成一条 `DecisionRecord`。
+/// **改字段要同时改两侧**：这里、`Agent.answerDecoder` 与 TS 侧的 `DecideResponse`。
 type AgentAnswer = {
     /// 模型最终选定的动作 id；交不出来时是 None。
     ActionId: int option
@@ -50,6 +50,15 @@ type AgentAnswer = {
     Attempts: int
     /// 端到端毫秒，含重试。
     LatencyMs: int
+    /// 最后一次问出去的 prompt 全文。
+    Prompt: string
+    /// 工具定义的 JSON 全文（`choose_action` 的 schema）。**F# 不解释它**：
+    /// 那是 Agent 层那侧的形状，这边只负责原样搬进牌谱（ADR-0005：跨界只传字符串）。
+    Tools: string
+    /// 模型原始输出的 JSON 全文（停止原因、内容块、token 用量），**不含 thinking**。
+    Output: string
+    /// 扩展思考全文；没开、provider 不给、或这一次根本没答上话时是 None。
+    Thinking: string option
 }
 
 /// 一次问话：那一手的决策包、座位配置与重试上限。
@@ -232,18 +241,29 @@ module Agent =
             Failure = get.Optional.Field "failure" Decode.string
             Attempts = get.Optional.Field "attempts" Decode.int |> Option.defaultValue 0
             LatencyMs = get.Optional.Field "latency_ms" Decode.int |> Option.defaultValue 0
+            Prompt = get.Optional.Field "prompt" Decode.string |> Option.defaultValue ""
+            Tools = get.Optional.Field "tools" Decode.string |> Option.defaultValue ""
+            Output = get.Optional.Field "output" Decode.string |> Option.defaultValue ""
+            Thinking = get.Optional.Field "thinking" Decode.string
         })
 
     // ---- 构造 ----
 
     /// 「这一手交不出来」的回执。Agent 层根本没答上话时（promise 被 reject、
     /// 回执读不动）由这边造一条，**兜底路径因此只有一条**。
+    ///
+    /// 审计的那几项在这条路上是空的：**Agent 层都没答话，就没有真的 prompt 与输出可记**。
+    /// 这一手仍然留一条记录（不能因为模型挂了就在牌谱里退形），只是它的内容就是那句原因。
     let refused (reason: string) : AgentAnswer = {
         ActionId = None
         Reason = None
         Failure = Some reason
         Attempts = 0
         LatencyMs = 0
+        Prompt = ""
+        Tools = ""
+        Output = ""
+        Thinking = None
     }
 
     // ---- 边界 ----

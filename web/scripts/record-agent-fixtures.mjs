@@ -94,6 +94,8 @@ await record(
         .filter((block) => block.type === "text")
         .map((block) => block.text)
         .join(""),
+      // 这一条的座位 thinking 是 off，因此它恒为 null（票 26）。
+      thinking: null,
       errorMessage: message.errorMessage ?? null,
       latencyMs: Math.round(performance.now() - started),
       usage: { input: message.usage.input, output: message.usage.output },

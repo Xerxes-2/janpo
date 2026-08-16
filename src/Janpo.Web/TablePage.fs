@@ -4,6 +4,7 @@ open Elmish
 open Fable.Core
 open Feliz
 open Feliz.UseElmish
+open Thoth.Json.JavaScript
 open Janpo
 
 /// 在等哪一次问话的回执（票 23）。
@@ -82,6 +83,8 @@ type TableMsg =
     | LlmSeatPicked of seat: Seat option
     /// 改配置面板里的一个字段。
     | LlmEdited of field: LlmField * value: string
+    /// 把这一桌到此刻为止的牌谱存成一个 JSON 文件（票 26）。
+    | Exported
     /// Agent 层的回执回来了。`ticket` 不是在等的那一张就丢掉（见 `Awaiting`）。
     ///
     /// **它不会不来**：超时与 provider 报错在 Agent 层都是值，最后也会变成一条回执
@@ -135,6 +138,23 @@ module TablePage =
     /// **推导出来而不存下来**：配置只有 `LlmAt` 与 `Llm` 这一份，不会与第二份对不上。
     let private rosterOf (model: TableModel) : Roster =
         Roster.withLlm model.Ruleset model.LlmAt model.Llm
+
+    /// 导出文件的名字。**种子只有解析得出来才进文件名**：输入框里是人随手填的文本，
+    /// 原样拼进文件名会把斜杠之类的东西带进去。
+    let private exportName (seedText: string) : string =
+        match parseSeed seedText with
+        | Ok seed -> $"janpo-paifu-{seed}.json"
+        | Error _ -> "janpo-paifu.json"
+
+    /// 导出这一桌的牌谱。**编码在这里，落盘交给浏览器**（`Download`）：
+    /// 本平台没有后端，文件是浏览器自己在本地生成的（ADR-0003）。
+    /// 走 Cmd 而不是在 update 里直接写：副作用一律由 Cmd 发，update 保持纯的。
+    let private exportCmd (roster: Roster) (fileName: string) (table: Table) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun _ ->
+            Table.paifu roster table
+            |> Paifu.encoder
+            |> Encode.toString 0
+            |> Download.json fileName)
 
     /// 发一次问话。**不用 `Cmd.OfPromise`**：它整段包在 `#if FABLE_COMPILER` 里，
     /// 而这个文件要在 dotnet 上编得过（页面逻辑的用例跑在那边）。
@@ -202,25 +222,49 @@ module TablePage =
             },
             cmd
 
-    /// 回执 → 落子。**兜底就在这里**：id 换不回动作（模型没给、给的越界、超时、provider 报错）
-    /// 就由 `Fallback.action` 代打，而代打这件事记在牌桌上（`Table.applyFallback`）。
+    /// 回执 → 落子，并留下这一手的决策记录。**兜底就在这里**：id 换不回动作
+    /// （模型没给、给的越界、超时、provider 报错）就由 `Fallback.action` 代打。
+    ///
+    /// **DecisionRecord 只在这一处组装**（票 26）：只有这里同时拿得到那一手的决策包、
+    /// Agent 层的全部回执、最终落定的动作与「是不是兜底」。`turn` 是它在这一场里的手序号，
+    /// 取自牌桌（`Table.Turns`）而不是记录数——随机座位的手同样占号。
     let private settle (awaiting: Awaiting) (answer: AgentAnswer) (table: Table) : Table * AgentStatus =
         let seat = DecisionPackage.seat awaiting.Package
 
-        match
-            answer.ActionId
-            |> Option.bind (fun id -> DecisionPackage.tryAction id awaiting.Package)
-        with
-        | Some action -> Table.apply action table, AgentStatus.Spoke(seat, answer.Reason, answer.LatencyMs)
-        | None ->
-            // Agent 层没给原因就只能是「id 不在这一包里」：它自己校过一道，能走到这里
-            // 说明两边对 id 的看法分了岔（例：回执延到了下一份包）。
-            let reason =
-                answer.Failure |> Option.defaultValue $"模型给回的动作 id 不在这一包里（{answer.ActionId}）"
+        let action, fallback =
+            match
+                answer.ActionId
+                |> Option.bind (fun id -> DecisionPackage.tryAction id awaiting.Package)
+            with
+            | Some action -> action, None
+            | None ->
+                // Agent 层没给原因就只能是「id 不在这一包里」：它自己校过一道，能走到这里
+                // 说明两边对 id 的看法分了岔（例：回执延到了下一份包）。
+                let reason =
+                    answer.Failure |> Option.defaultValue $"模型给回的动作 id 不在这一包里（{answer.ActionId}）"
 
-            let action = Fallback.action awaiting.Config.Tier awaiting.Package
+                Fallback.action awaiting.Config.Tier awaiting.Package, Some reason
 
-            Table.applyFallback reason action table, AgentStatus.Troubled(seat, reason)
+        let record: DecisionRecord = {
+            Turn = table.Turns
+            Seat = seat
+            Prompt = answer.Prompt
+            Tools = answer.Tools
+            Output = answer.Output
+            Reason = answer.Reason
+            Thinking = answer.Thinking
+            Attempts = answer.Attempts
+            LatencyMs = answer.LatencyMs
+            // 兜底代打挑的那条也取自这一包（`Fallback.action`），因此 id 恒找得回。
+            Applied = DecisionPackage.tryId action awaiting.Package
+            Fallback = fallback
+        }
+
+        let played = Table.applyRecorded record action table
+
+        match fallback with
+        | None -> played, AgentStatus.Spoke(seat, answer.Reason, answer.LatencyMs)
+        | Some reason -> played, AgentStatus.Troubled(seat, reason)
 
     /// 初次摆的那一桌，**配置从外面给**。拆出来是为了它是纯的：
     /// 读 localStorage 在 `init` 那一层，因此页面逻辑的用例（dotnet 侧）用得上这个入口。
@@ -276,6 +320,11 @@ module TablePage =
             let advanced, cmd = step model
             resume cmd advanced
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
+        | Exported ->
+            match model.Table with
+            // 牌桌都开不起来时没有牌谱可导（按钮那时也是灰的）。
+            | Error _ -> model, Cmd.none
+            | Ok table -> model, exportCmd (rosterOf model) (exportName model.SeedText) table
         | KyokuAdvanced ->
             {
                 model with
@@ -673,6 +722,8 @@ module TablePage =
                         dispatch
                     button "table-step" (not running) "单步" Advanced dispatch
                     button "table-next" (not ended) "下一局" KyokuAdvanced dispatch
+                    // 牌谱随时导得出来，不必等终局：打到一半的事件流同样 fold 得回去。
+                    button "table-export" (Result.isError model.Table) "导出牌谱" Exported dispatch
                     Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
                 ]
                 @ speeds
@@ -874,18 +925,16 @@ module TablePage =
                 "spoke", $"座位 {Seat.index seat} 的模型选完了（{latency} ms）{said}"
             | AgentStatus.Troubled(seat, reason) -> "troubled", $"座位 {Seat.index seat} 兜底代打：{reason}"
 
-        let tally =
-            if table.Fallbacks = 0 then
-                ""
-            else
-                $"　这一桌已兜底 {table.Fallbacks} 手"
+        let fallbacks = Table.fallbacks table
+
+        let tally = if fallbacks = 0 then "" else $"　这一桌已兜底 {fallbacks} 手"
 
         Html.p [
             prop.key "agent"
             prop.className (if state = "troubled" then "agent error" else "agent")
             prop.testId "table-agent"
             prop.custom ("data-agent", state)
-            prop.custom ("data-fallbacks", string table.Fallbacks)
+            prop.custom ("data-fallbacks", string fallbacks)
             prop.text (text + tally)
         ]
 

@@ -85,6 +85,13 @@
     <Compile Include="Game.fs" />
   </ItemGroup>
 
+  <!-- 牌谱与回放（ADR-0002）：**唯一的可分享物**与它的 fold。
+       回放不是另一套代码路径，就是 `GameState.step`；局面快照格式不存在。 -->
+  <ItemGroup>
+    <Compile Include="Paifu.fs" />
+    <Compile Include="Replay.fs" />
+  </ItemGroup>
+
   <!-- 跑批（M0 验收）：一批种子跑到底，逐手验不变量、逐场数覆盖率。CLI 与 CI 共用它。 -->
   <ItemGroup>
     <Compile Include="Soak.fs" />

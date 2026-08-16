@@ -104,6 +104,12 @@
     <Compile Include="GameProperties.fs" />
   </ItemGroup>
 
+  <!-- 牌谱与回放（票 26）：编解码往返，以及「导出的事件流 fold 回同一个终局」。 -->
+  <ItemGroup>
+    <Compile Include="PaifuTests.fs" />
+    <Compile Include="ReplayTests.fs" />
+  </ItemGroup>
+
   <!-- M0 验收跑批（票 14）：一批种子跑到底，逐手验不变量、逐场数覆盖率。 -->
   <ItemGroup>
     <Compile Include="SoakTests.fs" />

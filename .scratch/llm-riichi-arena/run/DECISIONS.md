@@ -1799,3 +1799,99 @@ ADR-0005 第 2 条：渲染层要中文时由决策包携带，不让 TS 查术�
 它是人工验收脚本（调真实 API，不进 CI）。种子 1177 上 Bare 荒牌流局、Assisted 立直自摸满贯——
 **这是一局，不是证据**，只说明脚手架真的进了 prompt 且模型在用它。
 真要比强度是 M2 的评测口径（spec 的「对局跑批」），不是这一票。
+
+## 26
+
+**26-1：Paifu 的类型与编解码放引擎（`src/Janpo.Engine/Paifu.fs`），不放 Web 工程。**
+票里的倾向是「放 F# 侧」，落点选引擎而不是 `Janpo.Web`：`Event` / `Ruleset` / `Replay` 都在引擎里，
+牌谱的三样东西有两样半是引擎的；放 Web 工程会让引擎的往返测试反过来依赖宿主工程。
+Thoth.Json.Core 本来就在引擎的依赖白名单里（`Event.encoder` 用的就是它），后端仍然由两侧各自接
+（浏览器 JavaScript / dotnet Newtonsoft）。
+
+**26-2：decoder 出现在「记录回流」这个方向上，边界没破。**
+20 号票只给 `DecisionPackage` 写了 encoder，理由是**决策边界是单向的**：包出去、一个 id 回来，
+TS 侧构造不出 `Action`，非法动作在结构上不可能。本票新增的 decoder 都在**另一条路**上：
+- `Paifu.decoder` / `Ruleset.decoder` / 已有的 `Event.decoder`：**牌谱回流**（导入、URL 分享、往返测试）。
+  读进来的是**事件**（既成事实）与审计数据，不是意图；事件仍要经 `Replay` 交回 `GameState.step`
+  才变成局面，引擎该拒的照拒。
+- `Agent.answerDecoder`（23 号票就有）：回执回流，读进来的是一个 id 与几段字符串。
+**仍然没有的**：`Action.decoder` 与 `DecisionPackage.decoder`。「意图不上牌谱」这条没动——
+决策记录里存的是**动作在那一包里的 id**（`DecisionRecord.Applied`），不是动作本身。
+一句话：**出去的是决策包与 prompt，回来的是 id 与事实；事实有 decoder，意图没有。**
+
+**26-3：决策记录不存 `Action`，存它在那一手决策包里的 id。**
+理由三条：① `Action.encoder` 的注释明写「单向出口……意图不上牌谱」；② 那一手的决策包由
+「事件流 fold 到第 `Turn` 手的局面」重算得出（`DecisionPackage.forSeat`），id 在包内稳定——
+状态是 fold 出来的，不是存下来的（ADR-0002）；③ 中文 label 更不能存（ADR-0001 禁止牌谱消费渲染输出）。
+代价：M2 的思考气泡要显示「它选了什么」时得先 fold 到那一手。**被否决**：存一份 mjai 动作消息
+（等于给牌谱塞进第二份事实源，且要为它开一个 `Action.decoder`）。
+配套给引擎加了 `DecisionPackage.tryId`（`tryAction` 的反向）。
+
+**26-4：`DecisionRecord.Applied` 是 `int option` 而不是 `int`。**
+兜底代打的那条也取自这一包（`Fallback.action` 的候选全部来自它），因此实际恒是 `Some`；
+但「id ↔ 动作」的换算在引擎里恒是 option，记录不拿一个占位数字（-1 / 0）去假装它不是。
+**被否决**：`Applied: int` + `Option.defaultValue 0`——审计数据里出现一个假 id 比多一层 option 贵。
+
+**26-5：手序编号（`Table.Turns`）记在牌桌上，随机座位的手照样占号。**
+记录列表因此是稀疏的（实测一份真样例：`turn = 1, 5, 9, 10, 13, 18, 22`）。
+**被否决**：按记录数发号——那样「第几手」就与事件流对不上了，而 CONTEXT.md 的 Turn
+是「某座位提交一次 Action 的时机」，不是「某座位被审计的第几次」。
+
+**26-6：`Table.Fallbacks` 那个计数字段删了，改成从决策记录数出来（`Table.fallbacks`）。**
+兜底只发生在问过模型的那几手上，而那几手恒有记录，两份计数只会漂。
+这是对 23 号票的一处收敛，行为不变（牌桌上的 `data-fallbacks` 与那句「已兜底 N 手」照旧）。
+
+**26-7：「省掉 thinking」是**值上的一次变换**（`Paifu.stripThinking`），不是第二个编码器。**
+票里要求两条路径共用同一个解码器；本票让它们共用**同一个编码器**也成立：
+`thinking` 为 `None` 时那个键整个不写（不是写 `null`），解码那侧 `Optional.Field` 读得动两种。
+URL 分享（M2）= `paifu |> Paifu.stripThinking |> Paifu.encoder`。`reason` 与 `fallback` 同样处理。
+
+**26-8：牌谱带整份规则集，逐字段写，不写预设名。**
+回放要照**这一场**的规则重算符与点数，而预设会随版本漂（今天的 `yonma` 与半年后的不必相同）。
+代价是 20 个字段的 encoder/decoder（`Ruleset.fs` 里那一段）与每份牌谱多约 300 字节。
+顺带给 `GameLength` 加了 `toWire` / `ofWire`（此前只有中文的 `toDisplay`，而牌谱不许消费渲染输出）。
+
+**26-9：回放是引擎里的一个新模块 `Replay.fs`，与测试里的 `PaifuReplay` 各留各的。**
+两者算法同形（重建牌山 → 把动作交回 `GameState.step`），但吃的类型与用途不同：
+`PaifuReplay` 吃**外部**牌谱的 `PaifuEvent`（带上游转换器的噪声，要 denoise、要报差异分类），
+`Replay` 吃**我们自己产出的** `Event`，不允许差异——不同就是 bug。
+合并的代价是让引擎依赖测试固件的形状，或让对拍失去它的诊断能力，不划算。
+`Replay` 用了 `internal` 的 `Wall.ofOrdered` / `GameState.startFrom`：它在引擎里，因此这两个口子仍然没对外开。
+
+**26-10：回放的产物是 `Replayed = { Game; Current }`，不是一个 `Game`。**
+ADR-0002 说 Replay 是「对事件前缀做 fold」，而前缀常常停在某一局中间（分享一场没打完的对局）。
+只回 `Game` 会把没打完的那一局整个丢掉。这个形状与 `Table`（`Game` + `GameState`）一样，
+M2 的导入回放可以直接拿它摆牌桌。事件流喂完还没打完**不是错误**，中间某局没走完才是（`Stranded`）。
+
+**26-11：`streamSimple` 换掉 `completeSimple`，thinking 由 `thinking_delta` 收。**
+pi-ai 的 `completeSimple` 就是 `streamSimple(…).result()`，换过去只多一条流。收益有二：
+① 思考全文进牌谱（票 18 实测 `reasoning: "medium"` 收得到）；② M2 的思考气泡要边下边显示，
+接的就是这条流。**超时那一手也留得下已经流出来的思考**——真样例里那条 60 s 超时的记录带着完整思考。
+
+**26-12：工具定义拆进 `web/src/agent/tools.ts`，`piai.ts` 与 `loop.ts` 共读一份。**
+决策记录要记「发出去的工具定义」，而它此前只在 `piai.ts` 内部。抄一份进记录等于让审计数据
+与真发出去的可能不一致，因此改成同一个函数：`piai` 拿它发请求，`loop` 拿它 `JSON.stringify` 进回执。
+
+**26-13：导出的 JSON 是紧凑的一行（`Encode.toString 0`），不缩进。**
+与仓库其余序列化一致（黄金用例、决策包、事件流都是 0）。要读用 `jq`。
+实测一份 45 条事件 + 7 条决策记录（带 medium 思考）的牌谱 77 KB，大头全是 thinking——
+这正是 ADR-0002 说「URL 分享省掉它就足够短」的那个大头。
+
+**26-14：下载走一段 `[<Emit>]`（`Download.fs`），不引新的 Fable 绑定包。**
+`URL.createObjectURL` 与 `Blob` 在 `Fable.Browser.Dom` 里没有绑定，为一次下载引一个包不值当。
+那段 JS 是标准做法，且**只有这一处**碰下载 API。它在 dotnet 上编得过、跑不了——与 `Store` 的
+localStorage 同一处理（页面逻辑的用例不走这条路，副作用一律经 Cmd 发）。
+无头验收 `web/scripts/verify-export.mjs` 用 playwright 的 download 事件真下了一次，并把下下来的
+**那份字节**喂回浏览器里的引擎 fold（新增的浏览器侧入口 `PaifuCheck.fs`，与 `Golden.fs` 同一形态）。
+
+**26-16：审计四项记的是**最后一轮**问话，不是每一轮各记一份。**
+重试时 prompt 只多一句「上一次为什么不行」，而最后那轮才是产出这条回答的那一次；
+问了几次看 `Attempts`。**被否决**：把三轮的 prompt / 输出各存一份——牌谱体积翻几倍，
+而多出来的信息只有「重试的措辞」，那在 `prompt.ts` 里看得到。
+顺带一条形态上的说明：**TS 不发一整条 `DecisionRecord` 过来**（它不知道手序、座位、
+兜底与 id 换算），它只在回执上加审计四项；`Turn` / `Seat` / `Applied` / `Fallback` 由
+`TablePage.settle` 补齐。票里说的「按 schema decode 成 F# 类型」落在 `Agent.answerDecoder` 上。
+
+**26-15（提案，请裁决）：新词 `Replayed`（回放产物）没进 `CONTEXT.md`。**
+术语表有 Replay（动作），没有它的产物。本票取 `Replayed = { Game; Current }`。
+`Roster`（23-9）还挂着，两条一起裁比较省事。

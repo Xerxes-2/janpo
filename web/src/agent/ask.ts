@@ -26,6 +26,13 @@ export interface AskResult {
   toolCall: { name: string; arguments: Record<string, unknown> } | null;
   /** 模型说的话（没调工具时看它）。 */
   text: string;
+  /**
+   * 扩展思考的全文（票 26）；没开 `reasoning` 或 provider 不给时是 null。
+   *
+   * 它由 `streamSimple` 收 `thinking_delta` 拼出来（票 18 实测：`reasoning: "medium"`
+   * 收到 4062 个 delta）。**它不在 `text` 里**：牌谱要能单独省掉这一段（URL 分享）。
+   */
+  thinking: string | null;
   errorMessage: string | null;
   latencyMs: number;
   usage: { input: number; output: number } | null;

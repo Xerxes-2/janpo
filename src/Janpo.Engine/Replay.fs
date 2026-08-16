@@ -1,0 +1,484 @@
+namespace Janpo
+
+/// 回放推不下去的原因。**是值，不是异常**（与引擎其余部分同一风格）。
+/// `kyoku` 是事件流里的第几段（0 起），定位用。
+[<RequireQualifiedAccess>]
+type ReplayError =
+    /// 事件流里一局都没有（没有一条 `start_kyoku`）。
+    | NoKyoku
+    /// 牌山重建不出来：事件流里露过面的牌凑不成这个规则集的一座山。
+    | CannotBuildWall of kyoku: int * detail: string
+    /// 开不出局（重建出来的牌山不合这个规则集）。
+    | CannotStart of kyoku: int * error: KyokuStartError
+    /// 引擎拒绝了事件流里的某个动作。**不该发生**：事件是既成事实。
+    | Rejected of kyoku: int * illegal: IllegalAction
+    /// 这一局的事件流读不下去了，后面却还有别的局。
+    ///
+    /// **最后一局没走完不在其列**：回放就是对事件流的**前缀**做 fold（ADR-0002），
+    /// 分享一场还没打完的对局是常事。
+    | Stranded of kyoku: int * detail: string
+
+/// 一份事件流 fold 出来的东西：已经打完的那几局（收进了 `Game`）加上还没打完的那一局。
+///
+/// **形状与牌桌一样**（`Table` 也是 `Game` + `GameState`）不是巧合：回放出来的就是一桌对局，
+/// M2 的导入回放直接拿它摆牌桌。
+type Replayed =
+    {
+        /// 已经打完并收进这一场的那几局。
+        Game: Game
+        /// 还没打完的那一局；事件流正好在某一局收尾处结束时是 None。
+        Current: GameState option
+    }
+
+/// 回放产物的拆解。
+[<RequireQualifiedAccess>]
+module Replayed =
+
+    /// 回放出来的事件流。**它与喂进去的那份逐条相同**（除了开头的 `start_game`
+    /// ——那条的 `names` 来自配桌，不属于任何一局）。
+    let events (replayed: Replayed) : Event list =
+        Game.events replayed.Game
+        @ (replayed.Current |> Option.map GameState.events |> Option.defaultValue [])
+
+    /// 终局精算；这一场还没走完则为 None。
+    let result (replayed: Replayed) : GameResult option = Game.result replayed.Game
+
+/// 回放的诊断。
+[<RequireQualifiedAccess>]
+module ReplayError =
+
+    /// **渲染层的单向出口**（ADR-0001）：中文说明，只供 CLI 与 UI 提示使用。
+    let toDisplay (error: ReplayError) : string =
+        match error with
+        | ReplayError.NoKyoku -> "这份事件流里一局都没有"
+        | ReplayError.CannotBuildWall(kyoku, detail) -> $"第 {kyoku} 局的牌山重建不出来：{detail}"
+        | ReplayError.CannotStart(kyoku, error) -> $"第 {kyoku} 局开不出来：{KyokuStartError.toDisplay error}"
+        | ReplayError.Rejected(kyoku, illegal) -> $"第 {kyoku} 局：引擎拒绝了事件流里的动作（{IllegalAction.toDisplay illegal}）"
+        | ReplayError.Stranded(kyoku, detail) -> $"第 {kyoku} 局：{detail}"
+
+/// 回放（CONTEXT.md 的 Replay）：对 Paifu 事件流做 fold 得到局面。
+///
+/// **回放不是另一套代码路径，就是引擎本身**（ADR-0002）：这里做的全部事情是
+/// ① 按事件流把牌山摆回原样、② 把事件流里的动作原样交回 `GameState.step`。
+/// 符、点数、连庄、终局精算一律由引擎重算——本模块一条规则都不自己判，
+/// 因此「导出的牌谱回放出同一个终局」不靠两份实现对齐，靠的是只有一份实现。
+///
+/// 事件流里没有的两样东西由这里补回来：
+/// - 「过」（`Action.None`）不产出事件，因此没被宣言的座位一律交「过」；
+/// - 三家和了那三家的荣和宣言也不产出 `hora`（一家都没成立），宣言者记在
+///   `ryukyoku` 的 `tenpais` 上（`Ryuukyoku.revealedBy`），照它交回去。
+[<RequireQualifiedAccess>]
+module Replay =
+
+    // ---- 分段 ----
+
+    /// 这条事件是一局的边界吗（`start_kyoku` / `end_kyoku`）。
+    let private isBoundary (event: Event) : bool =
+        match event with
+        | StartKyoku _
+        | EndKyoku -> true
+        | _ -> false
+
+    /// 事件流 → 一局一段：`start_kyoku` 的载荷，加上它之后到这一局收尾为止的那些事件。
+    /// `start_game` / `end_game` 不属于任何一局，丢掉。
+    let rec private kyokus (events: Event list) : (StartKyoku * Event list) list =
+        match events |> List.skipWhile (isBoundary >> not) with
+        | StartKyoku start :: rest ->
+            let moves = rest |> List.takeWhile (isBoundary >> not)
+            (start, moves) :: kyokus (List.skip (List.length moves) rest)
+        | _ :: rest -> kyokus rest
+        | [] -> []
+
+    // ---- 牌山的重建 ----
+
+    /// 从一列牌里拿掉第一张与 `tile` 相同的；没有就原样返回。
+    let private removeOne (tile: Tile) (tiles: Tile list) : Tile list =
+        match List.tryFindIndex ((=) tile) tiles with
+        | Some index -> List.take index tiles @ List.skip (index + 1) tiles
+        | None -> tiles
+
+    /// 配牌的取牌手顺（4-4-4-1），与 `Wall.deal` 同一份，只是反过来用：
+    /// 已知四家的配牌，倒推它们在牌山里的先后。
+    let private haipaiOrder (ruleset: Ruleset) (oya: Seat) (tehais: Tile list list) : Tile list =
+        let rounds = ruleset.HaipaiSize / 4
+        let rest = ruleset.HaipaiSize % 4
+        let chunks = [ for _ in 1..rounds -> 4 ] @ (if rest > 0 then [ rest ] else [])
+
+        let plan =
+            [
+                for chunk in chunks do
+                    for seat in Seat.orderFrom ruleset oya -> seat, chunk
+            ]
+
+        (([], tehais), plan)
+        ||> List.fold (fun (taken, remaining) (seat, chunk) ->
+            let hand = Seat.tryItem seat remaining |> Option.defaultValue []
+            let size = min chunk (List.length hand)
+
+            taken @ List.truncate size hand, remaining |> Seat.mapAt seat (fun _ -> List.skip size hand))
+        |> fst
+
+    /// 摸进的牌分两路：从可摸区摸的，与杠之后从王牌补摸的岭上牌。
+    /// **紧跟在杠后面的那次自摸是岭上牌**；中间可能夹一条 `dora`（暗杠正是那个顺序）。
+    let private drawnTiles (moves: Event list) : Tile list * Tile list =
+        let step (live, rinshan, afterKan) event =
+            match event with
+            | Tsumo(_, pai) ->
+                if afterKan then
+                    live, rinshan @ [ pai ], false
+                else
+                    live @ [ pai ], rinshan, false
+            // 翻宝牌不打断「杠 → 补摸」：暗杠的顺序就是 `ankan` → `dora` → `tsumo`。
+            | Dora _ -> live, rinshan, afterKan
+            | Ankan _
+            | Kakan _
+            | Minkan _ -> live, rinshan, true
+            | StartGame _
+            | StartKyoku _
+            | Dahai _
+            | Pon _
+            | Chi _
+            | Riichi _
+            | RiichiAccepted _
+            | Hora _
+            | Ryuukyoku _
+            | EndKyoku
+            | EndGame -> live, rinshan, false
+
+        let live, rinshan, _ = moves |> List.fold step ([], [], false)
+        live, rinshan
+
+    /// 这一局露过面的表宝牌指示牌（开局那张加每次杠翻的那张）与里宝牌指示牌
+    /// （只有和了者立了直才公开；双响时取最长的那条）。
+    let private indicatorsIn (start: StartKyoku) (moves: Event list) : Tile list * Tile list =
+        let dora =
+            moves
+            |> List.choose (fun event ->
+                match event with
+                | Dora marker -> Some marker
+                | _ -> None)
+
+        let ura =
+            moves
+            |> List.choose (fun event ->
+                match event with
+                | Hora hora -> Some hora.UraDoraMarkers
+                | _ -> None)
+            |> List.sortByDescending List.length
+            |> List.tryHead
+            |> Option.defaultValue []
+
+        start.DoraMarker :: dora, ura
+
+    /// 从一局的事件流重建牌山：配牌与摸牌按事件流摆好，表里宝牌指示牌按事件流摆进王牌，
+    /// 其余位置由整副牌里**没露过面的**牌补满（那些牌这一局根本没被碰过，摆哪都一样）。
+    ///
+    /// 摊出来的一列牌交给 `Wall.ofOrdered`：可摸区在前、末尾 `DeadWallSize` 张是王牌，
+    /// 王牌里岭上牌在前、其后每两张是一叠（表宝牌指示牌，里宝牌指示牌）。
+    let private buildWall (ruleset: Ruleset) (start: StartKyoku) (moves: Event list) : Result<Wall, string> =
+        let haipai = haipaiOrder ruleset start.Oya start.Tehais
+        let live, rinshan = drawnTiles moves
+        let dora, ura = indicatorsIn start moves
+        let known = haipai @ live @ rinshan @ dora @ ura
+
+        let filler =
+            (Ruleset.wallTiles ruleset, known)
+            ||> List.fold (fun rest tile -> removeOne tile rest)
+
+        let liveSize = Ruleset.wallSize ruleset - ruleset.DeadWallSize
+        let liveFillerCount = liveSize - List.length haipai - List.length live
+        let rinshanFillerCount = ruleset.RinshanCount - List.length rinshan
+
+        if List.length filler <> Ruleset.wallSize ruleset - List.length known then
+            Error "事件流里露过面的牌凑不进整副牌（同一种牌最多四张）"
+        elif liveFillerCount < 0 then
+            Error $"事件流的摸牌数超出了可摸区（多 {-liveFillerCount} 张）"
+        elif rinshanFillerCount < 0 then
+            Error $"事件流的杠数超出了岭上牌（多 {-rinshanFillerCount} 次）"
+        else
+            let liveFiller, afterLive = List.splitAt liveFillerCount filler
+            let rinshanFiller, indicatorFiller = List.splitAt rinshanFillerCount afterLive
+
+            // 指示牌区按「表, 里」成叠排；事件流没公开的那几张用余牌顶上。
+            let slots =
+                [
+                    for index in 0 .. (ruleset.DeadWallSize - ruleset.RinshanCount) / 2 - 1 do
+                        yield List.tryItem index dora
+                        yield List.tryItem index ura
+                ]
+
+            let indicators, _ =
+                (([], indicatorFiller), slots)
+                ||> List.fold (fun (placed, pool) slot ->
+                    match slot, pool with
+                    | Some tile, _ -> placed @ [ tile ], pool
+                    | None, head :: rest -> placed @ [ head ], rest
+                    | None, [] -> placed, [])
+
+            let tiles = haipai @ live @ liveFiller @ rinshan @ rinshanFiller @ indicators
+
+            if List.length tiles <> Ruleset.wallSize ruleset then
+                Error $"重建出来的牌山有 {List.length tiles} 张，应当是 {Ruleset.wallSize ruleset} 张"
+            else
+                Ok(Wall.ofOrdered ruleset tiles)
+
+    // ---- 重放 ----
+
+    /// 重放过程中的游标：局面与还没喂进去的事件。
+    type private Driving = { State: GameState; Queue: Event list }
+
+    /// 引擎自己产出的事件，不必提交：摸牌、翻宝牌、立直成立与三条 game / kyoku 级事件。
+    let private isEngineProduced (event: Event) : bool =
+        match event with
+        | Tsumo _
+        | Dora _
+        | RiichiAccepted _
+        | StartGame _
+        | StartKyoku _
+        | EndKyoku
+        | EndGame -> true
+        | Dahai _
+        | Pon _
+        | Chi _
+        | Ankan _
+        | Kakan _
+        | Minkan _
+        | Riichi _
+        | Hora _
+        | Ryuukyoku _ -> false
+
+    /// 队列里下一条要喂进去的事件：引擎自己产出的先跳过。
+    let private pendingMoves (queue: Event list) : Event list = List.skipWhile isEngineProduced queue
+
+    /// 从队列里拿掉第一条与 `event` 相同的事件。
+    let private removeFirst (event: Event) (queue: Event list) : Event list =
+        match List.tryFindIndex ((=) event) queue with
+        | Some index -> List.take index queue @ List.skip (index + 1) queue
+        | None -> queue
+
+    /// 把一个动作交给引擎。被拒绝就是回放到此为止——事件是既成事实，引擎不该拒绝它。
+    let private submit (kyoku: int) (action: Action) (driving: Driving) : Result<Driving, ReplayError> =
+        match GameState.step driving.State action with
+        | Ok(next, _) -> Ok { driving with State = next }
+        | Error illegal -> Error(ReplayError.Rejected(kyoku, illegal))
+
+    /// 这条事件是不是对当前这一轮响应的宣言。
+    /// 抢杠那一轮只可能是荣和（`ResponseCause.Kan`：杠上鸣不了牌）。
+    let private isResponseTo (waiting: AwaitingResponse) (event: Event) : bool =
+        let toDiscard (target: Seat) (pai: Tile) =
+            match waiting.Cause with
+            | ResponseCause.Dahai -> target = waiting.Target && pai = waiting.Pai
+            | ResponseCause.Kan _ -> false
+
+        match event with
+        | Hora hora -> hora.Target = waiting.Target && hora.Actor <> hora.Target
+        | Pon(_, target, pai, _)
+        | Chi(_, target, pai, _)
+        | Minkan(_, target, pai, _) -> toDiscard target pai
+        | StartGame _
+        | StartKyoku _
+        | Tsumo _
+        | Dahai _
+        | Ankan _
+        | Kakan _
+        | Dora _
+        | Riichi _
+        | RiichiAccepted _
+        | Ryuukyoku _
+        | EndKyoku
+        | EndGame -> false
+
+    /// 宣言这条事件的座位。**只有响应阶段那四种用得上**：其余事件要么不在响应阶段出现，
+    /// 要么压根不是某家宣言的（`Event.actor` 引擎里没有这个函数，也不必为本模块加一个）。
+    let private declarer (event: Event) : Seat option =
+        match event with
+        | Hora hora -> Some hora.Actor
+        | Pon(actor, _, _, _)
+        | Chi(actor, _, _, _)
+        | Minkan(actor, _, _, _) -> Some actor
+        | StartGame _
+        | StartKyoku _
+        | Tsumo _
+        | Dahai _
+        | Ankan _
+        | Kakan _
+        | Dora _
+        | Riichi _
+        | RiichiAccepted _
+        | Ryuukyoku _
+        | EndKyoku
+        | EndGame -> None
+
+    /// 三家和了时这一家宣言过荣和吗。那三家的宣言**在事件流里没有各自的 `hora`**
+    /// （一家也没成立），只有一条 `ryukyoku`，宣言者记在它的 `tenpais` 上
+    /// （`Ryuukyoku.revealedBy`：三家和了那一支记的正是宣言者）。
+    let private declaredSanchaHora (seat: Seat) (queue: Event list) : bool =
+        match pendingMoves queue with
+        | Ryuukyoku result :: _ when result.Reason = SanchaHora ->
+            Seat.tryItem seat result.Tenpais |> Option.defaultValue false
+        | _ -> false
+
+    /// 响应阶段的一步：按引擎等答复的顺序，逐座位交出事件流里的宣言，没宣言的交「过」。
+    let private stepResponse
+        (kyoku: int)
+        (waiting: AwaitingResponse)
+        (driving: Driving)
+        : Result<Driving, ReplayError> =
+        match waiting.Responses with
+        // 走不到：响应阶段必然还等着至少一家。
+        | [] -> Error(ReplayError.Stranded(kyoku, "引擎停在响应阶段却没有等答复的座位"))
+        | pending :: _ ->
+            let seat = pending.Seat
+
+            let declared =
+                pendingMoves driving.Queue
+                |> List.takeWhile (isResponseTo waiting)
+                |> List.tryFind (fun event -> declarer event = Some seat)
+
+            match declared with
+            | Some event ->
+                let dropped =
+                    { driving with
+                        Queue = removeFirst event driving.Queue
+                    }
+
+                match event with
+                | Hora hora -> submit kyoku (Action.Hora(hora.Actor, hora.Target, hora.Pai)) dropped
+                | Pon(actor, target, pai, consumed) ->
+                    submit kyoku (Action.Pon(actor, target, pai, Tile.sort consumed)) dropped
+                | Chi(actor, target, pai, consumed) ->
+                    submit kyoku (Action.Chi(actor, target, pai, Tile.sort consumed)) dropped
+                | Minkan(actor, target, pai, consumed) ->
+                    submit kyoku (Action.Minkan(actor, target, pai, Tile.sort consumed)) dropped
+                // 走不到：`isResponseTo` 只放行上面那四种。
+                | StartGame _
+                | StartKyoku _
+                | Tsumo _
+                | Dahai _
+                | Ankan _
+                | Kakan _
+                | Dora _
+                | Riichi _
+                | RiichiAccepted _
+                | Ryuukyoku _
+                | EndKyoku
+                | EndGame -> Error(ReplayError.Stranded(kyoku, "响应阶段收到了不是响应的事件"))
+            | None when declaredSanchaHora seat driving.Queue ->
+                submit kyoku (Action.Hora(seat, waiting.Target, waiting.Pai)) driving
+            // 没宣言就是「过」——它不产出事件，因此事件流里根本看不见它。
+            | None -> submit kyoku (Action.None seat) driving
+
+    /// 摸牌后阶段的一步：打牌、宣言立直、自家宣言的杠、自摸和或九种九牌。
+    let private stepDahai (kyoku: int) (waiting: AwaitingDahai) (driving: Driving) : Result<Driving, ReplayError> =
+        match pendingMoves driving.Queue with
+        | [] -> Error(ReplayError.Stranded(kyoku, "事件流走完了，引擎还等着有人出手"))
+        | event :: rest ->
+            let advanced = { driving with Queue = rest }
+
+            match event with
+            | Dahai(actor, pai, tsumogiri) -> submit kyoku (Action.Dahai(actor, pai, tsumogiri)) advanced
+            | Riichi actor -> submit kyoku (Action.Riichi actor) advanced
+            | Ankan(actor, consumed) -> submit kyoku (Action.Ankan(actor, Tile.sort consumed)) advanced
+            | Kakan(actor, pai, consumed) -> submit kyoku (Action.Kakan(actor, pai, Tile.sort consumed)) advanced
+            | Hora hora -> submit kyoku (Action.Hora(hora.Actor, hora.Target, hora.Pai)) advanced
+            // 摸牌后阶段的 `ryukyoku` 只可能是九种九牌：其余形态由引擎自己判，不必提交。
+            | Ryuukyoku result when result.Reason = KyuushuKyuuhai ->
+                submit kyoku (Action.Ryuukyoku waiting.Actor) advanced
+            | Ryuukyoku result ->
+                let reason = RyuukyokuReason.toMjai result.Reason
+                Error(ReplayError.Stranded(kyoku, $"引擎等着有人出手，事件流却是一条 {reason} 流局"))
+            | Pon _
+            | Chi _
+            | Minkan _ -> Error(ReplayError.Stranded(kyoku, "事件流里有人响应上一张，引擎却没进响应阶段"))
+            // 走不到：`pendingMoves` 已经跳过这几种。
+            | StartGame _
+            | StartKyoku _
+            | Tsumo _
+            | Dora _
+            | RiichiAccepted _
+            | EndKyoku
+            | EndGame -> Error(ReplayError.Stranded(kyoku, "引擎自己产出的事件混进了要提交的队列"))
+
+    let rec private drive (kyoku: int) (driving: Driving) : Result<GameState, ReplayError> =
+        // 要喂的事件喂完了：**回放就是对前缀做 fold**（ADR-0002），停在这里不是错误。
+        // 取得出来的就是那一刻的局面（分享一场还没打完的对局走的就是这条路）。
+        if List.isEmpty (pendingMoves driving.Queue) then
+            Ok driving.State
+        else
+            match GameState.phase driving.State with
+            // 一局已终：队列里剩下的（`end_kyoku` 之类）不必再喂。
+            | Ended _ -> Ok driving.State
+            | AwaitingResponse waiting -> stepResponse kyoku waiting driving |> Result.bind (drive kyoku)
+            | AwaitingDahai waiting -> stepDahai kyoku waiting driving |> Result.bind (drive kyoku)
+
+    // ---- 入口 ----
+
+    /// 由这一局的 `start_kyoku` 摆出它的场况。**点数取事件流的**：每一局各自从
+    /// 它自己记下来的条件开起，因此某一局重建不出来也不会把后面几局全带歪。
+    let private contextOf (start: StartKyoku) : KyokuContext =
+        {
+            Bakaze = start.Bakaze
+            Kyoku = start.Kyoku
+            Honba = start.Honba
+            Kyotaku = start.Kyotaku
+            Oya = start.Oya
+            Scores = start.Scores
+        }
+
+    /// 重放一局：按事件流摆回牌山、开局、把动作原样交回引擎。
+    let private kyoku
+        (ruleset: Ruleset)
+        (index: int)
+        (start: StartKyoku)
+        (moves: Event list)
+        : Result<GameState, ReplayError> =
+        buildWall ruleset start moves
+        |> Result.mapError (fun detail -> ReplayError.CannotBuildWall(index, detail))
+        |> Result.bind (fun wall ->
+            GameState.startFrom ruleset (contextOf start) wall
+            |> Result.mapError (fun error -> ReplayError.CannotStart(index, error)))
+        |> Result.bind (fun opening -> drive index { State = opening; Queue = moves })
+
+    /// 把 fold 完的一局收进这一场。还没打完的只允许是**最后一局**（事件流到此为止）；
+    /// 中间某一局没走完说明这份事件流本身不自洽。
+    let private collect
+        (index: int)
+        (isLast: bool)
+        (state: GameState)
+        (replayed: Replayed)
+        : Result<Replayed, ReplayError> =
+        if GameState.isEnded state then
+            Ok
+                { replayed with
+                    Game = Game.advance state replayed.Game
+                }
+        elif isLast then
+            Ok { replayed with Current = Some state }
+        else
+            Error(ReplayError.Stranded(index, "这一局的事件流没走完，后面却还有别的局"))
+
+    /// **事件流 → 一场对局**：一局一局 fold 回去，连庄、结转与终局精算全由 `Game` 重算。
+    ///
+    /// 得到的东西与当初打出这份事件流的那一场逐项相同——终局点数、顺位，
+    /// 乃至 `Replayed.events` 逐条相同。「回放出同一个终局」这件事因此不是靠对齐两份实现，
+    /// 而是**只有一份实现**。
+    let game (ruleset: Ruleset) (events: Event list) : Result<Replayed, ReplayError> =
+        match kyokus events with
+        | [] -> Error ReplayError.NoKyoku
+        | segments ->
+            let last = List.length segments - 1
+
+            (Ok
+                {
+                    Game = Game.start ruleset
+                    Current = None
+                },
+             List.indexed segments)
+            ||> List.fold (fun replayed (index, (start, moves)) ->
+                replayed
+                |> Result.bind (fun replayed ->
+                    kyoku ruleset index start moves
+                    |> Result.bind (fun state -> collect index (index = last) state replayed)))
+
+    /// 一份牌谱 → 它记的那一场对局。规则集也取自牌谱：回放照的是**这一场**的规则。
+    let ofPaifu (paifu: Paifu) : Result<Replayed, ReplayError> = game paifu.Ruleset paifu.Events

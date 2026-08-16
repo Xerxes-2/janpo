@@ -43,6 +43,17 @@ module Roster =
     let playerAt (seat: Seat) (roster: Roster) : SeatPlayer =
         Seat.tryItem seat roster.Seats |> Option.defaultValue SeatPlayer.Random
 
+    /// 各家的名字，按座位升序——mjai `start_game` 的 `names`，也就是牌谱第一条事件里的那一列。
+    ///
+    /// **它是 wire 数据不是渲染**（ADR-0001）：随机选手叫 `random`，LLM 座位叫 `provider/model`。
+    /// **key 不在里面**：牌谱是可分享物，它里头永远不能出现 API key。
+    let names (roster: Roster) : string list =
+        roster.Seats
+        |> List.map (fun player ->
+            match player with
+            | SeatPlayer.Random -> "random"
+            | SeatPlayer.Llm config -> $"{config.Provider}/{config.Model}")
+
     /// 坐着 LLM 的那些座位。M1 只会有一个，形状仍按多个写——M2 是四家 LLM 同桌。
     let llmSeats (roster: Roster) : (Seat * LlmSeat) list =
         roster.Seats

@@ -100,6 +100,20 @@ module AgentTests =
         Assert.Equal(3, answer.Attempts)
 
     [<Fact>]
+    let ``回执带着审计那四项：prompt、工具定义、原始输出与 thinking`` () =
+        // 它们过界之后组装成牌谱里的一条 `DecisionRecord`（票 26）。
+        let answer =
+            answer
+                """{"action_id":3,"reason":"这张最安全","failure":null,"attempts":2,"latency_ms":2446,
+                    "prompt":"【可选动作】只能从下面这些 id 里选一个：","tools":"[{\"name\":\"choose_action\"}]",
+                    "output":"{\"stop_reason\":\"toolUse\"}","thinking":"先数向听……"}"""
+
+        Assert.Contains("可选动作", answer.Prompt)
+        Assert.Contains("choose_action", answer.Tools)
+        Assert.Contains("toolUse", answer.Output)
+        Assert.Equal(Some "先数向听……", answer.Thinking)
+
+    [<Fact>]
     let ``缺字段按「没有」处理，不是整条读不动`` () =
         // Agent 层是另一个语言写的，字段对不齐时这一手仍要走得下去（兜底），
         // 而不是因为一个字段缺失把整条回执废掉。
@@ -109,6 +123,11 @@ module AgentTests =
         Assert.Equal(None, answer.Failure)
         Assert.Equal(0, answer.Attempts)
         Assert.Equal(0, answer.LatencyMs)
+        // 审计那四项同理：缺了就是空的，不把这一手废掉。
+        Assert.Equal("", answer.Prompt)
+        Assert.Equal("", answer.Tools)
+        Assert.Equal("", answer.Output)
+        Assert.Equal(None, answer.Thinking)
 
     [<Fact>]
     let ``读不动的回执是 Error，不是异常`` () =

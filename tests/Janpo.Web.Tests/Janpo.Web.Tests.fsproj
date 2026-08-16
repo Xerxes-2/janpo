@@ -19,6 +19,7 @@
     <Compile Include="BoardTests.fs" />
     <Compile Include="AgentTests.fs" />
     <Compile Include="TablePageTests.fs" />
+    <Compile Include="PaifuExportTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
