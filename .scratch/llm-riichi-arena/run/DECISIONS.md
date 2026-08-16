@@ -1426,3 +1426,32 @@ mjai 参考实现在九种九牌那条 `ryukyoku` 上带 `actor`，本票没加�
 对拍时按牌谱**自己的** `reach_accepted` 把这份噪声抹掉（`PaifuReplay.denoiseUra`），
 判据取自牌谱而不是引擎。若将来换数据源，这一处可以删。
 
+
+---
+
+# M1
+
+M1 的决策与提案从这里往下追加。格式与 M0 同：票号、决定、被否决的选项、理由，各三五行。
+需要人裁决的写成「提案 <票号>-<字母>（需人裁）」。
+
+## 主人出门前定下的四条（不必再议）
+
+- **UI 形态 B**：Feliz + useElmish，牌桌核心用 F#，TS 只剩 Agent 层。关键论据是不对称性：
+  F# 调 TS 只需 import 一个返 Promise 的函数，TS 调 F# 要给每个跨界类型写 codec 或 `.d.ts`。
+- **边界形态**：`GameState` 是不透明句柄，永不序列化；跨界只有「决策包 JSON」与「动作 id」，
+  TS 永不构造 `Action`。
+- **prompt 在 TS 侧渲染**，F# 只出结构化决策包。
+- **M1 范围**：DecisionRecord、Danger、播放控制、Paifu JSON 导出四项全部纳入；
+  验收目标是**跑完一整场东风战**（不是 spec 下限的一个 Kyoku）。
+
+## 18（调度器自跑）pi-ai 浏览器可用性 —— 可用，不需要薄后端
+
+实测环境 Chrome headless + Vite 7 production build，DeepSeek `deepseek-v4-flash`。
+打包 26.65 kB（gzip 9.39）+ provider SDK 懒加载 chunk 170.88 kB（gzip 44.36），零 `node:` 外部化；
+跨域 200；单轮 tool call `stopReason=toolUse` 拿到合法 `action_id`；abort → `stopReason:"aborted"`、
+坏 key → `stopReason:"error"`，**都不抛异常**；`reasoning:"medium"` 收到 4062 个 `thinking_delta`。
+全文与五条实现约束见 `docs/research/pi-ai-browser-usability.md`。
+
+**顺带纠正 spec 一处**：包名是 `@earendil-works/pi-ai`（spec 写的 `@mariozechner/pi-ai` 是旧 scope）。
+**顺带发现一处会影响产品措辞的**：pi-ai 的 OAuth 登录流程是 Node-only，因此浏览器里**只能用 API key**，
+Claude / ChatGPT 订阅制登录在本项目里不可用。配置面板不要给用户这个幻觉（已写进 23 号票）。
