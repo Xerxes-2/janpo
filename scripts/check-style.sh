@@ -49,10 +49,10 @@ for f in files():
 # 而静态检查数不出运行时间。实测过——给非关键路径的 8 个模块加 Parallelism，CI 35s→37s，
 # 无收益反略慢。按属性条数当阈值是错的，留在文档里当指导。
 
-# ── 规则 5：引擎的 `let mutable` 预算。现有 7 处全部有理由（Shanten 的 34 长计数数组 6 处、
+# ── 规则 5：引擎的 `let mutable` 预算。现有 6 处全部有理由（Shanten 的 34 长计数数组 5 处、
 #    Rng 的原地洗牌 1 处）。要新增就得先改这个数字，顺带被迫在 DECISIONS.md 里留一条。
 #    只查引擎：CLI 的 stdin 读行循环是驱动层的标准写法，不在此约束内。
-BUDGET = 7
+BUDGET = 6
 n = sum(l.count("let mutable") for f in pathlib.Path("src/Janpo.Engine").rglob("*.fs") for l in f.read_text().splitlines())
 if n > BUDGET:
     bad.append(f"引擎里 let mutable {n} 处 > 预算 {BUDGET}（规则 5）：确有必要就改预算并在 DECISIONS.md 留一条")

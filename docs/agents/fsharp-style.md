@@ -116,7 +116,14 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 - **必须包在纯接口后面**（03 票的原话：允许「丑但快」，但外面看不见）
 - **必须注明性能理由**。34 元素的直方图用 `Array.fold` 会分配，循环不会——这个理由要写在代码里
 
-**不满足这两条的命令式代码按坏味道处理。** 新增 `let mutable` 要在 `DECISIONS.md` 留一条。
+**不满足这两条的命令式代码按坏味道处理。** 新增 `let mutable` 要在 `DECISIONS.md` 留一条，
+并且 `scripts/check-style.sh` 的预算会挡住你——改预算这个动作本身就是让你停下来想一想。
+
+**判断某处 `mutable` 值不值，看它省下的开销有没有被紧邻的代码吃掉。** 真实例子：
+`Shanten.fs` 的 `deadQuadKinds` 原本用可变累加器数「死张种数」，但它每次循环都要调 `canJoinRun`，
+而后者每次分配一个小 list——省下的那点开销早被吃光。改成 `Seq.filter |> Seq.length` 后实测
+11.83 µs → 12.00 µs，而**同版本三次跑的噪声带是 11.66–12.16 µs**，差异在带内，即无可测差异。
+（另一处 `searchStandard` 的 `let mutable best` 留着：它是递归搜索里跨调用累积的，改成纯的要换算法形状。）
 
 ## 规则 6：`.fsx` 脚本同样受这些约束
 
@@ -142,8 +149,32 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 | 指标 | 现值 | 有闸门吗 |
 |---|---|---|
 | 引擎行数 / `\|>` | 7261 行 / 364 个 | 无（密度不是指标） |
-| 引擎 `let mutable` | 7（`Shanten.fs` 6 + `Rng.fs` 1，全部有理由） | **有**，预算 7 |
+| 引擎 `let mutable` | 6（`Shanten.fs` 5 + `Rng.fs` 1，全部有理由） | **有**，预算 6 |
 | `fun x -> Encode.* (…)` | 0（原 3 处已改 `>>`） | **有**，锁零 |
 | `f (atom)` 多余括号 | 0 | **有**，锁零 |
 | `.NET` 方法调用的括号 | 10（`Assert.Empty(x)` 等，按规则 8 保留） | 无（惯例，不该管） |
 | 带 `Parallelism` 的属性模块 | 4（实测慢的那四个） | 无（判据是运行时间，静态查不出） |
+
+## 规则 9：F# 表达不了「长度 34 的数组」，用私有类型 + 智能构造子代替
+
+**F# 没有 const 泛型**（Rust 的 `[u8; 34]` 那种），也没有依赖类型。实测：`[<InlineArray(34)>]`
+（.NET 8+ 的定长内联数组）**在 F# 里声明得出来但构造不出来**——`error FS1133: No constructors
+are available for the type`。所以类型签名里写不出长度，只能是 `int array`。
+
+而且就算写得出也不能用：**引擎要经 Fable 编成 JS**，`InlineArray` / `Span<T>` /
+`System.Runtime.CompilerServices` 那套一律不可用。这条约束比语言能力更早否掉这个方向。
+
+**F# 的做法是把长度保证放进构造路径，而不是放进类型签名**——本仓库已经这么做了：
+
+```fsharp
+// TileKindSet / HandShape：类型私有，只能经校验过的构造子拿到
+type HandShape = private { Counts: int array; NakiCount: int }   // Counts 恒为 34 长
+// HandShape.create 校验张数与「同种 ≤4 张」，构造不出非法值
+```
+
+于是**「34 长」不是类型说的，是「唯一的构造入口保证的」**。模块内部的私有函数
+（如 `Shanten.searchStandard` 收的 `legal` / `original` / `counts`）直接收裸数组，
+因为它们只能被那些已验证类型的方法调用——边界在**模块**上，不在每个函数签名上。
+
+想更进一步（私有单 case wrapper 包住 34 长数组）在热路径上要加一层间接，**没做，也不建议做**：
+现有的模块边界已经够，收益不抵可读性与速度的代价。

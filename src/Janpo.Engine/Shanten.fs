@@ -66,14 +66,13 @@ module Shanten =
     /// 「死张」的种数：手里握满 4 张、且在这个规则集下永远进不了顺子的牌种。
     /// 它的第 4 张既凑不出需要第 5 张的刻子，也进不了顺子，只能打掉——每有一种就至少
     /// 多一次替换，因此它是向听数的下界。四麻里这就是字牌。
+    ///
+    /// 每次 `standard` 只调一次（不在递归里），所以这里不为省一次遍历而用可变累加：
+    /// 紧挨着的 `canJoinRun` 每次都要分配一个小 list，省下的那点开销早被它吃掉了。
     let private deadQuadKinds (legal: bool array) (original: int array) : int =
-        let mutable dead = 0
-
-        for index in 0 .. Tile.KindCount - 1 do
-            if original.[index] = 4 && not (canJoinRun legal index) then
-                dead <- dead + 1
-
-        dead
+        seq { 0 .. Tile.KindCount - 1 }
+        |> Seq.filter (fun index -> original.[index] = 4 && not (canJoinRun legal index))
+        |> Seq.length
 
     /// 面子分解搜索。`legal` 是规则集的牌种存在标志，`original` 是手牌的原始计数
     /// （判「4 张全在手里」用），`counts` 是可以原地增删的副本。
