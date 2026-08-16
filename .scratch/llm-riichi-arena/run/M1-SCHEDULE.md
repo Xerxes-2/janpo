@@ -49,9 +49,9 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 | 25 | **done** | txxznwps | ws-a；Assisted 四项齐；无人立直也无人副露时整份危险度是 None |
 | 26 | **done** | mwuloxvq | ws-b；Paifu 版本 1，thinking 是「值上的一次变换」可省；200 场回放逐条相同 |
 | 28 | 待派 | | 裁决落地（21-c 逐字段 + 23-A Roster），阻塞于 25、26；PendingKan 与立直宣言牌已抽给 29 |
-| 29a | 待派 | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
+| 29a | 派工中 | ws-a | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
 | 29b | 待派 | | 前缀可缓存 prompt + **prompt 降为数据 + system 槽位/人格** + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
-| 30 | 待派 | | 自定义 baseUrl 接本地端点（含 CORS 与 mixed-content 实证），无阻塞 |
+| 30 | 派工中 | ws-b | | 自定义 baseUrl 接本地端点（含 CORS 与 mixed-content 实证），无阻塞 |
 | 27 | 待派 | | 阻塞于 21、24、25、26、28、29a、29b、30 |
 
 ## 集成记录
@@ -78,6 +78,10 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 - **25 集成**（调度器）：两处纯追加冲突（`DECISIONS.md`、`TablePage.fs` 各加一个 Msg 分支），
   用 `run/resolve-append-conflicts.py` 解——那个脚本只处理「两侧各自新增」，一见删改就报错交人，不许猜。
   合流后 `./scripts/ci.sh` 全绿（含牌谱导出下载与回放）。
+
+- **28 集成**（调度器）：一处纯追加冲突（`DECISIONS.md`），脚本解。CI 全绿。
+  28-1 的偏离（decoder 落在 `Janpo.Golden` 而非引擎）由调度器**接受**：它比票面写法更好，
+  产品路径的单向边界没被破，且摊平的是已编好的 JSON，不可能与 encoder 漂移。
 
 ## 主人回来先看哪里
 
