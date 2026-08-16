@@ -142,7 +142,7 @@ type Outcome =
     /// 流局收尾。听牌家与授受都在引擎给的这份载荷里。
     | Ryuukyoku of ryuukyoku: Ryuukyoku
 
-/// 一局的结算显示：怎么结束的、亲连不连庄。
+/// 一局的结算显示：怎么结束的、亲连不连庄、这一局之后往哪走。
 type Settlement = {
     /// 怎么结束的。
     Outcome: Outcome
@@ -150,6 +150,26 @@ type Settlement = {
     Oya: Seat
     /// 连庄与否。**判据只有一处**（`KyokuEnd.isRenchan`），这里只读它的布尔值。
     Renchan: bool
+    /// 这一局打完就终局了吗（CONTEXT.md 的 `GameProgress`：`NextKyoku` 还是 `Ended`）。
+    ///
+    /// **它不是连庄的反义**：局数序列走完就终局，连庄也不延长（东风战东 4 局的亲连庄
+    /// 照样终局，05 票的 Out of Scope）。结算面板那句「进下一局」读的就是它：
+    /// 末局那一刻根本没有下一局（票 39）。
+    Ended: bool
+}
+
+/// 终局那一屏（CONTEXT.md 的 `GameResult`）：精算本身，加上「场上剩的那几根供托归了谁」。
+///
+/// **座位卡读的是同一份数**（`Board.ofTable` 的 `settled`）：同一屏上不允许两个点数并排
+/// 站着不解释（票 39）。
+type FinalView = {
+    /// 终局精算：精算后的各家点数与顺位。
+    Result: GameResult
+    /// 精算**前**场上还剩几根供托（Kyotaku 记的是根数不是点数）。它们已经归了头名；
+    /// 0 就没有这回事。
+    Kyotaku: int
+    /// 那几根值多少点（`Ruleset.kyotakuScore`）。头名的点数比局末多出来的就是它。
+    KyotakuScore: int
 }
 
 /// 投影 → 牌桌视图。**这一层不做规则判定**，只把两个投影摆成同一个形状。
@@ -292,16 +312,42 @@ module Board =
 
     // ---- 投影选择 ----
 
+    /// 终局那一刻的点数与供托：**换成精算之后的那一份**。
+    ///
+    /// **谁是权威**：局中是 `GameState`（两个投影就是它的换装）；终局是 `Game` ——
+    /// `Game.scores` 在终局返回精算后的点数、`Game.kyotaku` 返回 0（供托已经归属完毕），
+    /// 两行注释就写在 `Game.fs` 里。投影只认最后一局的局面，它不知道精算这回事，
+    /// 于是同一屏上座位卡与终局精算各说一个数（票 39 的病根）。
+    ///
+    /// 立直棒那排图元跟着 `Kyotaku` 走，因此归零之后桌上自然不再画着它。
+    let private settled (result: GameResult) (board: BoardView) : BoardView = {
+        board with
+            Kyotaku = 0
+            Seats =
+                board.Seats
+                |> List.map (fun view -> {
+                    view with
+                        Score = Seat.tryItem view.Seat result.Scores |> Option.defaultValue view.Score
+                })
+    }
+
     /// 牌桌 + 视角 → 画出来的那张牌桌。坐的那个座位不在这个规则集里时是 None
     /// （上帝视角不会失败）。
     ///
     /// **坐席那一侧取的是增量维护的掩蔽流**（票 29a 的 `Table.observation`），
     /// 不是每帧重头 fold 全流；上帝视角另走一条投影——它一张也不蔽，因此不在掩蔽法则之列
     /// （里宝牌压根不在事件流里）。
+    ///
+    /// **终局那一屏另过一道 `settled`**：那时牌桌该画的不再是最后一局的局末局面。
     let ofTable (viewpoint: Viewpoint) (table: Table) : BoardView option =
-        match viewpoint with
-        | Viewpoint.God -> GodView.ofState table.State |> ofGodView |> Some
-        | Viewpoint.Seated seat -> Table.observation seat table |> Option.map ofObservation
+        let projected =
+            match viewpoint with
+            | Viewpoint.God -> GodView.ofState table.State |> ofGodView |> Some
+            | Viewpoint.Seated seat -> Table.observation seat table |> Option.map ofObservation
+
+        match Table.result table with
+        | None -> projected
+        | Some result -> projected |> Option.map (settled result)
 
     // ---- 结算 ----
 
@@ -353,4 +399,20 @@ module Board =
                 Outcome = outcome
                 Oya = oya
                 Renchan = KyokuEnd.isRenchan oya kyokuEnd
+                // 这一局已经被 `Game.advance` 收进这一场了，因此现在就答得出有没有下一局。
+                Ended = Table.result table |> Option.isSome
             })
+
+    /// 终局那一屏；这一场还没走完则为 None。
+    ///
+    /// 供托取的是**最后一局终了时场上剩的那几根**（`GameState.kyotaku`）：`Game` 那边精算
+    /// 一做完就归零了，而「归了谁」这句话需要知道归之前有几根。
+    let final (table: Table) : FinalView option =
+        let kyotaku = GameState.kyotaku table.State
+
+        Table.result table
+        |> Option.map (fun result -> {
+            Result = result
+            Kyotaku = kyotaku
+            KyotakuScore = Ruleset.kyotakuScore (GameState.ruleset table.State) kyotaku
+        })

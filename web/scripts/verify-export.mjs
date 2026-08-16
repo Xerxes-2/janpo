@@ -5,6 +5,9 @@
 //   1. 点一下真的下载得到一个文件（不是「代码写了没验」）；
 //   2. 那份 JSON 读得动：版本号、规则集、事件流、决策记录都在；
 //   3. 它的事件流被引擎重新 fold 出**逐条相同**的事件流与同一份点数（ADR-0002 的回放）；
+//      **点数那一条比的是「牌桌该显示什么」**：局中的权威是那一局的 `GameState`，
+//      终局的权威是 `Game`（精算之后，供托已归头名）——两侧都照这条口径取数，
+//      因此它在**打完整场**的情形下同样说得通（票 39；从前不是，那时它是一条假红）。
 //   4. **导出物里没有 API key**（票 34）：一把假 key 灌进 localStorage，四家仍是随机选手
 //      （于是一个请求都不发），导出的文件名与字节里都不该出现它。
 //
@@ -16,10 +19,13 @@
 //
 // 跑法：
 //   cd web && pnpm run fable && pnpm run verify:export
+//   node scripts/verify-export.mjs --to-end    # 一路打到终局精算那一屏
 //   JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-export.mjs --llm --thinking medium
 //   node scripts/verify-export.mjs --poison   # 反向自证：这一趟**必须**红
 //
-// 选项：--turns N（导出前先走几手，默认 60）、--seat N、--model X、--thinking off|low|medium|high、
+// 选项：--turns N（导出前先走几手，默认 60；一局打完就接着开下一局）、
+//       --to-end（打完一整场再导出：走到终局精算出现为止，手数上限默认 4000）、
+//       --seed N（开跑前先换一个种子重开一桌）、--seat N、--model X、--thinking off|low|medium|high、
 //       --keep <路径>（把下下来的牌谱另存一份，报告里的样例就是这么来的）、
 //       --poison（往导出物里拌一把 key，见下面 `poisoned`）。
 
@@ -39,7 +45,9 @@ const flag = (name, fallback) => {
 };
 
 const withLlm = argv.includes("--llm");
-const turns = Number.parseInt(flag("--turns", "60"), 10);
+const toEnd = argv.includes("--to-end");
+const turns = Number.parseInt(flag("--turns", toEnd ? "4000" : "60"), 10);
+const seed = flag("--seed", null);
 const seat = Number.parseInt(flag("--seat", "1"), 10);
 const model = flag("--model", "deepseek-v4-flash");
 const thinking = flag("--thinking", "off");
@@ -122,25 +130,52 @@ try {
 
   const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
 
+  // 换种子就是页面上那两下：填输入框 + 「重开」。种子 447 那一场终局时场上还剩着供托，
+  // 也就是「局末点数」与「精算后点数」真的不同的那种场（票 39 的现场）。
+  if (seed !== null) {
+    await page.getByTestId("table-seed").fill(seed);
+    await page.getByTestId("table-restart").click();
+    console.log(`种子换成 ${seed} 重开了一桌`);
+  }
+
   console.log(
-    `模式：${withLlm ? `一席交给 ${model}（思考预算 ${thinking}）` : "四家随机选手（不发任何请求）"}　先走 ${turns} 手`,
+    `模式：${withLlm ? `一席交给 ${model}（思考预算 ${thinking}）` : "四家随机选手（不发任何请求）"}　` +
+      `${toEnd ? `一路打到终局（手数上限 ${turns}）` : `先走 ${turns} 手`}`,
   );
   if (!withLlm) console.log(`localStorage 里躺着一把假 key：${FAKE_KEY}`);
 
   // 一手一手走：单步之后要么当场落子，要么在等模型——等到「上一手」变了为止。
+  // 一局打完就点「下一局」接着打；终局那一刻「下一局」也是灰的，于是停在终局那一屏。
+  let kyokus = 1;
   for (let turn = 0; turn < turns; turn += 1) {
+    if (await page.getByTestId("table-step").isDisabled()) {
+      if (await page.getByTestId("table-next").isDisabled()) break; // 终局了
+      await page.getByTestId("table-next").click();
+      kyokus += 1;
+      continue;
+    }
     const before = await readText("table-latest");
     await page.getByTestId("table-step").click();
-    if (await page.getByTestId("table-step").isDisabled()) break; // 这一局打完了
+    // 引擎拒了那一手（`table-fault`）时「上一手」不会变，不一并等它就要白等一个预算。
     await page
       .waitForFunction(
         (previous) =>
-          document.querySelector('[data-testid="table-latest"]').textContent.trim() !== previous,
+          document.querySelector('[data-testid="table-latest"]').textContent.trim() !== previous ||
+          document.querySelector('[data-testid="table-fault"]') !== null,
         before,
         { timeout: budgetMs },
       )
       .catch(() => problems.push(`第 ${turn} 手没走动`));
   }
+
+  // 引擎拒掉了某一手（**不该发生**：提交的动作都取自合法动作集）：牌桌停在那里，闸门要说出来。
+  if (await page.getByTestId("table-fault").count()) {
+    problems.push(`牌桌停住了：${await readText("table-fault")}`);
+  }
+
+  const ended = (await page.getByTestId("table-result").count()) > 0;
+  console.log(`打了 ${kyokus} 局${ended ? "，已到终局精算那一屏" : "（还没终局）"}`);
+  if (toEnd && !ended) problems.push(`要求打完一整场，却在手数上限 ${turns} 里没走到终局`);
 
   console.log(`走完之后：${await readText("table-latest")}`);
   console.log(`Agent 状态：${await readText("table-agent")}`);
@@ -193,6 +228,12 @@ try {
     }
 
     // 页面上的点数与回放算出来的点数必须一致——牌桌与 fold 出来的是同一场对局。
+    //
+    // **两边比的是同一个量**（票 39）：`report.scores` 报的是「事件流走到哪，点数就报到哪」
+    // ——还在打的那一局报它此刻的点数（`GameState`），正好在某局收尾处结束的报这一场的
+    // （`Game`，终局那一份是精算之后、供托已归头名）。牌桌上的座位卡照同一条口径取数，
+    // 因此这条断言在**打完整场**时同样成立。从前不是：座位卡恒读最后一局的 `GameState`，
+    // 于是打完整场比的是两个不同的量，红了而代码没错（那条假红就是这张票的第三症）。
     const onPage = await Promise.all(
       [0, 1, 2, 3].map(async (index) => Number.parseInt(await readText(`seat-${index}-score`), 10)),
     );
@@ -200,6 +241,28 @@ try {
       problems.push(
         `牌桌上的点数 ${onPage.join("/")} 与回放算出的 ${report.scores.join("/")} 不同`,
       );
+    }
+
+    // 终局那一屏：牌桌上只许有一种说法（票 39）。座位卡跟着精算走（上面那条已经比过），
+    // 供托跟着归零、立直棒收走，结算面板也不再邀人「进下一局」。
+    if (ended) {
+      console.log(`终局精算：${await readText("table-result-ranking")}`);
+      if (await page.getByTestId("table-result-kyotaku").count()) {
+        console.log(await readText("table-result-kyotaku"));
+      }
+      const kyotaku = await readText("table-kyotaku");
+      if (kyotaku !== "0 根") {
+        problems.push(`终局之后场况行还写着「供托 ${kyotaku}」：供托在精算里已经归了头名`);
+      }
+      if (await page.getByTestId("table-bou").count()) {
+        problems.push("终局之后桌上还画着立直棒：那几根已经归了头名");
+      }
+      const progress = await page.getByTestId("table-renchan").getAttribute("data-progress");
+      if (progress !== "ended") {
+        problems.push(
+          `最后一局的结算面板写着「${await readText("table-renchan")}」，而没有下一局了`,
+        );
+      }
     }
     if (report.events < 10) problems.push(`只导出了 ${report.events} 条事件，这一桌根本没走动`);
     if (withLlm && report.decisions === 0) problems.push("一席交给了模型，却一条决策记录都没有");

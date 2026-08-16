@@ -21,7 +21,9 @@ your browser's `localStorage`, and requests go straight from your browser to the
 UI and docs are Chinese-first. Work in progress — the interface and the export format will change.
 
 > **还在做（WIP）。** 现在能玩的是「一个座位交给模型 + 三家随机选手」；
-> 「模型坐一席打完**一整场**」还没验收过，界面、prompt 与牌谱格式都还会变。
+> 模型坐一席打完**一整场**东风战已经真跑过两次（同一个种子下两档脚手架各一次）：
+> 裸奔档 4 局 91 手、信息辅助档 7 局 153 手，**全程没有一手要引擎代打**；
+> 界面、prompt 与牌谱格式都还会变。
 
 ---
 

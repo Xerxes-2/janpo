@@ -39,6 +39,29 @@ module BoardTests =
 
         loop budget start
 
+    /// 打完一整场：一局打到终就开下一局，直到局数序列走完（`Table.result` 有值）。
+    let private toGameEnd (budget: int) (start: Table) : Table =
+        let rec loop (left: int) (current: Table) =
+            match Table.result current with
+            | Some _ -> current
+            | None when left <= 0 -> failwith "这一场在预算内没打完"
+            | None -> current |> toKyokuEnd 400 |> Table.nextKyoku |> loop (left - 1)
+
+        loop budget start
+
+    let private resultOf (table: Table) : GameResult =
+        match Table.result table with
+        | Some result -> result
+        | None -> failwith "这一场应当已经终局"
+
+    let private settlementOf (table: Table) : Settlement =
+        match Board.settlement table with
+        | Some settlement -> settlement
+        | None -> failwith "这一局应当已经终了"
+
+    let private scoresOn (board: BoardView) : int list =
+        board.Seats |> List.map (fun view -> view.Score)
+
     let private handsOf (board: BoardView) : HandView list =
         board.Seats |> List.map (fun view -> view.Hand)
 
@@ -146,6 +169,70 @@ module BoardTests =
     [<Fact>]
     let ``还没终就没有结算`` () =
         Assert.True(table seed |> Board.settlement |> Option.isNone)
+
+    /// 票 39 的病根：终局那一屏上「点数」有两个说法——座位卡读最后一局的 `GameState`，
+    /// 终局精算读 `Game`（精算后，供托已归头名）。**终局的权威是 `Game`**，
+    /// 因此两处必须是同一份数。
+    ///
+    /// 种子 447 的那一场终局时场上还剩 1 根供托（27 号验收用的就是它），
+    /// 于是「最后一局的局末点数」与「精算后的点数」真的不同——不同才验得出口径。
+    [<Fact>]
+    let ``终局那一屏：座位卡与终局精算是同一份点数`` () =
+        let ended = table 447 |> toGameEnd 12
+        let result = resultOf ended
+
+        Assert.NotEqual<int list>(GameState.scores ended.State, result.Scores)
+
+        for viewpoint in [ Viewpoint.God; Viewpoint.Seated Seat.first ] do
+            Assert.Equal<int list>(result.Scores, board viewpoint ended |> scoresOn)
+
+    [<Fact>]
+    let ``终局之后桌上不再剩供托：它已经归了头名`` () =
+        let ended = table 447 |> toGameEnd 12
+
+        // 前提：这一场终局时最后一局手上确实还剩着供托（否则这条用例什么也没验）。
+        Assert.True(GameState.kyotaku ended.State > 0, "种子 447 的终局那一局该剩着供托")
+
+        for viewpoint in [ Viewpoint.God; Viewpoint.Seated Seat.first ] do
+            Assert.Equal(0, (board viewpoint ended).Kyotaku)
+
+    [<Fact>]
+    let ``还没终局时点数与供托照旧读这一局的局面`` () =
+        let playing = table 447 |> toKyokuEnd 400
+
+        for viewpoint in [ Viewpoint.God; Viewpoint.Seated Seat.first ] do
+            let board = board viewpoint playing
+            Assert.Equal<int list>(GameState.scores playing.State, scoresOn board)
+            Assert.Equal(GameState.kyotaku playing.State, board.Kyotaku)
+
+    [<Fact>]
+    let ``最后一局的结算说的是终局，不是进下一局`` () =
+        let ended = table 447 |> toGameEnd 12
+
+        Assert.True((settlementOf ended).Ended, "局数序列走完了，这一局之后没有下一局")
+
+    [<Fact>]
+    let ``不是最后一局的结算仍然有下一局`` () =
+        let first = table 447 |> toKyokuEnd 400
+
+        Assert.False((settlementOf first).Ended, "东 1 局之后还有下一局")
+
+    [<Fact>]
+    let ``终局精算那一屏说得出供托归了谁`` () =
+        let ended = table 447 |> toGameEnd 12
+
+        match Board.final ended with
+        | None -> failwith "这一场应当已经终局"
+        | Some final ->
+            Assert.Equal<int list>((resultOf ended).Scores, final.Result.Scores)
+            Assert.Equal(GameState.kyotaku ended.State, final.Kyotaku)
+            // 头名多出来的正是那几根：供托在精算里只换归属，不凭空增减。
+            let carried = List.sum final.Result.Scores - List.sum (GameState.scores ended.State)
+            Assert.Equal(final.KyotakuScore, carried)
+
+    [<Fact>]
+    let ``还没终局就没有终局精算那一屏`` () =
+        Assert.True(table 447 |> toKyokuEnd 400 |> Board.final |> Option.isNone)
 
     [<Fact>]
     let ``和了的结算给役种、番符、点数授受与连庄`` () =

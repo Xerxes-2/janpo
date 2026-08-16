@@ -752,6 +752,15 @@ module TablePage =
             | Outcome.Hora _ -> "和了"
             | Outcome.Ryuukyoku _ -> "流局"
 
+        // 这一局之后往哪走。**末局不该邀人「进下一局」**：局数序列走完就终局，
+        // 连庄也不延长，因此终局那一行压过连庄与否（票 39）。
+        // `data-progress` 给无头验收读，不必去分析中文。
+        let progress, text =
+            match settlement.Ended, settlement.Renchan with
+            | true, _ -> "ended", "终局：这一场到此打完，下面是终局精算"
+            | false, true -> "renchan", "亲连庄"
+            | false, false -> "next", "亲流局，进下一局"
+
         Html.section [
             prop.key "settlement"
             prop.className "settlement"
@@ -763,18 +772,44 @@ module TablePage =
                     Html.p [
                         prop.key "renchan"
                         prop.testId "table-renchan"
-                        prop.text (if settlement.Renchan then "亲连庄" else "亲流局，进下一局")
+                        prop.custom ("data-progress", progress)
+                        prop.text text
                     ]
                 ]
             )
         ]
 
-    let private resultPanel (result: GameResult) =
+    /// 终局精算。**座位卡读的是同一份数**（`Board.ofTable` 在终局那一刻换成精算后的点数），
+    /// 因此这一屏上只有一种说法。供托那几根去了哪要写出来：场况行已经归零、
+    /// 桌上那根立直棒也收走了，不说一句就成了「凭空不见」。
+    let private resultPanel (final: FinalView) =
+        let kyotaku =
+            if final.Kyotaku = 0 then
+                []
+            else
+                [
+                    Html.p [
+                        prop.key "kyotaku"
+                        prop.testId "table-result-kyotaku"
+                        prop.text $"场上剩下的供托 {final.Kyotaku} 根（{final.KyotakuScore} 点）已归 1 位"
+                    ]
+                ]
+
         Html.section [
             prop.key "result"
             prop.className "settlement"
             prop.testId "table-result"
-            prop.children [ Html.h3 "终局精算"; Html.p (GameResult.toDisplay result) ]
+            prop.children (
+                [
+                    Html.h3 [ prop.key "title"; prop.text "终局精算" ]
+                    Html.p [
+                        prop.key "ranking"
+                        prop.testId "table-result-ranking"
+                        prop.text (GameResult.toDisplay final.Result)
+                    ]
+                ]
+                @ kyotaku
+            )
         ]
 
     // ---- 视图：控制 ----
@@ -1248,7 +1283,7 @@ module TablePage =
 
             let settlement = Board.settlement table |> Option.toList |> List.map settlementPanel
 
-            let result = Table.result table |> Option.toList |> List.map resultPanel
+            let result = Board.final table |> Option.toList |> List.map resultPanel
 
             let danger = dangerPanels model table board.Viewer
 
