@@ -40,10 +40,8 @@ let hands =
     |> Seq.toArray
 
 let sw = Stopwatch.StartNew()
-let mutable acc = 0
 
-for h in hands do
-    acc <- acc + (Shanten.calculate kindSet h |> Shanten.value)
+let acc = hands |> Array.sumBy (Shanten.calculate kindSet >> Shanten.value)
 
 sw.Stop()
 printfn "50000 手纯计算 %.2f 秒 = %.1f µs/手（校验和 %d）" sw.Elapsed.TotalSeconds (sw.Elapsed.TotalMicroseconds / 50000.0) acc
