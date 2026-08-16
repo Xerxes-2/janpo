@@ -41,6 +41,37 @@ _Avoid_: 庄家、Dealer
 某座位提交一次 Action 的时机。复盘与 DecisionRecord 以「手」为编号单位（「第 7 手」）。
 _Avoid_: 步、step（step 是引擎函数名，不是领域词）
 
+**GameLength（对局长度）**：
+`Tonpuusen` 与 `Hanchan` 的上位词，`Ruleset.Length` 的类型。局数由它与座位数推出——
+四麻东风战 4 局、半庄 8 局、三麻半庄 6 局都不是写死的。
+
+**GameProgress（对局进程）**：
+一局打完之后的去向：`NextKyoku`（还有下一局，带下一局的场况）或 `Ended`（终局，带 `GameResult`）。
+
+**GameResult（终局精算）**：
+一整场打完的结果：各家点数与 `Juni`。
+
+**Juni（顺位）**：
+终局时的名次。**注意与 `Junme`（巡）只差一个字母**，读代码时留神。
+
+**Renchan（连庄）**：
+Oya 继续当庄。判据只有一处（`KyokuEnd.isRenchan`），消费它的规则（Honba 递增、局数不进）在 Game 层。
+
+**KyokuEnd（一局的结局）**：
+这一局是怎么结束的——和了或某种 Ryuukyoku。它是「一局」与「一场」之间唯一的接缝。
+
+**NotenBappu（听牌料 / ノーテン罚符）**：
+荒牌 Ryuukyoku 时听牌家与不听家之间的点数授受。**途中流局不授受**，
+Nagashi Mangan 是**替代**它而不是叠加。
+
+**Haitei / Houtei（海底 / 河底）**：
+牌山最后一张摸牌成和（海底摸月）与最后一张打牌被荣和（河底捞鱼）。
+
+**SuufonRenda / Suukaikan / SuuchaRiichi / KyuushuKyuuhai / SanchaHora
+（四风连打 / 四杠散了 / 四家立直 / 九种九牌 / 三家和了）**：
+五种途中流局，`RyuukyokuReason` 的取值。`Suukaikan` 取「四開槓」的读法，与中文「四杠散了」同指一事。
+三家和了是否流局由 `Ruleset.SanchaHoraRyuukyoku` 控制（天凤流局、雀魂不流局）。
+
 ## 牌与手牌
 
 **Tile（牌）**：
@@ -56,6 +87,40 @@ _Avoid_: 鸣牌（指动作时可用，指结果时用 Naki）、Meld
 
 **Dora（宝牌）**：
 由宝牌指示牌决定的加符牌，含里宝牌与红宝牌。
+
+**Manzu / Pinzu / Souzu / Jihai（万子 / 筒子 / 索子 / 字牌）**：
+四种花色。`Tile.suit` 返回它们。
+_Avoid_: Character/Circle/Bamboo/Honor 这类英文意译（ADR-0001）
+
+**Akadora（红宝牌）**：
+`5mr` / `5pr` / `5sr`。它与对应正牌是**同一牌种**——`kindIndex` 相同，形态判定前一律先 `deaka`（去红）。
+是否使用由 `Ruleset.Akadora` 控制。
+_Avoid_: Red Five、把红宝牌当成第 35 种牌
+
+**kindIndex（牌种索引）**：
+0-33 的整数，牌种在引擎内部的表示。34 长计数数组按它索引，是形态判定的热路径。
+红宝牌与其正牌共用同一个索引。
+
+**Kawa（河）**：
+某座位打出去的牌，按顺序。**被别人鸣走的那张仍留在河里**——振听判定要它。
+
+**Tsumogiri / Tedashi（摸切 / 手切）**：
+打出的是刚摸进的那张（摸切）还是原本手里的（手切）。mjai 的 `dahai` 事件带 `tsumogiri` 布尔字段。
+
+**Mentsu（面子）**：
+三张成组的牌。三种：`Shuntsu`（顺子）、`Koutsu`（刻子）、`Kantsu`（杠子）。
+每个面子记它是暗的还是副露来的——役种判定与符计算都要这一位。
+
+**Jantou（雀头）**：
+和了形里的那一对。
+
+**Kuikae（食替）**：
+鸣完之后不能马上打回鸣进来的那张；两面搭子吃时另一端也不能打。
+引擎里判据只有一处（`GameState.kuikaeKinds`），从严、不可配。
+
+**KawaTaken（河被鸣走过）**：
+这家打出的牌被别家鸣走过。Nagashi Mangan 的前提，一旦置位不再清除。
+**这个词是本项目自造的**（`Kawa` + 英文动词）——日麻没有通行的短词，若想换请一并改标识符。
 
 ## 人的角色
 
@@ -93,6 +158,10 @@ _Avoid_: AssistLevel、难度、强度
 
 **Fallback（兜底）**：
 Player 输出非法、解析失败或超时且重试用尽后代他执行的动作：Bare 档为摸切，Assisted 档为不退 Shanten 的安全打。
+
+**Shimocha / Toimen / Kamicha（下家 / 对家 / 上家）**：
+相对座位。**三麻没有 Toimen**，所以取对家的函数返回 option。
+全仓库唯一的座位取模在 `Seat` 模块的私有 `shift` 里。
 
 ## 规则判定
 
@@ -132,6 +201,47 @@ Player 输出非法、解析失败或超时且重试用尽后代他执行的动�
 
 **Nagashi Mangan（流局满贯）**：
 荒牌 Ryuukyoku 时，某家打出的牌全为幺九牌且一张未被鸣走，以满贯清算**替代**听牌料清算。天凤与雀魂都有。
+
+**Hora（和了）**：
+和牌这件事本身，含自摸与荣和。型成立不等于能和——**无役不可和**。
+
+**Menzen（门清）**：
+没有副露（暗杠不破门清）。立直的前提，也是许多役的前提。
+
+**Han / Yakuman（番 / 役满）**：
+番是役的计数单位；役满是另一档计价，不与番相加。
+
+**Limit（满贯档）**：
+满贯 / 跳满 / 倍满 / 三倍满 / 数え役满这一档的统称。**这个词是英文**——
+日麻没有涵盖这一整档的单一名词，`Mangan` 只是其中一档。
+
+**Kuitan（食断）**：
+副露之后的断幺九是否成立，由 `Ruleset.Kuitan` 控制。
+
+**WaitKind（听牌型）**：
+`Ryanmen`（两面）/ `Penchan`（边张）/ `Kanchan`（嵌张）/ `Shanpon`（双碰）/ `Tanki`（单骑）。
+符计算与役种判定都要它。
+
+**Minogashi（见逃）**：
+够格荣和却选择「过」。它使该座位进入同巡 Furiten。
+
+**Doujun（同巡）**：
+从自己打牌到下次摸牌之间。Furiten 的两种里较短的那一种就按它计。
+
+**Kan / Rinshan / Chankan（杠 / 岭上 / 抢杠）**：
+`Kan` 是杠这个动作的上位词，三种取值 `Ankan` / `Minkan` / `Kakan`。
+`Rinshan` 是杠后从王牌补摸的那张（岭上开花即由它成和）。
+`Chankan` 是对 Kakan 宣言的荣和；国士对 Ankan 能否抢杠由 `Ruleset.KokushiAnkanChankan` 控制。
+
+**RiichiBou（立直棒）**：
+宣言立直时放出的那根棒，**一根 1000 点**（`Ruleset.RiichiBou`）。
+它计入 Kyotaku，而 Kyotaku 记的是根数不是点数。
+
+**Honba 的点数**：
+一本场 300 点（`Ruleset.HonbaPoints`），和了时由放铳者或三家分担。
+
+**HoraPoints（和了点）**：
+一次和了的总点数，mjai wire 的 `hora_points`。
 
 ## 分析（引擎的附件能力，不参与规则判定）
 
@@ -185,6 +295,11 @@ _Avoid_: 另立一个可序列化的 Position / 局面快照类型（见 ADR-000
 
 **Legal Action Set（合法动作集）**：
 当前阶段某座位可提交的全部 Action。真人 UI 的按钮与 LLM 的工具 schema 都由它驱动，两边都不自己判断合法性。
+
+**Phase（阶段）**：
+一局在某一刻等着谁做什么：`AwaitingDahai`（某家摸完牌待打）、
+`AwaitingResponse`（他家打牌或杠后待各家响应）、`Ended`。
+每个阶段各自携带自己的合法动作集，只能由引擎内部构造。
 
 ## 牌谱与回放
 
