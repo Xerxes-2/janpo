@@ -64,7 +64,7 @@ echo "== vite build =="
 if [[ "$NO_BROWSER" == "1" ]]; then
   echo "== 浏览器内的那几道（曳光弹对拍 / 黄金用例 / 牌谱导出 / 两道 key 闸门）：按 JANPO_NO_BROWSER=1 跳过 =="
 else
-  echo "== 浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带自证默认视图里没有它、却有回仓库那一行）=="
+  echo "== 浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验默认视图：没有曳光弹、有回仓库那一行、副露看得出来源）=="
   (cd web && node scripts/verify-tracer.mjs)
 
   echo "== 浏览器内黄金用例（与 tests/fixtures/golden/ 逐字段逐行对照）=="

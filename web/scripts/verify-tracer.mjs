@@ -65,6 +65,112 @@ const DEV_TEST_IDS = ["traces", "seed-input", "rerun"];
 const DEV_WORDS = ["曳光弹", "Fable", "dotnet"];
 
 /**
+ * 票 38 那几条断言走哪一局：**种子 1223 走 90 手同时摆着吃、碰、暗杠与加杠**
+ * （四家都是随机选手，同一种子每次走出来的一模一样）。一局打完就停，不往下一局走。
+ */
+const NAKI_SEED = 1223;
+const NAKI_TURNS = 90;
+
+/** 相对位置的中文（CONTEXT.md 的 Shimocha / Toimen / Kamicha），参照系是**副露方**。 */
+const WHO = { 1: "下家", 2: "对家", 3: "上家" };
+
+/** 走 n 手：一手一手点「单步」，等「上一手」那行变了再点下一手（写法照 `shoot-table.mjs`）。 */
+async function stepTable(page, count) {
+  for (let turn = 0; turn < count; turn += 1) {
+    if (await page.getByTestId("table-step").isDisabled()) return turn; // 这一局打完了
+    const before = (await page.getByTestId("table-latest").textContent()).trim();
+    await page.getByTestId("table-step").click();
+    if (await page.getByTestId("table-step").isDisabled()) continue;
+    await page.waitForFunction(
+      (previous) =>
+        document.querySelector('[data-testid="table-latest"]').textContent.trim() !== previous,
+      before,
+      { timeout: 30000 },
+    );
+  }
+  return count;
+}
+
+/**
+ * 票 38：副露上**被鸣的是哪一张、来自谁**必须真的挂在 DOM 上。
+ *
+ * 这两件事早就在数据里（引擎的 `Naki.Taken` / `Naki.Target`），prompt 尾部也写了，
+ * 之前只有**牌桌上**看不见——围观者因此看不懂这一局怎么走的。它又死回去也不会有人发现，
+ * 因此摆在默认视图这道闸门里。逐组验四件事：
+ *
+ * 1. 非暗杠的每一组**恰好一张**带 `data-naki-taken`（横放的那张），且写了来源；
+ * 2. 暗杠两样都没有——它不是鸣来的；
+ * 3. 来源的**中文说法与绝对座位对得上**：参照系是副露方，不是观测者（漂了这条当场就红），
+ *    且**吃恒来自上家**；
+ * 4. 只有加杠有那一张 `data-naki-added`（后加上去的，出自自家手里）。
+ *
+ * 头一条是防空转的：一组鸣来的副露都没走出来的话，下面全部断言都会空着全绿。
+ */
+async function checkNaki(page) {
+  const missing = [];
+  await page.getByTestId("table-seed").fill(String(NAKI_SEED));
+  await page.getByTestId("table-restart").click();
+  const walked = await stepTable(page, NAKI_TURNS);
+
+  const groups = await page.evaluate(() =>
+    [0, 1, 2, 3].flatMap((seat) =>
+      [...document.querySelectorAll(`[data-testid="seat-${seat}-naki"] [data-naki]`)].map(
+        (node) => ({
+          seat,
+          kind: node.getAttribute("data-naki"),
+          from: node.getAttribute("data-naki-from"),
+          fromSeat: node.getAttribute("data-naki-from-seat"),
+          taken: node.querySelectorAll("[data-naki-taken]").length,
+          added: node.querySelectorAll("[data-naki-added]").length,
+        }),
+      ),
+    ),
+  );
+
+  const called = groups.filter((group) => group.kind !== "暗杠");
+  if (called.length === 0)
+    missing.push(
+      `种子 ${NAKI_SEED} 走了 ${walked} 手，一组鸣来的副露都没有：副露那几条断言全在空转`,
+    );
+
+  for (const group of groups) {
+    const where = `座位 ${group.seat} 的「${group.kind}」`;
+
+    if (group.kind === "暗杠") {
+      if (group.taken !== 0) missing.push(`${where}画了横放的那张，可暗杠没有被鸣的牌`);
+      if (group.from !== null) missing.push(`${where}标了来源「${group.from}」，可暗杠不是鸣来的`);
+    } else {
+      // 两件事分开报（而不是 else if 一路串下去）：「哪一张」与「来自谁」是两条信息，
+      // 坐坐丢掉一条时得看得出丢的是哪一条。
+      if (group.taken !== 1)
+        missing.push(`${where}里被鸣的那张有 ${group.taken} 处记号（该有且只有一处）`);
+
+      if (group.from === null || group.fromSeat === null) {
+        missing.push(`${where}没写来源（data-naki-from / data-naki-from-seat）`);
+      } else {
+        const relative = (Number(group.fromSeat) - group.seat + 4) % 4;
+        if (WHO[relative] !== group.from)
+          missing.push(
+            `${where}写着「来自${group.from}」，可座位 ${group.fromSeat} 相对副露方是「${WHO[relative] ?? relative}」`,
+          );
+        if (group.kind === "吃" && group.from !== "上家")
+          missing.push(`${where}写着「来自${group.from}」：吃只吃得了上家`);
+      }
+    }
+
+    const expected = group.kind === "加杠" ? 1 : 0;
+    if (group.added !== expected)
+      missing.push(`${where}里「加上去的那张」有 ${group.added} 处记号（该有 ${expected} 处）`);
+  }
+
+  const seen = groups
+    .map((group) => `${group.kind}${group.from === null ? "" : `←${group.from}`}`)
+    .join("、");
+
+  return { missing, seen: `种子 ${NAKI_SEED} 走 ${walked} 手：${seen || "无"}` };
+}
+
+/**
  * 票 35 的反向自证：**不带开关时，默认视图里不得有开发向内容**；
  * 票 37 的正面：**默认视图里必须有回仓库的那一行**。
  *
@@ -97,7 +203,10 @@ async function checkDefaultView(page, url) {
   if (footerLinks === 0) missing.push("默认视图的页脚里没有一条指回仓库的外链（票 37）");
   if (!text.includes("MIT")) missing.push("默认视图的正文里没提许可（MIT）（票 37）");
 
-  return { leaks, missing };
+  // 票 38：副露的来源与被鸣的那张。开局那一帧一组副露也没有，得先把牌局走起来。
+  const naki = await checkNaki(page);
+
+  return { leaks, missing: missing.concat(naki.missing), naki: naki.seen };
 }
 
 /**
@@ -119,7 +228,7 @@ async function readBrowser(seed, executablePath) {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    const { leaks, missing } = await checkDefaultView(page, pageUrl(server));
+    const { leaks, missing, naki } = await checkDefaultView(page, pageUrl(server));
 
     await page.goto(`${pageUrl(server)}/${DEV_QUERY}`, { waitUntil: "load" });
 
@@ -143,7 +252,14 @@ async function readBrowser(seed, executablePath) {
       kyokus: await read(`${prefix}-kyokus`),
     });
 
-    return { kyoku: await trace("kyoku"), game: await trace("game"), problems, leaks, missing };
+    return {
+      kyoku: await trace("kyoku"),
+      game: await trace("game"),
+      problems,
+      leaks,
+      missing,
+      naki,
+    };
   } finally {
     await browser.close();
     await server.close();
@@ -215,4 +331,5 @@ if (failures.length > 0) {
 
 console.log("默认视图里没有曳光弹，带上 ?dev=1 它回来了 ✓");
 console.log("默认视图的页脚里有回仓库的外链与许可（MIT）✓");
+console.log(`副露看得出被鸣的那张与来源 ✓（${browserSide.naki}）`);
 console.log("浏览器内的引擎与 dotnet 侧逐项相同 ✓");

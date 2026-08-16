@@ -48,6 +48,38 @@ type SeatView = {
     Ippatsu: bool
 }
 
+/// 副露里一张牌该怎么画。
+///
+/// **`FromOther` 严格对应 `Naki.fromKawa`**：这张牌是从**别人**那儿来的——碰 / 吃 / 大明杠是
+/// 被鸣的那张，加杠是**当初碰来的**那张（不是加上去的），暗杠一张也没有。牌桌上它横放。
+/// 加杠后加上去的那张出自**自家手里**，所以它不横放，另记 `Added`。
+/// 两个标志因此互斥，且一组里各至多一张。
+type NakiTileView = {
+    /// 牌面；`None` 是扣着的那张（暗杠两端）。**扣着的牌没有牌面可写**，与手牌那边同一条。
+    Pai: Tile option
+    /// 从他家那儿来的那一张（`Naki.fromKawa`）。
+    FromOther: bool
+    /// 加杠后加上去的那张（`Naki.taken`，来自自家手里）。
+    Added: bool
+}
+
+/// 一组副露画出来的样子：种类、来源、逐张。**这一层不做规则判定**，只把 `Naki` 摆成
+/// 「哪一张横放、来自谁」这个形状——牌桌与它的无头验收读的都是它。
+type NakiView = {
+    /// 种类。
+    Kind: NakiKind
+    /// 被鸣的那家（`Naki.target`）：暗杠没有，加杠记的是**当初碰的**来源。
+    Target: Seat option
+    /// 那一家相对**副露方**是第几家：1 下家、2 对家、3 上家（编号同 `MaskedSeat.Relative`）。
+    ///
+    /// **参照系是副露方，不是观测者**：牌谱上「吃只能吃上家」是副露自己的属性，
+    /// 换成观测者的参照系，别人吃来的那一组会写成「来自对家」——那在日麻里根本不成立。
+    /// （prompt 尾部的 `words.who` 是另一回事：它给的是**观测者**对每个座位的称呼。）
+    Relative: int option
+    /// 逐张，从左到右。
+    Tiles: NakiTileView list
+}
+
 /// 一张牌桌该画的全部东西。**它只是两个投影的换装**，不含任何规则判定。
 type BoardView = {
     /// 场风。
@@ -154,6 +186,79 @@ module Board =
         Riichi = seat.Riichi
         Ippatsu = seat.Ippatsu
     }
+
+    // ---- 副露 ----
+
+    /// 亮着的一张。
+    let private nakiTile (fromOther: bool) (added: bool) (pai: Tile) : NakiTileView = {
+        Pai = Some pai
+        FromOther = fromOther
+        Added = added
+    }
+
+    /// 扣着的一张（暗杠两端）。
+    let private nakiBack: NakiTileView = {
+        Pai = None
+        FromOther = false
+        Added = false
+    }
+
+    /// 暗杠：四张升序，两端扣着（牌桌上就是这个摆法）。没有来源，也没有横放的那张。
+    let private ankanTiles (naki: Naki) : NakiTileView list =
+        Naki.tiles naki
+        |> List.mapi (fun index pai ->
+            if index = 0 || index = 3 then
+                nakiBack
+            else
+                nakiTile false false pai)
+
+    /// 加杠：底是原来那副碰，**加上去的那张摆在末尾**。
+    ///
+    /// 这一组**不重排**：`Naki.consumed` 的第一张恒是当初被碰的那张（`Naki.kakan` 的注释写着），
+    /// 而四张同种牌一排序谁是谁就没了——那正是「加上去的那张看不出来」的成因。
+    let private kakanTiles (naki: Naki) : NakiTileView list =
+        let bottom =
+            Naki.consumed naki
+            |> List.mapi (fun index pai -> nakiTile (index = 0) false pai)
+
+        let added = Naki.taken naki |> Option.map (nakiTile false true) |> Option.toList
+
+        bottom @ added
+
+    /// 碰 / 吃 / 大明杠：**升序摆**（`Naki.tiles`），被鸣的那张就地横放，不挪位。
+    ///
+    /// 吃尤其要看这个顺序：`2p [3p] 4p` 与 `[2p] 3p 4p` 是两种不同的吃，
+    /// 挪位（把被鸣那张一律搬到最左）会把「2 3 4 是个顺子」这件事读没了。
+    let private calledTiles (naki: Naki) : NakiTileView list =
+        let all = Naki.tiles naki
+
+        // 同种牌互换无碍，取第一个对得上的位置即可（红 5 与正 5 是两个不同的值，不会认错）。
+        let fromOtherAt =
+            Naki.fromKawa naki
+            |> Option.bind (fun taken -> all |> List.tryFindIndex ((=) taken))
+
+        all
+        |> List.mapi (fun index pai -> nakiTile (Some index = fromOtherAt) false pai)
+
+    /// 一组副露画出来的样子。`owner` 是**副露方**（相对位置的参照系）。
+    let nakiView (ruleset: Ruleset) (owner: Seat) (naki: Naki) : NakiView =
+        let kind = Naki.kind naki
+        let target = Naki.target naki
+
+        {
+            Kind = kind
+            Target = target
+            Relative = target |> Option.map (Seat.distanceFrom ruleset owner)
+            Tiles =
+                match kind with
+                | NakiKind.Ankan -> ankanTiles naki
+                | NakiKind.Kakan -> kakanTiles naki
+                | NakiKind.Pon
+                | NakiKind.Chi
+                | NakiKind.Minkan -> calledTiles naki
+        }
+
+    // ---- 一桌 ----
 
     /// 座位升序。观测给的是「自家 + 下家对家上家」，上帝视角给的已经是升序；
     /// 一律排一遍，画出来的位置就不随视角跳。

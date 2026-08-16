@@ -442,31 +442,108 @@ module TablePage =
 
             paiSpan index (if entry.Tsumogiri then " tsumogiri" else "") marks entry.Pai)
 
-    /// 一组副露。**杠看得出形态**：四张一组，暗杠两端扣着（牌桌上就是这个摆法），
-    /// 种类另有一枚中文标签（`NakiKind.toDisplay`）。
-    let private nakiGroup (key: int) (naki: Naki) =
-        let kind = Naki.kind naki
+    /// 副露的来源怎么称呼：**相对副露方**的中文说法（CONTEXT.md 的 Shimocha / Toimen / Kamicha）。
+    /// 措辞与 prompt 尾部那头同一套词（`web/src/agent/wording.ts` 的 `relative`），
+    /// 形状照 `Threat.who`：座位数不是 4 时没有对家，那时按座位号说。
+    let private nakiFrom (view: NakiView) : string option =
+        match view.Relative, view.Target with
+        | Some 1, _ -> Some "下家"
+        | Some 2, _ -> Some "对家"
+        | Some 3, _ -> Some "上家"
+        | Some _, Some target -> Some $"座位 {Seat.index target}"
+        | _, _ -> None
 
-        let tiles =
-            if kind = NakiKind.Ankan then
-                Naki.tiles naki
-                |> List.mapi (fun index pai ->
-                    if index = 0 || index = 3 then
-                        back index
-                    else
-                        face index "" pai)
+    /// 副露里的一张。**横放的那张是从他家那儿来的**（`NakiTileView.FromOther`）：
+    /// 碰 / 吃 / 大明杠是被鸣的那张，加杠是当初碰来的那张，暗杠一张也没有。
+    /// 记号挑**朝向**而不是描边或换色：虚线加淡色是摸切、45° 斜纹是牌背、红字是赤牌、
+    /// 额外间距是刚摸那张——四条都占了，而横放又正是牌谱的标准画法。
+    ///
+    /// 加杠**加上去的那张**出自自家手里，不是鸣来的，所以不横放；它前面摆一枚「＋」
+    /// （牌谱文字记法里的 `中中中＋中`）——四张同种牌摆在一起，没这枚记号就看不出谁是后添的。
+    /// `data-naki-taken` / `data-naki-added` 给无头闸门读（票 38）。
+    let private nakiTile (takenTitle: string) (key: int) (tile: NakiTileView) : ReactElement list =
+        match tile.Pai with
+        | None -> [ back key ]
+        | Some pai ->
+            let marks = [
+                if tile.FromOther then
+                    prop.custom ("data-naki-taken", "true")
+                    prop.title takenTitle
+                if tile.Added then
+                    prop.custom ("data-naki-added", "true")
+                    prop.title "加杠加上去的那张（自家手里的第四张）"
+            ]
+
+            let extra =
+                (if tile.FromOther then " taken" else "")
+                + (if tile.Added then " added" else "")
+
+            let plus = [
+                if tile.Added then
+                    Html.span [
+                        prop.key $"add-{key}"
+                        prop.className "naki-add"
+                        prop.title "加杠加上去的那张（自家手里的第四张）"
+                        prop.text "＋"
+                    ]
+            ]
+
+            plus @ [ paiSpan key extra marks pai ]
+
+    /// 一组副露。三件事要看得出来：**种类**、**被鸣的是哪一张**（横放）、**来自谁**
+    /// （一枚「来自上家」的标签）。杠仍看得出形态：四张一组，暗杠两端扣着（牌桌上就是这个摆法）
+    /// 且**没有来源**——它不是鸣来的。
+    ///
+    /// 来源走**文字**而不是牌谱那套位置编码（横放那张摆左 / 中 / 右）：这一页四家是竖排面板，
+    /// 没有真牌桌的方位可锚，位置约定读不出来；而挪位还会打乱吃的升序，
+    /// 把「2 3 4 是个顺子」读成一堆散牌。`data-naki-from` 上写着同一句话，无头闸门读的就是它。
+    let private nakiGroup (ruleset: Ruleset) (owner: Seat) (key: int) (naki: Naki) =
+        let view = Board.nakiView ruleset owner naki
+        let kind = NakiKind.toDisplay view.Kind
+        let from = nakiFrom view
+
+        let takenTitle =
+            let who =
+                from |> Option.map (fun each -> $"来自{each}") |> Option.defaultValue "从他家鸣来"
+
+            if view.Kind = NakiKind.Kakan then
+                $"当初碰来的那张（{who}）"
             else
-                faces "" (Naki.tiles naki)
+                $"被鸣的那张（{who}）"
 
-        Html.span [
-            prop.key key
-            prop.className "naki"
-            prop.custom ("data-naki", NakiKind.toDisplay kind)
-            prop.children (
-                Html.span [ prop.className "naki-kind"; prop.text (NakiKind.toDisplay kind) ]
-                :: tiles
-            )
-        ]
+        // 来源那枚标签与它的 `data-`：暗杠一样都没有。绝对座位另写一份（`data-naki-from-seat`），
+        // 闸门拿它与副露方的座位号对得上才算数——参照系要是漂到观测者那边，这一条当场就红。
+        let sourceMarks =
+            match from, view.Target with
+            | Some who, Some target -> [
+                prop.custom ("data-naki-from", who)
+                prop.custom ("data-naki-from-seat", Seat.index target)
+              ]
+            | _, _ -> []
+
+        let sourceLabel =
+            match from, view.Target with
+            | Some who, Some target -> [
+                Html.span [
+                    prop.key "from"
+                    prop.className "naki-from"
+                    prop.title $"这一组是从座位 {Seat.index target} 那儿鸣来的"
+                    prop.text $"来自{who}"
+                ]
+              ]
+            | _, _ -> []
+
+        Html.span (
+            [ prop.key key; prop.className "naki"; prop.custom ("data-naki", kind) ]
+            @ sourceMarks
+            @ [
+                prop.children (
+                    Html.span [ prop.key "kind"; prop.className "naki-kind"; prop.text kind ]
+                    :: sourceLabel
+                    @ (view.Tiles |> List.mapi (nakiTile takenTitle) |> List.concat)
+                )
+            ]
+        )
 
     /// 一排牌：小标题加那几张。**张数写在标题里**——「各家手牌数」那条验收看的就是它，
     /// 而他家的张数来自投影（`MaskedSeat.HandCount`），不是渲染层拿副露数推的。
@@ -481,8 +558,8 @@ module TablePage =
             )
         ]
 
-    /// 一家的牌与标记。`oya` 只用来画那枚「亲」标签。
-    let private seatPanel (viewer: Seat option) (oya: Seat) (view: SeatView) =
+    /// 一家的牌与标记。`oya` 只用来画那枚「亲」标签；`ruleset` 只用来算副露的来源是第几家。
+    let private seatPanel (ruleset: Ruleset) (viewer: Seat option) (oya: Seat) (view: SeatView) =
         let index = Seat.index view.Seat
 
         let handCount =
@@ -529,7 +606,7 @@ module TablePage =
                     )
                 ]
                 tileRow $"seat-{index}-hand" "hand" $"手牌 {handCount}" (handTiles view.Hand)
-                tileRow $"seat-{index}-naki" "naki-row" "副露" (view.Naki |> List.mapi nakiGroup)
+                tileRow $"seat-{index}-naki" "naki-row" "副露" (view.Naki |> List.mapi (nakiGroup ruleset view.Seat))
                 tileRow $"seat-{index}-kawa" "kawa" $"河 {List.length view.Kawa}" (kawaTiles view.Kawa)
             ]
         ]
@@ -1196,7 +1273,11 @@ module TablePage =
                             prop.className "seats-board"
                             prop.children [
                                 for view in board.Seats ->
-                                    seatPanel board.Viewer (GameState.context table.State).Oya view
+                                    seatPanel
+                                        (GameState.ruleset table.State)
+                                        board.Viewer
+                                        (GameState.context table.State).Oya
+                                        view
                             ]
                         ]
                     ]

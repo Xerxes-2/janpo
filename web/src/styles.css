@@ -247,19 +247,49 @@ h1 {
   color: transparent;
 }
 
+/* 被鸣的那张：**横放**（票 38）。牌谱上就是这个画法——一组里横着的那张是从别人那儿来的
+   （加杠横着的是当初碰来的那张，后加上去的那张见 `.tile.added`）。
+   记号挑**朝向**而不是描边或换色：虚线加淡色是摸切、45° 斜纹是牌背、红字是赤牌、
+   额外间距是刚摸那张，四条都占了，转 90° 与它们一条也不撞。
+   `transform` 不占布局，邻牌因此不会被推走；两侧的 margin 是给转过来的那张腾地方，
+   行高（`.tiles.naki-row`）也相应抬高——不然它会压到上下两行。 */
+.tile.taken {
+  transform: rotate(90deg);
+  margin: 0 0.3rem;
+}
+
+/* 加杠后加上去的那张前面那枚「＋」：牌谱文字记法里的 `中中中＋中`。
+   它出自**自家手里**，不是鸣来的，所以不横放；但四张同种牌摆在一起，
+   没这枚记号就看不出谁是后添的那张。机器可读的那一半写在 `data-naki-added` 上。 */
+.naki-add {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* 副露组比别处高：横放那张转完 90° 后占的是牌的**宽**度（「赤 5 万」三个字最宽），
+   高度不给够它就会顶出虚线框、压到手牌那一行上去。
+   **抬的是副露组而不是副露那一行**：一家还门清时那一行是空的，空行不必跟着变高。 */
 .naki {
   display: inline-flex;
   gap: 0.1rem;
   align-items: center;
+  min-height: 2.4rem;
   margin-right: 0.6rem;
   padding: 0.1rem 0.25rem;
   border: 1px dashed var(--line);
   border-radius: 0.25rem;
 }
 
-.naki-kind {
+.naki-kind,
+.naki-from {
   font-size: 0.7rem;
   opacity: 0.7;
+}
+
+/* 来源：`来自上家`。相对位置的参照系是**副露方自己**（吃恒来自上家），
+   措辞与 prompt 尾部的 `words.who` 同一套词。 */
+.naki-from {
+  white-space: nowrap;
 }
 
 .bou-row {
