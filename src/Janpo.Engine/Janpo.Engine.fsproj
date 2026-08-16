@@ -53,6 +53,8 @@
   <!-- 事件与开局。**加 Event case 要同时改 DU / encoder / decoder 三处**（备注 N-1）。 -->
   <ItemGroup>
     <Compile Include="Event.fs" />
+    <!-- 掩蔽事件流（票 29a）：**全项目唯一的一条掩蔽法则**。`Observation` 是它的 fold。 -->
+    <Compile Include="MaskedEvent.fs" />
     <Compile Include="KyokuStart.fs" />
   </ItemGroup>
 

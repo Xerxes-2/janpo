@@ -157,3 +157,42 @@ module TableTests =
     let ``开不了局是 Error，不是抛异常`` () =
         // 配牌每家 100 张：牌山不够发，`GameState.start` 必然拒掉。
         Assert.True(Table.start { ruleset with HaipaiSize = 100 } 1 |> Result.isError)
+
+    // ---- 增量维护的掩蔽流（票 29a） ----
+
+    /// 逐手推进的牌桌上，各座位的掩蔽流**与从头 fold 全流给出同一份观测**。
+    ///
+    /// 缓存与重算对不上是这一票唯一新增的失效模式：牌桌不再每帧重头 fold，
+    /// 而是把引擎吐出来的事件接进各座位的流里（`Table.played`）。
+    let private viewsAgree (table: Table) : bool =
+        Seat.all ruleset
+        |> List.forall (fun seat -> Table.observation seat table = Observation.ofState seat table.State)
+
+    [<Fact>]
+    let ``一整局逐手推进，增量维护的掩蔽流与重头 fold 逐手一致`` () =
+        let rec loop (left: int) (current: Table) =
+            Assert.True(viewsAgree current, $"第 {current.Turns} 手：增量维护的观测与重头 fold 不一致")
+
+            match Table.pending current with
+            | None -> current
+            | Some _ when left <= 0 -> failwith "这一局在预算内没打完"
+            | Some _ -> loop (left - 1) (Table.advance roster current)
+
+        // 这一局真的打完了（不是零手就通过）。
+        Assert.True(Table.isKyokuEnded (loop 400 (table seed)))
+
+    [<Fact>]
+    let ``开下一局把各座位的掩蔽流一起重置`` () =
+        let next = table seed |> toKyokuEnd 400 |> Table.nextKyoku
+
+        Assert.True(viewsAgree next)
+        // 新的一局：历史只剩开局那几条（`start_kyoku` 与亲的 `tsumo`）。
+        Assert.Equal(List.length (GameState.events next.State), List.length (Table.history Seat.first next))
+
+    [<Fact>]
+    let ``座席的历史与上帝视角那条流一样长`` () =
+        let played = table seed |> toKyokuEnd 400
+
+        Seat.all ruleset
+        |> List.iter (fun seat ->
+            Assert.Equal(List.length (GodView.stream played.State), List.length (Table.history seat played)))

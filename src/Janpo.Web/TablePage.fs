@@ -1043,7 +1043,7 @@ module TablePage =
     // ---- 视图：整页 ----
 
     let private tableBody (model: TableModel) (table: Table) =
-        match Board.ofState model.Viewpoint table.State with
+        match Board.ofTable model.Viewpoint table with
         | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
         | Some board ->
             // 兜底代打的那一手要看得出来（票 23）：不许静默替换。

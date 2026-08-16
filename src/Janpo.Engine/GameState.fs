@@ -65,6 +65,14 @@ type AwaitingResponse =
         /// 已经宣言的响应，按答复顺序；「过」不进这里。裁决时重新按优先级排，
         /// 因此「先被问到」不等于「优先」。
         Declared: Action list
+        /// 这一轮里**放过了一张自己能荣和的牌**的那几家（见逃 / Minogashi），按答复顺序。
+        ///
+        /// **同巡振听要等这一轮收齐才落到 `PlayerState` 上**（票 29a）：答复本身不是事件，
+        /// 因此「我刚才过了」这件事在掩蔽事件流里没有位置；当场就改 `PlayerState.Furiten`
+        /// 会让引擎的状态领先座席看得见的历史一拍，`Observation` 的两种算法（直算与
+        /// fold 掩蔽流）就此对不上。收齐再落有两条保证它不改变行为：这一轮里没有任何
+        /// 判据读得到它（`responsesTo` 在这一轮开始前就跑完了），而下一轮开始前它必然已经落定。
+        Minogashi: Seat list
     }
 
 /// 一局怎么结束的。04 只有荒牌流局，06 把它换成了 DU；12 票补完其余流局形态时
@@ -207,11 +215,14 @@ module GameState =
 
     // ---- 判役与算点的上下文 ----
 
-    /// 这家还没打过牌、且此前无人鸣牌。**三处读它**：天和 / 地和（`yakuContextOf`）、
-    /// 两立直（`applyRiichi`）与九种九牌（`awaitDahaiIn`）——「无人鸣牌的第一巡」
-    /// 是同一条判据，不写三份。
+    /// 这家还没打过牌、且此前无人鸣牌。**四处读它**：天和 / 地和（`yakuContextFor`）、
+    /// 两立直（`applyRiichi`）、九种九牌（`awaitDahaiIn`）与掩蔽流的 fold（`SeatStream`）
+    /// ——「无人鸣牌的第一巡」是同一条判据，不写四份。
     /// （事件流的顺序与这个判断无关，因此传倒序的也行。）
-    let private firstTurnFor (seat: Seat) (log: Event list) : bool =
+    ///
+    /// **掩蔽流喂得进来**：它读的只有打牌与鸣牌，两者在掩蔽流里都是 `MaskedEvent.Public`，
+    /// 经 `MaskedEvent.publicEvent` 滤一道就能用这一份（被滤掉的配牌与摸牌本来就不打断第一巡）。
+    let firstTurnFor (seat: Seat) (log: Event list) : bool =
         log
         |> List.forall (fun event ->
             match event with
@@ -244,18 +255,26 @@ module GameState =
     /// 这里填的标志都还要过判役那关：海底只对自摸生效、河底只对荣和生效、
     /// 一发要门清且真立了直、天和地和还要门清自摸（`Yaku` 自己会判），
     /// 所以这里不按自摸 / 荣和分两套。岭上与抢杠同理：它们只是 `KyokuFlags` 的搬运。
-    let private yakuContextOf
+    /// 判役要的上下文，**拼法只有这一份**：局面拿 `GameState` 的那几样喂它（`yakuContext`），
+    /// 观测投影拿掩蔽流 fold 出来的那几样喂它（`SeatStream`，票 29a）。
+    ///
+    /// 参数就是它真正读的那几样：场风与亲取自开局条件、宝牌指示牌取自牌山（投影那侧
+    /// 里宝牌看不见，传空表）、海底 / 河底 / 岭上 / 抢杠取自标志、立直与一发取自那一家
+    /// 自己的 `PlayerState`、天和 / 地和由「这家还没打过牌」推出。
+    ///
+    /// 这里填的标志都还要过判役那关：海底只对自摸生效、河底只对荣和生效、
+    /// 一发要门清且真立了直、天和地和还要门清自摸（`Yaku` 自己会判），
+    /// 所以这里不按自摸 / 荣和分两套。
+    let yakuContextFor
         (ruleset: Ruleset)
         (kyokuContext: KyokuContext)
-        (wall: Wall)
+        (doraMarkers: Tile list)
+        (uraDoraMarkers: Tile list)
         (flags: KyokuFlags)
-        (players: PlayerState list)
-        (log: Event list)
+        (firstTurn: bool)
+        (player: PlayerState option)
         (seat: Seat)
         : YakuContext =
-        let firstTurn = firstTurnFor seat log
-        let player = Seat.tryItem seat players
-
         { YakuContext.create kyokuContext.Bakaze (Seat.jikaze ruleset kyokuContext.Oya seat) with
             // 立直与一发都是那一家自己的状态（`PlayerState`），局面照搬，不复算。
             Riichi =
@@ -269,12 +288,20 @@ module GameState =
             Chankan = flags.Chankan
             Tenhou = firstTurn && seat = kyokuContext.Oya
             Chiihou = firstTurn && seat <> kyokuContext.Oya
-            DoraMarkers = Wall.doraIndicators wall
-            UraDoraMarkers = Wall.uraIndicators wall
+            DoraMarkers = doraMarkers
+            UraDoraMarkers = uraDoraMarkers
         }
 
     let private yakuContext (state: GameState) (seat: Seat) : YakuContext =
-        yakuContextOf state.Ruleset state.Context state.Wall state.Flags state.Players state.Log seat
+        yakuContextFor
+            state.Ruleset
+            state.Context
+            (Wall.doraIndicators state.Wall)
+            (Wall.uraIndicators state.Wall)
+            state.Flags
+            (firstTurnFor seat state.Log)
+            (Seat.tryItem seat state.Players)
+            seat
 
     /// 某家拿这张牌和了的话能得到什么：选中的读法与它的符番（`Score.best` 的高点法）。
     ///
@@ -290,6 +317,39 @@ module GameState =
         // 张数凑不成和了牌姿：连和了型都谈不上。
         | Error _ -> Error YakuError.NoAgariShape
         | Ok hand -> Score.best ruleset context hand
+
+    /// **某家此刻能不能荣和这一张**：不振听、型成立且有役，而且抢得了这个杠。
+    /// `robbing` 是抢杠那一轮里被抢的那个杠的种类，对打牌的响应是 None。
+    ///
+    /// **两处共用这一份**（票 29a）：状态机拿它产合法动作集（`responsesTo`），
+    /// 掩蔽流的 fold 拿它判见逃し——「放过了一张能荣和的牌」就是同巡振听（`PlayerState.minogashi`）。
+    /// 写两份的话两边会在无役、河底与国士抢暗杠这几条长尾上漂。
+    let canRon
+        (ruleset: Ruleset)
+        (context: YakuContext)
+        (robbing: NakiKind option)
+        (player: PlayerState)
+        (pai: Tile)
+        : bool =
+        /// 抢得了这个杠吗：加杠任何牌型都抢得，暗杠只有国士且规则集允许时抢得。
+        let robbable (reading: HoraReading) =
+            match robbing with
+            | Option.None -> true
+            | Some NakiKind.Ankan -> ruleset.KokushiAnkanChankan && reading.Tally.Shape = Kokushi
+            | Some NakiKind.Pon
+            | Some NakiKind.Chi
+            | Some NakiKind.Minkan
+            | Some NakiKind.Kakan -> true
+
+        not (Furiten.blocksRon (PlayerState.furiten player))
+        // 先拿便宜的型判定挡一道。**它不改结果**：`Score.best` 的每一条路都从
+        // `AgariShape.classify` 起（`Yaku.candidates` / `Yaku.detect`），型不成就必然是 `NoAgariShape`。
+        // 代价是多一次 `classify`，省下的是牌姿构造与全套判役：实测一局逐手的增量 fold
+        // 从 0.93 ms 降到 0.56 ms、一次性全流 fold 从 1.19 ms 降到 0.91 ms（票 29a）。
+        && PlayerState.isAgariWith ruleset.TileKinds pai player
+        && (match horaWith ruleset context player pai false with
+            | Ok reading -> robbable reading
+            | Error _ -> false)
 
     // ---- 合法动作集 ----
 
@@ -600,17 +660,11 @@ module GameState =
         // 河底牌（可摸区已空）只能荣和，鸣不得。
         let canNaki = Wall.remaining state.Wall > 0
 
-        /// 抢得了这个杠吗：加杠任何牌型都抢得，暗杠只有国士且规则集允许时抢得。
-        let robbable (reading: HoraReading) =
+        /// 被抢的那个杠的种类；对打牌的响应是 None。
+        let robbing =
             match cause with
-            | ResponseCause.Dahai -> true
-            | ResponseCause.Kan kan ->
-                match Naki.kind kan with
-                | NakiKind.Ankan -> state.Ruleset.KokushiAnkanChankan && reading.Tally.Shape = Kokushi
-                | NakiKind.Pon
-                | NakiKind.Chi
-                | NakiKind.Minkan
-                | NakiKind.Kakan -> true
+            | ResponseCause.Dahai -> Option.None
+            | ResponseCause.Kan kan -> Some(Naki.kind kan)
 
         Seat.orderAfter state.Ruleset target
         |> List.filter (fun seat -> seat <> target)
@@ -618,13 +672,11 @@ module GameState =
             match Seat.tryItem seat state.Players with
             | Option.None -> Option.None
             | Some player ->
-                let canRon =
-                    not (Furiten.blocksRon (PlayerState.furiten player))
-                    && (match horaWith state.Ruleset (yakuContext state seat) player pai false with
-                        | Ok reading -> robbable reading
-                        | Error _ -> false)
-
-                let ron = if canRon then [ Action.Hora(seat, target, pai) ] else []
+                let ron =
+                    if canRon state.Ruleset (yakuContext state seat) robbing player pai then
+                        [ Action.Hora(seat, target, pai) ]
+                    else
+                        []
 
                 let naki =
                     match cause with
@@ -1206,6 +1258,7 @@ module GameState =
                                 Cause = ResponseCause.Dahai
                                 Responses = responses
                                 Declared = []
+                                Minogashi = []
                             }
                 },
                 []
@@ -1499,6 +1552,7 @@ module GameState =
                             Cause = ResponseCause.Kan naki
                             Responses = responses
                             Declared = []
+                            Minogashi = []
                         }
             },
             [ event ]
@@ -1541,23 +1595,30 @@ module GameState =
             | Some(Action.None _)
             | Option.None -> couldRon
 
-        let answered =
-            // 见逃一次可以荣和的牌 → 同巡振听，到自己下次摸牌为止不能荣和。
-            // 鸣走它也算见逃：鸣牌不摸牌，因此这份同巡振听要到鸣的那家下次真正摸牌才解除。
-            if minogashi then
-                { state with
-                    Players = updatePlayer actor PlayerState.minogashi state.Players
-                }
-            else
-                state
+        // 见逃一次可以荣和的牌 → 同巡振听，到自己下次摸牌为止不能荣和。
+        // 鸣走它也算见逃：鸣牌不摸牌，因此这份同巡振听要到鸣的那家下次真正摸牌才解除。
+        //
+        // **先记在这一轮上，收齐才落**（票 29a，见 `AwaitingResponse.Minogashi`）。
+        let minogashiSeats = waiting.Minogashi @ (if minogashi then [ actor ] else [])
 
         let remaining = waiting.Responses |> List.filter (fun each -> each.Seat <> actor)
 
         let declared = waiting.Declared @ Option.toList declaration
 
+        /// 这一轮收齐了，把记下的见逃落到各家身上。**每一支都落**（荣和收尾的也落）：
+        /// 推迟的只是时机，不是判据。
+        let settleMinogashi (current: GameState) : GameState =
+            { current with
+                Players =
+                    (current.Players, minogashiSeats)
+                    ||> List.fold (fun players seat -> updatePlayer seat PlayerState.minogashi players)
+            }
+
         if List.isEmpty remaining then
-            match ronWinners answered waiting.Target declared with
+            match ronWinners state waiting.Target declared with
             | [] ->
+                let answered = settleMinogashi state
+
                 match waiting.Cause with
                 // 没人抢杠：这个杠成立。宣言杠的那家不可能同时挂着没落定的立直宣言
                 // （`allowsAnkan` 对 `Declared` 恒为 false），因此这条路没有 `acceptRiichi`。
@@ -1574,7 +1635,9 @@ module GameState =
                         |> Option.defaultWith (fun () -> afterDahai accepted waiting.Target)
 
                     advanced, accepting @ events
-            | wins when Ryuukyoku.isSanchaHora answered.Ruleset (wins |> List.map fst) ->
+            | wins when Ryuukyoku.isSanchaHora state.Ruleset (wins |> List.map fst) ->
+                let answered = settleMinogashi state
+
                 // 三家和了（天凤）：三家同时荣和同一张牌⇒ 途中流局，一家也不成立。
                 // 打牌那家的立直宣言因此**不成立**（与被荣和同理，立直棒不出）：
                 // 走到这里时 `acceptRiichi` 还没跑过，把挂着的宣言作废即可。
@@ -1584,14 +1647,15 @@ module GameState =
                     }
 
                 endWithAbortive cancelled SanchaHora (wins |> List.map fst)
-            | wins -> applyHora answered waiting.Target wins
+            | wins -> applyHora (settleMinogashi state) waiting.Target wins
         else
-            { answered with
+            { state with
                 Phase =
                     AwaitingResponse
                         { waiting with
                             Responses = remaining
                             Declared = declared
+                            Minogashi = minogashiSeats
                         }
             },
             []

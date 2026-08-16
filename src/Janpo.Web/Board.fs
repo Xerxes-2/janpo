@@ -187,11 +187,16 @@ module Board =
 
     // ---- 投影选择 ----
 
-    /// 局面 + 视角 → 牌桌。坐的那个座位不在这个规则集里时是 None（上帝视角不会失败）。
-    let ofState (viewpoint: Viewpoint) (state: GameState) : BoardView option =
+    /// 牌桌 + 视角 → 画出来的那张牌桌。坐的那个座位不在这个规则集里时是 None
+    /// （上帝视角不会失败）。
+    ///
+    /// **坐席那一侧取的是增量维护的掩蔽流**（票 29a 的 `Table.observation`），
+    /// 不是每帧重头 fold 全流；上帝视角另走一条投影——它一张也不蔽，因此不在掩蔽法则之列
+    /// （里宝牌压根不在事件流里）。
+    let ofTable (viewpoint: Viewpoint) (table: Table) : BoardView option =
         match viewpoint with
-        | Viewpoint.God -> GodView.ofState state |> ofGodView |> Some
-        | Viewpoint.Seated seat -> Observation.ofState seat state |> Option.map ofObservation
+        | Viewpoint.God -> GodView.ofState table.State |> ofGodView |> Some
+        | Viewpoint.Seated seat -> Table.observation seat table |> Option.map ofObservation
 
     // ---- 结算 ----
 

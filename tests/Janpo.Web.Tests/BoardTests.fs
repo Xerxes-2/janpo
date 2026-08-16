@@ -21,7 +21,7 @@ module BoardTests =
         | Error error -> failwith $"这个种子应当开得了局，却得到「{error}」"
 
     let private board (viewpoint: Viewpoint) (table: Table) : BoardView =
-        match Board.ofState viewpoint table.State with
+        match Board.ofTable viewpoint table with
         | Some board -> board
         | None -> failwith "这个视角应当有牌桌"
 
@@ -113,7 +113,7 @@ module BoardTests =
 
     [<Fact>]
     let ``座位不在这个规则集里就没有牌桌`` () =
-        Assert.True((Board.ofState (Viewpoint.Seated(seat 9)) (table seed).State) |> Option.isNone)
+        Assert.True((Board.ofTable (Viewpoint.Seated(seat 9)) (table seed)) |> Option.isNone)
 
     [<Fact>]
     let ``各家一律按座位升序排，画出来的位置不随视角跳`` () =

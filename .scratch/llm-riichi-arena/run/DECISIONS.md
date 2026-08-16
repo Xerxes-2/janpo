@@ -2257,3 +2257,79 @@ the loopback address space`），用 `grantPermissions(["local-network-access"])
 
 **调度器的教训**：并行跑批时看到红，**先怀疑基础设施，再怀疑代码**。假红比真红危险——
 它会训练人「重跑一遍就好」，而那正是掩盖真失败的习惯。
+
+## 29a（掩蔽事件流成为座席的唯一投影，快照降为它的 fold）
+
+**29a-1：`MaskedEvent` 是一个独立的 DU，但只给「真有东西看不见」的那两条事件立 case，
+其余十四条经 `Public of Event` 原样带着。**
+`StartKyoku` 换成 `MaskedStartKyoku`（只有自家那手配牌，他家的配牌**没有字段装得下**，
+与 20-1 的 `MaskedSeat` 同源），`Tsumo` 换成 `actor: Seat * pai: Tile option`。
+**被否决**：(a) 复用 `Event` 把看不见的部分填空值——`Tsumo` 的 `pai` 是 `Tile`，填不了「未知」，
+只能整条丢掉，而丢掉他家摸牌就丢掉了巡目与手切摸切的时间轴；(b) 十七个 case 全抄一遍——
+`Event.fs` 明写「加一个 case 的代价固定为三处」，抄一份就变五处，而十四条里没有一条要改字段。
+`forSeat` 的 match **穷举** `Event` 的每个 case（不写 catch-all），因此新增 mjai 事件时编译器
+逼着加的人回答「这条有没有看不见的部分」。顺带的好处：`publicEvent` 能把公开那一半喂回引擎既有的
+判据（`GameState.firstTurnFor` 就这么共用，两立直与天和地和没有第二份实现）。
+
+**29a-2：暗杠**不**掩蔽，票面第一节那句「暗杠隐去牌面」不采纳。**
+日麻的暗杠亮着两张，牌种是公开信息——国士抢暗杠（`Ruleset.KokushiAnkanChankan`）这条规则的前提
+就是它看得见；20 号票的 `MaskedSeat.Naki` 也一直把他家的暗杠原样给出来，掩掉的话
+`Observation` 的字段就变了，而票同时要求「类型不变、下游一行不改」。按 RUNBOOK 的自主决策条款
+取「最贴近日麻通行规则、最不影响其他票」的那一种。**要改的话**：改的是 20 号票的投影语义，
+不是这一票。
+
+**29a-3：同巡振听（见逃し）改为「这一轮响应收齐才落到 `PlayerState` 上」。**
+`AwaitingResponse` 多一个 `Minogashi: Seat list`，原来「某家一答复就当场改 `Furiten`」改成先记后落。
+**理由是这一票的核心**：「我刚才过了」不是事件，掩蔽流里没有它，因此当场改会让引擎的状态领先
+座席看得见的历史一拍——两家答复的那一轮里，先答的那家在直算投影里已经振听、在 fold 投影里还没有,
+迁移闸门必然红。**行为不变**有两条保证：这一轮里没有任何判据读得到它（`responsesTo` 在这一轮
+开始前就跑完了），而下一轮开始前它必然已经落定。既有用例全绿，一条期望值都没改。
+**被否决**：让 fold 在观测里「猜」谁答复过——那是把不在流里的信息硬编回去。
+
+**29a-4：荣和收尾那一支的见逃仍然落，fold 靠 `hora` 与 `ryukyoku.tenpais` 对齐。**
+一局被荣和收掉时，掩蔽流看到的是别家的 `hora`；双响里自己那条 `hora` 排在优先的那家之后，
+因此看见别家和了的那一刻还不能断定自己是放过了——`SeatStream` 把那一张挂着，
+直到这一局真的没有自己那条 `hora`（`observation` 结算）。三家和了同理：谁宣言了荣和写在
+`ryukyoku` 的 `tenpais` 里（`Ryuukyoku.revealedBy`），流里读得出来。
+**留下的唯一缝**：头跳开着（`Ruleset.withAtamahane`，默认关）时，宣言了荣和却被刷掉的那家在
+事件流里与「真的放过了」分不出来，fold 会把它记成见逃。**后果为零**：那一刻一局已终，
+同巡振听没有下一次摸牌可解除，也没有任何判据读它。默认规则集走不到这条路。
+
+**29a-5：`GodView` 不改成 fold，`GodView.stream` 给的是未掩蔽的事件流本身。**
+上帝视角一张也不蔽，因此不在「掩蔽法则」的定义域里（20-1 的同一条理由：它没有观测者）；
+更硬的一条是**里宝牌指示牌压根不在事件流里**（它没翻开），只有局面读得到。
+因此「终局只剩一条掩蔽法则」成立，而 `SeatProjection.revealed` 留着只服务上帝视角。
+
+**29a-6：迁移闸门退役，换成「fold 出来的观测 vs 引擎的权威状态」的回归守卫。**
+闸门（`MigrationGate.fs`）比的是两种实现，直算那套删掉之后它无物可比。
+新守卫（`ObservationProperties`）比的是 fold 出来的观测与 `GameState` / `PlayerState`
+**逐字段**，报错点名字段（`others.2.riichi`）——沿用裁决 21-c 的做法。它比闸门更硬：
+直算那套本来就只是 `GameState` 的誊写，现在直接跟原件对。
+**被否决**：留着直算实现只为了守闸门——那正是这一票要消灭的第二条掩蔽法则。
+
+**29a-7：`GameState.canRon` 多一道 `PlayerState.isAgariWith` 短路（性能，不改结果）。**
+fold 每遇到一条他家打牌都要问「我荣和得了吗」（见逃判据），这是 fold 的开销大头。
+`Score.best` 的每一条路都从 `AgariShape.classify` 起，因此型不成时先短路掉是等价的。
+实测一整局的增量 fold 0.93 → 0.56 ms、一次性全流 fold 1.19 → 0.91 ms，
+**引擎自己的 `responsesTo` 一起受益**（每条打牌它要问三家）。
+
+**29a-8：牌桌把各座位的掩蔽流增量维护起来（`Table.Views`），`Board.ofState` 改名 `Board.ofTable`。**
+牌桌本来就在 fold 引擎吐出来的事件（`GameState.step` 的第二个返回值，以前直接丢掉），接上去即可。
+数字是理由：一局 95 手逐手取观测，每帧重头 fold 全流是 **29 ms**（O(n²)），
+增量维护是 **0.56 ms**，改前的直算是 0.46 ms。`Observation.ofState` 留作一次性入口
+（黄金用例、CLI、测试，一手一次 0.9 ms 无所谓），两条路在 `TableTests` 里逐手对照。
+
+**提案 29a-A（需人裁）：`MaskedEvent` 要不要 encoder。**
+29b 要把座席的历史送过 F#→TS 的接缝（决策包 JSON）就需要一个；现在写等于替 29b 决定
+前缀怎么切、渲染成什么形状，因此这一票没写。若你希望历史像 `Observation` 一样有个
+「wire 与渲染出口放在类型旁边」的出口（20-3 的约定），说一声，那是二三十行的活，
+但**渲染的形状要先定**（29b 的裁决 1「prompt 降为数据」会影响它）。
+
+**提案 29a-B（需人裁）：`CONTEXT.md` 里没有「掩蔽事件流」与它的累加器。**
+这一票新立了两个一等概念：**掩蔽事件流**（某座位亲眼看得见的那条历史，`MaskedEvent`）与
+**它 fold 到此刻的结果**（`SeatStream`，历史 + 观测同出一源）。术语表现在只有
+「Observation Projection（观测投影）」，而那条词条现在的定义（「全局状态 → 某座位合法观测」的纯函数）
+描述的是**改前**的形态——现在的形态是「全局状态 → 掩蔽事件流 → fold → 观测」。
+建议 (a) 改写 Observation Projection 的词条，(b) 补一条 Masked Event Stream。
+RUNBOOK 不许我改 `CONTEXT.md`，因此代码里的标识符按既有词根拼（Masked 取自 20 号票的 `MaskedSeat`，
+Minogashi 取自既有的 `PlayerState.minogashi`），词条留给你裁。

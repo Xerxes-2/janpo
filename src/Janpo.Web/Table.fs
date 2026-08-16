@@ -37,6 +37,13 @@ type Table = {
     /// （mjai wire 就没有），而 `GameState.horaOf` 只在宣言的那一刻答得出来——
     /// 一局终了之后阶段已是 `Ended`，再问就是 `NoAgariShape`。结算要显示的役种只有这一个来源。
     Readings: (Seat * HoraReading) list
+    /// 各座位的**掩蔽事件流**，按座位升序（票 29a）。
+    ///
+    /// **它不是第二份局面，是同一条事件流的逐座位投影**：牌桌本来就在 fold 引擎吐出来
+    /// 的事件（`GameState.step` 的第二个返回值，以前直接丢掉），接上去而已。
+    /// 拿它而不是每帧 `Observation.ofState` 的理由是代价：一局 95 手逐手取观测，
+    /// 每帧重头 fold 全流是 29 ms（O(n²)），增量维护是 0.56 ms。
+    Views: SeatStream list
     /// 刚落定的那一手。给牌桌显示「上一手是谁做了什么」用（`Action.toDisplay`），
     /// 并且看得出它是不是兜底代打的（`Turn.Fallback`）。
     Latest: Turn option
@@ -73,6 +80,14 @@ module Table =
 
     /// 开一场对局的第一局。同一种子必然跑出同一场：牌山与选手共用同一条随机流，
     /// 与 `Game.runRandom` / CLI 的 `janpo game` 一致。
+    /// 一局开头那几条事件（`start_kyoku` 与 Oya 的 `tsumo`）先喂给各座位的掩蔽流。
+    /// **一局一重置**：`start_kyoku` 在 fold 里本来就是重置，这里不必另外清场。
+    let private viewsOf (ruleset: Ruleset) (state: GameState) : SeatStream list =
+        let events = GameState.events state
+
+        Seat.all ruleset
+        |> List.map (fun seat -> SeatStream.start ruleset seat |> SeatStream.advanceAll events)
+
     let start (ruleset: Ruleset) (seed: int) : Result<Table, string> =
         let game = Game.start ruleset
 
@@ -86,6 +101,7 @@ module Table =
                 Game = game
                 State = state
                 Players = players
+                Views = viewsOf ruleset state
                 Readings = []
                 Latest = None
                 Turns = 0
@@ -101,6 +117,18 @@ module Table =
     let fallbacks (table: Table) : int =
         table.Decisions
         |> List.sumBy (fun record -> if Option.isSome record.Fallback then 1 else 0)
+
+    /// 某座位此刻的观测（票 29a）：**取自增量维护的那条掩蔽流**，不重头 fold。
+    /// 座位不在这个规则集里时是 None。
+    let observation (seat: Seat) (table: Table) : Observation option =
+        Seat.tryItem seat table.Views |> Option.bind SeatStream.observation
+
+    /// 某座位看得见的那条历史（掩蔽事件流）。**观测就是它的 fold**，
+    /// 因此两种形态不可能对不上。
+    let history (seat: Seat) (table: Table) : MaskedEvent list =
+        Seat.tryItem seat table.Views
+        |> Option.map SeatStream.events
+        |> Option.defaultValue []
 
     /// 现在等哪一家、它能提交什么；这一局已终或出过错则为 None。
     ///
@@ -156,9 +184,11 @@ module Table =
             table with
                 Fault = Some(IllegalAction.toDisplay illegal)
           }
-        | Ok(next, _) -> {
+        | Ok(next, produced) -> {
             table with
                 State = next
+                // 引擎刚吐出来的那几条事件直接接进各座位的掩蔽流（票 29a）。
+                Views = table.Views |> List.map (SeatStream.advanceAll produced)
                 // 一局终了的那一步就把它收进这场对局：连庄、本场与供托的结转全在 `Game.after`，
                 // 牌桌一条规则都不自己判。还没终时 `Game.advance` 原样返回。
                 Game = Game.advance next table.Game
@@ -206,6 +236,7 @@ module Table =
                 table with
                     State = state
                     Players = players
+                    Views = viewsOf (Game.ruleset table.Game) state
                     Readings = []
                     Latest = None
               }
