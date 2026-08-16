@@ -65,9 +65,19 @@
     <Compile Include="Kyoku.fs" />
   </ItemGroup>
 
+  <!-- 选手（CONTEXT.md 的 Player）：引擎自带的 bot。LLM 适配器与真人坐席是 Agent 层的事。 -->
+  <ItemGroup>
+    <Compile Include="RandomPlayer.fs" />
+  </ItemGroup>
+
   <!-- 整场对局（GameState 之上一层）：局间推进、连庄、终局精算。 -->
   <ItemGroup>
     <Compile Include="Game.fs" />
+  </ItemGroup>
+
+  <!-- 跑批（M0 验收）：一批种子跑到底，逐手验不变量、逐场数覆盖率。CLI 与 CI 共用它。 -->
+  <ItemGroup>
+    <Compile Include="Soak.fs" />
   </ItemGroup>
 
   <ItemGroup>

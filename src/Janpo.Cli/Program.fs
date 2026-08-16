@@ -14,9 +14,16 @@ let private usage =
                                  用给定种子开一局，每行打印一个 mjai JSON 事件
   janpo kyoku <种子> [--no-akadora]
                                  用给定种子让四个随机选手打完一局，打印完整事件流与结算后点数
-  janpo game <种子> [--no-akadora] [--hanchan]
+  janpo game <种子> [--no-akadora] [--hanchan] [--covering]
                                  用给定种子让四个随机选手打完一整场（默认东风战），
-                                 打印完整事件流、终局点数与顺位
+                                 打印完整事件流、终局点数与顺位。
+                                 --covering 换成跑批用的那个带偏好的选手，
+                                 跑出来的就是 `janpo soak` 在这个种子上看到的那一场
+  janpo soak <种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform]
+                                 用给定种子区间连续跑 N 场，**逐手验不变量、逐场数覆盖率**：
+                                 牌数守恒、点数与供托之和恒定、合法动作集非空或局已终、
+                                 回放确定性。打印覆盖率、未覆盖的形态与问题清单；
+                                 有问题时退出码 1，每条都带能复现的种子
   janpo shanten [--naki N] <记法>...  打印向听数、和了型与有效牌（四麻全 34 牌种）
   janpo shanten --batch               从 stdin 逐行读「<副露数> <记法>...」，每行打印一个向听数
   janpo yaku --win <记法> [选项] <暗牌记法>...
@@ -51,6 +58,9 @@ yaku 的选项:
   janpo kyoku 42
   janpo game 42
   janpo game 42 --hanchan
+  janpo game 42 --covering
+  janpo soak 1 60
+  janpo soak 1 200 --uniform
   janpo shanten "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
   janpo shanten --naki 1 "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p"
   echo "0 1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z" | janpo shanten --batch
@@ -144,40 +154,51 @@ let private runKyoku (arguments: string list) : int =
             printfn "scores: %s" (GameState.scores state |> List.map string |> String.concat " ")
             0
 
-/// `<种子> [--no-akadora] [--hanchan]`：game 的参数形态，比 deal / kyoku 多一个对局长度。
-let private parseGameArguments (arguments: string list) : Result<int option * bool * GameLength, string> =
-    let rec parse (seed: int option) (akadora: bool) (length: GameLength) (rest: string list) =
+/// `<种子> [--no-akadora] [--hanchan] [--covering]`：game 的参数形态，
+/// 比 deal / kyoku 多一个对局长度与一个选手开关。
+let private parseGameArguments (arguments: string list) : Result<int option * bool * GameLength * bool, string> =
+    let rec parse (seed: int option) (akadora: bool) (length: GameLength) (covering: bool) (rest: string list) =
         match rest with
-        | [] -> Ok(seed, akadora, length)
-        | "--no-akadora" :: tail -> parse seed false length tail
-        | "--hanchan" :: tail -> parse seed akadora Hanchan tail
-        | "--tonpuusen" :: tail -> parse seed akadora Tonpuusen tail
+        | [] -> Ok(seed, akadora, length, covering)
+        | "--no-akadora" :: tail -> parse seed false length covering tail
+        | "--hanchan" :: tail -> parse seed akadora Hanchan covering tail
+        | "--tonpuusen" :: tail -> parse seed akadora Tonpuusen covering tail
+        | "--covering" :: tail -> parse seed akadora length true tail
         | token :: tail ->
             match System.Int32.TryParse token, seed with
-            | (true, value), None -> parse (Some value) akadora length tail
+            | (true, value), None -> parse (Some value) akadora length covering tail
             | _ -> Error token
 
-    parse None true Ruleset.yonma.Length arguments
+    parse None true Ruleset.yonma.Length false arguments
 
-/// `janpo game <种子> [--no-akadora] [--hanchan]`：四个随机选手把一整场对局打到终局精算。
+/// `janpo game <种子> [--no-akadora] [--hanchan] [--covering]`：四个随机选手把一整场对局打到终局精算。
 /// 输出是每行一个 mjai JSON 事件（每局之间有 `end_kyoku`，最后是 `end_game`），
 /// 随后是终局点数与顺位。同一种子必然跑出同一场对局——**14 票的 soak 从这里进**。
 let private runGame (arguments: string list) : int =
     match parseGameArguments arguments with
     | Error token ->
-        eprintfn "game 只认一个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen，不认「%s」" token
+        eprintfn "game 只认一个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --covering，不认「%s」" token
         2
-    | Ok(None, _, _) ->
+    | Ok(None, _, _, _) ->
         eprintfn "game 需要一个整数种子，例如: janpo game 42"
         2
-    | Ok(Some seed, akadora, length) ->
+    | Ok(Some seed, akadora, length, covering) ->
         let ruleset = rulesetOf akadora |> Ruleset.withLength length
 
-        match Game.runRandom ruleset (Rng.ofSeed seed) with
+        // `--covering` 跑的是 **`janpo soak` 在这个种子上看到的那一场**：同一个选手、
+        // 同一对发生器（选手与牌山分两条流）。跑批报出问题时拿它看完整事件流。
+        let played =
+            if covering then
+                Game.run RandomPlayer.covering (Soak.playerRng seed) (Rng.ofSeed seed) (Game.start ruleset)
+                |> Result.map (fun (game, _, _) -> game)
+            else
+                Game.runRandom ruleset (Rng.ofSeed seed) |> Result.map fst
+
+        match played with
         | Error error ->
             eprintfn "%s" (KyokuError.toDisplay error)
             1
-        | Ok(game, _) ->
+        | Ok game ->
             printEvents (startGame ruleset :: Game.events game)
             printfn "kyokus: %d" (Game.played game |> List.length)
             printfn "scores: %s" (Game.scores game |> List.map string |> String.concat " ")
@@ -189,6 +210,84 @@ let private runGame (arguments: string list) : int =
             | None -> ()
 
             0
+
+/// `<种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform]`：soak 的参数形态，
+/// 比 game 多一个种子与一个选手开关。两个整数按出现顺序当区间的两端。
+type private SoakArguments =
+    {
+        Seeds: int list
+        Akadora: bool
+        Length: GameLength
+        /// 用均匀取样的随机选手而不是带偏好的那个：拿来对照「不加偏好就跑不到哪几类动作」。
+        Uniform: bool
+    }
+
+let private parseSoakArguments (arguments: string list) : Result<SoakArguments, string> =
+    let rec parse (seeds: int list) (parsed: SoakArguments) (rest: string list) =
+        match rest with
+        | [] -> Ok { parsed with Seeds = List.rev seeds }
+        | "--no-akadora" :: tail -> parse seeds { parsed with Akadora = false } tail
+        | "--hanchan" :: tail -> parse seeds { parsed with Length = Hanchan } tail
+        | "--tonpuusen" :: tail -> parse seeds { parsed with Length = Tonpuusen } tail
+        | "--uniform" :: tail -> parse seeds { parsed with Uniform = true } tail
+        | token :: tail ->
+            match System.Int32.TryParse token, seeds with
+            | (true, value), [] -> parse [ value ] parsed tail
+            | (true, value), [ first ] -> parse [ value; first ] parsed tail
+            | _ -> Error token
+
+    parse
+        []
+        {
+            Seeds = []
+            Akadora = true
+            Length = Ruleset.yonma.Length
+            Uniform = false
+        }
+        arguments
+
+/// `janpo soak <种子起> [<种子止>] ...`：一批种子连着跑，逐手验不变量、逐场数覆盖率。
+/// **退出码只看问题清单**：覆盖率只打印不卡（跑一两场当然覆盖不全）。
+/// 把覆盖率当闸门的是 CI 里的 soak 用例，它跑的是已验证过的默认规模。
+let private runSoak (arguments: string list) : int =
+    match parseSoakArguments arguments with
+    | Error token ->
+        eprintfn "soak 只认一到两个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --uniform，不认「%s」" token
+        2
+    | Ok { Seeds = [] } ->
+        eprintfn "soak 需要种子区间，例如: janpo soak 1 60"
+        2
+    | Ok parsed ->
+        let ruleset = rulesetOf parsed.Akadora |> Ruleset.withLength parsed.Length
+
+        let player =
+            if parsed.Uniform then
+                RandomPlayer.uniform
+            else
+                RandomPlayer.covering
+
+        let seeds =
+            match parsed.Seeds with
+            | [ first ] -> [ first ]
+            | first :: last :: _ -> [ min first last .. max first last ]
+            | [] -> []
+
+        let report = Soak.run ruleset player seeds
+
+        printfn "%s" (SoakReport.toDisplay report)
+
+        match report.Issues with
+        | [] -> 0
+        | issues ->
+            // 种子本身就是事件流的指针：同一种子必然跑出同一场对局，
+            // `janpo game <种子> --covering` 把它整条事件流打出来（同一选手、同一对发生器）。
+            eprintfn "复现："
+
+            for seed in issues |> List.map (fun issue -> issue.Seed) |> List.distinct do
+                eprintfn "  janpo soak %d %d          # 重跑这一场并重验不变量" seed seed
+                eprintfn "  janpo game %d --covering  # 打印同一场的完整事件流" seed
+
+            1
 
 /// 四麻：全 34 牌种，**从规则集读**（ADR-0004 决定 4：牌种全集由 `Ruleset` 携带）。
 /// 三麻的牌种集合是另一张票的事，这里只把接缝留出来。
@@ -499,6 +598,7 @@ let main argv =
     | "deal" :: arguments -> runDeal arguments
     | "kyoku" :: arguments -> runKyoku arguments
     | "game" :: arguments -> runGame arguments
+    | "soak" :: arguments -> runSoak arguments
     | [ "shanten"; "--batch" ] -> runShantenBatch ()
     | "shanten" :: "--naki" :: naki :: arguments ->
         match System.Int32.TryParse naki with

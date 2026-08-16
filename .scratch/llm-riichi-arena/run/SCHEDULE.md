@@ -44,7 +44,7 @@
 | 11 | **done** | wqzppokx | 493 测试；岭上/抢杠/新宝牌/责任支付；kanCount 给 12 |
 | 12 | **done** | kmuuknlq | 528 测试；RyuukyokuReason 全集（wire 出自 mjai 参考实现）、Nagashi Mangan 替代清算 |
 | 13 | **done** | uoltqvry | 541 测试；固件 0 差异，200 局报 8 条→修 1 真 bug、开 16 票 |
-| 14 | dispatched | | ws-a（M0 最后一票）|
+| 14 | **done** | ssunoxrq | 555 测试；带偏好 Player，soak 覆盖率断言 16 项 |
 | 16 | **done** | qznxrwnq | 543 测试；扩样本对拍差异 8 → 0 |
 | 17 | dispatched | | ws-b（研究推荐，实测 6.6×）|
 | 15 | pending | | M0 之后：立直合法性的 Shanten 前置闸门（N-19），阻塞于 14 |

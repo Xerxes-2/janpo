@@ -93,6 +93,11 @@
     <Compile Include="GameProperties.fs" />
   </ItemGroup>
 
+  <!-- M0 验收跑批（票 14）：一批种子跑到底，逐手验不变量、逐场数覆盖率。 -->
+  <ItemGroup>
+    <Compile Include="SoakTests.fs" />
+  </ItemGroup>
+
   <!-- 真实牌谱对拍（票 13）。顺序有依赖：事件 → oracle → 重放 → 对拍 → 断言。 -->
   <ItemGroup>
     <Compile Include="PaifuEvent.fs" />
