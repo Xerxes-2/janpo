@@ -12,6 +12,8 @@ import type { AskResult } from "../../src/agent/ask.ts";
 import { decideWith } from "../../src/agent/loop.ts";
 import {
   aborted,
+  assistedAnswer,
+  assistedSeat,
   badKey,
   dahaiPackage,
   legal,
@@ -130,6 +132,33 @@ test("ask 真抛了异常也只是这一次失败，不是整局崩掉", async (
   assert.equal(calls, 3);
   assert.equal(response.action_id, null);
   assert.match(response.failure ?? "", /适配器炸了/);
+});
+
+test("Assisted 档：问出去的 prompt 带脚手架，回执还是那五个字段", async () => {
+  // 录制的是模型对**带脚手架那份 prompt** 的真实回答（`pnpm run record:agent ask-assisted`）。
+  const { ask, prompts } = replay(assistedAnswer);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: assistedSeat }));
+
+  assert.equal(response.action_id, 2);
+  assert.equal(response.failure, null);
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0], /【引擎算好的数】/, "档位随座位配置进来，不是写死的");
+  assert.match(prompts[0], /当前向听数：3 向听/);
+  // 模型真的拿它当了理由（录制下来的原话里引了有效牌与退向）。
+  assert.match(response.reason ?? "", /有效牌|退向/);
+});
+
+test("Assisted 档：答不上话照样交不出来，兜底路径一模一样", async () => {
+  // 兜底**打哪一手**是引擎的事（`Fallback.action tier package`），
+  // 这一层只负责把「我交不出来」连同原因回回去——换了档位也一样。
+  const { ask, prompts } = replay(aborted);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: assistedSeat }));
+
+  assert.equal(response.action_id, null);
+  assert.equal(response.attempts, 3);
+  assert.match(response.failure ?? "", /模型超时/);
+  assert.match(prompts[2], /【引擎算好的数】/, "重问的那几遍也是同一档");
+  assert.match(prompts[2], /上一次的回答没有被采用/);
 });
 
 test("合法动作集是空的（不该发生）也不抛", async () => {

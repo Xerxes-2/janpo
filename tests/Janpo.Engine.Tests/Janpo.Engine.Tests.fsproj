@@ -90,6 +90,8 @@
   <ItemGroup>
     <Compile Include="ObservationTests.fs" />
     <Compile Include="ObservationProperties.fs" />
+    <Compile Include="ScaffoldTests.fs" />
+    <Compile Include="ScaffoldProperties.fs" />
     <Compile Include="DecisionPackageTests.fs" />
     <Compile Include="DecisionPackageProperties.fs" />
     <Compile Include="FallbackTests.fs" />

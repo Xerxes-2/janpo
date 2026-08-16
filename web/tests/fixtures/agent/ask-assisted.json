@@ -1,0 +1,18 @@
+{
+  "_note": "真实录制：DeepSeek deepseek-v4-flash 对 decision-dahai.json 的 Assisted 档 prompt（带向听数、有效牌与逐张试打的进退向）的单轮 tool call。",
+  "stopReason": "toolUse",
+  "toolCall": {
+    "name": "choose_action",
+    "arguments": {
+      "action_id": "2",
+      "reason": "打9万保留更多有效牌种（66枚19种），维持3向听，同时9万是孤张对搭子形成帮助最小，且切3筒/4筒/5筒会退向，切中虽有效牌70枚但中作为役牌价值高。"
+    }
+  },
+  "text": "",
+  "errorMessage": null,
+  "latencyMs": 1802,
+  "usage": {
+    "input": 2183,
+    "output": 119
+  }
+}

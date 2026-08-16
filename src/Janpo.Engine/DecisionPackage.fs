@@ -33,6 +33,9 @@ type DecisionPackage =
             Observation: Observation
             /// 它此刻能提交的全部动作，按合法动作集的既定顺序编号。非空。
             Options: ActionOption list
+            /// 脚手架数值（向听数、有效牌、逐张试打的进退向）。**包恒带它**，
+            /// 档位决定的是 prompt 渲不渲染（Bare 档不渲染）。手牌形态读不出来时是 None。
+            Scaffold: Scaffold option
         }
 
 /// 一条编号动作的拆解与编码。
@@ -81,18 +84,25 @@ module DecisionPackage =
 
         match asked, Observation.ofState seat state with
         | Some choice, Some observation ->
+            let options =
+                choice.Actions
+                |> List.mapi (fun index action ->
+                    {
+                        Id = index
+                        Action = action
+                        Label = Action.toDisplay action
+                    })
+
+            // 脚手架从**这份遮蔽好的观测**再算一遍，不从 `state` 抄近路：
+            // 它因此一张多余的牌也看不见（他家的暗牌在 `MaskedSeat` 里没有位置）。
+            let numbered = options |> List.map (fun option -> option.Id, option.Action)
+
             Some
                 {
                     Seat = seat
                     Observation = observation
-                    Options =
-                        choice.Actions
-                        |> List.mapi (fun index action ->
-                            {
-                                Id = index
-                                Action = action
-                                Label = Action.toDisplay action
-                            })
+                    Options = options
+                    Scaffold = Scaffold.calculate (GameState.ruleset state).TileKinds numbered observation
                 }
         | Some _, None
         | None, _ -> None
@@ -108,6 +118,10 @@ module DecisionPackage =
     /// 编号动作，按合法动作集的既定顺序。
     let options (package: DecisionPackage) : ActionOption list = package.Options
 
+    /// 脚手架数值。手牌形态读不出来时是 None——`Fallback` 的 Assisted 档读的就是它，
+    /// 读不到就退回 Bare 档的兜底。
+    let scaffold (package: DecisionPackage) : Scaffold option = package.Scaffold
+
     /// **反方向的唯一入口**：一个整数 → 那个动作。
     /// id 越界或压根不存在时是 None 而不是异常——兜底路径（23 号票）依赖这一条，
     /// 而 LLM 给回来的整数什么都可能是。
@@ -120,9 +134,9 @@ module DecisionPackage =
 
     /// 决策包的 wire 形态。**只有 encoder，没有 decoder**：包只往外走，回来的是一个 id。
     ///
-    /// `scaffold` 是**留好的槽位**，这一票恒为空对象：
-    /// Shanten / Ukeire / 进退向由 24 号票填，Danger 由 25 号票填。
-    /// 投影只做遮蔽不做计算，脚手架数值是**分析附件**，两件事不混在一起。
+    /// `scaffold` 是分析附件（24 号票填的向听数、有效牌与逐张试打的进退向，
+    /// 25 号票再往里加 Danger），**与 `observation` 分开放**：投影只做遮蔽不做计算，
+    /// 两件事不混在一起。算不出来时它退回空对象。
     let encoder: Encoder<DecisionPackage> =
         fun package ->
             Encode.object
@@ -130,5 +144,5 @@ module DecisionPackage =
                     "seat", Seat.encoder package.Seat
                     "observation", Observation.encoder package.Observation
                     "actions", package.Options |> List.map ActionOption.encoder |> Encode.list
-                    "scaffold", Encode.object []
+                    "scaffold", Scaffold.slotEncoder package.Scaffold
                 ]

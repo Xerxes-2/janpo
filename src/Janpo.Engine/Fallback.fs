@@ -39,16 +39,41 @@ module Fallback =
         |> Option.orElseWith (fun () -> List.tryFind isPass options)
         |> Option.defaultWith (fun () -> List.head options)
 
+    /// Assisted 档：**不退 Shanten 的那一手**（CONTEXT.md 的 Fallback）。
+    ///
+    /// 候选是脚手架里进退向为 0 的那几条试打；同为不退向听时优先摸切——它与 Bare 档同手，
+    /// 也不多暴露手牌信息。**摸切并不必然不退向听**：刚摸进的那张让手牌进了一步时，
+    /// 把它扭头扔回去就是退向（向听戻し），这一档不这么打。
+    ///
+    /// 打不了牌（响应阶段）或者脚手架算不出来时是 None，由调用方退回 `bare`。
+    ///
+    /// **「安全打」那一半还没有**：现物 / 筋 / 壁要 `Danger`（25 号票的新分析模块），
+    /// 这一票手上没有它。25 号票落地后在**这里**按危险度给下面这批候选排序，
+    /// `bare` 与档位分派都不用动。
+    let private assisted (package: DecisionPackage) : Action option =
+        DecisionPackage.scaffold package
+        |> Option.bind (fun scaffold ->
+            let candidates =
+                scaffold.Dahai
+                |> List.filter (fun trial -> trial.ShantenDelta = 0)
+                |> List.collect (fun trial -> trial.ActionIds)
+                |> List.choose (fun id -> DecisionPackage.tryAction id package)
+
+            candidates
+            |> List.tryFind isTsumogiri
+            |> Option.orElseWith (fun () -> List.tryHead candidates))
+
     /// 代打一手。**必然回一个合法动作**：候选全部取自决策包，而包里的动作列表非空。
     ///
-    /// 分档在这里，不在 `bare` 里面：24 号票把 Assisted 换成「不退 Shanten 的安全打」，
-    /// 25 号票把 Danger 排序接进来，改的都是下面这个 `match` 的分支，`bare` 一行不动。
+    /// 分档在这里，不在 `bare` 里面：Assisted 挑不退向听的那一手（25 号票再按 Danger 排序），
+    /// `bare` 一行不动。
     let action (tier: ScaffoldTier) (package: DecisionPackage) : Action =
         let options = DecisionPackage.options package |> List.map ActionOption.action
 
         match tier with
         | ScaffoldTier.Bare -> bare options
-        // 24 号票：Assisted 的兜底是「不退 Shanten 的安全打」；在那之前照 Bare 打，
-        // 保守（摸切必不放铳新张，也必不退向听）且绝不卡死。
-        | ScaffoldTier.Assisted
+        // 挑不出不退向听的打牌（响应阶段、和了型手牌、脚手架算不出来）就退回 Bare：
+        // 兜底只挑不发明，宁可摸切也不能没有一手交出去。
+        | ScaffoldTier.Assisted -> assisted package |> Option.defaultWith (fun () -> bare options)
+        // ToolSearch 是 M3 的事，它的兜底跟着 Assisted 走要等那一票定了工具的语义，先照 Bare 打。
         | ScaffoldTier.ToolSearch -> bare options

@@ -112,6 +112,33 @@ module TablePageTests =
         Assert.Equal(AgentStatus.Troubled(Seat.first, "模型超时（重试 2 次仍无结果）"), played.Agent)
 
     [<Fact>]
+    let ``兜底按座位自己那一档代打`` () =
+        // 档位是座位级配置（票 24），它一路跟到兜底。
+        // **种子 42 的开局第一手两档不同**：刚摸进的 7p 让手牌进了一步，摸切就是退向，
+        // 因此 Bare 摸切而 Assisted 改打一张不退向听的——档位传错了这条就红。
+        let start (tier: ScaffoldTier) =
+            TablePage.initial (Some Seat.first) { config with Tier = tier }
+            |> fst
+            |> step (TableMsg.SeedEdited "42")
+            |> step TableMsg.Restarted
+            |> step Advanced
+
+        let asked = start ScaffoldTier.Assisted
+        let awaiting = awaitingOf asked
+        Assert.Equal(ScaffoldTier.Assisted, awaiting.Config.Tier)
+
+        let played = asked |> step (Answered(awaiting.Ticket, refused))
+        let action = (tableOf played).Latest |> Option.map (fun turn -> turn.Action)
+
+        Assert.Equal(Some(Fallback.action ScaffoldTier.Assisted awaiting.Package), action)
+
+        let bare = start ScaffoldTier.Bare
+        let bareAwaiting = awaitingOf bare
+        let barePlayed = bare |> step (Answered(bareAwaiting.Ticket, refused))
+
+        Assert.NotEqual(action, (tableOf barePlayed).Latest |> Option.map (fun turn -> turn.Action))
+
+    [<Fact>]
     let ``越界的 id 走同一条兜底路：tryAction 是第二道闸`` () =
         let asked = llmTable () |> step Advanced
         let awaiting = awaitingOf asked

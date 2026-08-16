@@ -202,5 +202,1070 @@
       }
     }
   ],
-  "scaffold": {}
+  "scaffold": {
+    "shanten": {
+      "value": 3,
+      "display": "3 向听"
+    },
+    "ukeire": null,
+    "dahai": [
+      {
+        "pai": "2m",
+        "action_ids": [0],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 66,
+          "kinds": 19,
+          "tiles": [
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "5m",
+        "action_ids": [1],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 66,
+          "kinds": 19,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "9m",
+        "action_ids": [2],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 66,
+          "kinds": 19,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "3p",
+        "action_ids": [3],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 76,
+          "kinds": 22,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "3p",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "4p",
+        "action_ids": [4],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 76,
+          "kinds": 22,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "4p",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "5p",
+        "action_ids": [5],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 79,
+          "kinds": 23,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "2p",
+              "remaining": 4
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "8p",
+        "action_ids": [6],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 59,
+          "kinds": 17,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "3s",
+        "action_ids": [7],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 55,
+          "kinds": 16,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "7s",
+        "action_ids": [8],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 79,
+          "kinds": 23,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "7s",
+              "remaining": 3
+            },
+            {
+              "pai": "8s",
+              "remaining": 3
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "8s",
+        "action_ids": [9],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 79,
+          "kinds": 23,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "7s",
+              "remaining": 3
+            },
+            {
+              "pai": "8s",
+              "remaining": 3
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            },
+            {
+              "pai": "7z",
+              "remaining": 3
+            }
+          ]
+        }
+      },
+      {
+        "pai": "7z",
+        "action_ids": [10],
+        "shanten": {
+          "value": 3,
+          "display": "3 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 70,
+          "kinds": 20,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 4
+            },
+            {
+              "pai": "2m",
+              "remaining": 3
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 4
+            },
+            {
+              "pai": "5m",
+              "remaining": 3
+            },
+            {
+              "pai": "6m",
+              "remaining": 4
+            },
+            {
+              "pai": "7m",
+              "remaining": 4
+            },
+            {
+              "pai": "8m",
+              "remaining": 4
+            },
+            {
+              "pai": "9m",
+              "remaining": 3
+            },
+            {
+              "pai": "6p",
+              "remaining": 4
+            },
+            {
+              "pai": "7p",
+              "remaining": 4
+            },
+            {
+              "pai": "8p",
+              "remaining": 3
+            },
+            {
+              "pai": "9p",
+              "remaining": 3
+            },
+            {
+              "pai": "1s",
+              "remaining": 4
+            },
+            {
+              "pai": "2s",
+              "remaining": 3
+            },
+            {
+              "pai": "3s",
+              "remaining": 3
+            },
+            {
+              "pai": "4s",
+              "remaining": 4
+            },
+            {
+              "pai": "5s",
+              "remaining": 4
+            },
+            {
+              "pai": "6s",
+              "remaining": 4
+            },
+            {
+              "pai": "9s",
+              "remaining": 4
+            }
+          ]
+        }
+      }
+    ]
+  }
 }

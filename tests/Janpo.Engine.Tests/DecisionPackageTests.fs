@@ -129,8 +129,19 @@ module DecisionPackageTests =
             encoded
         )
 
-        // 脚手架数值是 24 / 25 号票的，这一票只把槽位留好。
-        Assert.Contains("\"scaffold\":{}", encoded)
+        // 脚手架数值（票 24）：向听数、有效牌与逐张试打的进退向。
+        // 这一手已经摸进了，因此手牌自己没有有效牌（要先试打一张）。
+        // 向听数带着**引擎渲染好的中文**过界（ADR-0005）：0 叫「听牌」，不是「0 向听」。
+        Assert.Contains(
+            "\"scaffold\":{\"shanten\":{\"value\":0,\"display\":\"听牌\"},\"ukeire\":null,\"dahai\":[",
+            encoded
+        )
+
+        // 摸切 1z（id=14）不退向听：打完听 5z 单骑，还剩 3 枚。
+        Assert.Contains(
+            "{\"pai\":\"1z\",\"action_ids\":[14],\"shanten\":{\"value\":0,\"display\":\"听牌\"},\"shanten_delta\":0,\"ukeire\":{\"total\":3,\"kinds\":1,\"tiles\":[{\"pai\":\"5z\",\"remaining\":3}]}}",
+            encoded
+        )
 
     [<Fact>]
     let ``动作的结构化字段照 mjai 的动作消息`` () =

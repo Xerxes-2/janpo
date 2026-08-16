@@ -6,7 +6,8 @@
 //   2. 断电演习：故意配一把坏 key，整局照样打完（全程兜底），页面上有明确的错误状态。
 //        node scripts/verify-llm-seat.mjs --bad-key
 //
-// 选项：--seat N（默认 1）、--seed N（默认页面自带的 2088）、--model X、--speed 1|2|4|8。
+// 选项：--seat N（默认 1）、--seed N（默认页面自带的 2088）、--model X、--speed 1|2|4|8、
+//       --tier bare|assisted（默认 bare；票 24 的脚手架档位）。
 // key 只从文件读、只经 addInitScript 注入 localStorage，**不进代码、不进产物、不进提交**。
 
 import { readFileSync } from "node:fs";
@@ -30,6 +31,7 @@ const seat = Number.parseInt(flag("--seat", "1"), 10);
 const seed = flag("--seed", null);
 const model = flag("--model", "deepseek-v4-flash");
 const speed = flag("--speed", "8");
+const tier = flag("--tier", "bare");
 const budgetMs = Number.parseInt(flag("--budget", "600000"), 10);
 
 const apiKey = badKey
@@ -76,15 +78,16 @@ try {
 
   // 配置只从 localStorage 来 —— 页面 `init` 读的就是它（`Store.readSeatConfig`）。
   await page.addInitScript(
-    ([seat, model, apiKey]) => {
+    ([seat, model, apiKey, tier]) => {
       localStorage.setItem("janpo.llm.seat", String(seat));
       localStorage.setItem("janpo.llm.provider", "deepseek");
       localStorage.setItem("janpo.llm.model", model);
       localStorage.setItem("janpo.llm.api_key", apiKey);
       localStorage.setItem("janpo.llm.timeout_ms", "30000");
       localStorage.setItem("janpo.llm.thinking", "off");
+      localStorage.setItem("janpo.llm.tier", tier);
     },
-    [seat, model, apiKey],
+    [seat, model, apiKey, tier],
   );
 
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: "load" });
@@ -97,7 +100,9 @@ try {
   const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
   const readAttr = async (testId, name) => await page.getByTestId(testId).getAttribute(name);
 
-  console.log(`模式：${badKey ? "断电演习（坏 key）" : "真跑一局"}　座位 ${seat}　模型 ${model}`);
+  console.log(
+    `模式：${badKey ? "断电演习（坏 key）" : "真跑一局"}　座位 ${seat}　模型 ${model}　脚手架 ${await page.getByTestId("table-llm-tier").inputValue()}`,
+  );
   console.log(`模型坐席状态：${await readText("table-agent")}`);
 
   await page.getByTestId(`table-speed-${speed}×`).click();

@@ -130,10 +130,25 @@ module AgentTests =
         Assert.Equal(config, LlmSeat.edit LlmField.TimeoutMs "三万" config)
         Assert.Equal(config, LlmSeat.edit LlmField.TimeoutMs "-1" config)
         Assert.Equal(config, LlmSeat.edit LlmField.Thinking "疯狂" config)
+        Assert.Equal(config, LlmSeat.edit LlmField.Tier "开挂" config)
 
         Assert.Equal({ config with TimeoutMs = 5000 }, LlmSeat.edit LlmField.TimeoutMs " 5000 " config)
 
         Assert.Equal({ config with Thinking = Thinking.High }, LlmSeat.edit LlmField.Thinking "high" config)
+
+    [<Fact>]
+    let ``脚手架档位是座位级配置：拨一下就换一档`` () =
+        // 主持人在座位上切 Bare / Assisted，因此脚手架强度是个可对照的实验变量（票 24）。
+        Assert.Equal(
+            { config with
+                Tier = ScaffoldTier.Assisted
+            },
+            LlmSeat.edit LlmField.Tier "assisted" config
+        )
+
+        // 三个 case 都认得出来：ToolSearch 只是面板上灰着，不是这一层拦的。
+        for tier in ScaffoldTier.all do
+            Assert.Equal({ config with Tier = tier }, LlmSeat.edit LlmField.Tier (ScaffoldTier.toWire tier) config)
 
     [<Fact>]
     let ``每个字段读出来再写回去都是原样的`` () =
@@ -147,7 +162,7 @@ module AgentTests =
         let keys = LlmField.all |> List.map LlmField.key
 
         Assert.Equal<string list>(List.distinct keys, keys)
-        Assert.Equal(5, List.length keys)
+        Assert.Equal(6, List.length keys)
 
     [<Fact>]
     let ``provider 列表里没有 Bedrock——它是 Node-only`` () =

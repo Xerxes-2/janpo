@@ -739,12 +739,15 @@ module TablePage =
             ]
         ]
 
-    /// 一个下拉框。`options` 是（值, 显示）对。
+    /// 一个下拉框。`options` 是（值, 显示, 选不选得了）三元组。
+    ///
+    /// **选不了的选项仍然列出来**：脚手架的工具搜索档是 M3 的事，列着它并灰掉
+    /// 比藏起来诚实——人看得见「还有一档，还没做」。
     let private selectField
         (testId: string)
         (label: string)
         (which: LlmField)
-        (options: (string * string) list)
+        (options: (string * string * bool) list)
         (model: TableModel)
         (dispatch: TableMsg -> unit)
         =
@@ -758,8 +761,13 @@ module TablePage =
                     prop.value (LlmSeat.field which model.Llm)
                     prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
                     prop.children [
-                        for value, display in options ->
-                            Html.option [ prop.key value; prop.value value; prop.text display ]
+                        for value, display, enabled in options ->
+                            Html.option [
+                                prop.key value
+                                prop.value value
+                                prop.text display
+                                prop.disabled (not enabled)
+                            ]
                     ]
                 ]
             ]
@@ -803,7 +811,7 @@ module TablePage =
                             "table-llm-provider"
                             "provider"
                             LlmField.Provider
-                            (LlmSeat.providers |> List.map (fun name -> name, name))
+                            (LlmSeat.providers |> List.map (fun name -> name, name, true))
                             model
                             dispatch
                         textField "table-llm-model" "text" "模型" LlmField.Model model dispatch
@@ -814,28 +822,27 @@ module TablePage =
                             "思考预算"
                             LlmField.Thinking
                             (Thinking.all
-                             |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level))
+                             |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level, true))
                             model
                             dispatch
-                        // 档位只有 Bare；24 / 25 号票把它换成一个选择框。
-                        Html.span [
-                            prop.key "tier"
-                            prop.className "field"
-                            prop.children [
-                                Html.span [ prop.className "label"; prop.text "脚手架" ]
-                                Html.span [
-                                    prop.testId "table-llm-tier"
-                                    prop.text (ScaffoldTier.toDisplay model.Llm.Tier)
-                                ]
-                            ]
-                        ]
+                        // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。
+                        // 工具搜索档是 M3 的，灰着；它真被选上也不会坏事（prompt 与兜底都退回 Bare）。
+                        selectField
+                            "table-llm-tier"
+                            "脚手架"
+                            LlmField.Tier
+                            (ScaffoldTier.all
+                             |> List.map (fun tier ->
+                                 ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, tier <> ScaffoldTier.ToolSearch))
+                            model
+                            dispatch
                     ]
                 ]
                 Html.p [
                     prop.key "note"
                     prop.className "intro"
                     prop.text
-                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底摸切，对局不会卡住。"
+                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的），对局不会卡住。"
                 ]
             ]
         ]

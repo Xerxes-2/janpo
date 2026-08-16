@@ -29,7 +29,7 @@ type LlmSeat = {
     TimeoutMs: int
     /// 思考预算。
     Thinking: Thinking
-    /// 脚手架档位。23 号票只实现 Bare（决策包的 `scaffold` 恒为空对象）。
+    /// 脚手架档位。它决定 Agent 层渲哪一份 prompt，以及兜底怎么代打（`Fallback`）。
     Tier: ScaffoldTier
 }
 
@@ -72,6 +72,7 @@ type LlmField =
     | ApiKey
     | TimeoutMs
     | Thinking
+    | Tier
 
 /// 思考预算的取值与两个出口。
 [<RequireQualifiedAccess>]
@@ -113,6 +114,7 @@ module LlmField =
         LlmField.ApiKey
         LlmField.TimeoutMs
         LlmField.Thinking
+        LlmField.Tier
     ]
 
     /// localStorage 里的键名（不带前缀）。**只有这一份**：写的与读的拼不到一块去。
@@ -123,6 +125,7 @@ module LlmField =
         | LlmField.ApiKey -> "api_key"
         | LlmField.TimeoutMs -> "timeout_ms"
         | LlmField.Thinking -> "thinking"
+        | LlmField.Tier -> "tier"
 
 /// LLM 座位配置的默认值与编辑。**它不碰 localStorage**：读写浏览器本地存储是页面的事，
 /// 这里只管「一个字段改成什么值」。
@@ -150,7 +153,7 @@ module LlmSeat =
         // 30 秒：票 18 实测单轮 tool call 约 2.4 秒，开了思考预算会长很多。
         TimeoutMs = 30000
         Thinking = Thinking.Off
-        // 23 号票只有 Bare；24 号票把它变成配置面板上的一个选项。
+        // 默认裸奔：它是对照组（量「模型自己会不会数牌」），加脚手架是主持人自己拨的实验变量。
         Tier = ScaffoldTier.Bare
     }
 
@@ -162,6 +165,7 @@ module LlmSeat =
         | LlmField.ApiKey -> seat.ApiKey
         | LlmField.TimeoutMs -> string seat.TimeoutMs
         | LlmField.Thinking -> Thinking.toWire seat.Thinking
+        | LlmField.Tier -> ScaffoldTier.toWire seat.Tier
 
     /// 改一个字段。**读不懂的值一律原样不改**（超时框里的非数字、认不出的思考档位）：
     /// 配置是人填的，不该因为一次误输入就把设定清掉。
@@ -177,6 +181,10 @@ module LlmSeat =
         | LlmField.Thinking ->
             match Thinking.ofWire value with
             | Some thinking -> { seat with Thinking = thinking }
+            | None -> seat
+        | LlmField.Tier ->
+            match ScaffoldTier.ofWire value with
+            | Some tier -> { seat with Tier = tier }
             | None -> seat
 
 /// F#/TS 的那道边界（ADR-0005：**只有 F# 调 TS 这一个方向**）。

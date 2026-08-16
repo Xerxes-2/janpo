@@ -24,6 +24,9 @@ export const responsePackage = load<DecisionPackage>("decision-response");
 /** 合法输出：模型调 choose_action 选了 id=2。 */
 export const legal = load<AskResult>("ask-legal");
 
+/** Assisted 档（票 24）：**同一份决策包**的带脚手架 prompt 问出来的那一次。 */
+export const assistedAnswer = load<AskResult>("ask-assisted");
+
 /** 格式跑偏：模型没调工具，只回了一段话。 */
 export const textOnly = load<AskResult>("ask-text-only");
 
@@ -41,6 +44,9 @@ export const seat: SeatConfig = {
   thinking: "off",
   tier: "bare",
 };
+
+/** 同一个座位，**只把脚手架档位拨到 Assisted**（票 24：档位是座位级配置）。 */
+export const assistedSeat: SeatConfig = { ...seat, tier: "assisted" };
 
 export function request(
   decision: DecisionPackage,

@@ -104,5 +104,49 @@
       }
     }
   ],
-  "scaffold": {}
+  "scaffold": {
+    "shanten": {
+      "value": 3,
+      "display": "3 向听"
+    },
+    "ukeire": {
+      "total": 28,
+      "kinds": 8,
+      "tiles": [
+        {
+          "pai": "1m",
+          "remaining": 4
+        },
+        {
+          "pai": "4m",
+          "remaining": 4
+        },
+        {
+          "pai": "9m",
+          "remaining": 3
+        },
+        {
+          "pai": "8p",
+          "remaining": 3
+        },
+        {
+          "pai": "3s",
+          "remaining": 3
+        },
+        {
+          "pai": "6s",
+          "remaining": 4
+        },
+        {
+          "pai": "9s",
+          "remaining": 4
+        },
+        {
+          "pai": "7z",
+          "remaining": 3
+        }
+      ]
+    },
+    "dahai": []
+  }
 }
