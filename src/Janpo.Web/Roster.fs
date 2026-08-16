@@ -2,6 +2,19 @@ namespace Janpo.Web
 
 open Janpo
 
+/// 引擎自带的两种 bot（票 42）。**两种都是随机选手**，差别只在有没有主见。
+///
+/// 跑批那个覆盖型偏好（`RandomPlayer.covering`）**不在这里**：它是量具
+/// （见和就和、九种九牌权重 500），不是给人看的对手。它只在 CLI 上选得到。
+[<RequireQualifiedAccess>]
+type Bot =
+    /// 均匀随机（`Kyoku.randomPlayer`）：从合法动作集里等概率挑一个。
+    /// **它是 40 条黄金用例与双目标对拍的基准，行为一个字节都不许动**（票 42 的边界）。
+    | Uniform
+    /// 有主见的随机（`OpinionatedPlayer.player`）：能和就和、听牌就立直、有役才鸣。
+    /// 立直、一发、里宝牌、供托与振听这些路径靠它才在正常对局里出现。
+    | Opinionated
+
 /// 坐在一个座位上的选手（CONTEXT.md 的 Player）。**四种选手对引擎完全同级**：
 /// 给定观测与合法动作集，返回一个动作。差别只在「返回得同步还是要等」——
 /// 而那件事在 `Table.decide` 那道缝上分岔，引擎一无所知。
@@ -9,10 +22,42 @@ open Janpo
 /// M1 只有两种。Mortal 与真人坐席是 M3 的 case，加在这里。
 [<RequireQualifiedAccess>]
 type SeatPlayer =
-    /// 引擎自带的随机 bot（`Kyoku.randomPlayer`）。动作当场就有。
-    | Random
+    /// 引擎自带的 bot。动作当场就有。
+    | Bot of kind: Bot
     /// LLM 适配器：决策包发给 Agent 层，动作由后来的一条 Msg 带回来。
     | Llm of config: LlmSeat
+
+/// 自带 bot 的实现与两种渲染。
+[<RequireQualifiedAccess>]
+module Bot =
+
+    // ---- 拆解 ----
+
+    /// 牌桌上选得到的那几种，按摆出来的顺序。
+    let all: Bot list = [ Bot.Uniform; Bot.Opinionated ]
+
+    /// 它的引擎实现。**均匀那档走的仍是 `Kyoku.randomPlayer` 本尊**：
+    /// 换成同义的 `RandomPlayer.uniform` 也逐手一致（SoakTests 钉着），
+    /// 但这一票的边界是「不碰它」，因此连指过去的那只手都不动。
+    let player (kind: Bot) : Player<Rng> =
+        match kind with
+        | Bot.Uniform -> Kyoku.randomPlayer
+        | Bot.Opinionated -> OpinionatedPlayer.player
+
+    // ---- 渲染层出口（ADR-0001） ----
+
+    /// **牌谱里的名字**（mjai `start_game` 的 `names`），不是给人看的那一份。
+    /// 均匀那档仍叫 `random`：牌谱是可分享物，改它等于把既有牌谱的读法改了。
+    let toWire (kind: Bot) : string =
+        match kind with
+        | Bot.Uniform -> "random"
+        | Bot.Opinionated -> "opinionated"
+
+    /// **渲染层的单向出口**：牌桌上那个控件的中文标签。
+    let toDisplay (kind: Bot) : string =
+        match kind with
+        | Bot.Uniform -> "均匀随机"
+        | Bot.Opinionated -> "有主见"
 
 /// 配桌（CONTEXT.md 的 Roster）：这一桌按什么规则打、每个座位由谁来决策。
 ///
@@ -32,37 +77,42 @@ module Roster =
 
     // ---- 构造 ----
 
-    /// 四家都是随机选手（22 号票那一桌）。
-    let allRandom (ruleset: Ruleset) : Roster = {
+    /// 四家都是同一种自带 bot（22 号票那一桌）。
+    let allBots (ruleset: Ruleset) (kind: Bot) : Roster = {
         Ruleset = ruleset
-        Seats = Seat.all ruleset |> List.map (fun _ -> SeatPlayer.Random)
+        Seats = Seat.all ruleset |> List.map (fun _ -> SeatPlayer.Bot kind)
     }
 
-    /// 一席交给 LLM，其余随机（23 号票那一桌）。`seat` 是 None 时四家全随机。
-    /// 座位越界时也是四家全随机（`Seat.mapAt` 越界不改）。
-    let withLlm (ruleset: Ruleset) (seat: Seat option) (config: LlmSeat) : Roster =
+    /// 四家都是均匀随机选手。
+    let allRandom (ruleset: Ruleset) : Roster = allBots ruleset Bot.Uniform
+
+    /// 一席交给 LLM，其余是 `kind` 那种 bot（23 号票那一桌）。`seat` 是 None 时四家全是 bot。
+    /// 座位越界时也是四家全 bot（`Seat.mapAt` 越界不改）。
+    let withLlm (ruleset: Ruleset) (kind: Bot) (seat: Seat option) (config: LlmSeat) : Roster =
         match seat with
-        | None -> allRandom ruleset
+        | None -> allBots ruleset kind
         | Some seat -> {
             Ruleset = ruleset
-            Seats = (allRandom ruleset).Seats |> Seat.mapAt seat (fun _ -> SeatPlayer.Llm config)
+            Seats = (allBots ruleset kind).Seats |> Seat.mapAt seat (fun _ -> SeatPlayer.Llm config)
           }
 
     // ---- 查表 ----
 
-    /// 这个座位是谁。**越界按随机算**：牌桌永远推得动，不因为配置出错卡住。
+    /// 这个座位是谁。**越界按均匀随机算**：牌桌永远推得动，不因为配置出错卡住。
     let playerAt (seat: Seat) (roster: Roster) : SeatPlayer =
-        Seat.tryItem seat roster.Seats |> Option.defaultValue SeatPlayer.Random
+        Seat.tryItem seat roster.Seats
+        |> Option.defaultValue (SeatPlayer.Bot Bot.Uniform)
 
     /// 各家的名字，按座位升序——mjai `start_game` 的 `names`，也就是牌谱第一条事件里的那一列。
     ///
-    /// **它是 wire 数据不是渲染**（ADR-0001）：随机选手叫 `random`，LLM 座位叫 `provider/model`。
+    /// **它是 wire 数据不是渲染**（ADR-0001）：自带 bot 叫 `random` / `opinionated`，
+    /// LLM 座位叫 `provider/model`。
     /// **key 不在里面**：牌谱是可分享物，它里头永远不能出现 API key。
     let names (roster: Roster) : string list =
         roster.Seats
         |> List.map (fun player ->
             match player with
-            | SeatPlayer.Random -> "random"
+            | SeatPlayer.Bot kind -> Bot.toWire kind
             | SeatPlayer.Llm config -> $"{config.Provider}/{config.Model}")
 
     /// 坐着 LLM 的那些座位。M1 只会有一个，形状仍按多个写——M2 是四家 LLM 同桌。
@@ -72,4 +122,4 @@ module Roster =
         |> List.choose (fun (seat, player) ->
             match player with
             | SeatPlayer.Llm config -> Some(seat, config)
-            | SeatPlayer.Random -> None)
+            | SeatPlayer.Bot _ -> None)

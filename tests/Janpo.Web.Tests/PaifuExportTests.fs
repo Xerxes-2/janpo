@@ -106,7 +106,7 @@ module PaifuExportTests =
         loop 4000 model
 
     let private paifuOf (model: TableModel) : Paifu =
-        Table.paifu (Roster.withLlm Ruleset.yonma model.LlmAt model.Llm) (tableOf model)
+        Table.paifu (TablePage.rosterOf model) (tableOf model)
 
     let private roundTrip (paifu: Paifu) : Paifu =
         match Paifu.encoder paifu |> Encode.toString 0 |> Decode.fromString Paifu.decoder with

@@ -39,6 +39,8 @@ module TablePageTests =
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 
+    let private rosterOf (model: TableModel) : Roster = TablePage.rosterOf model
+
     /// 模型好好答话：选 `id`。
     let private chose (id: int) : AgentAnswer =
         {
@@ -262,3 +264,71 @@ module TablePageTests =
             asked.Awaiting |> Option.map (fun awaiting -> awaiting.Ticket),
             toggled.Awaiting |> Option.map (fun awaiting -> awaiting.Ticket)
         )
+
+    // ---- 自带 bot 的选择（票 42） ----
+
+    [<Fact>]
+    let ``自带 bot 默认是均匀随机：默认视图那几道闸门量的仍是它`` () =
+        // 曳光弹对拍、牌谱导出、副露来源那几道闸门跑的都是默认那一桌
+        // （票 42 的边界：换默认值会让它们量到另一个选手）。
+        let model = TablePage.initial None config |> fst
+
+        Assert.Equal(Bot.Uniform, model.Bot)
+        Assert.Equal<string list>([ "random"; "random"; "random"; "random" ], Roster.names (rosterOf model))
+
+    [<Fact>]
+    let ``拨成有主见的：配桌换人，牌谱里的名字跟着换`` () =
+        let picked =
+            TablePage.initial None config |> fst |> step (BotPicked Bot.Opinionated)
+
+        Assert.Equal(Bot.Opinionated, picked.Bot)
+
+        Assert.Equal<string list>(
+            [ "opinionated"; "opinionated"; "opinionated"; "opinionated" ],
+            Roster.names (rosterOf picked)
+        )
+
+    [<Fact>]
+    let ``模型坐席与自带 bot 是两个维度：一席仍是模型，其余三席换人`` () =
+        let picked = llmTable () |> step (BotPicked Bot.Opinionated)
+
+        Assert.Equal<string list>(
+            [ "deepseek/deepseek-v4-flash"; "opinionated"; "opinionated"; "opinionated" ],
+            Roster.names (rosterOf picked)
+        )
+
+        // 换 bot 不动牌局：它只改「下一手谁来决策」。
+        let asked = llmTable () |> step Advanced
+        let toggled = asked |> step (BotPicked Bot.Opinionated)
+
+        Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf toggled).State)
+
+    [<Fact>]
+    let ``有主见的那一桌照样打得完一局，且真的走出了立直`` () =
+        // 它坐得上牌桌这件事要有证据：一局打到底、零卡死，而且那一局里出了立直
+        // ——牌桌那条路与 `Soak` 那条路走的是同一个选手。
+        let rec loop (left: int) (model: TableModel) =
+            match Table.pending (tableOf model) with
+            | None -> model
+            | Some _ when left <= 0 -> failwith "这一局在预算内没打完"
+            | Some _ -> loop (left - 1) (model |> step Advanced)
+
+        let played =
+            TablePage.initial None config
+            |> fst
+            |> step (BotPicked Bot.Opinionated)
+            |> loop 400
+
+        let table = tableOf played
+
+        Assert.True(Table.isKyokuEnded table)
+        Assert.True(Option.isNone table.Fault)
+
+        let riichi =
+            GameState.events table.State
+            |> List.filter (fun event ->
+                match event with
+                | RiichiAccepted _ -> true
+                | _ -> false)
+
+        Assert.NotEmpty riichi

@@ -51,8 +51,11 @@ type TableModel = {
     /// 牌桌上要不要把危险度排序显示出来（票 25）。**默认关**：
     /// 它是围观者想看的东西，不是牌桌本来就该摆着的。
     ShowDanger: bool
-    /// 哪个座位交给 LLM；None = 四家都是随机选手。
+    /// 哪个座位交给 LLM；None = 四家都是自带 bot。
     LlmAt: Seat option
+    /// 不是 LLM 的那几家由哪种自带 bot 坐（票 42）。**默认均匀随机**：
+    /// 默认视图上那几道闸门（曳光弹对拍、牌谱导出、副露来源）量的都是它跑出来的那几局。
+    Bot: Bot
     /// 那个座位的配置（也就是配置面板里填的那份，同时落在 localStorage）。
     Llm: LlmSeat
     /// 在等回执吗。**等着的时候不续定时器**，否则牌桌会空转。
@@ -86,6 +89,8 @@ type TableMsg =
     | KyokuAdvanced
     /// 把哪个座位交给 LLM。
     | LlmSeatPicked of seat: Seat option
+    /// 其余座位换成哪种自带 bot（票 42）。
+    | BotPicked of kind: Bot
     /// 改配置面板里的一个字段。
     | LlmEdited of field: LlmField * value: string
     /// 把这一桌到此刻为止的牌谱存成一个 JSON 文件（票 26）。
@@ -142,10 +147,13 @@ module TablePage =
         else
             schedule playback
 
-    /// 这一桌的配桌：一席交给 LLM（选了的话），其余随机。
-    /// **推导出来而不存下来**：配置只有 `LlmAt` 与 `Llm` 这一份，不会与第二份对不上。
-    let private rosterOf (model: TableModel) : Roster =
-        Roster.withLlm model.Ruleset model.LlmAt model.Llm
+    /// 这一桌的配桌：一席交给 LLM（选了的话），其余交给选中的那种自带 bot。
+    /// **推导出来而不存下来**：配置只有 `Bot` / `LlmAt` / `Llm` 这一份，不会与第二份对不上。
+    ///
+    /// **公开的**：页面逻辑的用例要问「这一桌到底谁坐哪里」，在用例里拄一份同样的推导
+    /// 只会与这里漂（票 42 前它真的漂过一份，在 `PaifuExportTests`）。
+    let rosterOf (model: TableModel) : Roster =
+        Roster.withLlm model.Ruleset model.Bot model.LlmAt model.Llm
 
     /// 导出文件的名字。**种子只有解析得出来才进文件名**：输入框里是人随手填的文本，
     /// 原样拼进文件名会把斜杠之类的东西带进去。
@@ -299,11 +307,13 @@ module TablePage =
         {
             Ruleset = ruleset
             SeedText = seedText
-            Table = openTable (Roster.withLlm ruleset llmAt config) seedText
+            Table = openTable (Roster.withLlm ruleset Bot.Uniform llmAt config) seedText
             Playback = Playback.initial
             Viewpoint = Viewpoint.Seated Seat.first
             // 危险度默认关（票 25）。
             ShowDanger = false
+            // 自带 bot 默认均匀随机（票 42）：它是黄金用例与闸门的基准。
+            Bot = Bot.Uniform
             LlmAt = llmAt
             Llm = config
             Awaiting = None
@@ -371,6 +381,8 @@ module TablePage =
                     Agent = AgentStatus.Idle
             },
             save (fun () -> Store.writeSeat seat)
+        // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（与换模型坐席同一个做法）。
+        | BotPicked kind -> { model with Bot = kind }, Cmd.none
         | LlmEdited(field, value) ->
             let config = LlmSeat.edit field value model.Llm
             { model with Llm = config }, save (fun () -> Store.writeSeatConfig config)
@@ -1091,6 +1103,13 @@ module TablePage =
                         dispatch
             ]
 
+        // 剩下那几家由哪种自带 bot 坐（票 42）。**均匀随机是默认**：它是对拍与闸门的基准；
+        // 有主见的那个能和就和、听牌就立直，立直与供托那几条路径靠它才真的走得到。
+        let bots =
+            Bot.all
+            |> List.map (fun kind ->
+                picker $"table-bot-{Bot.toWire kind}" (model.Bot = kind) (Bot.toDisplay kind) (BotPicked kind) dispatch)
+
         Html.section [
             prop.className "llm-panel"
             prop.testId "table-llm-panel"
@@ -1099,8 +1118,10 @@ module TablePage =
                     prop.key "seat"
                     prop.className "controls"
                     prop.children (
-                        Html.span [ prop.key "llm-label"; prop.className "label"; prop.text "模型坐席" ]
-                        :: seats
+                        (Html.span [ prop.key "llm-label"; prop.className "label"; prop.text "模型坐席" ]
+                         :: seats)
+                        @ (Html.span [ prop.key "bot-label"; prop.className "label"; prop.text "其余座位" ]
+                           :: bots)
                     )
                 ]
                 Html.div [

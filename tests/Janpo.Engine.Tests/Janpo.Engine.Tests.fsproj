@@ -119,6 +119,11 @@
     <Compile Include="SoakTests.fs" />
   </ItemGroup>
 
+  <!-- 有主见的随机选手（票 42）。排在跑批之后：它的频率那一半用 `Soak.run` 断言。 -->
+  <ItemGroup>
+    <Compile Include="OpinionatedPlayerTests.fs" />
+  </ItemGroup>
+
   <!-- 双目标黄金用例（票 21）：dotnet 侧跑的那一遍。JS 侧跑同一份数据，
        入口在 web/scripts/verify-golden.mjs。 -->
   <ItemGroup>

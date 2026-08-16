@@ -80,9 +80,12 @@
     <Compile Include="Fallback.fs" />
   </ItemGroup>
 
-  <!-- 选手（CONTEXT.md 的 Player）：引擎自带的 bot。LLM 适配器与真人坐席是 Agent 层的事。 -->
+  <!-- 选手（CONTEXT.md 的 Player）：引擎自带的 bot。LLM 适配器与真人坐席是 Agent 层的事。
+       有主见的那个（票 42）另起一份文件：均匀随机是黄金用例与双目标对拍的基准，
+       一个字节都不许动，分成两份文件这件事本身就是那条边界的证据。 -->
   <ItemGroup>
     <Compile Include="RandomPlayer.fs" />
+    <Compile Include="OpinionatedPlayer.fs" />
   </ItemGroup>
 
   <!-- 整场对局（GameState 之上一层）：局间推进、连庄、终局精算。 -->

@@ -162,21 +162,24 @@ module Table =
 
     // ---- 推进 ----
 
-    /// 问该出手的那家要一个动作。**按座位分派**（票 23）：随机座位当场就给得出，
+    /// 问该出手的那家要一个动作。**按座位分派**（票 23）：bot 座位当场就给得出，
     /// LLM 座位只给得出一份决策包——动作要发一趟请求、由后来的一条 Msg 带回来。
     ///
     /// 异步就分岔在这里，**而不在 `apply`**：落子那一半与决策者是谁无关。
     let decide (roster: Roster) (table: Table) : Demand option =
         pending table
         |> Option.map (fun choice ->
+            let bot (kind: Bot) =
+                Bot.player kind table.Players table.State choice |> Demand.Ready
+
             match Roster.playerAt choice.Seat roster with
-            | SeatPlayer.Random -> Kyoku.randomPlayer table.Players table.State choice |> Demand.Ready
+            | SeatPlayer.Bot kind -> bot kind
             | SeatPlayer.Llm config ->
                 // 包里就是这一手的合法动作集，因此 `forSeat` 必然给得出一份；
-                // 万一给不出（座位越界这类不该发生的事）就退回随机选手，牌桌照样推得动。
+                // 万一给不出（座位越界这类不该发生的事）就退回均匀随机选手，牌桌照样推得动。
                 match DecisionPackage.forSeat choice.Seat table.State with
                 | Some package -> Demand.Asked(package, config)
-                | None -> Kyoku.randomPlayer table.Players table.State choice |> Demand.Ready)
+                | None -> bot Bot.Uniform)
 
     /// 把一个动作落进引擎。**决策者是谁与这一半无关**——`record` 只是审计数据：
     /// 它里的兜底原因记在 `Latest` 上给牌桌看，引擎那边一分待遇都不变。

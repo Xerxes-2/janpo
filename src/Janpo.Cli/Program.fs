@@ -17,11 +17,14 @@ let private usage =
   janpo kyoku <种子> [--no-akadora]
                                  用给定种子让四个随机选手打完一局，打印完整事件流、
                                  结算后点数与按该点数排出的顺位
-  janpo game <种子> [--no-akadora] [--hanchan] [--covering]
+  janpo game <种子> [--no-akadora] [--hanchan] [--uniform] [--covering] [--opinionated]
                                  用给定种子让四个随机选手打完一整场（默认东风战），
                                  打印完整事件流、终局点数与顺位。
-                                 --covering 换成跑批用的那个带偏好的选手，
-                                 跑出来的就是 `janpo soak` 在这个种子上看到的那一场
+                                 三个选手开关任选其一，跑出来的就是 `janpo soak` 带同一开关
+                                 在这个种子上看到的那一场（选手与牌山分两条随机流）：
+                                 --uniform 均匀随机、--covering 跑批用的覆盖型偏好、
+                                 --opinionated 有主见的那个（能和就和、听牌就立直、有役才鸣）。
+                                 一个开关也不写时牌山与选手共用同一条随机流（黄金用例认的那一种）
   janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence]
                                  用给定种子开一局、让随机选手先走 --steps 手（默认 0），
                                  再把那一手的**决策包 JSON** 打出来：某座位的合法观测
@@ -37,11 +40,12 @@ let private usage =
   janpo golden write <文件>          把文件里每条用例按**当前引擎**重跑一遍，用跑出来的值换掉期望。
                                  加一条用例：先写 id / note / ruleset / run，再跑它，
                                  然后**逐行看 diff**——这份文件的对与错靠人看 diff 把关
-  janpo soak <种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform]
+  janpo soak <种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform] [--opinionated]
                                  用给定种子区间连续跑 N 场，**逐手验不变量、逐场数覆盖率**：
                                  牌数守恒、点数与供托之和恒定、合法动作集非空或局已终、
                                  回放确定性。打印覆盖率、未覆盖的形态与问题清单；
-                                 有问题时退出码 1，每条都带能复现的种子
+                                 有问题时退出码 1，每条都带能复现的种子。
+                                 选手默认是覆盖型偏好，--uniform / --opinionated 换成另两个
   janpo shanten [--naki N] <记法>...  打印向听数、和了型与有效牌（四麻全 34 牌种）
   janpo shanten --batch               从 stdin 逐行读「<副露数> <记法>...」，每行打印一个向听数
   janpo yaku --win <记法> [选项] <暗牌记法>...
@@ -81,10 +85,12 @@ yaku 的选项:
   janpo game 42
   janpo game 42 --hanchan
   janpo game 42 --covering
+  janpo game 42 --opinionated
   janpo golden check tests/fixtures/golden/dual-target.json
   janpo golden write tests/fixtures/golden/dual-target.json
   janpo soak 1 60
   janpo soak 1 200 --uniform
+  janpo soak 1 200 --opinionated
   janpo shanten "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
   janpo shanten --naki 1 "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p"
   echo "0 1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z" | janpo shanten --batch
@@ -184,45 +190,86 @@ let private runKyoku (arguments: string list) : int =
             printfn "juni: %s" (juni |> List.map string |> String.concat " ")
             0
 
-/// `<种子> [--no-akadora] [--hanchan] [--covering]`：game 的参数形态，
-/// 比 deal / kyoku 多一个对局长度与一个选手开关。
-let private parseGameArguments (arguments: string list) : Result<int option * bool * GameLength * bool, string> =
-    let rec parse (seed: int option) (akadora: bool) (length: GameLength) (covering: bool) (rest: string list) =
+/// CLI 选得了的自带选手。**`janpo game` 与 `janpo soak` 共用这一份**：
+/// 两条命令的开关名一样，跑批报出问题时那条复现命令才对得上。
+///
+/// 牌桌上只有前两种（`Janpo.Web` 的 `Bot`）：`Covering` 是跑批的仪器
+/// （见和就和、九种九牌权重 500），不是给人看的对手。
+[<RequireQualifiedAccess>]
+type private BotChoice =
+    /// 均匀随机（`Kyoku.randomPlayer`）：黄金用例与双目标对拍的基准。
+    | Uniform
+    /// 跑批用的覆盖型偏好（票 14）。
+    | Covering
+    /// 有主见的随机选手（票 42）：能和就和、听牌就立直、有役才鸣。
+    | Opinionated
+
+[<RequireQualifiedAccess>]
+module private BotChoice =
+
+    let player (choice: BotChoice) : Player<Rng> =
+        match choice with
+        | BotChoice.Uniform -> RandomPlayer.uniform
+        | BotChoice.Covering -> RandomPlayer.covering
+        | BotChoice.Opinionated -> OpinionatedPlayer.player
+
+    /// 复现这一场要带的开关（`janpo game <种子> <这个>`）。**均匀那一档也要写出来**：
+    /// 跑批给选手的发生器与牌山分两条流（`Soak.playerRng`），不写开关的 `janpo game`
+    /// 走的却是两者共用一条流的那种——同一种子跑出来不是同一场。
+    let flag (choice: BotChoice) : string =
+        match choice with
+        | BotChoice.Uniform -> " --uniform"
+        | BotChoice.Covering -> " --covering"
+        | BotChoice.Opinionated -> " --opinionated"
+
+/// `<种子> [--no-akadora] [--hanchan] [--uniform] [--covering] [--opinionated]`：game 的参数形态，
+/// 比 deal / kyoku 多一个对局长度与一个选手开关。**不给选手开关是另一回事**（`None`）：
+/// 那是牌山与选手共用一条随机流的 `Game.runRandom`，黄金用例与曳光弹对拍认的就是它。
+let private parseGameArguments
+    (arguments: string list)
+    : Result<int option * bool * GameLength * BotChoice option, string> =
+    let rec parse (seed: int option) (akadora: bool) (length: GameLength) (bot: BotChoice option) (rest: string list) =
         match rest with
-        | [] -> Ok(seed, akadora, length, covering)
-        | "--no-akadora" :: tail -> parse seed false length covering tail
-        | "--hanchan" :: tail -> parse seed akadora Hanchan covering tail
-        | "--tonpuusen" :: tail -> parse seed akadora Tonpuusen covering tail
-        | "--covering" :: tail -> parse seed akadora length true tail
+        | [] -> Ok(seed, akadora, length, bot)
+        | "--no-akadora" :: tail -> parse seed false length bot tail
+        | "--hanchan" :: tail -> parse seed akadora Hanchan bot tail
+        | "--tonpuusen" :: tail -> parse seed akadora Tonpuusen bot tail
+        | "--uniform" :: tail -> parse seed akadora length (Some BotChoice.Uniform) tail
+        | "--covering" :: tail -> parse seed akadora length (Some BotChoice.Covering) tail
+        | "--opinionated" :: tail -> parse seed akadora length (Some BotChoice.Opinionated) tail
         | token :: tail ->
             match System.Int32.TryParse token, seed with
-            | (true, value), None -> parse (Some value) akadora length covering tail
+            | (true, value), None -> parse (Some value) akadora length bot tail
             | _ -> Error token
 
-    parse None true Ruleset.yonma.Length false arguments
+    parse None true Ruleset.yonma.Length None arguments
 
-/// `janpo game <种子> [--no-akadora] [--hanchan] [--covering]`：四个随机选手把一整场对局打到终局精算。
+/// `janpo game <种子> [--no-akadora] [--hanchan] [--uniform] [--covering] [--opinionated]`：
+/// 四个选手把一整场对局打到终局精算。
 /// 输出是每行一个 mjai JSON 事件（每局之间有 `end_kyoku`，最后是 `end_game`），
 /// 随后是终局点数与顺位。同一种子必然跑出同一场对局——**14 票的 soak 从这里进**。
 let private runGame (arguments: string list) : int =
     match parseGameArguments arguments with
     | Error token ->
-        eprintfn "game 只认一个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --covering，不认「%s」" token
+        eprintfn
+            "game 只认一个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --uniform / --covering / --opinionated，不认「%s」"
+            token
+
         2
     | Ok(None, _, _, _) ->
         eprintfn "game 需要一个整数种子，例如: janpo game 42"
         2
-    | Ok(Some seed, akadora, length, covering) ->
+    | Ok(Some seed, akadora, length, bot) ->
         let ruleset = rulesetOf akadora |> Ruleset.withLength length
 
-        // `--covering` 跑的是 **`janpo soak` 在这个种子上看到的那一场**：同一个选手、
+        // 写了选手开关跑的就是 **`janpo soak` 在这个种子上看到的那一场**：同一个选手、
         // 同一对发生器（选手与牌山分两条流）。跑批报出问题时拿它看完整事件流。
         let played =
-            if covering then
-                Game.run RandomPlayer.covering (Soak.playerRng seed) (Rng.ofSeed seed) (Game.start ruleset)
+            match bot with
+            | None -> Game.runRandom ruleset (Rng.ofSeed seed) |> Result.map fst
+            | Some bot ->
+                Game.run (BotChoice.player bot) (Soak.playerRng seed) (Rng.ofSeed seed) (Game.start ruleset)
                 |> Result.map (fun (game, _, _) -> game)
-            else
-                Game.runRandom ruleset (Rng.ofSeed seed) |> Result.map fst
 
         match played with
         | Error error ->
@@ -241,15 +288,17 @@ let private runGame (arguments: string list) : int =
 
             0
 
-/// `<种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform]`：soak 的参数形态，
-/// 比 game 多一个种子与一个选手开关。两个整数按出现顺序当区间的两端。
+/// `<种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform] [--opinionated]`：soak 的参数形态，
+/// 比 game 多一个种子。两个整数按出现顺序当区间的两端。
 type private SoakArguments =
     {
         Seeds: int list
         Akadora: bool
         Length: GameLength
-        /// 用均匀取样的随机选手而不是带偏好的那个：拿来对照「不加偏好就跑不到哪几类动作」。
-        Uniform: bool
+        /// 哪一个选手。默认是覆盖型偏好（跑批要的是走遍全部动作类型）；
+        /// `--uniform` 拿来对照「不加偏好就跑不到哪几类动作」，
+        /// `--opinionated` 是票 42 那组数字的量具。
+        Bot: BotChoice
     }
 
 let private parseSoakArguments (arguments: string list) : Result<SoakArguments, string> =
@@ -259,7 +308,14 @@ let private parseSoakArguments (arguments: string list) : Result<SoakArguments, 
         | "--no-akadora" :: tail -> parse seeds { parsed with Akadora = false } tail
         | "--hanchan" :: tail -> parse seeds { parsed with Length = Hanchan } tail
         | "--tonpuusen" :: tail -> parse seeds { parsed with Length = Tonpuusen } tail
-        | "--uniform" :: tail -> parse seeds { parsed with Uniform = true } tail
+        | "--uniform" :: tail -> parse seeds { parsed with Bot = BotChoice.Uniform } tail
+        | "--opinionated" :: tail ->
+            parse
+                seeds
+                { parsed with
+                    Bot = BotChoice.Opinionated
+                }
+                tail
         | token :: tail ->
             match System.Int32.TryParse token, seeds with
             | (true, value), [] -> parse [ value ] parsed tail
@@ -272,7 +328,7 @@ let private parseSoakArguments (arguments: string list) : Result<SoakArguments, 
             Seeds = []
             Akadora = true
             Length = Ruleset.yonma.Length
-            Uniform = false
+            Bot = BotChoice.Covering
         }
         arguments
 
@@ -282,19 +338,15 @@ let private parseSoakArguments (arguments: string list) : Result<SoakArguments, 
 let private runSoak (arguments: string list) : int =
     match parseSoakArguments arguments with
     | Error token ->
-        eprintfn "soak 只认一到两个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --uniform，不认「%s」" token
+        eprintfn "soak 只认一到两个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --uniform / --opinionated，不认「%s」" token
+
         2
     | Ok { Seeds = [] } ->
         eprintfn "soak 需要种子区间，例如: janpo soak 1 60"
         2
     | Ok parsed ->
         let ruleset = rulesetOf parsed.Akadora |> Ruleset.withLength parsed.Length
-
-        let player =
-            if parsed.Uniform then
-                RandomPlayer.uniform
-            else
-                RandomPlayer.covering
+        let player = BotChoice.player parsed.Bot
 
         let seeds =
             match parsed.Seeds with
@@ -314,8 +366,8 @@ let private runSoak (arguments: string list) : int =
             eprintfn "复现："
 
             for seed in issues |> List.map (fun issue -> issue.Seed) |> List.distinct do
-                eprintfn "  janpo soak %d %d          # 重跑这一场并重验不变量" seed seed
-                eprintfn "  janpo game %d --covering  # 打印同一场的完整事件流" seed
+                eprintfn "  janpo soak %d %d%s          # 重跑这一场并重验不变量" seed seed (BotChoice.flag parsed.Bot)
+                eprintfn "  janpo game %d%s  # 打印同一场的完整事件流" seed (BotChoice.flag parsed.Bot)
 
             1
 
