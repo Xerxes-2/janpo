@@ -12,9 +12,13 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: DeterminateSystems/nix-installer-action@main
+      # 钉在发布 tag 上而不是 @main：@main 是移动靶，每次跑的都是别人主干上的最新代码
+      # ——既不可复现，也是一条无人看守的供应链入口。
+      # 注意：钉住这个 action 并不钉住 Nix 本身（官方文档明说它总装最新的 Determinate Nix）。
+      # 真被 Nix 版本咬到时，用 `with: determinate-nix-version: <版本>` 钉它。
+      - uses: DeterminateSystems/nix-installer-action@v22
 
       # ci.sh 的 JS 段要一个 Chrome/Chromium 跑无头验收（浏览器内的引擎与 dotnet 侧对拍、
       # 以及浏览器内的黄金用例）。

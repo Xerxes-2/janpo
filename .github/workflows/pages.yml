@@ -30,11 +30,12 @@ jobs:
       #    它经 vite.config.ts 的 JANPO_BASE 变成打包产物里的资源前缀。
       JANPO_BASE: /janpo/
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # 与 ci.yml 同一套工具链：dotnet（跑 Fable）与 node/pnpm（打包）都由 flake.lock 钉住版本，
       # 因此 Pages 上跑的那份产物与本地 `pnpm run build` 出来的是同一条链路。
-      - uses: DeterminateSystems/nix-installer-action@main
+      # 钉在发布 tag 上，理由同 ci.yml。
+      - uses: DeterminateSystems/nix-installer-action@v22
 
       - name: 装依赖
         run: nix develop --command bash -c "cd web && pnpm install --frozen-lockfile"
@@ -48,9 +49,11 @@ jobs:
       - name: 构建静态站（Fable + Vite）
         run: nix develop --command bash -c "cd web && pnpm run build"
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v3
+      # v4 起隐藏文件（dotfile）不再进包。web/dist 里没有 dotfile（vite 只出 index.html 与 assets/），
+      # 且 Actions 部署不经 Jekyll、不需要 .nojekyll——将来若有 dotfile 要发布，得显式开 include-hidden-files。
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: web/dist
 
@@ -62,4 +65,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
