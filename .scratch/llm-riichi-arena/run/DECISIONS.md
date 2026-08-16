@@ -1443,6 +1443,8 @@ M1 的决策与提案从这里往下追加。格式与 M0 同：票号、决定�
 | **20-A** | 抢杠窗口里投影看不见「有人宣言了杠」 | 决策做得了，但围观视角与 25 号 Danger 拿不到这条信息；要补是给 `Observation` 加 `PendingKan: Naki option`，改动很小但属票外加字段 | 本文件「## 20」段 |
 | **21-a** | 黄金用例文件 131 KB，96% 是那 1238 条事件 | diff 大。缩成 kyoku 级别就轻，但一整场（连庄、终局精算、`end_kyoku`/`end_game`）会掉出闸门 | `reports/21-*.md` §6.1 |
 | **21-b** | `GoldenObservation.parseNaki` 与 CLI 的 `parseNakiSpec` 两份同形解析各约 20 行 | 重复代码。合并要把它挪进引擎，可它是 CLI 的输入格式而不是引擎概念 | `reports/21-*.md` §6.2 |
+| **23-A** | 新词 `Roster`（配桌，谁坐哪个座位）没进 `CONTEXT.md` | 术语表缺一个 M2 配桌页会大量用的词。收进去或改名，二选一（agent 按 RUNBOOK 不许自己改 `CONTEXT.md`） | 本文件「## 23」段 23-9 |
+| **23-B** | 401 也照样重试 2 次 | 白烧两个请求。要省得先给 provider 错误分类（判据是「这个错误重试有没有意义」），不是加一个 if | 同上 23-6 |
 | **21-c** | `decide` 用例把决策包 JSON 当一整行钉住（约 2 KB） | 漂了会印整行。拆成逐字段要给 `DecisionPackage` 补 decoder（20 票只写了 encoder，因为边界是单向的） | `reports/21-*.md` §6.3 |
 
 另有若干 nitpick 级技术债（`verify-tracer.mjs` 端口 4179 写死、`Trace.Kyokus` 恒为 1 的冗余字段），
