@@ -542,21 +542,29 @@ module TablePage =
         ]
 
     let private boardHead (board: BoardView) =
+        // 立直棒是「供托 N 根」那个数字的实物画法，一根都没时**整个字段不画**（同下面的里宝牌）：
+        // 否则只剩一枚「立直棒」标签后面空着，看着像掉了东西（票 32 扫同类隐形时收的）。
         let bou =
-            Html.span [
-                prop.key "bou"
-                prop.className "field"
-                prop.children [
-                    Html.span [ prop.className "label"; prop.text "立直棒" ]
+            if board.Kyotaku = 0 then
+                []
+            else
+                [
                     Html.span [
-                        prop.className "bou-row"
-                        prop.testId "table-bou"
+                        prop.key "bou"
+                        prop.className "field"
                         prop.children [
-                            for index in 1 .. board.Kyotaku -> Html.span [ prop.key index; prop.className "bou" ]
+                            Html.span [ prop.className "label"; prop.text "立直棒" ]
+                            Html.span [
+                                prop.className "bou-row"
+                                prop.testId "table-bou"
+                                prop.children [
+                                    for index in 1 .. board.Kyotaku ->
+                                        Html.span [ prop.key index; prop.className "bou" ]
+                                ]
+                            ]
                         ]
                     ]
                 ]
-            ]
 
         // 里宝牌只有上帝视角有（坐着看时投影里就是空表）。
         let ura =
@@ -575,7 +583,7 @@ module TablePage =
                     tileField "table-dora" "宝牌指示牌" board.DoraMarkers
                 ]
                 @ ura
-                @ [ bou ]
+                @ bou
             )
         ]
 

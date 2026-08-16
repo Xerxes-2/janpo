@@ -227,9 +227,23 @@ h1 {
   margin-left: 0.6rem;
 }
 
+/* 牌背：他家的暗牌。牌面字符**不许露出来**——围观视角下他家的牌面在数据层面就不存在，
+   元素里那个「背」字用 `color: transparent` 抹掉；但**牌本身必须看得见**，且一眼与明牌分得开：
+   明牌是空底加字，牌背是斜纹底加实线框。
+   坑（票 32）：牌背的墨色不能吃 `currentcolor`——上面那句 `color: transparent` 会把边框
+   （`.tile` 的 `1px solid currentcolor`）与底纹一起抹没。所以这里取 `canvastext`，
+   即页面正文色，跟着 `:root` 的 `color-scheme` 走。 */
 .tile.back {
+  --back-ink: color-mix(in srgb, canvastext 55%, transparent);
+
   border-style: solid;
-  background: color-mix(in srgb, currentcolor 25%, transparent);
+  border-color: var(--back-ink);
+  background-color: color-mix(in srgb, canvastext 8%, transparent);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--back-ink) 0 1.5px,
+    transparent 1.5px 5px
+  );
   color: transparent;
 }
 
