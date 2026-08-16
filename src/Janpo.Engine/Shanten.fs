@@ -69,10 +69,18 @@ module Shanten =
     ///
     /// 每次 `standard` 只调一次（不在递归里），所以这里不为省一次遍历而用可变累加：
     /// 紧挨着的 `canJoinRun` 每次都要分配一个小 list，省下的那点开销早被它吃掉了。
+    /// 预算好的牌种索引。`Array.sumBy` 要一个可遍历的索引源，每次调用现造
+    /// `seq { 0 .. 33 }` 会付枚举器的钱——实测 131 ns vs 88 ns，而 `calculate`
+    /// 本身只有约 1360 ns（2026-08-16，17 票剪枝之后）。
+    let private allKindIndices = [| 0 .. Tile.KindCount - 1 |]
+
     let private deadQuadKinds (legal: bool array) (original: int array) : int =
-        seq { 0 .. Tile.KindCount - 1 }
-        |> Seq.filter (fun index -> original.[index] = 4 && not (canJoinRun legal index))
-        |> Seq.length
+        allKindIndices
+        |> Array.sumBy (fun index ->
+            if original.[index] = 4 && not (canJoinRun legal index) then
+                1
+            else
+                0)
 
     /// 面子分解搜索。`legal` 是规则集的牌种存在标志，`original` 是手牌的原始计数
     /// （判「4 张全在手里」用），`counts` 是可以原地增删的副本。

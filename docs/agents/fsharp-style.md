@@ -127,7 +127,21 @@ List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai
 | `chiitoitsu` / `kokushi` | 每次 `calculate` 一次 | 微基准 86.5 → 93.8 ns，占 `calculate`（约 12,000 ns）的 **0.06%** | **改了** |
 | `searchStandard` | 递归搜索的每个节点 | `best` 是分支限界的上界，要跨子树活着（纯写法得传下去再传回来） | **留着，注明理由** |
 
-**三处写法一样丑，判据都是实测不是审美。** 顺带一条：`Array.filter |> Array.length` 是
+**三处写法一样丑，判据都是实测不是审美。**
+
+### 但测量会过期 —— 同一天下午被推翻了一次
+
+17 票给 `searchStandard` 加剪枝后 `calculate` 从 ~9 µs 降到 ~1.36 µs（6.6×）。于是**上表第一行的结论过期了**：
+
+| | 当时（基线 12 µs） | 剪枝后（基线 1.36 µs） |
+|---|---|---|
+| `deadQuadKinds` 的 `Seq` 管道比循环多花 47 ns | 占 0.4%，**无可测差异** | 占 **3.5%**，与 libriichi 对比时被指认出来 |
+
+处置：改成**预算好的索引数组 + `Array.sumBy`**（88 ns，几乎追平循环的 84 ns，且保持纯、
+不占 `let mutable` 预算）。
+
+**教训：性能测量的结论绑在当时的基线上。基线变了，「可忽略」也会变。**
+每次有大幅提速落地，回头看一眼之前判为「无差异」的那些决定。 顺带一条：`Array.filter |> Array.length` 是
 `Array.sumBy` 的 2 倍（178.5 vs 93.8 ns，中间数组要分配）——数个数就用 `sumBy`，别用 `filter`。
 
 **判断某处 `mutable` 值不值，看它省下的开销有没有被紧邻的代码吃掉。** 真实例子：
