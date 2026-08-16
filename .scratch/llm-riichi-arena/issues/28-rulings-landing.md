@@ -6,7 +6,7 @@
 
 **Blocked by:** 25, 26
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 ## 被抽掉的两节（原一、一之二）
 
@@ -19,19 +19,27 @@
 黄金用例现在把决策包 JSON 按整行钉住，2 KB 一行，加一个字段就印两条长行、只能写脚本比对。
 这个代价已经付了三次（22 的 `tehai_count`、24 的 `scaffold`、25 的 Danger），拆掉它。
 
-- [ ] 给 `DecisionPackage` 补 decoder，**注释与 DECISIONS 里都要写清：它只服务测试，不是产品路径**
+- [x] 给 `DecisionPackage` 补 decoder，**注释与 DECISIONS 里都要写清：它只服务测试，不是产品路径**
       （产品边界仍是单向的 —— encoder 出去、动作 id 回来，20 号票的决策没有被推翻）
-- [ ] `decide` 用例改成逐字段对照，报错能指到具体字段而不是整行
-- [ ] 加一条反向测试：改坏决策包里的一个字段必须红，且报错点名那个字段
+      —— 落成 `GoldenJson.fields`（`Janpo.Golden`）：读回来的是**逐字段的文本**，
+      构造不出 `DecisionPackage`、更构造不出 `Action`，「只服务测试」因此是**结构上的**。
+      为什么不是引擎里的 `DecisionPackage.decoder`（它必然要 `Action.decoder`，而 26-2
+      刚把「事实有 decoder、意图没有」写成不变量）：`DECISIONS.md` 的 28-1，**留给人复核**
+- [x] `decide` 用例改成逐字段对照，报错能指到具体字段而不是整行
+      （报错从 17,276 字节缩到 180 字节，新旧对照在报告第 2 节）
+- [x] 加一条反向测试：改坏决策包里的一个字段必须红，且报错点名那个字段
+      （`决策包漂一个字段就红，且报错点名那个字段`；另加两条：少一个字段只多一条报错、
+      整包那条长行不得再出现）
 
 ## 二、`Roster` 收进 `CONTEXT.md`（裁决 23-A）
 
 「谁坐哪个座位」这个映射术语表里缺词条（有 Seat、有 Player，没有两者的绑定）。23 号票已经在用
 `Roster` 这个名字，主人裁定收进术语表。
 
-- [ ] `CONTEXT.md` 的「座席与选手」节加 `Roster（配桌）` 词条，写明它是 Seat → Player 的绑定、
+- [x] `CONTEXT.md` 的「座席与选手」节加 `Roster（配桌）` 词条，写明它是 Seat → Player 的绑定、
       带 Ruleset，并给 _Avoid_ 列表（Table、Lineup、Setup 之类的同义词）
-- [ ] 代码里的用法与词条一致，不一致就改代码
+- [x] 代码里的用法与词条一致，不一致就改代码
+      （`Roster` 原本只有 `Seats`；现在带 `Ruleset`，`TablePage.openTable` 按 `roster.Ruleset` 开局）
 
 ## 三、Bare / Assisted 的判据写成正式定义（主人 8/16 第四次裁决）
 
@@ -45,14 +53,17 @@
 「真人一看就知道、不用动脑子」的量 → Bare；现物与筋要推 → Assisted（25 号已经放在那）；
 向听数要算 → Assisted。**可见牌按牌种归并的统计是「数出来的」→ 属于 Assisted，别放进 Bare。**
 
-- [ ] `CONTEXT.md` 的 Scaffold Tier 词条按这条判据重写 Bare / Assisted 的定义
+- [x] `CONTEXT.md` 的 Scaffold Tier 词条按这条判据重写 Bare / Assisted 的定义
       （**感知 vs 计算**，不要只列举内容 —— 判据要能裁决以后出现的新项）
-- [ ] ToolSearch 的词条保持现状（M3 的事），但别与新判据打架
-- [ ] 顺手记一句：两种客观事实在 prompt 里的位置不同 —— 事件流在前缀（append-only、可缓存），
+- [x] ToolSearch 的词条保持现状（M3 的事），但别与新判据打架
+      （「追加局面模拟查询工具」一字未改，只添一句「它加的是自己去问的能力，不落在这条判据的两端上」）
+- [x] 顺手记一句：两种客观事实在 prompt 里的位置不同 —— 事件流在前缀（append-only、可缓存），
       场况在尾部（每手重算、每手付全价）。细节在票 29b
+      （词条里只记了位置；「细节在票 29b」写在 `DECISIONS.md` 28-6——术语表不引 .scratch 的票号）
 
 ## 收尾
 
-- [ ] `./scripts/ci.sh` 全绿
-- [ ] 逐字段的新用例形态要**经得起 29 号票的考验**：29 会往投影里加字段、改 prompt，
+- [x] `./scripts/ci.sh` 全绿
+- [x] 逐字段的新用例形态要**经得起 29 号票的考验**：29 会往投影里加字段、改 prompt，
       报错必须能指到具体字段（这一票存在的理由就是让 29 的用例churn 可读）
+      —— 字段名就是 JSON 路径，加一个字段 = 一条 `UnexpectedField`，其余 1946 个字段一条不动（有用例盯着）

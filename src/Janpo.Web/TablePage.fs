@@ -114,8 +114,10 @@ module TablePage =
         | true, seed -> Ok seed
         | false, _ -> Error $"种子要是一个整数，得到「{text}」"
 
-    let private openTable (ruleset: Ruleset) (seedText: string) : Result<Table, string> =
-        parseSeed seedText |> Result.bind (Table.start ruleset)
+    /// 按这一桌的**配桌**开局：牌桌的规则集就是 `Roster` 里的那一份（CONTEXT.md 的 Roster），
+    /// 因此不会出现「四家的配桌配上三麻的牌桌」。
+    let private openTable (roster: Roster) (seedText: string) : Result<Table, string> =
+        parseSeed seedText |> Result.bind (Table.start roster.Ruleset)
 
     /// 定时器：播着的时候续下一记，暂停时什么也不发。
     /// **世代号一并带上**——暂停期间在飞的那一记回来时会被 `Playback.accepts` 丢掉。
@@ -280,7 +282,7 @@ module TablePage =
         {
             Ruleset = ruleset
             SeedText = seedText
-            Table = openTable ruleset seedText
+            Table = openTable (Roster.withLlm ruleset llmAt config) seedText
             Playback = Playback.initial
             Viewpoint = Viewpoint.Seated Seat.first
             // 危险度默认关（票 25）。
@@ -304,7 +306,7 @@ module TablePage =
             // 在飞的那一次问话作废：它的 id 是按旧那桌的决策包编的号。
             {
                 model with
-                    Table = openTable model.Ruleset model.SeedText
+                    Table = openTable (rosterOf model) model.SeedText
                     Playback = Playback.pause model.Playback
                     Awaiting = None
                     Agent = AgentStatus.Idle

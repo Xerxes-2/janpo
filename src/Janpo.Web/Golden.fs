@@ -11,8 +11,10 @@ open Thoth.Json.Core
 open Thoth.Json.JavaScript
 open Janpo.Golden
 
-/// mjai 事件与决策包在 JS 侧的序列化。**它是被测对象之一**：
+/// mjai 事件在 JS 侧的序列化。**它是被测对象之一**：
 /// 与 dotnet 侧的 Newtonsoft 后端逐字节相同，这份用例文件才对得上。
+/// （决策包不走这条路：票 28 起它由 `GoldenJson.fields` 摊成逐字段，
+/// 不经过宿主的 `toString`——对照的是 encoder 的结构与值，不是某个后端的排版。）
 let private toText: IEncodable -> string = Encode.toString 0
 
 /// 跑一份用例文件，回一份报告 JSON（`{cases, fields, lines, mismatches}`）。

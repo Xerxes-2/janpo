@@ -120,6 +120,7 @@
   <!-- 双目标黄金用例（票 21）：dotnet 侧跑的那一遍。JS 侧跑同一份数据，
        入口在 web/scripts/verify-golden.mjs。 -->
   <ItemGroup>
+    <Compile Include="GoldenJsonTests.fs" />
     <Compile Include="GoldenSuiteTests.fs" />
   </ItemGroup>
 

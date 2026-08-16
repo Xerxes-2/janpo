@@ -35,9 +35,23 @@
 | `shanten` | `naki` / `tiles` | 向听、和了型、有效牌（34 长计数数组那条路） |
 | `hora` | `hora`（形态同 `janpo yaku` 的选项） | 役、符与点数授受 |
 | `points` | `points`（符 + 番 + 授受条件） | 整数除法与取整：切上到 100、跳满的 3/2、本场平摊、包的平分 |
-| `decide` | `seed` / `steps` / `seat` | 决策包 JSON（票 20），23 票的 Agent 层读的就是它 |
+| `decide` | `seed` / `steps` / `seat` | 决策包 JSON（票 20），23 票的 Agent 层读的就是它。**逐字段钉住**，见下 |
 | `kyoku` | `seed` | 一局：逐条 mjai 事件 + 终了点数与顺位 |
 | `game` | `seed` | 一整场：局数、逐条事件、终局精算的点数与顺位 |
 
 加一种新的 `kind` 要改三处：`GoldenRun` 的 case、它的编解码、`GoldenObservation.run`
 的那一支（编译器会把三处都指出来）。
+
+## `decide` 的字段名就是 JSON 里的路径（票 28）
+
+决策包此前按**整行**钉住（约 8 KB 一行），加一个字段就印两条长行、只能写脚本比对。
+现在 `GoldenJson.fields` 把它摊成一个叶子一个字段，字段名就是路径：
+`package.observation.self.tehai`、`package.actions.11.action.tsumogiri`、
+`package.scaffold.dahai.0.ukeire.tiles.3.remaining`。于是
+
+- 一个值漂了 → 一条报错，指着那条路径（约 180 字节，不是 17 KB）；
+- 引擎**多产出一个字段** → 一条 `UnexpectedField`，指着新字段的路径，其余字段一条不动。
+
+两条约定：全是标量的数组是**一个字段的多行**（手牌漂一张指得出第几张）；
+空表与空对象是**一个零行的字段**（「一个都没有」也要有位置被钉住）。
+值原样落进文件、不带引号——这份文件要给人逐行核对。

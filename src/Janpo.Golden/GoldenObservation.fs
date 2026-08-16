@@ -342,15 +342,13 @@ module GoldenObservation =
     // ---- 决策包 ----
 
     /// 把一局推到第 `steps` 手，取那一手的决策包。**这就是跨 F#/TS 边界的那个包**（票 20）：
-    /// 23 票的 Agent 层读的是它在**浏览器里**的那份，因此它逐字节相同才算数。
+    /// 23 票的 Agent 层读的是它在**浏览器里**的那份，因此它在两个目标上一字不差才算数。
     /// 走的选手与 `janpo kyoku` 同一个，因此同一种子的第 N 手两边对得上。
-    let private decideFields
-        (toText: IEncodable -> string)
-        (ruleset: Ruleset)
-        (seed: int)
-        (steps: int)
-        (seat: int option)
-        : GoldenField list =
+    ///
+    /// **包是逐字段钉住的，不是整行**（票 28，裁决 21-c）：`GoldenJson.fields` 把它摊成
+    /// `package.observation.self.tehai` 这样一条条路径，于是漂了指得出是哪个字段，
+    /// 而 29 号票往投影里加一个字段时报错也只多一条（`UnexpectedField`），不会重印整包。
+    let private decideFields (ruleset: Ruleset) (seed: int) (steps: int) (seat: int option) : GoldenField list =
         let advanced =
             match GameState.start ruleset (KyokuContext.initial ruleset) (Rng.ofSeed seed) with
             | Error error -> Error(KyokuStartError.toDisplay error)
@@ -372,10 +370,13 @@ module GoldenObservation =
             match wanted |> Option.bind (fun seat -> DecisionPackage.forSeat seat state) with
             | None -> failure $"走了 {steps} 手之后这一手没有这家的决策包"
             | Some package ->
-                [
-                    integers "asked" (asked |> List.map Seat.index)
-                    scalar "package" (package |> DecisionPackage.encoder |> toText)
-                ]
+                let packageFields =
+                    package
+                    |> DecisionPackage.encoder
+                    |> GoldenJson.fields "package"
+                    |> List.map (fun (name, values) -> lines name values)
+
+                integers "asked" (asked |> List.map Seat.index) :: packageFields
 
     // ---- 一局与一整场 ----
 
@@ -440,6 +441,6 @@ module GoldenObservation =
         | GoldenRun.Shanten(nakiCount, notation) -> shantenFields ruleset nakiCount notation
         | GoldenRun.Hora hora -> horaFields ruleset hora
         | GoldenRun.Points points -> pointsFields ruleset points
-        | GoldenRun.Decide(seed, steps, seat) -> decideFields toText ruleset seed steps seat
+        | GoldenRun.Decide(seed, steps, seat) -> decideFields ruleset seed steps seat
         | GoldenRun.Kyoku seed -> kyokuFields toText ruleset seed
         | GoldenRun.Game seed -> gameFields toText ruleset seed

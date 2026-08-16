@@ -14,8 +14,17 @@ type SeatPlayer =
     /// LLM 适配器：决策包发给 Agent 层，动作由后来的一条 Msg 带回来。
     | Llm of config: LlmSeat
 
-/// 配桌：谁坐哪个座位，按座位升序。
-type Roster = { Seats: SeatPlayer list }
+/// 配桌（CONTEXT.md 的 Roster）：这一桌按什么规则打、每个座位由谁来决策。
+///
+/// **规则集在里面**：坐位数本来就由 `Ruleset` 定（三麻只有三家），
+/// 两者分开拿的话「四家的配桌配上三麻的牌桌」在类型上是合法的。
+/// **但它不是第二份牌局状态**：牌在 `GameState` 里，配桌只说人与规则。
+type Roster = {
+    /// 这一场所遵的规则集。牌桌就是按它开的（`TablePage.openTable`）。
+    Ruleset: Ruleset
+    /// 谁坐哪个座位，按座位升序。
+    Seats: SeatPlayer list
+}
 
 /// 配桌的构造与查表。
 [<RequireQualifiedAccess>]
@@ -25,6 +34,7 @@ module Roster =
 
     /// 四家都是随机选手（22 号票那一桌）。
     let allRandom (ruleset: Ruleset) : Roster = {
+        Ruleset = ruleset
         Seats = Seat.all ruleset |> List.map (fun _ -> SeatPlayer.Random)
     }
 
@@ -34,6 +44,7 @@ module Roster =
         match seat with
         | None -> allRandom ruleset
         | Some seat -> {
+            Ruleset = ruleset
             Seats = (allRandom ruleset).Seats |> Seat.mapAt seat (fun _ -> SeatPlayer.Llm config)
           }
 

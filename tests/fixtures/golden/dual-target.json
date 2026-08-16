@@ -1320,9 +1320,1683 @@
         "asked": [
           "3"
         ],
-        "package": [
-          "{\"seat\":3,\"observation\":{\"seat\":3,\"bakaze\":\"1z\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"dora_markers\":[\"1m\"],\"wall_remaining\":62,\"self\":{\"seat\":3,\"jikaze\":\"4z\",\"junme\":2,\"score\":25000,\"tehai\":[\"1m\",\"1m\",\"2m\",\"3m\",\"7m\",\"3p\",\"4p\",\"7p\",\"1s\",\"3s\",\"3s\",\"1z\",\"4z\",\"4z\"],\"tsumo\":\"2m\",\"kawa\":[{\"pai\":\"8p\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false,\"furiten\":{\"permanent\":false,\"doujun\":false}},\"others\":[{\"seat\":0,\"jikaze\":\"1z\",\"junme\":2,\"score\":25000,\"tehai_count\":13,\"relative\":1,\"kawa\":[{\"pai\":\"6z\",\"tsumogiri\":false},{\"pai\":\"8m\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":1,\"jikaze\":\"2z\",\"junme\":2,\"score\":25000,\"tehai_count\":13,\"relative\":2,\"kawa\":[{\"pai\":\"7s\",\"tsumogiri\":false},{\"pai\":\"9p\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":2,\"jikaze\":\"3z\",\"junme\":2,\"score\":25000,\"tehai_count\":13,\"relative\":3,\"kawa\":[{\"pai\":\"2s\",\"tsumogiri\":true},{\"pai\":\"5z\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false}]},\"actions\":[{\"id\":0,\"label\":\"手切1万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1m\",\"tsumogiri\":false}},{\"id\":1,\"label\":\"手切3万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3m\",\"tsumogiri\":false}},{\"id\":2,\"label\":\"手切7万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}},{\"id\":3,\"label\":\"手切3筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}},{\"id\":4,\"label\":\"手切4筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4p\",\"tsumogiri\":false}},{\"id\":5,\"label\":\"手切7筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7p\",\"tsumogiri\":false}},{\"id\":6,\"label\":\"手切1索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1s\",\"tsumogiri\":false}},{\"id\":7,\"label\":\"手切3索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}},{\"id\":8,\"label\":\"手切东\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1z\",\"tsumogiri\":false}},{\"id\":9,\"label\":\"手切北\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4z\",\"tsumogiri\":false}},{\"id\":10,\"label\":\"摸切2万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"2m\",\"tsumogiri\":true}}],\"scaffold\":{\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"ukeire\":null,\"dahai\":[{\"pai\":\"1m\",\"action_ids\":[0],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":60,\"kinds\":18,\"tiles\":[{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":4},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":3},{\"pai\":\"9p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"2s\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":2},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":4},{\"pai\":\"1z\",\"remaining\":3},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"3m\",\"action_ids\":[1],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":21,\"kinds\":7,\"tiles\":[{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"7m\",\"action_ids\":[2],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":59,\"kinds\":19,\"tiles\":[{\"pai\":\"1m\",\"remaining\":1},{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"4m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":4},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":3},{\"pai\":\"9p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"2s\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":2},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":4},{\"pai\":\"1z\",\"remaining\":3},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"3p\",\"action_ids\":[3],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":21,\"kinds\":7,\"tiles\":[{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"4p\",\"action_ids\":[4],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":21,\"kinds\":7,\"tiles\":[{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"7p\",\"action_ids\":[5],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":64,\"kinds\":20,\"tiles\":[{\"pai\":\"1m\",\"remaining\":1},{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"4m\",\"remaining\":4},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"2s\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":2},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":4},{\"pai\":\"1z\",\"remaining\":3},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"1s\",\"action_ids\":[6],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":63,\"kinds\":20,\"tiles\":[{\"pai\":\"1m\",\"remaining\":1},{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"4m\",\"remaining\":4},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":4},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":3},{\"pai\":\"9p\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":2},{\"pai\":\"1z\",\"remaining\":3},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"3s\",\"action_ids\":[7],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":58,\"kinds\":18,\"tiles\":[{\"pai\":\"1m\",\"remaining\":1},{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"4m\",\"remaining\":4},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":4},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":3},{\"pai\":\"9p\",\"remaining\":3},{\"pai\":\"2s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":3},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"1z\",\"action_ids\":[8],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":74,\"kinds\":23,\"tiles\":[{\"pai\":\"1m\",\"remaining\":1},{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"4m\",\"remaining\":4},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":4},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":3},{\"pai\":\"9p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"2s\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":2},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":4},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"4z\",\"action_ids\":[9],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":77,\"kinds\":24,\"tiles\":[{\"pai\":\"1m\",\"remaining\":1},{\"pai\":\"2m\",\"remaining\":3},{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"4m\",\"remaining\":4},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":4},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":3},{\"pai\":\"9p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"2s\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":2},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":4},{\"pai\":\"1z\",\"remaining\":3},{\"pai\":\"4z\",\"remaining\":2}]},\"danger\":null},{\"pai\":\"2m\",\"action_ids\":[10],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":21,\"kinds\":7,\"tiles\":[{\"pai\":\"3m\",\"remaining\":3},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":3}]},\"danger\":null}],\"threats\":[]}}"
-        ]
+        "package.seat": [
+          "3"
+        ],
+        "package.observation.seat": [
+          "3"
+        ],
+        "package.observation.bakaze": [
+          "1z"
+        ],
+        "package.observation.kyoku": [
+          "1"
+        ],
+        "package.observation.honba": [
+          "0"
+        ],
+        "package.observation.kyotaku": [
+          "0"
+        ],
+        "package.observation.dora_markers": [
+          "1m"
+        ],
+        "package.observation.wall_remaining": [
+          "62"
+        ],
+        "package.observation.self.seat": [
+          "3"
+        ],
+        "package.observation.self.jikaze": [
+          "4z"
+        ],
+        "package.observation.self.junme": [
+          "2"
+        ],
+        "package.observation.self.score": [
+          "25000"
+        ],
+        "package.observation.self.tehai": [
+          "1m",
+          "1m",
+          "2m",
+          "3m",
+          "7m",
+          "3p",
+          "4p",
+          "7p",
+          "1s",
+          "3s",
+          "3s",
+          "1z",
+          "4z",
+          "4z"
+        ],
+        "package.observation.self.tsumo": [
+          "2m"
+        ],
+        "package.observation.self.kawa.0.pai": [
+          "8p"
+        ],
+        "package.observation.self.kawa.0.tsumogiri": [
+          "false"
+        ],
+        "package.observation.self.naki": [],
+        "package.observation.self.riichi": [
+          "none"
+        ],
+        "package.observation.self.ippatsu": [
+          "false"
+        ],
+        "package.observation.self.furiten.permanent": [
+          "false"
+        ],
+        "package.observation.self.furiten.doujun": [
+          "false"
+        ],
+        "package.observation.others.0.seat": [
+          "0"
+        ],
+        "package.observation.others.0.jikaze": [
+          "1z"
+        ],
+        "package.observation.others.0.junme": [
+          "2"
+        ],
+        "package.observation.others.0.score": [
+          "25000"
+        ],
+        "package.observation.others.0.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.0.relative": [
+          "1"
+        ],
+        "package.observation.others.0.kawa.0.pai": [
+          "6z"
+        ],
+        "package.observation.others.0.kawa.0.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.0.kawa.1.pai": [
+          "8m"
+        ],
+        "package.observation.others.0.kawa.1.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.0.naki": [],
+        "package.observation.others.0.riichi": [
+          "none"
+        ],
+        "package.observation.others.0.ippatsu": [
+          "false"
+        ],
+        "package.observation.others.1.seat": [
+          "1"
+        ],
+        "package.observation.others.1.jikaze": [
+          "2z"
+        ],
+        "package.observation.others.1.junme": [
+          "2"
+        ],
+        "package.observation.others.1.score": [
+          "25000"
+        ],
+        "package.observation.others.1.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.1.relative": [
+          "2"
+        ],
+        "package.observation.others.1.kawa.0.pai": [
+          "7s"
+        ],
+        "package.observation.others.1.kawa.0.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.1.kawa.1.pai": [
+          "9p"
+        ],
+        "package.observation.others.1.kawa.1.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.1.naki": [],
+        "package.observation.others.1.riichi": [
+          "none"
+        ],
+        "package.observation.others.1.ippatsu": [
+          "false"
+        ],
+        "package.observation.others.2.seat": [
+          "2"
+        ],
+        "package.observation.others.2.jikaze": [
+          "3z"
+        ],
+        "package.observation.others.2.junme": [
+          "2"
+        ],
+        "package.observation.others.2.score": [
+          "25000"
+        ],
+        "package.observation.others.2.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.2.relative": [
+          "3"
+        ],
+        "package.observation.others.2.kawa.0.pai": [
+          "2s"
+        ],
+        "package.observation.others.2.kawa.0.tsumogiri": [
+          "true"
+        ],
+        "package.observation.others.2.kawa.1.pai": [
+          "5z"
+        ],
+        "package.observation.others.2.kawa.1.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.2.naki": [],
+        "package.observation.others.2.riichi": [
+          "none"
+        ],
+        "package.observation.others.2.ippatsu": [
+          "false"
+        ],
+        "package.actions.0.id": [
+          "0"
+        ],
+        "package.actions.0.label": [
+          "手切1万"
+        ],
+        "package.actions.0.action.type": [
+          "dahai"
+        ],
+        "package.actions.0.action.actor": [
+          "3"
+        ],
+        "package.actions.0.action.pai": [
+          "1m"
+        ],
+        "package.actions.0.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.1.id": [
+          "1"
+        ],
+        "package.actions.1.label": [
+          "手切3万"
+        ],
+        "package.actions.1.action.type": [
+          "dahai"
+        ],
+        "package.actions.1.action.actor": [
+          "3"
+        ],
+        "package.actions.1.action.pai": [
+          "3m"
+        ],
+        "package.actions.1.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.2.id": [
+          "2"
+        ],
+        "package.actions.2.label": [
+          "手切7万"
+        ],
+        "package.actions.2.action.type": [
+          "dahai"
+        ],
+        "package.actions.2.action.actor": [
+          "3"
+        ],
+        "package.actions.2.action.pai": [
+          "7m"
+        ],
+        "package.actions.2.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.3.id": [
+          "3"
+        ],
+        "package.actions.3.label": [
+          "手切3筒"
+        ],
+        "package.actions.3.action.type": [
+          "dahai"
+        ],
+        "package.actions.3.action.actor": [
+          "3"
+        ],
+        "package.actions.3.action.pai": [
+          "3p"
+        ],
+        "package.actions.3.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.4.id": [
+          "4"
+        ],
+        "package.actions.4.label": [
+          "手切4筒"
+        ],
+        "package.actions.4.action.type": [
+          "dahai"
+        ],
+        "package.actions.4.action.actor": [
+          "3"
+        ],
+        "package.actions.4.action.pai": [
+          "4p"
+        ],
+        "package.actions.4.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.5.id": [
+          "5"
+        ],
+        "package.actions.5.label": [
+          "手切7筒"
+        ],
+        "package.actions.5.action.type": [
+          "dahai"
+        ],
+        "package.actions.5.action.actor": [
+          "3"
+        ],
+        "package.actions.5.action.pai": [
+          "7p"
+        ],
+        "package.actions.5.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.6.id": [
+          "6"
+        ],
+        "package.actions.6.label": [
+          "手切1索"
+        ],
+        "package.actions.6.action.type": [
+          "dahai"
+        ],
+        "package.actions.6.action.actor": [
+          "3"
+        ],
+        "package.actions.6.action.pai": [
+          "1s"
+        ],
+        "package.actions.6.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.7.id": [
+          "7"
+        ],
+        "package.actions.7.label": [
+          "手切3索"
+        ],
+        "package.actions.7.action.type": [
+          "dahai"
+        ],
+        "package.actions.7.action.actor": [
+          "3"
+        ],
+        "package.actions.7.action.pai": [
+          "3s"
+        ],
+        "package.actions.7.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.8.id": [
+          "8"
+        ],
+        "package.actions.8.label": [
+          "手切东"
+        ],
+        "package.actions.8.action.type": [
+          "dahai"
+        ],
+        "package.actions.8.action.actor": [
+          "3"
+        ],
+        "package.actions.8.action.pai": [
+          "1z"
+        ],
+        "package.actions.8.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.9.id": [
+          "9"
+        ],
+        "package.actions.9.label": [
+          "手切北"
+        ],
+        "package.actions.9.action.type": [
+          "dahai"
+        ],
+        "package.actions.9.action.actor": [
+          "3"
+        ],
+        "package.actions.9.action.pai": [
+          "4z"
+        ],
+        "package.actions.9.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.10.id": [
+          "10"
+        ],
+        "package.actions.10.label": [
+          "摸切2万"
+        ],
+        "package.actions.10.action.type": [
+          "dahai"
+        ],
+        "package.actions.10.action.actor": [
+          "3"
+        ],
+        "package.actions.10.action.pai": [
+          "2m"
+        ],
+        "package.actions.10.action.tsumogiri": [
+          "true"
+        ],
+        "package.scaffold.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.ukeire": [
+          "null"
+        ],
+        "package.scaffold.dahai.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.0.action_ids": [
+          "0"
+        ],
+        "package.scaffold.dahai.0.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.0.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.0.ukeire.total": [
+          "60"
+        ],
+        "package.scaffold.dahai.0.ukeire.kinds": [
+          "18"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.0.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.1.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.3.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.4.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.5.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.6.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.7.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.8.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.8.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.9.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.9.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.10.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.11.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.12.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.13.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.13.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.14.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.15.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.16.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.17.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.17.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.1.action_ids": [
+          "1"
+        ],
+        "package.scaffold.dahai.1.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.1.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.1.ukeire.total": [
+          "21"
+        ],
+        "package.scaffold.dahai.1.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.0.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.2.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.3.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.4.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.5.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.6.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.2.action_ids": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.2.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.2.ukeire.total": [
+          "59"
+        ],
+        "package.scaffold.dahai.2.ukeire.kinds": [
+          "19"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.1.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.2.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.3.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.4.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.5.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.6.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.7.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.8.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.9.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.9.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.10.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.11.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.12.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.13.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.14.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.14.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.15.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.16.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.16.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.17.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.18.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.18.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.3.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.3.action_ids": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.3.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.3.ukeire.total": [
+          "21"
+        ],
+        "package.scaffold.dahai.3.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.0.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.3.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.4.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.5.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.6.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.4.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.4.action_ids": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.4.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.4.ukeire.total": [
+          "21"
+        ],
+        "package.scaffold.dahai.4.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.0.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.3.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.4.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.5.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.6.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.5.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.5.action_ids": [
+          "5"
+        ],
+        "package.scaffold.dahai.5.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.5.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.5.ukeire.total": [
+          "64"
+        ],
+        "package.scaffold.dahai.5.ukeire.kinds": [
+          "20"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.1.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.2.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.3.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.4.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.5.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.6.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.7.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.8.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.13.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.14.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.15.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.15.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.16.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.16.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.17.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.17.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.18.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.19.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.19.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.5.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.6.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.6.action_ids": [
+          "6"
+        ],
+        "package.scaffold.dahai.6.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.6.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.6.ukeire.total": [
+          "63"
+        ],
+        "package.scaffold.dahai.6.ukeire.kinds": [
+          "20"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.1.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.2.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.3.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.4.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.5.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.6.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.7.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.8.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.15.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.16.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.17.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.17.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.18.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.19.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.19.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.6.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.7.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.7.action_ids": [
+          "7"
+        ],
+        "package.scaffold.dahai.7.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.7.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.7.ukeire.total": [
+          "58"
+        ],
+        "package.scaffold.dahai.7.ukeire.kinds": [
+          "18"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.1.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.2.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.3.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.4.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.5.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.6.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.7.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.8.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.10.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.11.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.12.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.13.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.14.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.15.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.16.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.17.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.17.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.8.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.8.action_ids": [
+          "8"
+        ],
+        "package.scaffold.dahai.8.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.8.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.8.ukeire.total": [
+          "74"
+        ],
+        "package.scaffold.dahai.8.ukeire.kinds": [
+          "23"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.1.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.2.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.3.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.4.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.5.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.6.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.7.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.8.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.15.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.16.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.17.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.18.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.19.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.19.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.20.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.20.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.21.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.21.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.22.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.22.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.8.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.9.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.9.action_ids": [
+          "9"
+        ],
+        "package.scaffold.dahai.9.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.9.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.9.ukeire.total": [
+          "77"
+        ],
+        "package.scaffold.dahai.9.ukeire.kinds": [
+          "24"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.0.pai": [
+          "1m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.1.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.2.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.3.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.4.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.5.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.6.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.7.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.8.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.15.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.16.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.17.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.18.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.19.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.19.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.20.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.20.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.21.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.21.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.22.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.22.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.23.pai": [
+          "4z"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.23.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.10.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.10.action_ids": [
+          "10"
+        ],
+        "package.scaffold.dahai.10.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.10.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.10.ukeire.total": [
+          "21"
+        ],
+        "package.scaffold.dahai.10.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.0.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.0.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.2.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.3.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.4.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.5.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.6.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.danger": [
+          "null"
+        ],
+        "package.scaffold.threats": []
       }
     },
     {
@@ -1344,9 +3018,1736 @@
         "asked": [
           "0"
         ],
-        "package": [
-          "{\"seat\":0,\"observation\":{\"seat\":0,\"bakaze\":\"1z\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"dora_markers\":[\"1z\"],\"wall_remaining\":69,\"self\":{\"seat\":0,\"jikaze\":\"1z\",\"junme\":1,\"score\":25000,\"tehai\":[\"5m\",\"5m\",\"5mr\",\"7m\",\"8m\",\"6p\",\"7p\",\"9p\",\"9p\",\"5s\",\"9s\",\"1z\",\"5z\",\"7z\"],\"tsumo\":\"7p\",\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false,\"furiten\":{\"permanent\":false,\"doujun\":false}},\"others\":[{\"seat\":1,\"jikaze\":\"2z\",\"junme\":0,\"score\":25000,\"tehai_count\":13,\"relative\":1,\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":2,\"jikaze\":\"3z\",\"junme\":0,\"score\":25000,\"tehai_count\":13,\"relative\":2,\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":3,\"jikaze\":\"4z\",\"junme\":0,\"score\":25000,\"tehai_count\":13,\"relative\":3,\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false}]},\"actions\":[{\"id\":0,\"label\":\"手切5万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5m\",\"tsumogiri\":false}},{\"id\":1,\"label\":\"手切赤5万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5mr\",\"tsumogiri\":false}},{\"id\":2,\"label\":\"手切7万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7m\",\"tsumogiri\":false}},{\"id\":3,\"label\":\"手切8万\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"8m\",\"tsumogiri\":false}},{\"id\":4,\"label\":\"手切6筒\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"6p\",\"tsumogiri\":false}},{\"id\":5,\"label\":\"手切9筒\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9p\",\"tsumogiri\":false}},{\"id\":6,\"label\":\"手切5索\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5s\",\"tsumogiri\":false}},{\"id\":7,\"label\":\"手切9索\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"9s\",\"tsumogiri\":false}},{\"id\":8,\"label\":\"手切东\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"1z\",\"tsumogiri\":false}},{\"id\":9,\"label\":\"手切白\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"5z\",\"tsumogiri\":false}},{\"id\":10,\"label\":\"手切中\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7z\",\"tsumogiri\":false}},{\"id\":11,\"label\":\"摸切7筒\",\"action\":{\"type\":\"dahai\",\"actor\":0,\"pai\":\"7p\",\"tsumogiri\":true}}],\"scaffold\":{\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"ukeire\":null,\"dahai\":[{\"pai\":\"5m\",\"action_ids\":[0,1],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":65,\"kinds\":20,\"tiles\":[{\"pai\":\"5m\",\"remaining\":1},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"7m\",\"action_ids\":[2],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":64,\"kinds\":19,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"8m\",\"action_ids\":[3],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":65,\"kinds\":20,\"tiles\":[{\"pai\":\"5m\",\"remaining\":1},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"6p\",\"action_ids\":[4],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":64,\"kinds\":19,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"9p\",\"action_ids\":[5],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":62,\"kinds\":18,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"4p\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"5s\",\"action_ids\":[6],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":37,\"kinds\":11,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"9s\",\"action_ids\":[7],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":45,\"kinds\":13,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"1z\",\"action_ids\":[8],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":50,\"kinds\":14,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"5z\",\"action_ids\":[9],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":49,\"kinds\":14,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"7z\",\"action_ids\":[10],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":49,\"kinds\":14,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3}]},\"danger\":null},{\"pai\":\"7p\",\"action_ids\":[11],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":68,\"kinds\":20,\"tiles\":[{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":3},{\"pai\":\"8m\",\"remaining\":3},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"4p\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":4},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":3},{\"pai\":\"8p\",\"remaining\":4},{\"pai\":\"9p\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":4},{\"pai\":\"4s\",\"remaining\":4},{\"pai\":\"5s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":4},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":3},{\"pai\":\"1z\",\"remaining\":2},{\"pai\":\"5z\",\"remaining\":3},{\"pai\":\"7z\",\"remaining\":3}]},\"danger\":null}],\"threats\":[]}}"
-        ]
+        "package.seat": [
+          "0"
+        ],
+        "package.observation.seat": [
+          "0"
+        ],
+        "package.observation.bakaze": [
+          "1z"
+        ],
+        "package.observation.kyoku": [
+          "1"
+        ],
+        "package.observation.honba": [
+          "0"
+        ],
+        "package.observation.kyotaku": [
+          "0"
+        ],
+        "package.observation.dora_markers": [
+          "1z"
+        ],
+        "package.observation.wall_remaining": [
+          "69"
+        ],
+        "package.observation.self.seat": [
+          "0"
+        ],
+        "package.observation.self.jikaze": [
+          "1z"
+        ],
+        "package.observation.self.junme": [
+          "1"
+        ],
+        "package.observation.self.score": [
+          "25000"
+        ],
+        "package.observation.self.tehai": [
+          "5m",
+          "5m",
+          "5mr",
+          "7m",
+          "8m",
+          "6p",
+          "7p",
+          "9p",
+          "9p",
+          "5s",
+          "9s",
+          "1z",
+          "5z",
+          "7z"
+        ],
+        "package.observation.self.tsumo": [
+          "7p"
+        ],
+        "package.observation.self.kawa": [],
+        "package.observation.self.naki": [],
+        "package.observation.self.riichi": [
+          "none"
+        ],
+        "package.observation.self.ippatsu": [
+          "false"
+        ],
+        "package.observation.self.furiten.permanent": [
+          "false"
+        ],
+        "package.observation.self.furiten.doujun": [
+          "false"
+        ],
+        "package.observation.others.0.seat": [
+          "1"
+        ],
+        "package.observation.others.0.jikaze": [
+          "2z"
+        ],
+        "package.observation.others.0.junme": [
+          "0"
+        ],
+        "package.observation.others.0.score": [
+          "25000"
+        ],
+        "package.observation.others.0.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.0.relative": [
+          "1"
+        ],
+        "package.observation.others.0.kawa": [],
+        "package.observation.others.0.naki": [],
+        "package.observation.others.0.riichi": [
+          "none"
+        ],
+        "package.observation.others.0.ippatsu": [
+          "false"
+        ],
+        "package.observation.others.1.seat": [
+          "2"
+        ],
+        "package.observation.others.1.jikaze": [
+          "3z"
+        ],
+        "package.observation.others.1.junme": [
+          "0"
+        ],
+        "package.observation.others.1.score": [
+          "25000"
+        ],
+        "package.observation.others.1.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.1.relative": [
+          "2"
+        ],
+        "package.observation.others.1.kawa": [],
+        "package.observation.others.1.naki": [],
+        "package.observation.others.1.riichi": [
+          "none"
+        ],
+        "package.observation.others.1.ippatsu": [
+          "false"
+        ],
+        "package.observation.others.2.seat": [
+          "3"
+        ],
+        "package.observation.others.2.jikaze": [
+          "4z"
+        ],
+        "package.observation.others.2.junme": [
+          "0"
+        ],
+        "package.observation.others.2.score": [
+          "25000"
+        ],
+        "package.observation.others.2.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.2.relative": [
+          "3"
+        ],
+        "package.observation.others.2.kawa": [],
+        "package.observation.others.2.naki": [],
+        "package.observation.others.2.riichi": [
+          "none"
+        ],
+        "package.observation.others.2.ippatsu": [
+          "false"
+        ],
+        "package.actions.0.id": [
+          "0"
+        ],
+        "package.actions.0.label": [
+          "手切5万"
+        ],
+        "package.actions.0.action.type": [
+          "dahai"
+        ],
+        "package.actions.0.action.actor": [
+          "0"
+        ],
+        "package.actions.0.action.pai": [
+          "5m"
+        ],
+        "package.actions.0.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.1.id": [
+          "1"
+        ],
+        "package.actions.1.label": [
+          "手切赤5万"
+        ],
+        "package.actions.1.action.type": [
+          "dahai"
+        ],
+        "package.actions.1.action.actor": [
+          "0"
+        ],
+        "package.actions.1.action.pai": [
+          "5mr"
+        ],
+        "package.actions.1.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.2.id": [
+          "2"
+        ],
+        "package.actions.2.label": [
+          "手切7万"
+        ],
+        "package.actions.2.action.type": [
+          "dahai"
+        ],
+        "package.actions.2.action.actor": [
+          "0"
+        ],
+        "package.actions.2.action.pai": [
+          "7m"
+        ],
+        "package.actions.2.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.3.id": [
+          "3"
+        ],
+        "package.actions.3.label": [
+          "手切8万"
+        ],
+        "package.actions.3.action.type": [
+          "dahai"
+        ],
+        "package.actions.3.action.actor": [
+          "0"
+        ],
+        "package.actions.3.action.pai": [
+          "8m"
+        ],
+        "package.actions.3.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.4.id": [
+          "4"
+        ],
+        "package.actions.4.label": [
+          "手切6筒"
+        ],
+        "package.actions.4.action.type": [
+          "dahai"
+        ],
+        "package.actions.4.action.actor": [
+          "0"
+        ],
+        "package.actions.4.action.pai": [
+          "6p"
+        ],
+        "package.actions.4.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.5.id": [
+          "5"
+        ],
+        "package.actions.5.label": [
+          "手切9筒"
+        ],
+        "package.actions.5.action.type": [
+          "dahai"
+        ],
+        "package.actions.5.action.actor": [
+          "0"
+        ],
+        "package.actions.5.action.pai": [
+          "9p"
+        ],
+        "package.actions.5.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.6.id": [
+          "6"
+        ],
+        "package.actions.6.label": [
+          "手切5索"
+        ],
+        "package.actions.6.action.type": [
+          "dahai"
+        ],
+        "package.actions.6.action.actor": [
+          "0"
+        ],
+        "package.actions.6.action.pai": [
+          "5s"
+        ],
+        "package.actions.6.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.7.id": [
+          "7"
+        ],
+        "package.actions.7.label": [
+          "手切9索"
+        ],
+        "package.actions.7.action.type": [
+          "dahai"
+        ],
+        "package.actions.7.action.actor": [
+          "0"
+        ],
+        "package.actions.7.action.pai": [
+          "9s"
+        ],
+        "package.actions.7.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.8.id": [
+          "8"
+        ],
+        "package.actions.8.label": [
+          "手切东"
+        ],
+        "package.actions.8.action.type": [
+          "dahai"
+        ],
+        "package.actions.8.action.actor": [
+          "0"
+        ],
+        "package.actions.8.action.pai": [
+          "1z"
+        ],
+        "package.actions.8.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.9.id": [
+          "9"
+        ],
+        "package.actions.9.label": [
+          "手切白"
+        ],
+        "package.actions.9.action.type": [
+          "dahai"
+        ],
+        "package.actions.9.action.actor": [
+          "0"
+        ],
+        "package.actions.9.action.pai": [
+          "5z"
+        ],
+        "package.actions.9.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.10.id": [
+          "10"
+        ],
+        "package.actions.10.label": [
+          "手切中"
+        ],
+        "package.actions.10.action.type": [
+          "dahai"
+        ],
+        "package.actions.10.action.actor": [
+          "0"
+        ],
+        "package.actions.10.action.pai": [
+          "7z"
+        ],
+        "package.actions.10.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.11.id": [
+          "11"
+        ],
+        "package.actions.11.label": [
+          "摸切7筒"
+        ],
+        "package.actions.11.action.type": [
+          "dahai"
+        ],
+        "package.actions.11.action.actor": [
+          "0"
+        ],
+        "package.actions.11.action.pai": [
+          "7p"
+        ],
+        "package.actions.11.action.tsumogiri": [
+          "true"
+        ],
+        "package.scaffold.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.ukeire": [
+          "null"
+        ],
+        "package.scaffold.dahai.0.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.0.action_ids": [
+          "0",
+          "1"
+        ],
+        "package.scaffold.dahai.0.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.0.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.0.ukeire.total": [
+          "65"
+        ],
+        "package.scaffold.dahai.0.ukeire.kinds": [
+          "20"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.0.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.1.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.3.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.4.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.5.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.6.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.7.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.8.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.9.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.10.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.11.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.12.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.13.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.14.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.15.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.16.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.17.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.17.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.18.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.19.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.19.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.1.action_ids": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.1.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.1.ukeire.total": [
+          "64"
+        ],
+        "package.scaffold.dahai.1.ukeire.kinds": [
+          "19"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.2.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.3.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.4.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.5.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.6.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.7.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.8.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.8.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.9.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.10.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.11.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.12.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.13.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.14.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.15.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.16.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.16.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.17.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.18.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.2.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.2.action_ids": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.2.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.2.ukeire.total": [
+          "65"
+        ],
+        "package.scaffold.dahai.2.ukeire.kinds": [
+          "20"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.0.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.0.remaining": [
+          "1"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.1.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.3.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.4.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.5.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.6.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.7.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.8.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.9.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.10.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.11.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.12.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.13.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.14.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.15.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.16.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.17.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.17.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.18.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.19.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.19.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.3.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.3.action_ids": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.3.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.3.ukeire.total": [
+          "64"
+        ],
+        "package.scaffold.dahai.3.ukeire.kinds": [
+          "19"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.2.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.3.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.4.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.5.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.6.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.7.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.8.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.8.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.9.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.10.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.11.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.12.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.13.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.14.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.15.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.16.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.16.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.17.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.18.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.4.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.4.action_ids": [
+          "5"
+        ],
+        "package.scaffold.dahai.4.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.4.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.4.ukeire.total": [
+          "62"
+        ],
+        "package.scaffold.dahai.4.ukeire.kinds": [
+          "18"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.1.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.2.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.2.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.3.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.4.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.5.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.6.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.7.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.7.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.8.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.9.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.10.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.11.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.12.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.13.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.14.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.15.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.15.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.16.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.17.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.5.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.5.action_ids": [
+          "6"
+        ],
+        "package.scaffold.dahai.5.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.5.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.5.ukeire.total": [
+          "37"
+        ],
+        "package.scaffold.dahai.5.ukeire.kinds": [
+          "11"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.1.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.2.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.2.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.3.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.4.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.4.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.5.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.6.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.7.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.8.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.8.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.9.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.9.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.10.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.6.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.6.action_ids": [
+          "7"
+        ],
+        "package.scaffold.dahai.6.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.6.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.6.ukeire.total": [
+          "45"
+        ],
+        "package.scaffold.dahai.6.ukeire.kinds": [
+          "13"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.1.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.2.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.2.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.3.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.4.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.4.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.5.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.6.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.7.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.8.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.9.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.10.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.10.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.11.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.12.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.7.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.7.action_ids": [
+          "8"
+        ],
+        "package.scaffold.dahai.7.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.7.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.7.ukeire.total": [
+          "50"
+        ],
+        "package.scaffold.dahai.7.ukeire.kinds": [
+          "14"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.1.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.2.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.2.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.3.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.4.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.4.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.5.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.6.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.7.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.8.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.9.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.10.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.11.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.12.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.13.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.8.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.8.action_ids": [
+          "9"
+        ],
+        "package.scaffold.dahai.8.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.8.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.8.ukeire.total": [
+          "49"
+        ],
+        "package.scaffold.dahai.8.ukeire.kinds": [
+          "14"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.1.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.2.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.2.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.3.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.4.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.4.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.5.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.6.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.7.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.8.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.9.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.10.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.11.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.12.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.13.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.9.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.9.action_ids": [
+          "10"
+        ],
+        "package.scaffold.dahai.9.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.9.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.9.ukeire.total": [
+          "49"
+        ],
+        "package.scaffold.dahai.9.ukeire.kinds": [
+          "14"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.1.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.2.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.2.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.3.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.4.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.4.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.5.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.6.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.7.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.8.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.9.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.10.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.11.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.12.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.13.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.danger": [
+          "null"
+        ],
+        "package.scaffold.dahai.10.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.10.action_ids": [
+          "11"
+        ],
+        "package.scaffold.dahai.10.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.10.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.10.ukeire.total": [
+          "68"
+        ],
+        "package.scaffold.dahai.10.ukeire.kinds": [
+          "20"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.0.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.1.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.2.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.3.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.4.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.5.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.6.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.7.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.8.pai": [
+          "8p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.9.pai": [
+          "9p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.10.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.11.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.12.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.13.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.13.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.14.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.15.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.16.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.17.pai": [
+          "1z"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.17.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.18.pai": [
+          "5z"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.19.pai": [
+          "7z"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.19.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.danger": [
+          "null"
+        ],
+        "package.scaffold.threats": []
       }
     },
     {
@@ -1369,8 +4770,1862 @@
         "asked": [
           "3"
         ],
-        "package": [
-          "{\"seat\":3,\"observation\":{\"seat\":3,\"bakaze\":\"1z\",\"kyoku\":1,\"honba\":0,\"kyotaku\":0,\"dora_markers\":[\"6p\"],\"wall_remaining\":65,\"self\":{\"seat\":3,\"jikaze\":\"4z\",\"junme\":1,\"score\":25000,\"tehai\":[\"4m\",\"7m\",\"3p\",\"5p\",\"5pr\",\"1s\",\"1s\",\"3s\",\"4s\",\"5s\",\"5s\",\"7s\",\"3z\",\"6z\"],\"tsumo\":\"6z\",\"kawa\":[],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false,\"furiten\":{\"permanent\":false,\"doujun\":false}},\"others\":[{\"seat\":0,\"jikaze\":\"1z\",\"junme\":1,\"score\":25000,\"tehai_count\":13,\"relative\":1,\"kawa\":[{\"pai\":\"4p\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":1,\"jikaze\":\"2z\",\"junme\":1,\"score\":25000,\"tehai_count\":10,\"relative\":2,\"kawa\":[{\"pai\":\"7z\",\"tsumogiri\":false},{\"pai\":\"4m\",\"tsumogiri\":false}],\"naki\":[{\"type\":\"pon\",\"target\":2,\"pai\":\"1z\",\"consumed\":[\"1z\",\"1z\"]}],\"riichi\":\"none\",\"ippatsu\":false},{\"seat\":2,\"jikaze\":\"3z\",\"junme\":2,\"score\":25000,\"tehai_count\":13,\"relative\":3,\"kawa\":[{\"pai\":\"1z\",\"tsumogiri\":false},{\"pai\":\"7m\",\"tsumogiri\":false}],\"naki\":[],\"riichi\":\"none\",\"ippatsu\":false}]},\"actions\":[{\"id\":0,\"label\":\"手切4万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4m\",\"tsumogiri\":false}},{\"id\":1,\"label\":\"手切7万\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7m\",\"tsumogiri\":false}},{\"id\":2,\"label\":\"手切3筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3p\",\"tsumogiri\":false}},{\"id\":3,\"label\":\"手切5筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5p\",\"tsumogiri\":false}},{\"id\":4,\"label\":\"手切赤5筒\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5pr\",\"tsumogiri\":false}},{\"id\":5,\"label\":\"手切1索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"1s\",\"tsumogiri\":false}},{\"id\":6,\"label\":\"手切3索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3s\",\"tsumogiri\":false}},{\"id\":7,\"label\":\"手切4索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"4s\",\"tsumogiri\":false}},{\"id\":8,\"label\":\"手切5索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"5s\",\"tsumogiri\":false}},{\"id\":9,\"label\":\"手切7索\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"7s\",\"tsumogiri\":false}},{\"id\":10,\"label\":\"手切西\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"3z\",\"tsumogiri\":false}},{\"id\":11,\"label\":\"摸切发\",\"action\":{\"type\":\"dahai\",\"actor\":3,\"pai\":\"6z\",\"tsumogiri\":true}}],\"scaffold\":{\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"ukeire\":null,\"dahai\":[{\"pai\":\"4m\",\"action_ids\":[0],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":62,\"kinds\":19,\"tiles\":[{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"1p\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"genbutsu\",\"display\":\"现物\"},\"rank\":1,\"reasons\":[{\"value\":\"genbutsu\",\"display\":\"对家现物\"}]}},{\"pai\":\"7m\",\"action_ids\":[1],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":62,\"kinds\":19,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"1p\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"suji\",\"display\":\"筋\"},\"rank\":2,\"reasons\":[{\"value\":\"suji\",\"display\":\"对家 4m 筋\"}]}},{\"pai\":\"3p\",\"action_ids\":[2],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":51,\"kinds\":16,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"5p\",\"action_ids\":[3,4],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":43,\"kinds\":13,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":11,\"reasons\":[{\"value\":\"near_dora\",\"display\":\"宝牌 7p 周边\"}]}},{\"pai\":\"1s\",\"action_ids\":[5],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":76,\"kinds\":23,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"1p\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"2s\",\"remaining\":4},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"3s\",\"action_ids\":[6],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":19,\"kinds\":7,\"tiles\":[{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"4s\",\"action_ids\":[7],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":19,\"kinds\":7,\"tiles\":[{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"5s\",\"action_ids\":[8],\"shanten\":{\"value\":4,\"display\":\"4 向听\"},\"shanten_delta\":1,\"ukeire\":{\"total\":86,\"kinds\":26,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"1p\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"2s\",\"remaining\":4},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"5s\",\"remaining\":2},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"8s\",\"remaining\":4},{\"pai\":\"9s\",\"remaining\":4},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"7s\",\"action_ids\":[9],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":19,\"kinds\":7,\"tiles\":[{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"3z\",\"action_ids\":[10],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":69,\"kinds\":21,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"1p\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"6z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}},{\"pai\":\"6z\",\"action_ids\":[11],\"shanten\":{\"value\":3,\"display\":\"3 向听\"},\"shanten_delta\":0,\"ukeire\":{\"total\":69,\"kinds\":21,\"tiles\":[{\"pai\":\"2m\",\"remaining\":4},{\"pai\":\"3m\",\"remaining\":4},{\"pai\":\"4m\",\"remaining\":2},{\"pai\":\"5m\",\"remaining\":4},{\"pai\":\"6m\",\"remaining\":4},{\"pai\":\"7m\",\"remaining\":2},{\"pai\":\"8m\",\"remaining\":4},{\"pai\":\"9m\",\"remaining\":4},{\"pai\":\"1p\",\"remaining\":4},{\"pai\":\"2p\",\"remaining\":4},{\"pai\":\"3p\",\"remaining\":3},{\"pai\":\"4p\",\"remaining\":3},{\"pai\":\"5p\",\"remaining\":2},{\"pai\":\"6p\",\"remaining\":3},{\"pai\":\"7p\",\"remaining\":4},{\"pai\":\"1s\",\"remaining\":2},{\"pai\":\"3s\",\"remaining\":3},{\"pai\":\"4s\",\"remaining\":3},{\"pai\":\"6s\",\"remaining\":4},{\"pai\":\"7s\",\"remaining\":3},{\"pai\":\"3z\",\"remaining\":3}]},\"danger\":{\"tier\":{\"value\":\"no_evidence\",\"display\":\"无依据\"},\"rank\":3,\"reasons\":[]}}],\"threats\":[{\"seat\":1,\"relative\":2,\"riichi\":false,\"naki\":true,\"display\":\"对家有副露\"}]}}"
+        "package.seat": [
+          "3"
+        ],
+        "package.observation.seat": [
+          "3"
+        ],
+        "package.observation.bakaze": [
+          "1z"
+        ],
+        "package.observation.kyoku": [
+          "1"
+        ],
+        "package.observation.honba": [
+          "0"
+        ],
+        "package.observation.kyotaku": [
+          "0"
+        ],
+        "package.observation.dora_markers": [
+          "6p"
+        ],
+        "package.observation.wall_remaining": [
+          "65"
+        ],
+        "package.observation.self.seat": [
+          "3"
+        ],
+        "package.observation.self.jikaze": [
+          "4z"
+        ],
+        "package.observation.self.junme": [
+          "1"
+        ],
+        "package.observation.self.score": [
+          "25000"
+        ],
+        "package.observation.self.tehai": [
+          "4m",
+          "7m",
+          "3p",
+          "5p",
+          "5pr",
+          "1s",
+          "1s",
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "7s",
+          "3z",
+          "6z"
+        ],
+        "package.observation.self.tsumo": [
+          "6z"
+        ],
+        "package.observation.self.kawa": [],
+        "package.observation.self.naki": [],
+        "package.observation.self.riichi": [
+          "none"
+        ],
+        "package.observation.self.ippatsu": [
+          "false"
+        ],
+        "package.observation.self.furiten.permanent": [
+          "false"
+        ],
+        "package.observation.self.furiten.doujun": [
+          "false"
+        ],
+        "package.observation.others.0.seat": [
+          "0"
+        ],
+        "package.observation.others.0.jikaze": [
+          "1z"
+        ],
+        "package.observation.others.0.junme": [
+          "1"
+        ],
+        "package.observation.others.0.score": [
+          "25000"
+        ],
+        "package.observation.others.0.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.0.relative": [
+          "1"
+        ],
+        "package.observation.others.0.kawa.0.pai": [
+          "4p"
+        ],
+        "package.observation.others.0.kawa.0.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.0.naki": [],
+        "package.observation.others.0.riichi": [
+          "none"
+        ],
+        "package.observation.others.0.ippatsu": [
+          "false"
+        ],
+        "package.observation.others.1.seat": [
+          "1"
+        ],
+        "package.observation.others.1.jikaze": [
+          "2z"
+        ],
+        "package.observation.others.1.junme": [
+          "1"
+        ],
+        "package.observation.others.1.score": [
+          "25000"
+        ],
+        "package.observation.others.1.tehai_count": [
+          "10"
+        ],
+        "package.observation.others.1.relative": [
+          "2"
+        ],
+        "package.observation.others.1.kawa.0.pai": [
+          "7z"
+        ],
+        "package.observation.others.1.kawa.0.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.1.kawa.1.pai": [
+          "4m"
+        ],
+        "package.observation.others.1.kawa.1.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.1.naki.0.type": [
+          "pon"
+        ],
+        "package.observation.others.1.naki.0.target": [
+          "2"
+        ],
+        "package.observation.others.1.naki.0.pai": [
+          "1z"
+        ],
+        "package.observation.others.1.naki.0.consumed": [
+          "1z",
+          "1z"
+        ],
+        "package.observation.others.1.riichi": [
+          "none"
+        ],
+        "package.observation.others.1.ippatsu": [
+          "false"
+        ],
+        "package.observation.others.2.seat": [
+          "2"
+        ],
+        "package.observation.others.2.jikaze": [
+          "3z"
+        ],
+        "package.observation.others.2.junme": [
+          "2"
+        ],
+        "package.observation.others.2.score": [
+          "25000"
+        ],
+        "package.observation.others.2.tehai_count": [
+          "13"
+        ],
+        "package.observation.others.2.relative": [
+          "3"
+        ],
+        "package.observation.others.2.kawa.0.pai": [
+          "1z"
+        ],
+        "package.observation.others.2.kawa.0.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.2.kawa.1.pai": [
+          "7m"
+        ],
+        "package.observation.others.2.kawa.1.tsumogiri": [
+          "false"
+        ],
+        "package.observation.others.2.naki": [],
+        "package.observation.others.2.riichi": [
+          "none"
+        ],
+        "package.observation.others.2.ippatsu": [
+          "false"
+        ],
+        "package.actions.0.id": [
+          "0"
+        ],
+        "package.actions.0.label": [
+          "手切4万"
+        ],
+        "package.actions.0.action.type": [
+          "dahai"
+        ],
+        "package.actions.0.action.actor": [
+          "3"
+        ],
+        "package.actions.0.action.pai": [
+          "4m"
+        ],
+        "package.actions.0.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.1.id": [
+          "1"
+        ],
+        "package.actions.1.label": [
+          "手切7万"
+        ],
+        "package.actions.1.action.type": [
+          "dahai"
+        ],
+        "package.actions.1.action.actor": [
+          "3"
+        ],
+        "package.actions.1.action.pai": [
+          "7m"
+        ],
+        "package.actions.1.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.2.id": [
+          "2"
+        ],
+        "package.actions.2.label": [
+          "手切3筒"
+        ],
+        "package.actions.2.action.type": [
+          "dahai"
+        ],
+        "package.actions.2.action.actor": [
+          "3"
+        ],
+        "package.actions.2.action.pai": [
+          "3p"
+        ],
+        "package.actions.2.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.3.id": [
+          "3"
+        ],
+        "package.actions.3.label": [
+          "手切5筒"
+        ],
+        "package.actions.3.action.type": [
+          "dahai"
+        ],
+        "package.actions.3.action.actor": [
+          "3"
+        ],
+        "package.actions.3.action.pai": [
+          "5p"
+        ],
+        "package.actions.3.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.4.id": [
+          "4"
+        ],
+        "package.actions.4.label": [
+          "手切赤5筒"
+        ],
+        "package.actions.4.action.type": [
+          "dahai"
+        ],
+        "package.actions.4.action.actor": [
+          "3"
+        ],
+        "package.actions.4.action.pai": [
+          "5pr"
+        ],
+        "package.actions.4.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.5.id": [
+          "5"
+        ],
+        "package.actions.5.label": [
+          "手切1索"
+        ],
+        "package.actions.5.action.type": [
+          "dahai"
+        ],
+        "package.actions.5.action.actor": [
+          "3"
+        ],
+        "package.actions.5.action.pai": [
+          "1s"
+        ],
+        "package.actions.5.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.6.id": [
+          "6"
+        ],
+        "package.actions.6.label": [
+          "手切3索"
+        ],
+        "package.actions.6.action.type": [
+          "dahai"
+        ],
+        "package.actions.6.action.actor": [
+          "3"
+        ],
+        "package.actions.6.action.pai": [
+          "3s"
+        ],
+        "package.actions.6.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.7.id": [
+          "7"
+        ],
+        "package.actions.7.label": [
+          "手切4索"
+        ],
+        "package.actions.7.action.type": [
+          "dahai"
+        ],
+        "package.actions.7.action.actor": [
+          "3"
+        ],
+        "package.actions.7.action.pai": [
+          "4s"
+        ],
+        "package.actions.7.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.8.id": [
+          "8"
+        ],
+        "package.actions.8.label": [
+          "手切5索"
+        ],
+        "package.actions.8.action.type": [
+          "dahai"
+        ],
+        "package.actions.8.action.actor": [
+          "3"
+        ],
+        "package.actions.8.action.pai": [
+          "5s"
+        ],
+        "package.actions.8.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.9.id": [
+          "9"
+        ],
+        "package.actions.9.label": [
+          "手切7索"
+        ],
+        "package.actions.9.action.type": [
+          "dahai"
+        ],
+        "package.actions.9.action.actor": [
+          "3"
+        ],
+        "package.actions.9.action.pai": [
+          "7s"
+        ],
+        "package.actions.9.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.10.id": [
+          "10"
+        ],
+        "package.actions.10.label": [
+          "手切西"
+        ],
+        "package.actions.10.action.type": [
+          "dahai"
+        ],
+        "package.actions.10.action.actor": [
+          "3"
+        ],
+        "package.actions.10.action.pai": [
+          "3z"
+        ],
+        "package.actions.10.action.tsumogiri": [
+          "false"
+        ],
+        "package.actions.11.id": [
+          "11"
+        ],
+        "package.actions.11.label": [
+          "摸切发"
+        ],
+        "package.actions.11.action.type": [
+          "dahai"
+        ],
+        "package.actions.11.action.actor": [
+          "3"
+        ],
+        "package.actions.11.action.pai": [
+          "6z"
+        ],
+        "package.actions.11.action.tsumogiri": [
+          "true"
+        ],
+        "package.scaffold.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.ukeire": [
+          "null"
+        ],
+        "package.scaffold.dahai.0.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.0.action_ids": [
+          "0"
+        ],
+        "package.scaffold.dahai.0.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.0.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.0.ukeire.total": [
+          "62"
+        ],
+        "package.scaffold.dahai.0.ukeire.kinds": [
+          "19"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.0.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.1.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.2.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.3.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.4.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.5.pai": [
+          "1p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.6.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.7.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.8.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.8.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.9.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.10.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.11.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.12.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.13.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.14.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.15.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.16.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.17.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.18.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.0.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.0.danger.tier.value": [
+          "genbutsu"
+        ],
+        "package.scaffold.dahai.0.danger.tier.display": [
+          "现物"
+        ],
+        "package.scaffold.dahai.0.danger.rank": [
+          "1"
+        ],
+        "package.scaffold.dahai.0.danger.reasons.0.value": [
+          "genbutsu"
+        ],
+        "package.scaffold.dahai.0.danger.reasons.0.display": [
+          "对家现物"
+        ],
+        "package.scaffold.dahai.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.1.action_ids": [
+          "1"
+        ],
+        "package.scaffold.dahai.1.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.1.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.1.ukeire.total": [
+          "62"
+        ],
+        "package.scaffold.dahai.1.ukeire.kinds": [
+          "19"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.5.pai": [
+          "1p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.5.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.6.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.7.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.7.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.8.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.8.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.9.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.10.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.11.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.11.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.12.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.13.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.14.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.15.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.15.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.16.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.17.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.18.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.1.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.1.danger.tier.value": [
+          "suji"
+        ],
+        "package.scaffold.dahai.1.danger.tier.display": [
+          "筋"
+        ],
+        "package.scaffold.dahai.1.danger.rank": [
+          "2"
+        ],
+        "package.scaffold.dahai.1.danger.reasons.0.value": [
+          "suji"
+        ],
+        "package.scaffold.dahai.1.danger.reasons.0.display": [
+          "对家 4m 筋"
+        ],
+        "package.scaffold.dahai.2.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.2.action_ids": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.2.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.2.ukeire.total": [
+          "51"
+        ],
+        "package.scaffold.dahai.2.ukeire.kinds": [
+          "16"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.5.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.5.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.6.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.7.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.8.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.8.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.9.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.10.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.11.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.12.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.12.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.13.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.14.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.14.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.15.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.2.ukeire.tiles.15.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.2.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.2.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.2.danger.reasons": [],
+        "package.scaffold.dahai.3.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.3.action_ids": [
+          "3",
+          "4"
+        ],
+        "package.scaffold.dahai.3.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.3.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.3.ukeire.total": [
+          "43"
+        ],
+        "package.scaffold.dahai.3.ukeire.kinds": [
+          "13"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.5.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.5.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.6.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.7.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.8.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.8.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.9.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.9.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.10.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.10.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.11.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.12.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.3.ukeire.tiles.12.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.3.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.3.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.3.danger.rank": [
+          "11"
+        ],
+        "package.scaffold.dahai.3.danger.reasons.0.value": [
+          "near_dora"
+        ],
+        "package.scaffold.dahai.3.danger.reasons.0.display": [
+          "宝牌 7p 周边"
+        ],
+        "package.scaffold.dahai.4.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.4.action_ids": [
+          "5"
+        ],
+        "package.scaffold.dahai.4.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.4.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.4.ukeire.total": [
+          "76"
+        ],
+        "package.scaffold.dahai.4.ukeire.kinds": [
+          "23"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.5.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.5.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.6.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.7.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.8.pai": [
+          "1p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.15.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.15.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.16.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.16.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.17.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.18.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.19.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.19.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.20.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.20.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.21.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.21.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.22.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.4.ukeire.tiles.22.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.4.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.4.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.4.danger.reasons": [],
+        "package.scaffold.dahai.5.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.5.action_ids": [
+          "6"
+        ],
+        "package.scaffold.dahai.5.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.5.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.5.ukeire.total": [
+          "19"
+        ],
+        "package.scaffold.dahai.5.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.0.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.0.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.1.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.2.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.3.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.4.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.5.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.6.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.5.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.5.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.5.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.5.danger.reasons": [],
+        "package.scaffold.dahai.6.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.6.action_ids": [
+          "7"
+        ],
+        "package.scaffold.dahai.6.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.6.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.6.ukeire.total": [
+          "19"
+        ],
+        "package.scaffold.dahai.6.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.0.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.0.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.1.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.2.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.3.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.4.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.5.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.6.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.6.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.6.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.6.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.6.danger.reasons": [],
+        "package.scaffold.dahai.7.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.7.action_ids": [
+          "8"
+        ],
+        "package.scaffold.dahai.7.shanten.value": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.shanten.display": [
+          "4 向听"
+        ],
+        "package.scaffold.dahai.7.shanten_delta": [
+          "1"
+        ],
+        "package.scaffold.dahai.7.ukeire.total": [
+          "86"
+        ],
+        "package.scaffold.dahai.7.ukeire.kinds": [
+          "26"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.5.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.5.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.6.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.7.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.8.pai": [
+          "1p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.15.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.15.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.16.pai": [
+          "2s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.16.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.17.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.18.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.18.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.19.pai": [
+          "5s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.19.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.20.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.20.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.21.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.21.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.22.pai": [
+          "8s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.22.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.23.pai": [
+          "9s"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.23.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.24.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.24.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.25.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.7.ukeire.tiles.25.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.7.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.7.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.7.danger.reasons": [],
+        "package.scaffold.dahai.8.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.8.action_ids": [
+          "9"
+        ],
+        "package.scaffold.dahai.8.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.8.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.8.ukeire.total": [
+          "19"
+        ],
+        "package.scaffold.dahai.8.ukeire.kinds": [
+          "7"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.0.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.0.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.1.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.1.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.2.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.2.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.3.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.3.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.4.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.4.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.5.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.5.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.6.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.8.ukeire.tiles.6.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.8.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.8.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.8.danger.reasons": [],
+        "package.scaffold.dahai.9.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.9.action_ids": [
+          "10"
+        ],
+        "package.scaffold.dahai.9.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.9.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.9.ukeire.total": [
+          "69"
+        ],
+        "package.scaffold.dahai.9.ukeire.kinds": [
+          "21"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.5.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.5.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.6.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.7.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.8.pai": [
+          "1p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.15.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.15.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.16.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.17.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.18.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.18.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.19.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.19.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.20.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.9.ukeire.tiles.20.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.9.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.9.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.9.danger.reasons": [],
+        "package.scaffold.dahai.10.pai": [
+          "6z"
+        ],
+        "package.scaffold.dahai.10.action_ids": [
+          "11"
+        ],
+        "package.scaffold.dahai.10.shanten.value": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.shanten.display": [
+          "3 向听"
+        ],
+        "package.scaffold.dahai.10.shanten_delta": [
+          "0"
+        ],
+        "package.scaffold.dahai.10.ukeire.total": [
+          "69"
+        ],
+        "package.scaffold.dahai.10.ukeire.kinds": [
+          "21"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.0.pai": [
+          "2m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.0.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.1.pai": [
+          "3m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.1.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.2.pai": [
+          "4m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.2.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.3.pai": [
+          "5m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.3.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.4.pai": [
+          "6m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.4.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.5.pai": [
+          "7m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.5.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.6.pai": [
+          "8m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.6.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.7.pai": [
+          "9m"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.7.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.8.pai": [
+          "1p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.8.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.9.pai": [
+          "2p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.9.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.10.pai": [
+          "3p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.10.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.11.pai": [
+          "4p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.11.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.12.pai": [
+          "5p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.12.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.13.pai": [
+          "6p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.13.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.14.pai": [
+          "7p"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.14.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.15.pai": [
+          "1s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.15.remaining": [
+          "2"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.16.pai": [
+          "3s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.16.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.17.pai": [
+          "4s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.17.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.18.pai": [
+          "6s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.18.remaining": [
+          "4"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.19.pai": [
+          "7s"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.19.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.20.pai": [
+          "3z"
+        ],
+        "package.scaffold.dahai.10.ukeire.tiles.20.remaining": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.danger.tier.value": [
+          "no_evidence"
+        ],
+        "package.scaffold.dahai.10.danger.tier.display": [
+          "无依据"
+        ],
+        "package.scaffold.dahai.10.danger.rank": [
+          "3"
+        ],
+        "package.scaffold.dahai.10.danger.reasons": [],
+        "package.scaffold.threats.0.seat": [
+          "1"
+        ],
+        "package.scaffold.threats.0.relative": [
+          "2"
+        ],
+        "package.scaffold.threats.0.riichi": [
+          "false"
+        ],
+        "package.scaffold.threats.0.naki": [
+          "true"
+        ],
+        "package.scaffold.threats.0.display": [
+          "对家有副露"
         ]
       }
     },

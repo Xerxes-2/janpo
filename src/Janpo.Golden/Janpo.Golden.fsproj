@@ -12,9 +12,10 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
 
-  <!-- 顺序有依赖：用例的数据模型 → 怎么跑 → 怎么对照。 -->
+  <!-- 顺序有依赖：用例的数据模型 → JSON 怎么摊平 → 怎么跑 → 怎么对照。 -->
   <ItemGroup>
     <Compile Include="GoldenCase.fs" />
+    <Compile Include="GoldenJson.fs" />
     <Compile Include="GoldenObservation.fs" />
     <Compile Include="GoldenCheck.fs" />
   </ItemGroup>
