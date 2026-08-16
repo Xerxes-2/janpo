@@ -60,6 +60,7 @@
   <ItemGroup>
     <Compile Include="Action.fs" />
     <Compile Include="PlayerState.fs" />
+    <Compile Include="Ryuukyoku.fs" />
     <Compile Include="GameState.fs" />
     <Compile Include="Kyoku.fs" />
   </ItemGroup>

@@ -1098,3 +1098,68 @@ ADR-0004 决定 4。字段名不变、类型从 `Tile list` 变成 `TileKindSet`
 `CONTEXT.md` 的 Seat 条目写了「『下家 / 对家 / 上家』是相对座位的标准说法，照用」，但只给了中文。
 按 ADR-0001（标识符用罗马字日麻术语）我取了 `Shimocha` / `Toimen` / `Kamicha`，
 并把「三麻没有 Toimen」写进签名（返回 `Seat option`）。请一并裁，与 11-L 那条同批。
+
+---
+
+### 12 / 流局的判据单独成文件 `Ryuukyoku.fs`，是纯函数
+
+途中流局的四条判据、三家和了、流し満貫的成立与清算，全部放进新的 `Ryuukyoku.fs`
+（`PlayerState.fs` 与 `GameState.fs` 之间，「一局之内的状态机」组），输入 `Ruleset` +
+`PlayerState list`，输出 `RyuukyokuReason option` / `Seat list` / `int list`，一个字段都不改。
+否决：塞进已经 1700 行的 `GameState.fs`（那几条判据能单独对拍，也能被黄金用例直接调）；
+放进 `Event.fs` 的 `RyuukyokuReason` 模块（那个文件在 `PlayerState.fs` 之前，看不见家状态）。
+
+**F# 的坑**：同名的 `type Ryuukyoku` 在 `Event.fs`，跨文件同名要手写
+`[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]`（同文件才自动加）。
+叫法不变，只是 IL 里多个后缀。
+
+### 12 / `RyuukyokuReason` 的 wire 取值取自 mjai 的参考实现，不是它的 wiki
+
+gimite 的 mjai wiki 页只举了 `fanpai` 一个例子，Mortal 的 `libriichi` 把 `reason` 整个丢了。
+七个取值取自 gimite `mjai` gem 的 `lib/mjai/active_game.rb`（`process_ryukyoku` / `process_fanpai`）：
+`fanpai` / `nagashimangan` / `kyushukyuhai` / `sufonrenta` / `sukaikan` / `suchareach` / `sanchaho`。
+标识符按术语表拼作 `Fanpai` / `NagashiMangan` / `KyuushuKyuuhai` / `SuufonRenda` / `Suukaikan` /
+`SuuchaRiichi` / `SanchaHora`——**七个里有五个与 wire 不一致**，全在 `toMjai` 一处映射（裁决 D-1）。
+
+### 提案 12-A：`CONTEXT.md` 的 Ryuukyoku 条目缺五个罗马字
+
+术语表的 Ryuukyoku 条目只写了中文「四风连打、四杠散了、九种九牌、四家立直」，三家和了没进条目，
+流し満貫另有条目（`Nagashi Mangan`，有罗马字）。本票取的是
+`SuufonRenda` / `Suukaikan` / `SuuchaRiichi` / `KyuushuKyuuhai` / `SanchaHora`
+（`Suukaikan` 取 riichi.wiki 的「四開槓」读法，中文的「四杠散了」是同一件事的另一个说法）。
+与 11-L、R-5-A 同批待裁。
+
+### 12 / 规则集新增 `SanchaHoraRyuukyoku`（默认 true）与 `KyuushuKinds`（默认 9）
+
+三家和了是不是途中流局：天凤是（默认，ADR-0004 决定 3），雀魂三响成立不流局
+（`Ruleset.withoutSanchaHoraRyuukyoku`）。九种九牌的种数做成字段是因为 ADR-0004 决定 1
+禁止散落规则字面量，且十种十牌是真实存在的变体。
+**四杠散了没有新字段**：它读 `Ruleset.RinshanCount`（一局最多能杠几次），
+两个数在任何规则集里本来就相等——岭上牌用完就杠不动了。
+
+### 12 / 途中流局一律连庄，靠 `RyuukyokuReason.isAbortive` 而不是 `Tenpais`
+
+`KyokuEnd.isRenchan`（06 的）加了一支：途中流局直接 true。
+理由：途中流局压根不验听牌，`Tenpais` 记的是「谁亮了手牌」（mjai 参考实现的语义），
+拿它判连庄会把九种九牌判成进局。荒牌流局与流し満貫仍旧看 Oya 听不听牌。
+否决：给途中流局的 `Tenpais` 填 true 去迁就 `isRenchan`（那是在 wire 上撒谎）。
+
+### 12 / 流し満貫的清算直接调 `Score.hora`，不另写点数表
+
+`HoraValue = { Fu = 0; Han = 5; Yakuman = 0 }`（5 番即满贯档）+ `Actor = Target`（自摸）+
+本场供托都为 0 → Oya `+12000 / −4000 ×3`、Ko `+8000 / −4000(Oya) / −2000 ×2`，
+与 mjai 参考实现逐项相同，且引擎里不出现 `4000` / `8000` 这类字面量。
+多家同时成立逐家累加（和恒为 0）。它**替代**听牌料清算（`exhaustiveDraw` 里一个 match，不叠加）。
+
+### 提案 12-C：`Ryuukyoku` 记录没有 `actor`，九种九牌的宣言者不上 wire
+
+mjai 参考实现在九种九牌那条 `ryukyoku` 上带 `actor`，本票没加：`Ryuukyoku` 的形状因此保持稳定，
+且宣言者可以从前一条 `tsumo` 的 `actor` 读出来（13-prep 报告的 A5 用的正是这条判据）。
+若 13 票的对拍需要它，加一个 `Actor: Seat option` 是小改动。
+
+### 12 / `HoraTests` 的「三响都成立」改用雀魂规则集，断言一字未动
+
+默认规则集把三家和了判成途中流局（天凤，ADR-0004），那条用例因此改成显式
+`Ruleset.withoutSanchaHoraRyuukyoku` 并改了标题；天凤那一边（三响 → 流局）在 `RyuukyokuTests` 里另有一条。
+**这是本票唯一改动既有断言语义的地方**，两边的行为都有用例钉着，一条用例都没删。
+同批：`GameStateProperties` 的「听牌料」属性加了一个 `Fanpai` 的形态守卫——听牌料只是荒牌流局的事。

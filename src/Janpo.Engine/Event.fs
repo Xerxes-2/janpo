@@ -53,12 +53,33 @@ type Hora =
         UraDoraMarkers: Tile list
     }
 
-/// 流局的形态，mjai `ryukyoku` 的 `reason` 字段。04 只做荒牌流局，12 票补齐其余五种
-/// （九种九牌、四风连打、四杠散了、四家立直、三家和了）与流し満貫。
+/// 流局的形态，mjai `ryukyoku` 的 `reason` 字段。**这就是「一局能怎么结束」里不和了的那一半**：
+/// 两种打到底的（荒牌流局与流し満貫）加四种途中流局（CONTEXT.md 的 Ryuukyoku）再加三家和了。
+///
+/// F# 标识符按 `CONTEXT.md` 的罗马字拼法，wire 取值照 mjai 的原拼（裁决 D-1）——两者在
+/// 五个 case 上不一致（`SuufonRenda` / `sufonrenta`、`Suukaikan` / `sukaikan`、
+/// `SuuchaRiichi` / `suchareach`、`SanchaHora` / `sanchaho`、`KyuushuKyuuhai` / `kyushukyuhai`），
+/// 全部在 `toMjai` 一处映射。wire 取值取自 mjai 的参考实现（gimite 的 `mjai` gem，
+/// `active_game.rb` 的 `process_ryukyoku` / `process_fanpai`）。
 type RyuukyokuReason =
     /// 荒牌流局：可摸区摸完，按听牌家数授受听牌料。
     /// mjai wire 上写作 `fanpai`（荒牌的音读），不是「翻牌 / 飜牌」。
     | Fanpai
+    /// 流し満貫（CONTEXT.md 的 Nagashi Mangan）：荒牌流局时某家打出的牌全是幺九牌
+    /// 且一张未被鸣走，以满贯清算**替代**听牌料清算。它仍然是流局，不是和了。
+    | NagashiMangan
+    /// 九种九牌：第一巡、无人鸣牌时手里有九种以上幺九牌，**由座位自己宣言**。
+    /// 六种流局里只有它进合法动作集。
+    | KyuushuKyuuhai
+    /// 四风连打：第一巡四家打出同一张风牌且无人鸣牌。
+    | SuufonRenda
+    /// 四杠散了：全场四个杠且不是同一家杠的。**单人四杠不流局**（四杠子还等着和了）。
+    | Suukaikan
+    /// 四家立直：四家的立直都已成立。
+    | SuuchaRiichi
+    /// 三家和了：同一张牌被三家同时荣和。**天凤判成途中流局、雀魂三响成立**，
+    /// 因此它是规则集的一项（`Ruleset.SanchaHoraRyuukyoku`，ADR-0004）。
+    | SanchaHora
 
 /// mjai `ryukyoku` 的载荷：一局在无人和了的情况下结束时公开的全部事实。
 ///
@@ -150,13 +171,43 @@ module RyuukyokuReason =
 
     // ---- mjai 记法 ----
 
-    /// 全部形态。12 票加 case 时这里跟着加，`parse` 不必改。
-    let all: RyuukyokuReason list = [ Fanpai ]
+    /// 全部形态。加 case 时这里跟着加，`parse` 不必改。
+    let all: RyuukyokuReason list =
+        [
+            Fanpai
+            NagashiMangan
+            KyuushuKyuuhai
+            SuufonRenda
+            Suukaikan
+            SuuchaRiichi
+            SanchaHora
+        ]
 
     /// mjai `reason` 字段的取值。
     let toMjai (reason: RyuukyokuReason) : string =
         match reason with
         | Fanpai -> "fanpai"
+        | NagashiMangan -> "nagashimangan"
+        | KyuushuKyuuhai -> "kyushukyuhai"
+        | SuufonRenda -> "sufonrenta"
+        | Suukaikan -> "sukaikan"
+        | SuuchaRiichi -> "suchareach"
+        | SanchaHora -> "sanchaho"
+
+    /// 途中流局（Tochuu Ryuukyoku）：牌还没摸完就中止的那四种，加上三家和了。
+    ///
+    /// **两处读它**：途中流局一律连庄（`KyokuEnd.isRenchan`，亲不流），
+    /// 且一律不授受听牌料（`Ryuukyoku.noDeltas`）。荒牌流局与流し満貫不在其列——
+    /// 那两种是打到底的，听牌与授受都照算。
+    let isAbortive (reason: RyuukyokuReason) : bool =
+        match reason with
+        | Fanpai
+        | NagashiMangan -> false
+        | KyuushuKyuuhai
+        | SuufonRenda
+        | Suukaikan
+        | SuuchaRiichi
+        | SanchaHora -> true
 
     /// 解析 mjai `reason`；不认识的形态返回 None。
     let parse (text: string) : RyuukyokuReason option =

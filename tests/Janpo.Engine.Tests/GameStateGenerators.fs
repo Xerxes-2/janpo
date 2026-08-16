@@ -28,6 +28,10 @@ module GameStateFixtures =
 
         loop [] tiles
 
+    /// 逐张拿掉给定的那几张。
+    let removeAll (tiles: Tile list) (from: Tile list) : Tile list =
+        (from, tiles) ||> List.fold (fun rest tile -> removeOne tile rest)
+
     /// 配牌的取牌手顺（4-4-4-1）：与 `Wall.deal` 的手顺同一份，只是反过来用。
     let private haipaiChunks (ruleset: Ruleset) : int list =
         let rounds = ruleset.HaipaiSize / 4
@@ -102,15 +106,19 @@ module GameStateFixtures =
     /// 一局的剧本：四家的配牌加上摸牌顺序，都写成 mjai 记法。
     type Script = { Hands: string list; Draws: string }
 
+    /// 用一座摊好的牌山开一局。牌山是程序化摊出来的那几条用例（流し満貫）直接用它。
+    let startFromWall (ruleset: Ruleset) (kyokuContext: KyokuContext) (wall: Wall) : GameState =
+        match GameState.startFrom ruleset kyokuContext wall with
+        | Ok state -> state
+        | Error error -> failwith $"应当开得出局，却得到 {KyokuStartError.toDisplay error}"
+
     /// 用摊好的牌山开一局，规则集与开局条件都可换
     /// （头跳开关、本场与供托的那几条用例要它）。
     let startScriptedIn (ruleset: Ruleset) (kyokuContext: KyokuContext) (script: Script) : GameState =
         let hands = script.Hands |> List.map tilesOf
         let wall = scriptedWall ruleset kyokuContext.Oya hands (tilesOf script.Draws)
 
-        match GameState.startFrom ruleset kyokuContext wall with
-        | Ok state -> state
-        | Error error -> failwith $"应当开得出局，却得到 {KyokuStartError.toDisplay error}"
+        startFromWall ruleset kyokuContext wall
 
     /// 用摊好的牌山开一局，规则集可换（头跳开关的两条用例要它）。
     let startScriptedWith (ruleset: Ruleset) (script: Script) : GameState = startScriptedIn ruleset context script
@@ -344,6 +352,163 @@ module GameStateFixtures =
             Draws = "5z 6z 7z 4z 4z 4z 9p"
         }
 
+    // ---- 流局形态的剧本（RyuukyokuTests / RyuukyokuProperties 共用） ----
+    //
+    // **这几种形态随机取样几乎跑不出来**（四风连打 / 四杠散了 / 九种九牌 / 四家立直
+    // 都极稀），因此一律摊牌山写黄金用例，把覆盖钉成用例——备注 N-8 的同一课。
+
+    /// 九种九牌的剧本：Oya 配牌里就摊着九种幺九牌（1m 9m 1p 9p 1s 9s 1z 2z 3z），
+    /// 第一次自摸摸进一张没用的 6m——第一巡、无人鸣牌，宣言得了。
+    /// 它手切 2m 之后幺九牌一张不少，因此「只有第一巡宣言得了」用同一条剧本就验得到。
+    let kyuushuScript =
+        {
+            Hands =
+                [
+                    "1m 9m 1p 9p 1s 9s 1z 2z 3z 2m 3m 4m 5m"
+                    "4p 5p 6p 4s 5s 6s 6m 7m 8m 4z 5z 6z 7z"
+                    "2p 3p 7p 2s 3s 7s 5m 6m 7m 4z 5z 6z 7z"
+                    "6p 7p 8p 6s 7s 8s 7m 8m 2m 4z 5z 6z 7z"
+                ]
+            Draws = "6m"
+        }
+
+    /// 鸣牌之后就宣言不了九种九牌的剧本：Oya 摸切 5z，座位 1 碰它；
+    /// 座位 2 手里本来就有九种幺九牌，但轮到它摸牌时「无人鸣牌的第一巡」已经没了。
+    let kyuushuAfterNakiScript =
+        {
+            Hands =
+                [
+                    "1m 4m 7m 1p 4p 7p 2s 5s 8s 3z 4z 6z 7z"
+                    "5z 5z 2m 5m 8m 2p 5p 8p 3s 6s 9s 6z 7z"
+                    "1m 9m 1p 9p 1s 9s 1z 2z 3z 3m 6m 3p 6p"
+                    "2m 3m 5m 6m 8m 2p 3p 6p 7p 3s 4s 7s 4z"
+                ]
+            Draws = "5z 7m"
+        }
+
+    /// 四风连打的剧本：Oya 摸进 1z 摸切，其余三家配牌里各握一张 1z，依次手切。
+    /// 四家手牌全是孤张，既和不了也听不了；四张 1z 全散在四家手上，因此碰不成、也无人鸣得了。
+    /// 最后一手摸进的 2z 是另一条用例的材料：打它而不打 1z，四风连打就不成立。
+    let suufonRendaScript =
+        {
+            Hands =
+                [
+                    "1m 4m 7m 1p 4p 7p 1s 4s 7s 4z 5z 6z 7z"
+                    "1z 2m 5m 8m 2p 5p 8p 2s 5s 8s 5z 6z 7z"
+                    "1z 3m 6m 9m 3p 6p 9p 3s 6s 9s 5z 6z 7z"
+                    "1z 1m 4m 7m 1p 4p 7p 1s 4s 7s 4z 4z 3z"
+                ]
+            Draws = "1z 2z 2z 2z"
+        }
+
+    /// 四杠散了的剧本：Oya 手里 111m 222m 333m，摸进第四张 1m 暗杠，岭上又是 2m、再一张 3m
+    /// ——一口气三个暗杠；第三张岭上摸进的 9p 它摸切出去，而座位 1 手里三张 9p 大明杠
+    /// ——**第四个杠不是同一家杠的**，它打完岭上那一张就四杠散了。
+    let suukaikanScript =
+        {
+            Hands =
+                [
+                    "1m 1m 1m 2m 2m 2m 3m 3m 3m 4z 5z 6z 7z"
+                    "9p 9p 9p 4m 5m 6m 7m 8m 9m 1p 2p 3p 1s"
+                    "4p 5p 6p 4s 5s 6s 2s 3s 7s 1z 2z 3z 4z"
+                    "7p 8p 6s 7s 8s 9s 5m 6m 8m 1z 2z 3z 4z"
+                ]
+            Draws = "1m"
+        }
+
+    /// 单人四杠不流局的剧本：同上，只是第四个杠也是 Oya 自己的（岭上摸进第四张 9p）。
+    let singleSuukanScript =
+        {
+            Hands =
+                [
+                    "1m 1m 1m 2m 2m 2m 3m 3m 3m 9p 9p 9p 4z"
+                    "4m 5m 6m 7m 8m 9m 1p 2p 3p 1s 2s 3s 5z"
+                    "4p 5p 6p 4s 5s 6s 2s 3s 7s 1z 2z 3z 6z"
+                    "7p 8p 6s 7s 8s 9s 5m 6m 8m 1z 2z 3z 7z"
+                ]
+            Draws = "1m"
+        }
+
+    /// 四家立直的剧本：四家配牌就都是四组刻子加一张字牌的单骑听牌（分别听 5z / 6z / 7z / 4z），
+    /// 第一次自摸摸进的 1z / 2z / 3z / 1z 谁也和不了也荣和不了——四家依次立直摸切。
+    let suuchaRiichiScript =
+        {
+            Hands =
+                [
+                    "1m 1m 1m 9m 9m 9m 1p 1p 1p 9p 9p 9p 5z"
+                    "1s 1s 1s 9s 9s 9s 2m 2m 2m 8m 8m 8m 6z"
+                    "3m 3m 3m 7m 7m 7m 3p 3p 3p 7p 7p 7p 7z"
+                    "2p 2p 2p 8p 8p 8p 2s 2s 2s 8s 8s 8s 4z"
+                ]
+            Draws = "1z 2z 3z 1z"
+        }
+
+    /// 流し満貫的牌山：**座位 0 的配牌与每一次自摸全是幺九牌**，它一路摸切下来，
+    /// 河里因此全是幺九牌；其余三家拿到的先是中张，因此它们不成立。
+    ///
+    /// **它必须程序化地摊**：可摸区整整 70 张都要指定（座位 0 要摸满 18 巡），
+    /// 写成记法字串就是一堆没人读得下去的牌。
+    ///
+    /// `nakiPai` 是「河被鸣走因此不成立」那条用例的钩子：给座位 1 的配牌发两张同种牌，
+    /// 并把第三张排到**座位 0 的最后一次自摸**上——那一手可摸区还剩一张，碰得成，
+    /// 且座位 1 碰完不摸牌，**座位 0 先前的摸牌一张不受影响**（河仍旧全是幺九牌）。
+    /// 两条用例于是只差一个 `kawaTaken`。
+    let nagashiManganWall (ruleset: Ruleset) (nakiPai: Tile option) : Wall =
+        let isYaochuu (tile: Tile) =
+            Tile.suit tile = Jihai || Tile.number tile = 1 || Tile.number tile = 9
+
+        let reserved =
+            nakiPai |> Option.map (fun tile -> [ tile; tile ]) |> Option.defaultValue []
+
+        let yaochuu, chuuchan =
+            Ruleset.wallTiles ruleset |> removeAll reserved |> List.partition isYaochuu
+
+        // 座位 0 的配牌全取幺九牌；其余三家先拿指定的那几张，不够的部分拿中张。
+        let oyaHand = List.truncate ruleset.HaipaiSize yaochuu
+        let restYaochuu = List.skip (List.length oyaHand) yaochuu
+
+        let others, afterOthers =
+            (([], chuuchan), [ reserved; []; [] ])
+            ||> List.fold (fun (hands, pool) fixedPart ->
+                let take = ruleset.HaipaiSize - List.length fixedPart
+                hands @ [ fixedPart @ List.truncate take pool ], List.skip take pool)
+
+        // 可摸区减掉配牌占的那一段，就是一局里摸得到的张数（四麻：122 − 52 = 70）。
+        let drawCount =
+            Ruleset.wallSize ruleset - ruleset.DeadWallSize - Ruleset.haipaiTotal ruleset
+
+        // 可摸区：下标 0 起按座位轮转，座位 0 的那几个位置填幺九牌，其余位置填中张（不够了再拿幺九牌）。
+        let draws =
+            (([], restYaochuu, afterOthers), [ 0 .. drawCount - 1 ])
+            ||> List.fold (fun (taken, mineLeft, othersLeft) index ->
+                if index % ruleset.SeatCount = 0 then
+                    taken @ List.truncate 1 mineLeft, List.skip 1 mineLeft, othersLeft
+                else
+                    match othersLeft with
+                    | head :: tail -> taken @ [ head ], mineLeft, tail
+                    | [] -> taken @ List.truncate 1 mineLeft, List.skip 1 mineLeft, othersLeft)
+            |> fun (taken, _, _) -> taken
+
+        // 座位 0 的**最后一次自摸**换成 `nakiPai`：两张对换，牌山的多重集不变，
+        // 且两边都是幺九牌（座位 0 的位置本来就只填幺九牌），因此它的河仍旧全是幺九牌。
+        let scripted =
+            match nakiPai with
+            | None -> draws
+            | Some tile ->
+                let last = drawCount - 1 - ((drawCount - 1) % ruleset.SeatCount)
+
+                match draws |> List.tryFindIndex (fun each -> each = tile) with
+                | Some found when found <> last ->
+                    draws
+                    |> List.mapi (fun index each ->
+                        if index = last then tile
+                        elif index = found then List.item last draws
+                        else each)
+                | Some _ -> draws
+                | None -> failwith $"{Tile.toMjai tile} 没有出现在可摸区里，换不到座位 0 的最后一手上"
+
+        scriptedWall ruleset Seat.first (oyaHand :: others) scripted
+
     /// 某座位摸到第几巡了：它的 `tsumo` 事件条数。引擎的 `GameState.junme` 算的是同一件事，
     /// 这里从事件流重新数一遍——两条路径对上才算数对。
     let junmeOf (seat: Seat) (state: GameState) : int =
@@ -426,6 +591,7 @@ module GameStateFixtures =
                     | Action.Ankan _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> None)
 
             let chosen =
@@ -453,6 +619,7 @@ module GameStateFixtures =
                     | Action.Ankan _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -465,6 +632,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -477,6 +645,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -501,6 +670,7 @@ module GameStateFixtures =
                     | Action.Ankan _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -513,6 +683,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -538,6 +709,7 @@ module GameStateFixtures =
                     | Action.Ankan _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -550,6 +722,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -562,6 +735,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -574,6 +748,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -586,6 +761,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -609,6 +785,7 @@ module GameStateFixtures =
                     | Action.Ankan _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -621,6 +798,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -633,6 +811,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -645,6 +824,7 @@ module GameStateFixtures =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 
@@ -669,6 +849,7 @@ module GameStateFixtures =
                     | Action.Dahai _
                     | Action.Hora _
                     | Action.Riichi _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -681,6 +862,7 @@ module GameStateFixtures =
                         | Action.Kakan _
                         | Action.Minkan _
                         | Action.Riichi _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -693,6 +875,7 @@ module GameStateFixtures =
                         | Action.Kakan _
                         | Action.Minkan _
                         | Action.Riichi _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false))
                 |> Option.orElseWith (fun () ->
                     pick (fun action ->
@@ -705,6 +888,7 @@ module GameStateFixtures =
                         | Action.Kakan _
                         | Action.Minkan _
                         | Action.Riichi _
+                        | Action.Ryuukyoku _
                         | Action.Hora _ -> false))
                 |> Option.defaultValue (List.head choice.Actions)
 

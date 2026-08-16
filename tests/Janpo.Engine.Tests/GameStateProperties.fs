@@ -145,6 +145,7 @@ module GameStateProperties =
                         | Action.Riichi _
                         | Action.Ankan _
                         | Action.Kakan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false)
 
                 choice.Seat <> phase.Target
@@ -187,6 +188,7 @@ module GameStateProperties =
                 | Action.Riichi _
                 | Action.Ankan _
                 | Action.Kakan _
+                | Action.Ryuukyoku _
                 | Action.None _ -> true)
         | AwaitingDahai _
         | Ended _ -> true
@@ -209,6 +211,7 @@ module GameStateProperties =
                    | Action.Ankan _
                    | Action.Kakan _
                    | Action.Minkan _
+                   | Action.Ryuukyoku _
                    | Action.None _ -> false)
         | _ -> true
 
@@ -284,7 +287,17 @@ module GameStateProperties =
         let result = ryuukyokuOf (runWith tenpaiSeeking seed)
         let tenpaiCount = result.Tenpais |> List.filter id |> List.length
 
-        if tenpaiCount = 0 || tenpaiCount = List.length result.Tenpais then
-            result.Deltas |> List.forall (fun delta -> delta = 0)
-        else
-            List.forall2 (fun tenpai delta -> if tenpai then delta > 0 else delta < 0) result.Tenpais result.Deltas
+        // 听牌料只是**荒牌流局**的事：流し満貫的清算替代它，途中流局压根不授受（票 12）。
+        // 这两种形态在听牌选手的轨迹里极稀，各自的授受在 RyuukyokuTests 里钉着。
+        match result.Reason with
+        | NagashiMangan
+        | KyuushuKyuuhai
+        | SuufonRenda
+        | Suukaikan
+        | SuuchaRiichi
+        | SanchaHora -> true
+        | Fanpai ->
+            if tenpaiCount = 0 || tenpaiCount = List.length result.Tenpais then
+                result.Deltas |> List.forall (fun delta -> delta = 0)
+            else
+                List.forall2 (fun tenpai delta -> if tenpai then delta > 0 else delta < 0) result.Tenpais result.Deltas

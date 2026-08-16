@@ -44,6 +44,14 @@ type Ruleset =
         /// 关掉则双响 / 三响都成立。**默认关**——天凤与雀魂都是双响（ADR-0004 决定 3），
         /// 60 局鳳凰卓牌谱里 3 处 `hora` 事件相邻即为实测印证。要头跳用 `Ruleset.withAtamahane`。
         Atamahane: bool
+        /// 三家和了是不是途中流局：**天凤判成流局（默认）、雀魂三响都成立**
+        /// （ADR-0004：默认值对齐天凤）。关掉它就是雀魂的做法，用 `Ruleset.withoutSanchaHoraRyuukyoku`。
+        ///
+        /// **头跳开着时它永远用不上**：那时至多成立一家，凑不齐三家。
+        SanchaHoraRyuukyoku: bool
+        /// 九种九牌宣言所需的幺九牌**种数**。通行规则是 9（因此叫「九种」九牌），
+        /// 要十种十牌的规则集把它改成 10。
+        KyuushuKinds: int
         /// Kiriage Mangan（切上满贯）：把 4 番 30 符 / 3 番 60 符（基本点 1920）上调为满贯。
         /// **默认关**——天凤与雀魂段位战都不采用（DECISIONS 提案 S-A）。
         KiriageMangan: bool
@@ -85,6 +93,8 @@ module Ruleset =
             RiichiBou = 1000
             NotenBappu = 3000
             Atamahane = false
+            SanchaHoraRyuukyoku = true
+            KyuushuKinds = 9
             KiriageMangan = false
             DoubleKazeJantouFu = 4
             RinshanTsumoFu = true
@@ -101,6 +111,13 @@ module Ruleset =
     /// 打开头跳：同巡多家荣和时只成立打牌者下家优先的那一家。关着的形态就是各预设本身——
     /// 天凤与雀魂都是双响（ADR-0004 决定 3）。
     let withAtamahane (ruleset: Ruleset) : Ruleset = { ruleset with Atamahane = true }
+
+    /// 让三家和了成立而不流局（雀魂的做法）。开着的形态就是各预设本身——天凤把三家和了
+    /// 列在途中流局里（ADR-0004）。
+    let withoutSanchaHoraRyuukyoku (ruleset: Ruleset) : Ruleset =
+        { ruleset with
+            SanchaHoraRyuukyoku = false
+        }
 
     /// 打开切上满贯（SPEC 的规则开关）：4 番 30 符 / 3 番 60 符按满贯算。
     /// 关着的形态就是各预设本身——天凤与雀魂段位战都不采用它。

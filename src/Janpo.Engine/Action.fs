@@ -4,7 +4,7 @@ namespace Janpo
 /// 类型，允许 case 同名——未验证的意图不应当能被误当成事实写进 Paifu。
 /// case 名与字段贴 mjai 的动作消息，不自创。
 ///
-/// **这个 DU 会被后续的票反复加 case**：`Ryuukyoku`（九种九牌，12）。
+/// **这个 DU 还会被后续的票加 case**（三麻的拔北就是一个）。
 /// 加一个 case 的代价固定为三处，漏掉哪处编译器都会
 /// 指出来（`--warnaserror` 下不完整 match 是错误）：
 ///
@@ -53,6 +53,14 @@ type Action =
     /// 就必须同时有一条「过」，否则响应阶段停在那里没人推得走。mjai 的 `none` 消息没有
     /// `actor` 字段（服务端知道在等谁），这里带上是因为引擎的每个动作都要能说出是谁提交的。
     | None of actor: Seat
+    /// mjai `ryukyoku`：宣言**九种九牌**。六种流局里只有它是选手宣言的（其余五种由引擎自己判），
+    /// 也只有它可以不宣言——接着打是合法的。
+    ///
+    /// **只在第一巡、此前无人鸣牌的那一次自摸之后宣言得了**，且手里的幺九牌够
+    /// `Ruleset.KyuushuKinds` 种（判据在 `Ryuukyoku.canDeclareKyuushuKyuuhai`）。
+    /// mjai 的这条动作消息只带 `actor`，形态写在随后那条 `ryukyoku` 事件的 `reason` 里。
+    /// 标识符按术语表拼作 `Ryuukyoku`，wire 仍是 mjai 的 `ryukyoku`（裁决 D-1）。
+    | Ryuukyoku of actor: Seat
 
 /// 合法动作集（CONTEXT.md）：当前阶段某座位可提交的全部 Action。
 /// 真人 UI 的按钮与 LLM 的工具 schema 都由它驱动，两边都不自己判断合法性。
@@ -85,3 +93,4 @@ module Action =
         | Action.Minkan(actor, _, _, _) -> actor
         | Action.Riichi actor -> actor
         | Action.None actor -> actor
+        | Action.Ryuukyoku actor -> actor

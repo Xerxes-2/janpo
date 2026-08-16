@@ -110,6 +110,7 @@ module RiichiProperties =
                     | Action.Riichi _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
             | RiichiState.Declared _ ->
                 phase.Actions
@@ -123,6 +124,7 @@ module RiichiProperties =
                     | Action.Ankan _
                     | Action.Kakan _
                     | Action.Minkan _
+                    | Action.Ryuukyoku _
                     | Action.None _ -> false)
             | RiichiState.None -> true
         | AwaitingResponse _
@@ -147,6 +149,7 @@ module RiichiProperties =
                         | Action.Riichi _
                         | Action.Ankan _
                         | Action.Kakan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> true)
                 else
                     true)

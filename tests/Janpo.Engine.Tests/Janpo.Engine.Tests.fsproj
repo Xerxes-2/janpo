@@ -80,6 +80,8 @@
     <Compile Include="KanProperties.fs" />
     <Compile Include="RiichiTests.fs" />
     <Compile Include="RiichiProperties.fs" />
+    <Compile Include="RyuukyokuTests.fs" />
+    <Compile Include="RyuukyokuProperties.fs" />
     <Compile Include="ScoreProperties.fs" />
     <Compile Include="KyokuTests.fs" />
   </ItemGroup>

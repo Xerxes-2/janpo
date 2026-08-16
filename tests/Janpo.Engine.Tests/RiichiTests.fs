@@ -126,6 +126,7 @@ module RiichiTests =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false)
                     |> Option.orElseWith (fun () ->
                         pick (fun action ->
@@ -138,6 +139,7 @@ module RiichiTests =
                             | Action.Ankan _
                             | Action.Kakan _
                             | Action.Minkan _
+                            | Action.Ryuukyoku _
                             | Action.None _ -> false))
                     |> Option.orElseWith (fun () ->
                         pick (fun action ->
@@ -150,6 +152,7 @@ module RiichiTests =
                             | Action.Ankan _
                             | Action.Kakan _
                             | Action.Minkan _
+                            | Action.Ryuukyoku _
                             | Action.Hora _ -> false))
                     |> Option.defaultValue (List.head choice.Actions)
 
@@ -173,6 +176,7 @@ module RiichiTests =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false)
 
                 match pon with
@@ -254,6 +258,7 @@ module RiichiTests =
                 | Action.Ankan _
                 | Action.Kakan _
                 | Action.Minkan _
+                | Action.Ryuukyoku _
                 | Action.None _ -> false)
 
         Assert.True(riichiIndex < firstDahai)
@@ -334,6 +339,7 @@ module RiichiTests =
                 | Action.Ankan _
                 | Action.Kakan _
                 | Action.Minkan _
+                | Action.Ryuukyoku _
                 | Action.None _ -> failwith $"宣言之后这一手只剩打牌，却有 {action}"
         )
 

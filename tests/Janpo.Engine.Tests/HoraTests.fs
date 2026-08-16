@@ -72,6 +72,7 @@ module HoraTests =
                    | Action.Ankan _
                    | Action.Kakan _
                    | Action.Minkan _
+                   | Action.Ryuukyoku _
                    | Action.None _ -> false))
 
     let private horasOf (state: GameState) : Hora list = GameState.horas state
@@ -389,11 +390,13 @@ module HoraTests =
         Assert.True(GameState.isEnded ended)
 
     [<Fact>]
-    let ``头跳关掉时同巡三响也都成立`` () =
-        let doubleRon = ruleset
+    let ``头跳关掉且三家和了不流局时（雀魂），同巡三响都成立`` () =
+        // 默认规则集把三家和了判成途中流局（天凤，ADR-0004），因此这一条要雀魂的那一边；
+        // 天凤那一边在 RyuukyokuTests。
+        let tripleRon = Ruleset.withoutSanchaHoraRyuukyoku ruleset
 
         let state =
-            startScriptedWith doubleRon tripleRonScript |> driveUntil passive inRonPhase
+            startScriptedWith tripleRon tripleRonScript |> driveUntil passive inRonPhase
 
         Assert.Equal<Seat list>(seats [ 1; 2; 3 ], responding state)
 
@@ -496,6 +499,7 @@ module HoraTests =
                         | Action.Ankan _
                         | Action.Kakan _
                         | Action.Minkan _
+                        | Action.Ryuukyoku _
                         | Action.None _ -> false)
 
                 if offersRon then

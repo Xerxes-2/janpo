@@ -67,8 +67,8 @@ type AwaitingResponse =
         Declared: Action list
     }
 
-/// 一局怎么结束的。04 只有荒牌流局，06 把它换成了 DU；12 票补其余流局形态时
-/// 只需给 `RyuukyokuReason` 加 case，不必再动这里。
+/// 一局怎么结束的。04 只有荒牌流局，06 把它换成了 DU；12 票补完其余流局形态时
+/// 果然只给 `RyuukyokuReason` 加了 case，这个 DU 一字未动。
 ///
 /// case 强制限定名（`KyokuEnd.Hora`）：`Event` 里有同名 case，不限定名的话
 /// 后定义的那个会把先定义的遮住，读代码时分不出是「终局形态」还是「事件」。
@@ -164,6 +164,11 @@ type IllegalAction =
     /// 与 `Kuikae` 分开：两者都是「牌就在手里却动不得」，但原因不同，
     /// 合成一条会把立直报成食替。
     | RiichiRestricted of actor: Seat * pai: Tile
+    /// 此刻宣言不了九种九牌：不是第一巡、此前有人鸣牌、手里的幺九牌不够
+    /// `Ruleset.KyuushuKinds` 种，或者立直宣言之后又回头宣它。判据在 `Ryuukyoku.canDeclareKyuushuKyuuhai`。
+    ///
+    /// **其余五种流局没有对应的拒绝理由**：它们不是选手提交的意图，由引擎自己判。
+    | CannotRyuukyoku of actor: Seat
     /// 现在没有可响应的牌，「过」无从谈起。
     | NothingToRespond of actor: Seat
     /// 一局已终，不再接受任何动作。
@@ -177,10 +182,16 @@ module KyokuEnd =
 
     /// 是否连庄：Oya 和了则连庄（双响里只要有 Oya 就算）；流局时 Oya 听牌则连庄。
     /// 局与局之间怎么推进（Honba 递增、Kyotaku 结转、局数序列）是 05 的事，它读这一个布尔值。
+    ///
+    /// **途中流局一律连庄**（亲不流，通行规则）：那几种压根不验听牌，`Tenpais` 记的是
+    /// 「谁亮了手牌」而不是「谁听牌」，拿它判连庄会把九种九牌判成进局。
+    /// 荒牌流局与流し満貫仍然看 Oya 听不听牌（票 12：流し満貫时 Oya 听牌则连庄）。
     let isRenchan (oya: Seat) (kyokuEnd: KyokuEnd) : bool =
         match kyokuEnd with
         | KyokuEnd.Hora horas -> horas |> List.exists (fun hora -> hora.Actor = oya)
-        | KyokuEnd.Ryuukyoku result -> Seat.tryItem oya result.Tenpais |> Option.defaultValue false
+        | KyokuEnd.Ryuukyoku result ->
+            RyuukyokuReason.isAbortive result.Reason
+            || Seat.tryItem oya result.Tenpais |> Option.defaultValue false
 
 /// 局面的构造、拆解与迁移。`step` 是引擎唯一的入口：
 /// `GameState -> Action -> Result<GameState * Event list, IllegalAction>`。
@@ -189,8 +200,9 @@ module GameState =
 
     // ---- 判役与算点的上下文 ----
 
-    /// 这家还没打过牌、且此前无人鸣牌。**两处读它**：天和 / 地和（`yakuContextOf`）
-    /// 与两立直（`applyRiichi`）——「无人鸣牌的第一巡」是同一条判据，不写两份。
+    /// 这家还没打过牌、且此前无人鸣牌。**三处读它**：天和 / 地和（`yakuContextOf`）、
+    /// 两立直（`applyRiichi`）与九种九牌（`awaitDahaiIn`）——「无人鸣牌的第一巡」
+    /// 是同一条判据，不写三份。
     /// （事件流的顺序与这个判断无关，因此传倒序的也行。）
     let private firstTurnFor (seat: Seat) (log: Event list) : bool =
         log
@@ -373,6 +385,7 @@ module GameState =
         (context: YakuContext)
         (remaining: int)
         (canKan: bool)
+        (firstTurn: bool)
         (actor: Seat)
         (forbidden: Tile list)
         (player: PlayerState)
@@ -433,6 +446,16 @@ module GameState =
                 kakanCandidates (PlayerState.naki player) (PlayerState.hand player)
                 |> List.map (fun (added, pon) -> Action.Kakan(actor, added, Naki.tiles pon))
 
+        /// 九种九牌：第一巡、此前无人鸣牌的那一次自摸，手里的幺九牌够种数。
+        /// **它只出现在没立直那一支**：立直宣言之后那一手只能打宣言牌，
+        /// 而立直成立之后早就不是第一巡了。`drawn` 为 None（鸣完那一手）时
+        /// `firstTurn` 必定为 false，因此不必再判一次。
+        let kyuushu =
+            if Ryuukyoku.canDeclareKyuushuKyuuhai ruleset firstTurn (PlayerState.hand player) then
+                [ Action.Ryuukyoku actor ]
+            else
+                []
+
         match PlayerState.riichi player with
         | RiichiState.Declared _ ->
             let keeps =
@@ -459,7 +482,7 @@ module GameState =
                     []
 
             let tedashi, tsumogiri = dahai (fun _ -> true)
-            hora @ riichi @ ankan @ kakan @ tedashi @ tsumogiri
+            hora @ kyuushu @ riichi @ ankan @ kakan @ tedashi @ tsumogiri
 
     /// 从一堆牌里取两张的全部拿法（按实例，不去重）。
     let rec private pairsOf (tiles: Tile list) : Tile list list =
@@ -765,6 +788,7 @@ module GameState =
                     (yakuContext state actor)
                     (Wall.remaining state.Wall)
                     (canKan state)
+                    (firstTurnFor actor state.Log)
                     actor
                     forbidden
                     player
@@ -837,6 +861,46 @@ module GameState =
 
     // ---- 迁移 ----
 
+    /// 流局收尾：授受、记下结果、一局告终。**七种形态共用这一处**（荒牌、流し満貫与五种途中）：
+    /// 形态不同的只有 `reason` / `tenpais` / `deltas` 三个值，怎么结束是同一件事。
+    ///
+    /// **供托原样留在场上**（`Kyotaku` 不动）：无人和了就没人收立直棒，结转到下一局是 05 的事。
+    let private endWithRyuukyoku
+        (state: GameState)
+        (reason: RyuukyokuReason)
+        (tenpais: bool list)
+        (deltas: int list)
+        : GameState * Event list =
+        let settled = List.map2 PlayerState.addScore deltas state.Players
+
+        let result =
+            {
+                Reason = reason
+                Tenpais = tenpais
+                Deltas = deltas
+                Scores = settled |> List.map PlayerState.score
+            }
+
+        { state with
+            Players = settled
+            Phase = Ended(KyokuEnd.Ryuukyoku result)
+        },
+        [ Event.Ryuukyoku result ]
+
+    /// 途中流局收尾：**一律不授受**（听牌料不存在），`tenpais` 只记亮了手牌的那几家
+    /// （`Ryuukyoku.revealedBy`）。`declarers` 只有三家和了用得上，其余形态传空表。
+    let private endWithAbortive
+        (state: GameState)
+        (reason: RyuukyokuReason)
+        (declarers: Seat list)
+        : GameState * Event list =
+        let revealed = Ryuukyoku.revealedBy state.Ruleset reason declarers
+
+        let tenpais =
+            Seat.all state.Ruleset |> List.map (fun seat -> List.contains seat revealed)
+
+        endWithRyuukyoku state reason tenpais (Ryuukyoku.noDeltas state.Ruleset)
+
     /// 荒牌流局的授受：不听牌的家合计付 `NotenBappu`，听牌的家平分；全听或全不听时不授受。
     let private notenBappu (ruleset: Ruleset) (tenpais: bool list) : int list =
         let tenpaiCount = tenpais |> List.filter id |> List.length
@@ -850,26 +914,20 @@ module GameState =
             tenpais |> List.map (fun tenpai -> if tenpai then gain else -loss)
 
     /// 荒牌流局：可摸区摸完，按听牌家数授受听牌料，一局告终。
+    ///
+    /// **流し満貫成立时它的清算替代听牌料清算**（不叠加，票 12），形态也跟着从
+    /// `Fanpai` 变成 `NagashiMangan`。**听牌与否照算**：它进 `tenpais` 上 wire，
+    /// 且 05 的连庄判定（`KyokuEnd.isRenchan`）读的就是它——Oya 听牌则连庄。
     let private exhaustiveDraw (state: GameState) : GameState * Event list =
         let tenpais =
             state.Players |> List.map (PlayerState.isTenpai state.Ruleset.TileKinds)
 
-        let deltas = notenBappu state.Ruleset tenpais
-        let settled = List.map2 PlayerState.addScore deltas state.Players
+        let reason, deltas =
+            match Ryuukyoku.nagashiSeats state.Players with
+            | [] -> Fanpai, notenBappu state.Ruleset tenpais
+            | nagashi -> NagashiMangan, Ryuukyoku.nagashiDeltas state.Ruleset state.Context.Oya nagashi
 
-        let result =
-            {
-                Reason = Fanpai
-                Tenpais = tenpais
-                Deltas = deltas
-                Scores = settled |> List.map PlayerState.score
-            }
-
-        { state with
-            Players = settled
-            Phase = Ended(KyokuEnd.Ryuukyoku result)
-        },
-        [ Event.Ryuukyoku result ]
+        endWithRyuukyoku state reason tenpais deltas
 
     /// 三元牌（白发中）与风牌（东南西北）。`Yaku` 与 `Fu` 里各有一份同样的私有谓词：
     /// 这几个一行函数不值得让一层去依赖另一层的内部（见 DECISIONS 08 的同一取舍）。
@@ -1072,6 +1130,17 @@ module GameState =
             },
             [ Event.Tsumo(next, drawn) ]
 
+    /// **打牌落定之后的那一刻**：无人荣和、无人鸣走，本该轮下家摸牌。
+    /// 先看三种途中流局（`Ryuukyoku.afterDahai`：四家立直 / 四风连打 / 四杠散了），
+    /// 都不成立才摸牌（可摸区空了就是荒牌流局）。
+    ///
+    /// **时机就只能在这里**：三种都要等那一张牌没被荣和也没被鸣走（荣和优先于流局），
+    /// 而四家立直还要等宣言牌落定（`acceptRiichi` 已经在两个调用方里跑过了）。
+    let private afterDahai (state: GameState) (from: Seat) : GameState * Event list =
+        match Ryuukyoku.afterDahai state.Ruleset state.Players with
+        | Some reason -> endWithAbortive state reason []
+        | None -> drawNext state from
+
     let private applyDahai (state: GameState) (actor: Seat) (pai: Tile) (tsumogiri: bool) : GameState * Event list =
         let discarded =
             { state with
@@ -1097,7 +1166,7 @@ module GameState =
             // `dahai` → `reach_accepted` → `tsumo`（真实牌谱就是这个顺序）。
             | [] ->
                 let accepted, accepting = acceptRiichi discarded
-                let advanced, drawing = drawNext accepted actor
+                let advanced, drawing = afterDahai accepted actor
                 advanced, accepting @ drawing
             | responses ->
                 { discarded with
@@ -1140,6 +1209,7 @@ module GameState =
         | Action.Ankan _
         | Action.Kakan _
         | Action.Riichi _
+        | Action.Ryuukyoku _
         | Action.None _ -> Option.None
 
     /// 多家响应的裁决顺序：**打牌者的下家优先**，与「先被问到」无关。
@@ -1158,6 +1228,7 @@ module GameState =
                 | Action.Kakan _
                 | Action.Minkan _
                 | Action.Riichi _
+                | Action.Ryuukyoku _
                 | Action.None _ -> Option.None)
 
         let ordered =
@@ -1212,6 +1283,7 @@ module GameState =
         | Action.Chi _
         | Action.Minkan _
         | Action.Riichi _
+        | Action.Ryuukyoku _
         | Action.None _ -> Option.None
 
     /// 一条鸣牌宣言里的：谁鸣的、鸣出的副露、以及对应的 mjai 事件。
@@ -1231,6 +1303,7 @@ module GameState =
             | Action.Ankan _
             | Action.Kakan _
             | Action.Riichi _
+            | Action.Ryuukyoku _
             | Action.None _ -> Option.None
 
         match built with
@@ -1413,6 +1486,7 @@ module GameState =
                 | Action.Kakan _
                 | Action.Minkan _
                 | Action.Riichi _
+                | Action.Ryuukyoku _
                 | Action.None _ -> false)
 
         // 宣言了荣和以外的任何东西（「过」或鸣牌），都是把这张能荣和的牌放过了。
@@ -1426,6 +1500,7 @@ module GameState =
             | Some(Action.Kakan _)
             | Some(Action.Minkan _)
             | Some(Action.Riichi _)
+            | Some(Action.Ryuukyoku _)
             | Some(Action.None _)
             | Option.None -> couldRon
 
@@ -1459,9 +1534,19 @@ module GameState =
                     let advanced, events =
                         nakiWinner accepted waiting.Target declared
                         |> Option.bind (applyNaki accepted waiting.Target)
-                        |> Option.defaultWith (fun () -> drawNext accepted waiting.Target)
+                        |> Option.defaultWith (fun () -> afterDahai accepted waiting.Target)
 
                     advanced, accepting @ events
+            | wins when Ryuukyoku.isSanchaHora answered.Ruleset (wins |> List.map fst) ->
+                // 三家和了（天凤）：三家同时荣和同一张牌⇒ 途中流局，一家也不成立。
+                // 打牌那家的立直宣言因此**不成立**（与被荣和同理，立直棒不出）：
+                // 走到这里时 `acceptRiichi` 还没跑过，把挂着的宣言作废即可。
+                let cancelled =
+                    { answered with
+                        Players = answered.Players |> List.map PlayerState.cancelRiichi
+                    }
+
+                endWithAbortive cancelled SanchaHora (wins |> List.map fst)
             | wins -> applyHora answered waiting.Target wins
         else
             { answered with
@@ -1573,6 +1658,13 @@ module GameState =
                         Error(CannotRiichi actor)
                 | Action.Ankan(_, consumed) -> declareSelfKan NakiKind.Ankan consumed
                 | Action.Kakan(_, _, consumed) -> declareSelfKan NakiKind.Kakan consumed
+                | Action.Ryuukyoku _ ->
+                    // 不在合法动作集里只能是九种九牌的宣言条件不过（不是第一巡 / 有人鸣过牌 /
+                    // 幺九牌不够种数 / 立直宣言之后又回头宣它）。
+                    if List.contains action waiting.Actions then
+                        Ok(endWithAbortive state KyuushuKyuuhai [])
+                    else
+                        Error(CannotRyuukyoku actor)
                 // 摸牌后阶段没有「刚打出的那张」，鸣（含大明杠）与「过」都无从谈起。
                 | Action.Pon _
                 | Action.Chi _
@@ -1607,6 +1699,7 @@ module GameState =
                      | Action.Kakan _
                      | Action.Minkan _
                      | Action.Riichi _
+                     | Action.Ryuukyoku _
                      | Action.Hora _ -> Some action)
             )
         else
@@ -1630,11 +1723,12 @@ module GameState =
             | Action.Pon(_, target, pai, consumed) -> rejectNaki NakiKind.Pon target pai consumed
             | Action.Chi(_, target, pai, consumed) -> rejectNaki NakiKind.Chi target pai consumed
             | Action.Minkan(_, target, pai, consumed) -> rejectNaki NakiKind.Minkan target pai consumed
-            // 打牌、立直宣言与自家宣言的杠都不是响应：现在等的是别家对那张牌的答复。
+            // 打牌、立直宣言、自家宣言的杠与九种九牌都不是响应：现在等的是别家对那张牌的答复。
             | Action.Dahai _
             | Action.Ankan _
             | Action.Kakan _
             | Action.Riichi _
+            | Action.Ryuukyoku _
             | Action.None _ -> Error(NotYourTurn(actor, pendingSeats waiting))
 
     /// 引擎的唯一入口：给局面提交一个动作，得到新局面与本步产出的事件。
@@ -1697,6 +1791,7 @@ module IllegalAction =
             let tiles = consumed |> List.map Tile.toDisplay |> String.concat ""
             $"座位 {Seat.index actor} 此刻用 {tiles} {NakiKind.toDisplay kind}不了"
         | CannotRiichi actor -> $"座位 {Seat.index actor} 此刻立直不了（不门清、没听牌、点数不够或牌山不够再摸一圈）"
+        | CannotRyuukyoku actor -> $"座位 {Seat.index actor} 此刻宣言不了九种九牌（不是第一巡、有人鸣过牌或幺九牌种数不够）"
         | RiichiRestricted(actor, pai) -> $"座位 {Seat.index actor} 立直中，这一手动不了 {Tile.toDisplay pai}"
         | NothingToRespond actor -> $"现在没有可响应的牌，座位 {Seat.index actor} 无从响应起"
         | KyokuAlreadyEnded -> "这一局已经结束了，不再接受任何动作"

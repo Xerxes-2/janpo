@@ -167,13 +167,61 @@ module EventTests =
         Assert.Equal<Result<Event, string>>(Ok EndGame, decode """{"type":"end_game"}""")
 
     [<Fact>]
-    let ``不认识的流局形态解码为错误值`` () =
+    let ``七种流局形态的 mjai reason 取值照 mjai 的原拼`` () =
+        // 取自 mjai 的参考实现（gimite 的 `mjai` gem，`active_game.rb`）。标识符照术语表拼，
+        // wire 照 mjai 原拼，五处不一致都在这里钉死（裁决 D-1）。
+        let expected =
+            [
+                Fanpai, "fanpai"
+                NagashiMangan, "nagashimangan"
+                KyuushuKyuuhai, "kyushukyuhai"
+                SuufonRenda, "sufonrenta"
+                Suukaikan, "sukaikan"
+                SuuchaRiichi, "suchareach"
+                SanchaHora, "sanchaho"
+            ]
+
+        Assert.Equal<RyuukyokuReason list>(List.map fst expected, RyuukyokuReason.all)
+
+        for reason, mjai in expected do
+            Assert.Equal(mjai, RyuukyokuReason.toMjai reason)
+            Assert.Equal<RyuukyokuReason option>(Some reason, RyuukyokuReason.parse mjai)
+
+    [<Fact>]
+    let ``途中流局是四类加三家和了，荒牌与流し満貫不在其列`` () =
+        Assert.Equal<RyuukyokuReason list>(
+            [ KyuushuKyuuhai; SuufonRenda; Suukaikan; SuuchaRiichi; SanchaHora ],
+            RyuukyokuReason.all |> List.filter RyuukyokuReason.isAbortive
+        )
+
+    [<Fact>]
+    let ``流し満貫的 ryukyoku 事件往返不变`` () =
         let json =
             """{"type":"ryukyoku","reason":"nagashimangan","tenpais":[true,true,true,true],"""
+            + """"deltas":[8000,-2000,-4000,-2000],"scores":[33000,23000,21000,23000]}"""
+
+        let event =
+            Ryuukyoku
+                {
+                    Reason = NagashiMangan
+                    Tenpais = [ true; true; true; true ]
+                    Deltas = [ 8000; -2000; -4000; -2000 ]
+                    Scores = [ 33000; 23000; 21000; 23000 ]
+                }
+
+        Assert.Equal(json, encode event)
+        Assert.Equal<Result<Event, string>>(Ok event, decode json)
+
+    [<Fact>]
+    let ``不认识的流局形态解码为错误值`` () =
+        let json =
+            """{"type":"ryukyoku","reason":"suukaikan","tenpais":[true,true,true,true],"""
             + """"deltas":[0,0,0,0],"scores":[25000,25000,25000,25000]}"""
 
+        // `suukaikan` 是术语表的拼法，wire 上的叫 `sukaikan`——标识符不迁就 wire，
+        // wire 也不迁就标识符（裁决 D-1）。
         match decode json with
-        | Ok event -> failwith $"12 票才会加流し満貫，现在不该解码成功，却得到 {event}"
+        | Ok event -> failwith $"wire 上没有 suukaikan 这个取值，不该解码成功，却得到 {event}"
         | Error _ -> ()
 
     [<Fact>]

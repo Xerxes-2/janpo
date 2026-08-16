@@ -50,6 +50,7 @@ module GameStateTests =
         | Action.Minkan(_, _, pai, _) -> pai
         | Action.Ankan(actor, _) -> failwith $"座位 {actor} 的暗杠没有被鸣的那张"
         | Action.Riichi actor -> failwith $"座位 {actor} 的立直宣言没有牌"
+        | Action.Ryuukyoku actor -> failwith $"座位 {actor} 的九种九牌宣言没有牌"
         | Action.None actor -> failwith $"座位 {actor} 的「过」没有牌"
 
     [<Fact>]
@@ -89,6 +90,7 @@ module GameStateTests =
                 | Action.Ankan _
                 | Action.Kakan _
                 | Action.Minkan _
+                | Action.Ryuukyoku _
                 | Action.None _ -> failwith $"这一手不该有和了、鸣牌、立直或「过」：{action}")
         )
 

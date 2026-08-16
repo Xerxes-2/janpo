@@ -160,6 +160,7 @@ module KanProperties =
                 | Action.Pon _
                 | Action.Chi _
                 | Action.Riichi _
+                | Action.Ryuukyoku _
                 | Action.None _ -> true)
         | AwaitingResponse _
         | Ended _ -> true
@@ -186,6 +187,7 @@ module KanProperties =
                               | Action.Ankan _
                               | Action.Kakan _
                               | Action.Minkan _
+                              | Action.Ryuukyoku _
                               | Action.Riichi _ -> false))
         | AwaitingDahai _
         | Ended _ -> true

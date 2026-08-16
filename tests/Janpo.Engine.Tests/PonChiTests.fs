@@ -49,6 +49,7 @@ module PonChiTests =
             | Action.Ankan _
             | Action.Kakan _
             | Action.Minkan _
+            | Action.Ryuukyoku _
             | Action.None _ -> None)
 
     let private handOf (seat: Seat) (state: GameState) : Tile list =
