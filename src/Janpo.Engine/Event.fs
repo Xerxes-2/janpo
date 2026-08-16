@@ -225,6 +225,20 @@ module RyuukyokuReason =
             | Some reason -> Decode.succeed reason
             | None -> Decode.fail ("unknown mjai ryukyoku reason: " + text))
 
+    // ---- 渲染层出口（ADR-0001） ----
+
+    /// **渲染层的单向出口**：给人和 LLM 看的中文形式，措辞照 `CONTEXT.md` 的术语表。
+    /// 引擎判定、事件流、牌谱与测试固件都不得消费它的输出（那边用 `toMjai`）。
+    let toDisplay (reason: RyuukyokuReason) : string =
+        match reason with
+        | Fanpai -> "荒牌流局"
+        | NagashiMangan -> "流局满贯"
+        | KyuushuKyuuhai -> "九种九牌"
+        | SuufonRenda -> "四风连打"
+        | Suukaikan -> "四杠散了"
+        | SuuchaRiichi -> "四家立直"
+        | SanchaHora -> "三家和了"
+
 /// 事件的 JSON 编解码（mjai wire）。
 [<RequireQualifiedAccess>]
 module Event =

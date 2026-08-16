@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 牌桌的 UI 逻辑测试（票 22）。**只测不碰 React 的那三层**：播放控制的状态机、
+       牌桌的推进、投影选择与结算。纯渲染（Feliz 的 DSL）不在这里测——那要一个浏览器，
+       而浏览器侧的验收在 web/ 那边（无头跑真页面）。
+
+       Janpo.Web 是 Fable 工程，它的 .NET 产物只当类型检查用；但这三个文件一行 Feliz 都不 open，
+       因此在 dotnet 上跑得起来。加测试时守住这条：**要 open Feliz 就说明那段逻辑放错文件了**。 -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="PlaybackTests.fs" />
+    <Compile Include="TableTests.fs" />
+    <Compile Include="BoardTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Janpo.Web/Janpo.Web.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

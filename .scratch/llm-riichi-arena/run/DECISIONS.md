@@ -1619,3 +1619,47 @@ JSON 的具体后端（Newtonsoft / Thoth.Json.JavaScript）由宿主注入，�
 牌山头 14 张与四家配牌、符与点数的整数除法与切上、`Set`/`Map`/`groupBy`/中文串排序的遍历顺序、
 记法与错误文案的往返、决策包 JSON、一局与一整场的全部事件流。
 闸门本身有反向测试守着（改坏一行必须红，且指得出用例/字段/行号）。
+
+## 22 最小牌桌与播放控制
+
+**22-1：上帝视角开关切的是「消费哪个投影」，不是「渲染时要不要画手牌」。**
+`Viewpoint.Seated seat` 消费 `Observation.ofState seat`，`Viewpoint.God` 消费 `GodView.ofState`；
+两者各自换装成同一个 `BoardView`，而他家那条路只映得到 `HandView.Concealed`——`MaskedSeat` 没有手牌字段，
+映射函数想漏也没地方漏。否决了「一份视图 + `godMode: bool` 在渲染时决定画不画」：那是纪律，不是结构，
+而 M3 的真人坐席要复用的正是「坐在某个座位上看」这条路径。
+
+**22-2：给 `MaskedSeat` 加 `HandCount`（他家手牌张数）。**
+票里「各家手牌数」是渲染项，而 20 票的投影只给了副露与河。否决了「渲染层按 `13 - 3×副露数` 推」——
+那是把规则搬到渲染层，且摸牌那一手会差一张。加的这个字段仍是**遮蔽不是计算**：读的就是
+`PlayerState.hand` 的长度，而张数本来就是公开信息（谁都数得出来）。wire 上叫 `tehai_count`。
+
+**22-3：`RyuukyokuReason.toDisplay` 放进引擎，不放进 Web 工程。**
+`Tile` / `Kaze` / `Naki` / `Action` / `RiichiState` 的中文出口都在类型旁边（ADR-0001 的既有约定），
+流局形态没道理另立一处。七种形态的中文逐字照 `CONTEXT.md`。
+
+**22-4：牌桌驱动一整场（打完一局停下来等「下一局」），不是只打一局。**
+票的下限是「看完一个 Kyoku」，但渲染项里有本场与供托，而单局里它们恒为 0。
+`Table` 因此带一个 `Game`，一局终了的那一步就 `Game.advance` 收进去，连庄 / 本场 / 供托的结转
+一条规则都不自己判。**不自动接着开下一局**：结算面板正摆在那里，自己开会把它冲掉。
+
+**22-5：`Table` 多带两样非局面的东西，`Readings` 与 `Latest`。**
+`Readings` 是和了那一手从 `GameState.horaOf` 捞下来的读法——**役种只有那一刻问得到**
+（`Event.Hora` 的 mjai 字段里没有役种，一局终了之后阶段已是 `Ended`，再问是 `NoAgariShape`）。
+`Latest` 是刚落定的那一个 `Action`，只为显示「上一手是谁做了什么」（`Action.toDisplay`）。
+两者都不是第二份局面：牌局状态仍只有引擎那一份，它们是引擎输出的副本与一条显示用的记录。
+
+**22-6：播放控制用「世代号」而不是句柄。**
+`Playback` 里每次改播放状态或倍速都把 `Generation` +1，过期的 `setTimeout` 回来时按它丢掉。
+否决了「存 timeout id 再 clearTimeout」：那要在 Elmish 的 Model 里放一个可变句柄，
+而世代号是纯值、可单测（「暂停再播之后旧世代不算数」那条用例挡的就是牌桌跑双倍速）。
+
+**22-7：牌桌与 19 票的曳光弹页面同页共存，牌桌另起 `TablePage`。**
+曳光弹是 CI 对拍的依赖（`web/scripts/verify-tracer.mjs` 打开 `/` 就按 testId 找它），做成标签页会拿不到。
+牌桌的默认种子取 2088 而**不是**曳光弹的 1177：曳光弹会把原始 mjai 事件打在同一张文档里，
+而 `start_kyoku` 带着四家配牌——两边同种子的话，牌桌遮起来的那几家手牌就在下面躺着。
+（**留给人裁**：曳光弹页面本身仍然会在 DOM 里印出它自己那一局的四家配牌。它是开发用的诊断件，
+M2 把首页做成 Demo Paifu 时应当把它挪走或收进只在 dev 构建里挂的路由。）
+
+**22-8：UI 逻辑另立 `tests/Janpo.Web.Tests`，纯渲染不测。**
+`Playback` / `Table` / `Board` 三个文件一行 Feliz 都不 `open`，因此在 dotnet 上跑得起来（实测 31 条用例 0.4s）。
+Feliz 的 DSL 不在这里测——那要一个浏览器，而浏览器侧的验收是无头跑真页面（本票用它出的证据）。

@@ -106,6 +106,19 @@ module ObservationProperties =
 
             selfMatches && othersMatch)
 
+    /// 张数是公开信息（牌桌上每家手里摸得出来手里有几张），因此遮蔽之后仍然给得出。
+    /// **它是遮蔽不是计算**：读的就是那一家实际的张数，不是按副露数推算的
+    /// （摸牌那一手多一张，推算版本的 13 - 3×副露会差一张）。
+    [<Property>]
+    let ``任意局面任意座位，他家的手牌张数与那一家实际的一致`` (state: GameState) =
+        observationsOf state
+        |> List.forall (fun (_, observation) ->
+            observation.Others
+            |> List.forall (fun other ->
+                match GameState.player other.Seat state with
+                | Some player -> other.HandCount = List.length (PlayerState.hand player)
+                | None -> false))
+
     [<Property>]
     let ``任意局面，上帝视角亮出每一家的暗牌`` (state: GameState) =
         let view = GodView.ofState state

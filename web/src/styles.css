@@ -115,3 +115,175 @@ h1 {
 .error {
   color: #c0392b;
 }
+
+/* 牌桌（22 票）。**能看清就行**：这一票的验收项是「看得完一个 Kyoku」，不是美术。 */
+
+.shell {
+  max-width: 68rem;
+  margin: 0 auto;
+}
+
+.table-page {
+  max-width: none;
+}
+
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+.field {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.field .label {
+  min-width: 0;
+}
+
+.latest {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.seats-board {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.seat {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.seat-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+}
+
+.seat-name {
+  font-weight: 600;
+}
+
+.seat-score,
+.seat-junme {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.mark {
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+}
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  align-items: center;
+  min-height: 1.6rem;
+}
+
+.tiles.kawa {
+  max-width: 24rem;
+  opacity: 0.9;
+}
+
+.tile {
+  display: inline-block;
+  min-width: 1.5rem;
+  padding: 0.1rem 0.15rem;
+  border: 1px solid currentcolor;
+  border-radius: 0.2rem;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+/* 摸切：虚线加淡色。手切是实线——两者是公开信息，牌桌上必须分得出来。 */
+.tile.tsumogiri {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.tile.aka {
+  color: #c0392b;
+}
+
+/* 刚摸进、还没打出去的那张，摆得离手牌远一点。 */
+.tile.drawn {
+  margin-left: 0.6rem;
+}
+
+.tile.back {
+  border-style: solid;
+  background: color-mix(in srgb, currentcolor 25%, transparent);
+  color: transparent;
+}
+
+.naki {
+  display: inline-flex;
+  gap: 0.1rem;
+  align-items: center;
+  margin-right: 0.6rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.25rem;
+}
+
+.naki-kind {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.bou-row {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.bou {
+  display: inline-block;
+  width: 1.5rem;
+  height: 0.35rem;
+  border-radius: 0.2rem;
+  background: currentcolor;
+}
+
+.settlement {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.settlement h3 {
+  margin: 0.5rem 0;
+  font-size: 1rem;
+}
+
+.settlement p {
+  margin: 0.25rem 0;
+}
+
+.controls button.picked {
+  border-color: currentcolor;
+  font-weight: 700;
+}
+
+.row-label {
+  min-width: 3.5rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}

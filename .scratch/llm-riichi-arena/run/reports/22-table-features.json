@@ -1,0 +1,26 @@
+{
+  "kan": {
+    "naki": [
+      "暗杠",
+      "吃",
+      "大明杠",
+      "吃",
+      "碰"
+    ],
+    "ankanBacks": 2,
+    "ankanFaces": 2,
+    "kanTiles": 0
+  },
+  "riichi": {
+    "found": true,
+    "kyoku": "东2局 1 本场",
+    "kyotaku": "1 根",
+    "bou": 1,
+    "marks": [
+      "立直",
+      "一发",
+      "亲"
+    ]
+  },
+  "problems": []
+}

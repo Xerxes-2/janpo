@@ -22,6 +22,12 @@ type MaskedSeat =
     {
         /// 这是哪一家。
         Seat: Seat
+        /// 手里有几张（不含副露，含刚摸进那张）。**张数是公开信息**，牌牌都看得见，
+        /// 因此遮蔽之后仍然给得出；但它只是个数，牌是哪几张这个类型里仍无处可放。
+        ///
+        /// **这仍然是遮蔽不是计算**：读的就是那一家实际的张数。消费方自己拿副露数推
+        /// （`13 - 3 × 副露数`）会在摸牌那一手差一张——那是把规则搬到渲染层去。
+        HandCount: int
         /// 相对观测者第几家：1 下家、2 对家（四麻才有）、3 上家。
         /// 座位算术全在 `Seat.distanceFrom`，消费方不必自己取模。
         Relative: int
@@ -144,6 +150,7 @@ module private SeatProjection =
 
         {
             Seat = seat
+            HandCount = PlayerState.hand player |> List.length
             Relative = Seat.distanceFrom ruleset viewer seat
             Jikaze = Seat.jikaze ruleset (GameState.context state).Oya seat
             Junme = GameState.junme seat state
@@ -237,6 +244,9 @@ module private SeatProjection =
             Encode.object (
                 openFields value.Seat value.Jikaze value.Junme value.Score
                 @ [
+                    // mjai 没有「他家手里几张」这个字段（它发的是事件不是局面），
+                    // 名字照 `revealedSeat` 那边的 `tehai` 拼。
+                    "tehai_count", Encode.int value.HandCount
                     "relative", Encode.int value.Relative
                     "kawa", value.Kawa |> List.map kawaEntry |> Encode.list
                     "naki", value.Naki |> List.map naki |> Encode.list

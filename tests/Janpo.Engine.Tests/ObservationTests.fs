@@ -70,6 +70,15 @@ module ObservationTests =
             Assert.Equal(PlayerState.ippatsu player, other.Ippatsu)
 
     [<Fact>]
+    let ``他家给的是手牌张数，不是牌`` () =
+        let state, _ = start 7
+        let observation = observe (seat 0) state
+
+        for other in observation.Others do
+            let player = playerAt other.Seat state
+            Assert.Equal(List.length (PlayerState.hand player), other.HandCount)
+
+    [<Fact>]
     let ``他家按下家、对家、上家的顺序排，相对位置一并给出`` () =
         let state, _ = start 7
         let observation = observe (seat 1) state

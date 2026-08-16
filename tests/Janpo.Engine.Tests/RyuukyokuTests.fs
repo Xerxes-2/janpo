@@ -424,3 +424,11 @@ module RyuukyokuTests =
         for reason in [ Fanpai; NagashiMangan ] do
             Assert.True(KyokuEnd.isRenchan context.Oya (ryuukyokuOf reason [ true; false; false; false ]))
             Assert.False(KyokuEnd.isRenchan context.Oya (ryuukyokuOf reason [ false; true; true; true ]))
+
+    [<Fact>]
+    let ``七种形态各有互不相同的中文`` () =
+        let displays = RyuukyokuReason.all |> List.map RyuukyokuReason.toDisplay
+
+        Assert.Equal(List.length RyuukyokuReason.all, displays |> List.distinct |> List.length)
+        Assert.DoesNotContain("", displays)
+        Assert.Equal("荒牌流局", RyuukyokuReason.toDisplay Fanpai)

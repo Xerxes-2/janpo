@@ -1,0 +1,333 @@
+{
+  "steps": [
+    {
+      "label": "开局（坐在座位 0）",
+      "kyoku": "东1局 0 本场",
+      "kyotaku": "0 根",
+      "wall": "69 张",
+      "dora": [
+        "2s"
+      ],
+      "latest": "还没走一手",
+      "seats": [
+        {
+          "seat": 0,
+          "score": "25000",
+          "handPai": 14,
+          "handBacks": 0,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 1,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 2,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 3,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        }
+      ]
+    },
+    {
+      "label": "单步 3 手之后",
+      "kyoku": "东1局 0 本场",
+      "kyotaku": "0 根",
+      "wall": "67 张",
+      "dora": [
+        "2s"
+      ],
+      "latest": "上一手：座位 0 过",
+      "seats": [
+        {
+          "seat": 0,
+          "score": "25000",
+          "handPai": 13,
+          "handBacks": 0,
+          "kawa": 1,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 1,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 1,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 2,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 14,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 3,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        }
+      ]
+    },
+    {
+      "label": "上帝视角",
+      "kyoku": "东1局 0 本场",
+      "kyotaku": "0 根",
+      "wall": "67 张",
+      "dora": [
+        "2s"
+      ],
+      "latest": "上一手：座位 0 过",
+      "seats": [
+        {
+          "seat": 0,
+          "score": "25000",
+          "handPai": 13,
+          "handBacks": 0,
+          "kawa": 1,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 1,
+          "score": "25000",
+          "handPai": 13,
+          "handBacks": 0,
+          "kawa": 1,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 2,
+          "score": "25000",
+          "handPai": 14,
+          "handBacks": 0,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 3,
+          "score": "25000",
+          "handPai": 13,
+          "handBacks": 0,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        }
+      ]
+    },
+    {
+      "label": "坐到座位 2",
+      "kyoku": "东1局 0 本场",
+      "kyotaku": "0 根",
+      "wall": "67 张",
+      "dora": [
+        "2s"
+      ],
+      "latest": "上一手：座位 0 过",
+      "seats": [
+        {
+          "seat": 0,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 1,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 1,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 1,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 2,
+          "score": "25000",
+          "handPai": 14,
+          "handBacks": 0,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 3,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        }
+      ]
+    },
+    {
+      "label": "这一局打完",
+      "kyoku": "东1局 0 本场",
+      "kyotaku": "0 根",
+      "wall": "11 张",
+      "dora": [
+        "2s",
+        "8m"
+      ],
+      "latest": "上一手：座位 0 荣和7筒",
+      "seats": [
+        {
+          "seat": 0,
+          "score": "27000",
+          "handPai": 0,
+          "handBacks": 1,
+          "kawa": 17,
+          "tsumogiri": 5,
+          "naki": 4,
+          "nakiKinds": [
+            "碰",
+            "碰",
+            "碰",
+            "吃"
+          ]
+        },
+        {
+          "seat": 1,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 4,
+          "kawa": 18,
+          "tsumogiri": 2,
+          "naki": 3,
+          "nakiKinds": [
+            "加杠",
+            "吃",
+            "碰"
+          ]
+        },
+        {
+          "seat": 2,
+          "score": "25000",
+          "handPai": 7,
+          "handBacks": 0,
+          "kawa": 17,
+          "tsumogiri": 3,
+          "naki": 2,
+          "nakiKinds": [
+            "吃",
+            "吃"
+          ]
+        },
+        {
+          "seat": 3,
+          "score": "23000",
+          "handPai": 0,
+          "handBacks": 10,
+          "kawa": 16,
+          "tsumogiri": 1,
+          "naki": 1,
+          "nakiKinds": [
+            "吃"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "下一局",
+      "kyoku": "东1局 1 本场",
+      "kyotaku": "0 根",
+      "wall": "69 张",
+      "dora": [
+        "2p"
+      ],
+      "latest": "还没走一手",
+      "seats": [
+        {
+          "seat": 0,
+          "score": "27000",
+          "handPai": 14,
+          "handBacks": 0,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 1,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 2,
+          "score": "25000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        },
+        {
+          "seat": 3,
+          "score": "23000",
+          "handPai": 0,
+          "handBacks": 13,
+          "kawa": 0,
+          "tsumogiri": 0,
+          "naki": 0,
+          "nakiKinds": []
+        }
+      ]
+    }
+  ],
+  "settlement": "和了座位 0 荣和 座位 3 打出的 7筒役：役牌 中 1 番40 符 1 番 2000 点点数授受：座位 0 +2000　座位 1 0　座位 2 0　座位 3 -2000亲连庄",
+  "problems": []
+}

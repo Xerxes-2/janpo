@@ -7,5 +7,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Janpo.Engine.Tests/Janpo.Engine.Tests.fsproj" />
+    <Project Path="tests/Janpo.Web.Tests/Janpo.Web.Tests.fsproj" />
   </Folder>
 </Solution>
