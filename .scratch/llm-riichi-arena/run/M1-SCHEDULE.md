@@ -66,6 +66,10 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 - **24 集成**（调度器）：无冲突，`./scripts/ci.sh` 全绿。26 号票仍在 ws-b 跑（基于 24 之前的头），
   落地时由调度器 rebase 到 25 之上。
 
+- **26 集成**（调度器）：两处冲突。`DECISIONS.md` 照旧；`web/scripts/record-agent-fixtures.mjs`
+  被 24 与 26 各自重构过——取 24 的结构（`record()` 助手 + `ask-assisted` 用例），
+  补回 26 的语义增量（text-only 那条的 `thinking: null`）。合并后 CI 全绿，含无头下载验收。
+
 ## 主人回来先看哪里
 
 1. 这张表 —— 谁 done、谁 parked
