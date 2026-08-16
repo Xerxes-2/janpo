@@ -9,8 +9,27 @@ nix develop --command dotnet build -c Release          # 先构建，脚本引�
 nix develop --command dotnet fsi --exec scripts/fsi/shanten-probe.fsx
 ```
 
-DLL 要引 **CLI** 工程的输出目录（`src/Janpo.Cli/bin/Release/net10.0/`），
-不是引擎工程的——引擎是库，NuGet 依赖（Thoth.Json.Core 等）不会复制到它自己的 `bin`。
+### 唯一的坑：DLL 要引 CLI 工程的 bin，不是引擎工程的
+
+```
+error FS0078: 无法找到 .../src/Janpo.Engine/bin/Release/net10.0/Thoth.Json.Core.dll
+```
+
+引擎是**库工程**，NuGet 依赖（Thoth.Json.Core 等）不会复制到它自己的 `bin`；
+CLI 是可执行工程，依赖都在它的输出目录里。所以一律引 `src/Janpo.Cli/bin/Release/net10.0/`
+（`load-engine.fsx` 已经封好了，`#load` 它就行）。
+
+**这道坎值得写下来**：2026-08-16 一个研究 agent 需要「撤掉某条改动看会怎样」，
+撞上 FS0078 后放弃了 F# 脚本，改把 `Shanten.fs` 逐行移植成 Python 挂开关——
+移植本身它做得严谨（先用仓库固件校准到 0 差异才用），但慢 200-2000 倍，
+于是开了 16 个进程扫语料，把并行跑 dotnet 的另一个 agent 挤慢 6.5 倍。
+一个 FS0078 的代价是这些。
+
+### 要「撤掉某条改动看会怎样」怎么办
+
+不许改仓库代码时，把相关源码**复制**到 `/tmp` 打补丁，再用 fsi `#load` 复制品——
+仍是 F#、仍是原生速度、仍带真实类型的不变量校验。比移植到别的语言近得多。
+`#load` 的顺序照 `src/Janpo.Engine/Janpo.Engine.fsproj` 里的 `<Compile>` 列表。
 
 ## 为什么不移植到 Python
 
