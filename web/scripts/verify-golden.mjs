@@ -43,7 +43,8 @@ async function runInBrowser(casesText, executablePath) {
 
     const payload = await retryOnReload(() =>
       page.evaluate(async (text) => {
-        const golden = await import("/src/generated/Golden.js");
+        // 相对页面地址 import：vite 的 base 可配（JANPO_BASE），写死 "/src/…" 一改 base 就 404。
+        const golden = await import("./src/generated/Golden.js");
         return golden.check(text);
       }, casesText),
     );

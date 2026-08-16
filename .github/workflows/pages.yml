@@ -1,0 +1,60 @@
+name: Pages
+
+# 把 `web/dist`（纯静态产物，没有后端）发到 GitHub Pages。
+# 只在**默认分支**推送时跑；别的分支不部署，手动重发用 workflow_dispatch。
+#
+# 上线前主人要在仓库里点两下：Settings → Pages → Source 选 **GitHub Actions**，
+# 并确认默认分支就是下面 `branches:` 里写的那个。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 部署要这三个权限；GITHUB_TOKEN 默认只有 contents:read。
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同时只跑一份部署，但**不取消**跑到一半的那次（取消会留下半截的发布）。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # ★★ 部署地址的**唯一**来源：站点会挂在 https://<owner>.github.io/janpo/ 。
+      #    仓库改名（或换成自定义域名，那时填 "/"）**只改这一行**，别处没有第二处写着路径。
+      #    它经 vite.config.ts 的 JANPO_BASE 变成打包产物里的资源前缀。
+      JANPO_BASE: /janpo/
+    steps:
+      - uses: actions/checkout@v4
+
+      # 与 ci.yml 同一套工具链：dotnet（跑 Fable）与 node/pnpm（打包）都由 flake.lock 钉住版本，
+      # 因此 Pages 上跑的那份产物与本地 `pnpm run build` 出来的是同一条链路。
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: 装依赖
+        run: nix develop --command bash -c "cd web && pnpm install --frozen-lockfile"
+
+      # `pnpm run build` = `dotnet fable ../src/Janpo.Web` + `vite build` → web/dist
+      - name: 构建静态站（Fable + Vite）
+        run: nix develop --command bash -c "cd web && pnpm run build"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

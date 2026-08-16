@@ -130,7 +130,8 @@ try {
   const report = JSON.parse(
     await retryOnReload(() =>
       page.evaluate(async (paifu) => {
-        const check = await import("/src/generated/PaifuCheck.js");
+        // 相对页面地址 import：vite 的 base 可配（JANPO_BASE），写死 "/src/…" 一改 base 就 404。
+        const check = await import("./src/generated/PaifuCheck.js");
         return check.check(paifu);
       }, text),
     ),

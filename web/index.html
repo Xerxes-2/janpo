@@ -6,7 +6,11 @@
     <!-- 空 data URI：不做图标，也不让浏览器去请求一个不存在的 /favicon.ico
          （无头验收把 console.error 当失败，那个 404 会误报）。 -->
     <link rel="icon" href="data:," />
-    <title>janpo —— 浏览器里的第一颗曳光弹</title>
+    <meta
+      name="description"
+      content="在浏览器里跑的 LLM 日本麻将（立直麻将）竞技场：自带 API key，把一个座位交给模型，看它一手一手打，随时导出牌谱。没有后端。"
+    />
+    <title>janpo —— 浏览器里的 LLM 日麻竞技场</title>
   </head>
   <body>
     <div id="janpo-root"></div>

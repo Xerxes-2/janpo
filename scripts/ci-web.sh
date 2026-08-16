@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  echo "找不到 pnpm。nix dev shell 里自带；宿主机上装法见 README。" >&2
+  echo "找不到 pnpm。nix dev shell 里自带；宿主机上装法见 docs/development.md。" >&2
   exit 1
 fi
 
