@@ -56,23 +56,41 @@ not (List.isEmpty (classify kindSet hand))
 classify kindSet hand |> List.isEmpty |> not
 ```
 
-待修的真实例：
-
 ```fsharp
-// 坏（KyokuStart.fs:75）：四层，从最内层读起
-Error(NoDoraIndicator(List.length (Wall.deadWall dealt)))
-// 好
-dealt |> Wall.deadWall |> List.length |> NoDoraIndicator |> Error
-
-// 坏（RiichiState.fs:121）：三层变换
-&& not (List.isEmpty (tenpaiDahai kindSet (List.length naki) hand))
-// 好：给中间值命名，顺带说明它是什么
-let dahaiKeepingTenpai = tenpaiDahai kindSet (List.length naki) hand
-&& not (List.isEmpty dahaiKeepingTenpai)
+// 已修（RiichiState.fs:121）：与上例同形
+&& (tenpaiDahai kindSet (List.length naki) hand |> List.isEmpty |> not)
 ```
 
-拆的手段三选一：管道、`>>`、**给中间值起个有意义的名字**。第三种常常最好——
-名字能解释「这一步算出的是什么」，管道不能。
+拆的手段三选一：管道、`>>`、给中间值起个有意义的名字。但下面两条**限制比手段更重要**。
+
+### 限制 A：构造子嵌套不算深度，只有变换链算
+
+```fsharp
+// 这样就够了（KyokuStart.fs:75 的实际改法）
+Error(NoDoraIndicator(dealt |> Wall.deadWall |> List.length))
+
+// 不要为了「消灭括号」写成这样
+dealt |> Wall.deadWall |> List.length |> NoDoraIndicator |> Error
+```
+
+`Error(Foo(x))` 是 ADT 构造的常规形状，谁都读得懂，而且同一个 `match` 里的邻居都写
+`Error(LiveWallTooSmall(required, Wall.remaining wall))`——把其中一行改成 `... |> Error`
+破坏的局部一致性比嵌套本身更伤。**只管道化真正的变换部分。**
+
+### 限制 B：不许用命名中间值破坏 `&&` / `||` 的短路
+
+这条是本文档第一版的错误，改这两处时才发现：
+
+```fsharp
+// 本文档第一版建议的写法——错的
+let dahaiKeepingTenpai = tenpaiDahai kindSet (List.length naki) hand
+List.forall Naki.isConcealed naki && ... && not (List.isEmpty dahaiKeepingTenpai)
+```
+
+`tenpaiDahai` 要对 14 张候选打牌各跑一次 `Shanten`（约 84µs）。原本非门清的手牌在第一个子句
+就被 `&&` 短路掉；抽成 `let` 之后**每次都算**。那是性能回归，不是风格改进。
+
+**布尔链里一律用管道或保持原样，不许抽 `let`**，除非你确认那个值无论如何都要算。
 
 ## 规则 4：以下三种情况**不许**强行管道
 
@@ -125,5 +143,5 @@ let dahaiKeepingTenpai = tenpaiDahai kindSet (List.length naki) hand
 | `let mutable` | 7（6 在 `Shanten.fs`、1 在 `Rng.fs`，全部有理由） |
 | 真循环（非推导式） | 18（全部是 34 长计数数组或原地洗牌） |
 | `fun x -> f (g x)` 可改 `>>` | 3（`Tile.fs:237`、`Kaze.fs:51`、`Event.fs:167`） |
-| 深度 ≥3 嵌套 | 65（多数是管道内 lambda 体；已修 `AgariShape.fs:38`；待修 `KyokuStart.fs:75`、`RiichiState.fs:121`） |
+| 深度 ≥3 嵌套 | 63（多数是管道内 lambda 体；已修 `AgariShape.fs:38`、`KyokuStart.fs:75`、`RiichiState.fs:121`） |
 | 连续中间 `let` 串接集合变换 | 1（`Wall.fs:42`，两行有先后依赖，保留） |

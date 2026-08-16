@@ -36,7 +36,7 @@ module AgariShape =
 
     /// 是否已成和了型（任意一种）。
     let isAgari (kindSet: TileKindSet) (hand: HandShape) : bool =
-        not (List.isEmpty (classify kindSet hand))
+        classify kindSet hand |> List.isEmpty |> not
 
     /// 这手**等摸**的牌听什么：补上它就成和了型的那些牌种，按 mjai 顺序升序。
     /// 张数不对（已经摸进那张）时是空表。

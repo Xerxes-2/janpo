@@ -118,7 +118,7 @@ module RiichiState =
         List.forall Naki.isConcealed naki
         && score >= ruleset.RiichiBou
         && remaining >= ruleset.SeatCount
-        && not (List.isEmpty (tenpaiDahai kindSet (List.length naki) hand))
+        && (tenpaiDahai kindSet (List.length naki) hand |> List.isEmpty |> not)
 
     /// 从牌列里去掉**一张**给定的牌（按实例；红 5 与正牌各算各的）。
     let private withoutOne (tile: Tile) (tiles: Tile list) : Tile list =

@@ -72,7 +72,7 @@ module KyokuStart =
             | Some(tehais, dealt) ->
                 match Wall.draw dealt, Wall.doraIndicators dealt with
                 | None, _ -> Error(LiveWallTooSmall(required, Wall.remaining wall))
-                | _, [] -> Error(NoDoraIndicator(List.length (Wall.deadWall dealt)))
+                | _, [] -> Error(NoDoraIndicator(dealt |> Wall.deadWall |> List.length))
                 | Some(drawn, afterTsumo), doraMarker :: _ ->
                     let startKyoku =
                         Event.StartKyoku
