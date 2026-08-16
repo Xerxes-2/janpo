@@ -37,8 +37,8 @@ type Ruleset =
         /// 3000 对四麣（1/2/3 家听）与三麣（1/2 家听）都成立，这也是 mjai 的算法。
         NotenBappu: int
         /// Atamahane（头跳）：同巡多家荣和时只成立打牌者下家优先的那一家。
-        /// 关掉则双响 / 三响都成立。**默认开**（spec 的规则清单）——
-        /// 天凤与雀魂实际都是双响，默认值该不该翻是待人裁决的事（DECISIONS 提案 S-A）。
+        /// 关掉则双响 / 三响都成立。**默认关**——天凤与雀魂都是双响（ADR-0004 决定 3），
+        /// 60 局鳳凰卓牌谱里 3 处 `hora` 事件相邻即为实测印证。要头跳用 `Ruleset.withAtamahane`。
         Atamahane: bool
         /// Kiriage Mangan（切上满贯）：把 4 番 30 符 / 3 番 60 符（基本点 1920）上调为满贯。
         /// **默认关**——天凤与雀魂段位战都不采用（DECISIONS 提案 S-A）。
@@ -80,7 +80,7 @@ module Ruleset =
             StartingScore = 25000
             RiichiBou = 1000
             NotenBappu = 3000
-            Atamahane = true
+            Atamahane = false
             KiriageMangan = false
             DoubleKazeJantouFu = 4
             RinshanTsumoFu = true
@@ -94,8 +94,9 @@ module Ruleset =
     /// 关掉食断（SPEC 的「食断有无」开关）：副露后断幺九不成立。
     let withoutKuitan (ruleset: Ruleset) : Ruleset = { ruleset with Kuitan = false }
 
-    /// 关掉头跳：同巡多家荣和时双响 / 三响都成立。
-    let withoutAtamahane (ruleset: Ruleset) : Ruleset = { ruleset with Atamahane = false }
+    /// 打开头跳：同巡多家荣和时只成立打牌者下家优先的那一家。关着的形态就是各预设本身——
+    /// 天凤与雀魂都是双响（ADR-0004 决定 3）。
+    let withAtamahane (ruleset: Ruleset) : Ruleset = { ruleset with Atamahane = true }
 
     /// 打开切上满贯（SPEC 的规则开关）：4 番 30 符 / 3 番 60 符按满贯算。
     /// 关着的形态就是各预设本身——天凤与雀魂段位战都不采用它。

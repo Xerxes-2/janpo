@@ -1053,3 +1053,11 @@ mjai 的 `kakan` 是 `pai`（加上去的那张）+ `consumed`（原碰的三张
 `NotYourTurn` / `NotInHand` 同一风格。
 否决：两边都限定（读拒绝理由时要多写一截前缀）、把 `IllegalAction.NotAgari` 也改名（它没歧义了）。
 理由：不限定的 `NotAgari` / `NoYaku` 从此只可能是 `IllegalAction` 的，读代码不用停。零语义变化。
+
+### R-1 / `Atamahane` 默认翻成关（双响成立），`withoutAtamahane` → `withAtamahane`
+
+ADR-0004 决定 3：默认值对齐天凤鳳凰卓。`Ruleset.yonma.Atamahane` 从 `true` 改成 `false`；
+开关组合子的语义随之反转（默认已经是关，留一个「关掉」的组合子没有意义）。
+否决：留 `withoutAtamahane` 作 no-op 别名（读的人会以为默认是开的）。
+`RulesetTests` 里新增两行把新默认值钉死（`Assert.False(...Atamahane)` + `withAtamahane` 打得开）。
+测试期望值的改动见 `reports/morning-rulings-R1-R4-R5-R6.md`，一条用例都没删。

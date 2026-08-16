@@ -326,9 +326,11 @@ module HoraTests =
 
     [<Fact>]
     let ``头跳开着时同巡双响只成立打牌者下家优先的那一家`` () =
-        Assert.True(ruleset.Atamahane)
+        // 头跳**不是**默认（ADR-0004 决定 3：默认双响成立），要它就显式打开。
+        let atamahane = Ruleset.withAtamahane ruleset
+        Assert.True(atamahane.Atamahane)
 
-        let state = atTheDoubleRon ruleset
+        let state = atTheDoubleRon atamahane
         let first, events = stepped state (Action.Hora(2, 0, pai "4p"))
 
         // 第一家宣言之后不立刻结束：还要等另一家答复，收齐了才裁决。
@@ -343,7 +345,9 @@ module HoraTests =
 
     [<Fact>]
     let ``头跳关掉时同巡双响都成立，按打牌者下家优先排序`` () =
-        let doubleRon = Ruleset.withoutAtamahane ruleset
+        // `Ruleset.yonma` 的头跳默认就是关的（ADR-0004 决定 3），不必再关一次。
+        let doubleRon = ruleset
+        Assert.False(doubleRon.Atamahane)
         let state = atTheDoubleRon doubleRon
 
         let first, _ = stepped state (Action.Hora(2, 0, pai "4p"))
@@ -355,7 +359,7 @@ module HoraTests =
 
     [<Fact>]
     let ``头跳关掉时同巡三响也都成立`` () =
-        let doubleRon = Ruleset.withoutAtamahane ruleset
+        let doubleRon = ruleset
 
         let state =
             startScriptedWith doubleRon tripleRonScript |> driveUntil passive inRonPhase
@@ -370,8 +374,10 @@ module HoraTests =
 
     [<Fact>]
     let ``头跳开着时同巡三响只成立最靠前的一家`` () =
+        let atamahane = Ruleset.withAtamahane ruleset
+
         let state =
-            startScriptedWith ruleset tripleRonScript |> driveUntil passive inRonPhase
+            startScriptedWith atamahane tripleRonScript |> driveUntil passive inRonPhase
 
         let first, _ = stepped state (Action.Hora(1, 0, pai "4p"))
         let second, _ = stepped first (Action.Hora(2, 0, pai "4p"))
@@ -462,10 +468,12 @@ module HoraTests =
         let tsumo = horaTrace tsumoHoraScript |> List.last
         let ron = horaTrace doubleRonScript |> List.last
 
+        // `doubleRonScript` 里座位 2 与 3 都能荣和座位 0 打的 4p，而默认规则集的头跳是**关**的
+        // （ADR-0004 决定 3），因此两家都成立、按打牌者下家优先排序。头跳本身的用例在上一节。
         Assert.Equal<Seat list>([ 0 ], horasOf tsumo |> List.map (fun hora -> hora.Target))
-        Assert.Equal<Seat list>([ 0 ], horasOf ron |> List.map (fun hora -> hora.Target))
+        Assert.Equal<Seat list>([ 0; 0 ], horasOf ron |> List.map (fun hora -> hora.Target))
         Assert.Equal<Seat list>([ 0 ], horasOf tsumo |> List.map (fun hora -> hora.Actor))
-        Assert.Equal<Seat list>([ 2 ], horasOf ron |> List.map (fun hora -> hora.Actor))
+        Assert.Equal<Seat list>([ 2; 3 ], horasOf ron |> List.map (fun hora -> hora.Actor))
 
     // ---- 无役不可和 ----
 
@@ -605,10 +613,10 @@ module HoraTests =
 
     [<Fact>]
     let ``双响时本场与供托只归排在最前的那一家`` () =
-        // 规则集：`Ruleset.yonma` 关掉头跳。1 本场且 1 根立直棒。
+        // 规则集：`Ruleset.yonma`（头跳默认关，双响成立）。1 本场且 1 根立直棒。
         // 座位 2（排在前）：平和 30 符 1 番 1000 + 本场 300 + 供托 1000；
         // 座位 3：平和断幺九 30 符 2 番 2000，不再分本场与供托。
-        let doubleRon = Ruleset.withoutAtamahane ruleset
+        let doubleRon = ruleset
 
         let state =
             startScriptedIn doubleRon (withSticks 1 1) doubleRonScript

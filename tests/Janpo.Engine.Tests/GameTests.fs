@@ -219,9 +219,13 @@ module GameTests =
         let game = Game.advance ended (Game.start tonpuusen)
         let next = nextOf (Game.progress game)
 
+        // 默认规则集头跳关着（ADR-0004 决定 3），`doubleRonScript` 因此是双响；
+        // 本用例要的是「**子**和了 → 进局」，所以验的是每一家都不是亲。
         match GameState.horas ended with
-        | [ hora ] -> Assert.NotEqual(context.Oya, hora.Actor)
-        | other -> failwith $"头跳开着时只有一家荣和，实际是 {List.length other} 家"
+        | [] -> failwith "这一局应当有人荣和"
+        | horas ->
+            for hora in horas do
+                Assert.NotEqual(context.Oya, hora.Actor)
 
         Assert.Equal(context.Kyoku + 1, next.Kyoku)
         Assert.Equal(Seat.next tonpuusen context.Oya, next.Oya)

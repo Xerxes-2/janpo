@@ -53,9 +53,14 @@ module RulesetTests =
 
     [<Fact>]
     let ``符与点数的规则项是字段不是写死的，默认值照天凤`` () =
-        // 切上满贯 **默认关**：天凤与雀魂段位战都不采用（DECISIONS 提案 S-A）。
+        // 切上满贯 **默认关**：天凤与雀魂段位战都不采用（ADR-0004 决定 3）。
         Assert.False(Ruleset.yonma.KiriageMangan)
         Assert.True((Ruleset.withKiriageMangan Ruleset.yonma).KiriageMangan)
+
+        // 头跳 **默认关**（即双响 / 三响成立）：天凤与雀魂都允许双响，
+        // 60 局鳳凰卓牌谱里 3 处 `hora` 事件相邻（ADR-0004 决定 3）。
+        Assert.False(Ruleset.yonma.Atamahane)
+        Assert.True((Ruleset.withAtamahane Ruleset.yonma).Atamahane)
 
         // 连风牌雀头天凤是 4 符；岭上自摸天凤加自摸符。
         Assert.Equal(4, Ruleset.yonma.DoubleKazeJantouFu)
