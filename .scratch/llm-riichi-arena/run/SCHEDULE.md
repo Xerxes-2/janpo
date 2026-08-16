@@ -46,6 +46,7 @@
 | 13 | **done** | uoltqvry | 541 测试；固件 0 差异，200 局报 8 条→修 1 真 bug、开 16 票 |
 | 14 | dispatched | | ws-a（M0 最后一票）|
 | 16 | **done** | qznxrwnq | 543 测试；扩样本对拍差异 8 → 0 |
+| 17 | dispatched | | ws-b（研究推荐，实测 6.6×）|
 | 15 | pending | | M0 之后：立直合法性的 Shanten 前置闸门（N-19），阻塞于 14 |
 
 ## 中途插入的调研（用户给了牌谱屋链接与三麻 bonus）
