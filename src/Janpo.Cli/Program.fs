@@ -20,6 +20,12 @@ let private usage =
                                  打印完整事件流、终局点数与顺位。
                                  --covering 换成跑批用的那个带偏好的选手，
                                  跑出来的就是 `janpo soak` 在这个种子上看到的那一场
+  janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god]
+                                 用给定种子开一局、让随机选手先走 --steps 手（默认 0），
+                                 再把那一手的**决策包 JSON** 打出来：某座位的合法观测
+                                 加带 id 与中文 label 的动作列表。不给 --seat 就取正在被问的那家；
+                                 --god 改打上帝视角（全部暗牌与里宝牌，围观与复盘用）。
+                                 走的选手与 `janpo kyoku <种子>` 同一个，因此第 N 手就是那一局的第 N 手
   janpo soak <种子起> [<种子止>] [--no-akadora] [--hanchan] [--uniform]
                                  用给定种子区间连续跑 N 场，**逐手验不变量、逐场数覆盖率**：
                                  牌数守恒、点数与供托之和恒定、合法动作集非空或局已终、
@@ -57,6 +63,9 @@ yaku 的选项:
   janpo deal 42
   janpo deal 42 --no-akadora
   janpo kyoku 42
+  janpo decide 42
+  janpo decide 42 --steps 8 --seat 1
+  janpo decide 42 --steps 8 --god
   janpo game 42
   janpo game 42 --hanchan
   janpo game 42 --covering
@@ -295,6 +304,102 @@ let private runSoak (arguments: string list) : int =
                 eprintfn "  janpo game %d --covering  # 打印同一场的完整事件流" seed
 
             1
+
+/// `<种子> [--seat N] [--steps N] [--no-akadora] [--god]`：decide 的参数形态。
+type private DecideArguments =
+    {
+        Seed: int option
+        Akadora: bool
+        /// 要看哪家的决策包；不给就取正在被问的那家。
+        Seat: int option
+        /// 先让随机选手走几手（中局的决策包才有意思）。
+        Steps: int
+        /// 改打上帝视角。
+        God: bool
+    }
+
+let private parseDecideArguments (arguments: string list) : Result<DecideArguments, string> =
+    let rec parse (parsed: DecideArguments) (rest: string list) =
+        match rest with
+        | [] -> Ok parsed
+        | "--no-akadora" :: tail -> parse { parsed with Akadora = false } tail
+        | "--god" :: tail -> parse { parsed with God = true } tail
+        | "--seat" :: value :: tail ->
+            match System.Int32.TryParse value with
+            | true, index -> parse { parsed with Seat = Some index } tail
+            | false, _ -> Error value
+        | "--steps" :: value :: tail ->
+            match System.Int32.TryParse value with
+            | true, steps -> parse { parsed with Steps = steps } tail
+            | false, _ -> Error value
+        | token :: tail ->
+            match System.Int32.TryParse token, parsed.Seed with
+            | (true, value), None -> parse { parsed with Seed = Some value } tail
+            | _ -> Error token
+
+    parse
+        {
+            Seed = None
+            Akadora = true
+            Seat = None
+            Steps = 0
+            God = false
+        }
+        arguments
+
+/// `janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god]`：
+/// 把一局推到第 N 手，打出那一手的决策包 JSON（或上帝视角）。
+/// **这就是跨 F#/TS 边界的那个包**：肉眼查它有没有多给一张牌。
+let private runDecide (arguments: string list) : int =
+    match parseDecideArguments arguments with
+    | Error token ->
+        eprintfn "decide 只认一个整数种子与可选的 --seat / --steps / --no-akadora / --god，不认「%s」" token
+        2
+    | Ok { Seed = None } ->
+        eprintfn "decide 需要一个整数种子，例如: janpo decide 42"
+        2
+    | Ok parsed ->
+        let ruleset = rulesetOf parsed.Akadora
+        let context = KyokuContext.initial ruleset
+        let seed = Option.defaultValue 0 parsed.Seed
+
+        // 走的选手与 `janpo kyoku` 同一个，因此同一种子的第 N 手两边对得上。
+        let advanced =
+            match GameState.start ruleset context (Rng.ofSeed seed) with
+            | Error error -> Error(KyokuStartError.toDisplay error)
+            | Ok(state, rng) ->
+                Kyoku.runSteps parsed.Steps Kyoku.randomPlayer rng state
+                |> Result.map fst
+                |> Result.mapError IllegalAction.toDisplay
+
+        match advanced with
+        | Error message ->
+            eprintfn "%s" message
+            1
+        | Ok state when parsed.God ->
+            printfn "%s" (Encode.toString 2 (GodView.encoder (GodView.ofState state)))
+            0
+        | Ok state ->
+            let asked = GameState.legalActions state |> List.map (fun choice -> choice.Seat)
+
+            let wanted =
+                match parsed.Seat with
+                | Some index -> Seat.ofIndex index
+                | None -> List.tryHead asked
+
+            match wanted |> Option.bind (fun seat -> DecisionPackage.forSeat seat state) with
+            | Some package ->
+                printfn "%s" (Encode.toString 2 (DecisionPackage.encoder package))
+                0
+            | None ->
+                let waiting = asked |> List.map (Seat.index >> string) |> String.concat " "
+
+                if List.isEmpty asked then
+                    eprintfn "这一局已终（走了 %d 手），没有人在被问；--god 仍然看得了" parsed.Steps
+                else
+                    eprintfn "这一手等的是座位 %s，不是你要的那家" waiting
+
+                1
 
 /// 四麻：全 34 牌种，**从规则集读**（ADR-0004 决定 4：牌种全集由 `Ruleset` 携带）。
 /// 三麻的牌种集合是另一张票的事，这里只把接缝留出来。
@@ -605,6 +710,7 @@ let main argv =
     | "deal" :: arguments -> runDeal arguments
     | "kyoku" :: arguments -> runKyoku arguments
     | "game" :: arguments -> runGame arguments
+    | "decide" :: arguments -> runDecide arguments
     | "soak" :: arguments -> runSoak arguments
     | [ "shanten"; "--batch" ] -> runShantenBatch ()
     | "shanten" :: "--naki" :: naki :: arguments ->

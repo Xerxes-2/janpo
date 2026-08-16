@@ -1531,3 +1531,40 @@ Fable 输出到 `web/src/generated/`（gitignore）。JS 侧四道关卡拆成�
 **逃生口**：`JANPO_NO_BROWSER=1 ./scripts/ci-web.sh` 跳过这一道（其余三道照跑）。
 **但那样 19 票的验收就没被验**，`ci-web.sh` 的注释里写明了这一点。
 nix dev shell 本身没有偏离——`nix develop --command ./scripts/ci.sh` 实测 47s 全绿。
+
+## 20 决策包与 Observation 投影
+
+**20-1：他家在观测里是另一个类型（`MaskedSeat`），不是「手牌置空的同一个类型」。**
+否决了「一个 `SeatView` 带 `Hand: Tile list`（他家给空表）」与「带 `godMode: bool` 的单一投影」。
+理由：票里那条「他家暗牌看不见要在类型层面成立」只有这一种写法做得到——`MaskedSeat` 没有那个字段，
+投影函数想漏也没地方放。属性测试因此是佐证不是保障。上帝视角同理另立 `GodView`。
+
+**20-2：手切 / 摸切从事件流读。**
+`PlayerState.Kawa` 只存牌，摸切与否只有 mjai `dahai` 事件的 `tsumogiri` 知道。
+否决了「给 `PlayerState.Kawa` 换成 `(Tile * bool) list`」——那是引擎核心数据结构的改动，
+影响振听、流し満貫与一堆既有测试，而投影只是个读者。有一条属性钉住两者逐张一致。
+
+**20-3：`Action.encoder` 与 `Action.toDisplay` 放进 `Action.fs`。**
+否决了「放进 `DecisionPackage.fs` 当私有函数」。理由：`Tile` / `Kaze` / `Naki` / `Furiten`
+都把 wire 与渲染出口放在类型旁边，这是既有约定；label 也不只决策包用得上（22 的牌桌按钮同样要）。
+代价是 `Action.fs` 那句「加一个 case 的代价固定为三处」改成了五处，已同步改掉。
+
+**20-4：`scaffold` 是 wire 上的空对象，F# 类型里不留字段。**
+否决了「先立一个空的 `Scaffold` 记录」（F# 写不出空记录，硬凑要塞占位字段）与「什么都不写」。
+这样 23 号票的 TS 类型现在就能写 `pkg.scaffold`，24 / 25 号票加字段时只改 encoder 与记录各一处。
+
+**20-5：投影多带了两项票面没列的公开信息——`ippatsu` 与 `relative`。**
+一发是公开的（立直后一巡内，谁都看得出来），而它影响这一手要不要放铳；
+`relative`（相对第几家）是 `Seat.distanceFrom` 的搬运，省得消费方自己取模——三麻没有对家，
+座位算术只该有一处（CONTEXT.md 的 Seat 条目）。两项都是遮蔽不是计算。
+
+**20-6：投影不带 phase 标记，也不带「等谁出手」。**
+「现在等我干什么」由编号动作集本身表达（有 `none` 就是响应阶段）。
+否决了加一个 `phase` 字段：它与动作集重复，而票里那份可见清单没有它。
+
+**提案 20-A（需人裁）：抢杠窗口里，投影看不见「有人宣言了杠」。**
+引擎等抢杠时**不改局面**（副露与 `kakan` 事件都还没落，被抢时无需回滚），
+因此 `Observation` 里既没有那组杠也没有被抢的那张——它只出现在 Hora 那条动作的 `pai` 与 label 里。
+决策做得了，但围观视角与 25 号票的 Danger 可能想要它。要补的话是给 `Observation` 加一个
+`PendingKan: Naki option`（从 `Phase` 的 `ResponseCause.Kan` 读），改动很小，但那是往票外加字段，
+留给人裁。

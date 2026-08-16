@@ -43,6 +43,32 @@ module Kyoku =
 
         loop initial state
 
+    /// 把一局往前推**最多** `steps` 手；不到那么多手这一局就终了则提前停。
+    /// `steps` 非正时原样返回。
+    ///
+    /// **要看某个中局的局面就得用它**（决策包的 CLI 子命令）：`run` 只给终局，
+    /// 而中局那一手才是决策包有意思的地方。
+    let runSteps
+        (steps: int)
+        (player: Player<'player>)
+        (initial: 'player)
+        (state: GameState)
+        : Result<GameState * 'player, IllegalAction> =
+        let rec loop (left: int) (current: 'player) (state: GameState) =
+            if left <= 0 then
+                Ok(state, current)
+            else
+                match GameState.legalActions state with
+                | [] -> Ok(state, current)
+                | choice :: _ ->
+                    let action, advanced = player current state choice
+
+                    match GameState.step state action with
+                    | Error illegal -> Error illegal
+                    | Ok(next, _) -> loop (left - 1) advanced next
+
+        loop steps initial state
+
     /// 随机选手：从自己的合法动作集里等概率挑一个。M0 的四家都是它。
     let randomPlayer: Player<Rng> =
         fun rng _ choice ->

@@ -143,6 +143,37 @@ module KyokuTests =
         )
 
     [<Fact>]
+    let ``往前推给定手数就停，与一口气跑到那一手同一个局面`` () =
+        // 决策包的 CLI 子命令靠它停在中局。
+        let state, rng = start 42
+
+        match Kyoku.runSteps 6 Kyoku.randomPlayer rng state with
+        | Error illegal -> failwith $"应当推得动，却得到「{IllegalAction.toDisplay illegal}」"
+        | Ok(sixSteps, _) ->
+            Assert.False(GameState.isEnded sixSteps)
+
+            match Kyoku.runSteps 4 Kyoku.randomPlayer rng state with
+            | Error illegal -> failwith $"应当推得动，却得到「{IllegalAction.toDisplay illegal}」"
+            | Ok(fourSteps, restRng) ->
+                match Kyoku.runSteps 2 Kyoku.randomPlayer restRng fourSteps with
+                | Error illegal -> failwith $"应当推得动，却得到「{IllegalAction.toDisplay illegal}」"
+                | Ok(resumed, _) -> Assert.Equal<Event list>(GameState.events sixSteps, GameState.events resumed)
+
+    [<Fact>]
+    let ``手数超过一局长度时停在终局，手数非正时原地不动`` () =
+        let state, rng = start 42
+
+        match Kyoku.runSteps 100000 Kyoku.randomPlayer rng state with
+        | Error illegal -> failwith $"应当跑得完，却得到「{IllegalAction.toDisplay illegal}」"
+        | Ok(final, _) ->
+            Assert.True(GameState.isEnded final)
+            Assert.Equal<Event list>(GameState.events (runWith Kyoku.randomPlayer 42), GameState.events final)
+
+        match Kyoku.runSteps 0 Kyoku.randomPlayer rng state with
+        | Error illegal -> failwith $"应当原地不动，却得到「{IllegalAction.toDisplay illegal}」"
+        | Ok(unchanged, _) -> Assert.Equal<Event list>(GameState.events state, GameState.events unchanged)
+
+    [<Fact>]
     let ``选手提交非法动作时驱动停下来并给出理由`` () =
         let state, rng = start 42
 
