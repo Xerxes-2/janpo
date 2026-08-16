@@ -8,6 +8,7 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
 
+  <!-- 牌与手牌形态。加新的形态判定放这里（例：向听的变体、听牌型分类）。 -->
   <ItemGroup>
     <Compile Include="Tile.fs" />
     <Compile Include="TileKindSet.fs" />
@@ -15,10 +16,18 @@
     <Compile Include="Shanten.fs" />
     <Compile Include="AgariShape.fs" />
     <Compile Include="Ukeire.fs" />
+  </ItemGroup>
+
+  <!-- 规则集、对局长度与座位。**新增规则开关改 Ruleset.fs**，别在别处开全局开关。 -->
+  <ItemGroup>
     <Compile Include="Kaze.fs" />
     <Compile Include="GameLength.fs" />
     <Compile Include="Ruleset.fs" />
     <Compile Include="Seat.fs" />
+  </ItemGroup>
+
+  <!-- 和了形、役与点数。纯函数区：输入牌姿与上下文，输出役/符/点数，不碰状态机。 -->
+  <ItemGroup>
     <Compile Include="Mentsu.fs" />
     <Compile Include="Naki.fs" />
     <Compile Include="AgariHand.fs" />
@@ -27,16 +36,36 @@
     <Compile Include="Yaku.fs" />
     <Compile Include="Fu.fs" />
     <Compile Include="Score.fs" />
+  </ItemGroup>
+
+  <!-- 牌山与随机源。种子化洗牌的一切都在这两个文件里。 -->
+  <ItemGroup>
     <Compile Include="Rng.fs" />
     <Compile Include="Wall.fs" />
+  </ItemGroup>
+
+  <!-- 逐座位的持续状态（跨巡存在的标志）。振听、立直、一发这类。 -->
+  <ItemGroup>
     <Compile Include="Furiten.fs" />
     <Compile Include="RiichiState.fs" />
+  </ItemGroup>
+
+  <!-- 事件与开局。**加 Event case 要同时改 DU / encoder / decoder 三处**（备注 N-1）。 -->
+  <ItemGroup>
     <Compile Include="Event.fs" />
     <Compile Include="KyokuStart.fs" />
+  </ItemGroup>
+
+  <!-- 一局之内的状态机。加动作要改 Action 的 case、产出动作集的函数、step 的执行 match 三处。 -->
+  <ItemGroup>
     <Compile Include="Action.fs" />
     <Compile Include="PlayerState.fs" />
     <Compile Include="GameState.fs" />
     <Compile Include="Kyoku.fs" />
+  </ItemGroup>
+
+  <!-- 整场对局（GameState 之上一层）：局间推进、连庄、终局精算。 -->
+  <ItemGroup>
     <Compile Include="Game.fs" />
   </ItemGroup>
 

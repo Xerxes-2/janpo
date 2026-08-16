@@ -9,6 +9,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
+  <!-- 牌与手牌形态 -->
   <ItemGroup>
     <Compile Include="TileGenerators.fs" />
     <Compile Include="TileNotationTests.fs" />
@@ -20,6 +21,10 @@
     <Compile Include="ShantenProperties.fs" />
     <Compile Include="AgariShapeTests.fs" />
     <Compile Include="UkeireTests.fs" />
+  </ItemGroup>
+
+  <!-- 和了形、役与符点 -->
+  <ItemGroup>
     <Compile Include="YakuGenerators.fs" />
     <Compile Include="NakiTests.fs" />
     <Compile Include="AgariHandTests.fs" />
@@ -30,7 +35,15 @@
     <Compile Include="FuProperties.fs" />
     <Compile Include="ScoreGenerators.fs" />
     <Compile Include="ScoreTests.fs" />
+  </ItemGroup>
+
+  <!-- 离线 oracle 对拍（固件在 fixtures/，刷新用 scripts/oracle/） -->
+  <ItemGroup>
     <Compile Include="ShantenOracleTests.fs" />
+  </ItemGroup>
+
+  <!-- 规则集、座位、随机源与牌山 -->
+  <ItemGroup>
     <Compile Include="KazeTests.fs" />
     <Compile Include="RulesetTests.fs" />
     <Compile Include="SeatTests.fs" />
@@ -39,12 +52,20 @@
     <Compile Include="RulesetGenerators.fs" />
     <Compile Include="WallTests.fs" />
     <Compile Include="WallProperties.fs" />
+  </ItemGroup>
+
+  <!-- 事件与开局 -->
+  <ItemGroup>
     <Compile Include="EventGenerators.fs" />
     <Compile Include="EventTests.fs" />
     <Compile Include="EventProperties.fs" />
     <Compile Include="KyokuStartGenerators.fs" />
     <Compile Include="KyokuStartTests.fs" />
     <Compile Include="KyokuStartProperties.fs" />
+  </ItemGroup>
+
+  <!-- 一局的状态机与各动作。此段顺序有依赖：后面的文件用到前面定义的生成器。 -->
+  <ItemGroup>
     <Compile Include="GameStateGenerators.fs" />
     <Compile Include="GameStateTests.fs" />
     <Compile Include="GameStateProperties.fs" />
@@ -56,6 +77,10 @@
     <Compile Include="RiichiProperties.fs" />
     <Compile Include="ScoreProperties.fs" />
     <Compile Include="KyokuTests.fs" />
+  </ItemGroup>
+
+  <!-- 整场对局 -->
+  <ItemGroup>
     <Compile Include="GameGenerators.fs" />
     <Compile Include="GameTests.fs" />
     <Compile Include="GameProperties.fs" />
