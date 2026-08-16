@@ -51,7 +51,8 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 | 28 | 待派 | | 裁决落地（21-c 逐字段 + 23-A Roster），阻塞于 25、26；PendingKan 与立直宣言牌已抽给 29 |
 | 29a | **done** | unvvslns | ws-a；一条掩蔽法则 `MaskedEvent.forSeat`；`Observation.ofState` 签名未变 → 22/24/25 一行没改、黄金用例一字未动；增量 fold 0.56 ms | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
 | 29b | **done** | qtrpknku | ws-a；**真跑实测缓存命中 48%**（逐手 21%→70%）；三段形态 `promptSections`；端口债已清 | 历史过接缝 + prompt 翻转 + 前缀稳定性 + 缓存指标 + 端口债 | | 前缀可缓存 prompt + **prompt 降为数据 + system 槽位/人格** + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
-| 33 | 派工中 | ws-c | Pages 部署 + README 重写为纯用户向（主人 8/17 追加） |
+| 34 | 派工中 | ws-b | 「牌谱不含 key」闸门要在 CI 里真跑（调度器核 README 时发现） |
+| 33 | **done** | suzlvpor | ws-c；base 默认保留相对 `"./"` 比票面的 `/` 更稳；两种 base 都验过 CI | Pages 部署 + README 重写为纯用户向（主人 8/17 追加） |
 | 32 | **done** | vkvwqmmn | ws-b；牌背取 `canvastext` 画实线框+45°斜纹；顺带修供托 0 时的空「立直棒」标签 | 牌背隐形（22 号票逃逸缺陷）+ 重出 README 截图 |
 | README | **done** | twporvny | ws-b；七条声称核到出处，六条核不实的删/写弱；发现牌背隐形 → 票 32 |
 | 31 | 派工中 | ws-a | prompt 降为数据 + system/人格 + 牌谱只存尾部 + 术语表，阻塞于 29b |
