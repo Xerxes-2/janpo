@@ -64,3 +64,44 @@
 
 **留给人的一句话**：`Ruleset.withAtamahane` 是 13 票对拍的开关——牌谱来源若是允许头跳的平台，
 在那里显式打开即可，而**默认配置现在跑得出真实牌谱**（备注 N-6 提的那条顾虑就此消掉）。
+
+---
+
+## R-4：`Ruleset` 直接携带 `TileKindSet`（ADR-0004 决定 4）
+
+**改了什么**
+
+- `Ruleset.TileKinds` 的类型：`Tile list` → **`TileKindSet`**。字段名不变（它说的还是同一件事），
+  但值在规则集构造时派生一次，不再在每次形态判定前重派生。
+- `Ruleset.yonma`：`TileKinds = TileKindSet.fourPlayer`。
+- 派生量换 API（**两个都是 `TileKindSet` 已有的，一个新 API 都没加**）：
+  - `Ruleset.wallSize`：`List.length ruleset.TileKinds` → `TileKindSet.count ruleset.TileKinds`
+  - `Ruleset.wallTiles`：`ruleset.TileKinds |> List.collect ...` → `TileKindSet.kinds ruleset.TileKinds |> ...`
+- 消掉的重派生点（原先每调一次分配一个 34 长 `bool array`）：
+  - `Yaku.candidates`（**每副和了牌的每次读法枚举都走这里**）
+  - `Yaku.detect` 的失败分支
+  - `GameState.ofStarted`
+- **顺带删掉 `GameState.KindSet` 字段**。它当初就是「每次 `ofKinds` 太贵」的缓解措施；
+  规则集自己带了之后它是同一份东西的第二个表示，正是 ADR-0004 决定 4 要消掉的那种重复。
+  4 个使用点改成 `state.Ruleset.TileKinds`；私有函数 `awaitingDahaiActions` 的 `kindSet` 形参
+  也去掉了（同一个函数已经收着 `ruleset`）。
+- `Janpo.Cli` 里独立的 `TileKindSet.fourPlayer` 常量改成 `Ruleset.yonma.TileKinds`，
+  同一条理由：牌种全集从规则集读。
+
+**封装没破**：`TileKindSet` 仍是 `private` record，`legalFlags` 仍是 `internal` 快路径，
+`Ruleset.fs` 只用公开的 `fourPlayer` / `count` / `kinds` 三个 API。
+编译顺序不必动（`TileKindSet.fs` 本来就排在 `Ruleset.fs` 之前）。
+
+**测试**：期望值一处没改。7 处测试用的自定义规则集在末尾接了 `|> TileKindSet.ofKinds`
+（`KyokuStartTests` 3、`RulesetTests` 2、`KyokuTests` 1、`WallTests` 1），
+`GameStateFixtures.kindSet` 从 `TileKindSet.ofKinds ruleset.TileKinds` 简化成 `ruleset.TileKinds`。
+493 通过。
+
+**真引擎复验**（`dotnet fsi` 直调编译好的 DLL）：
+
+```
+Atamahane(默认) = false          牌种数 = 34
+wallSize = 136, wallTiles = 136
+三麻形状：牌种数 = 27, wallSize = 108, wallTiles = 108
+wallTiles 升序规范形 = true
+```

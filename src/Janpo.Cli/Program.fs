@@ -190,8 +190,9 @@ let private runGame (arguments: string list) : int =
 
             0
 
-/// 四麻：全 34 牌种。三麻的牌种集合是另一张票的事，这里只把接缝留出来。
-let private kindSet = TileKindSet.fourPlayer
+/// 四麻：全 34 牌种，**从规则集读**（ADR-0004 决定 4：牌种全集由 `Ruleset` 携带）。
+/// 三麻的牌种集合是另一张票的事，这里只把接缝留出来。
+let private kindSet = Ruleset.yonma.TileKinds
 
 /// 「<副露数> <记法>...」→ 手牌形态。CLI 与批量模式共用一个解析。
 let private parseHand (nakiCount: int) (notations: string) : Result<HandShape, string> =

@@ -14,7 +14,11 @@ type Ruleset =
         /// 对局长度：一场对局打哪几局由它与座位数一起推出（`Ruleset.kyokus`）。
         Length: GameLength
         /// 牌山里出现的牌种（正牌）。四麻是全部 34 种。
-        TileKinds: Tile list
+        ///
+        /// 类型**就是** `TileKindSet`，规则集构造时派生一次：形态判定（Shanten / Ukeire /
+        /// 和了型）要的正是它，而「这个规则集里存在哪些牌种」只该有一个表示（ADR-0004 决定 4）。
+        /// 要一列牌用 `TileKindSet.kinds`，要张数用 `TileKindSet.count`。
+        TileKinds: TileKindSet
         /// 每种牌几张。
         CopiesPerKind: int
         /// 红宝牌：牌山里把对应正牌的其中一张换成它。空列表 = 关掉红宝牌（SPEC 的规则开关）。
@@ -70,7 +74,7 @@ module Ruleset =
         {
             SeatCount = 4
             Length = Tonpuusen
-            TileKinds = Tile.kinds
+            TileKinds = TileKindSet.fourPlayer
             CopiesPerKind = 4
             Akadora = Tile.akadoraKinds
             Kuitan = true
@@ -115,7 +119,7 @@ module Ruleset =
 
     /// 牌山总张数。牌山构成变了它就跟着变，因此别处不必知道 136 这个数。
     let wallSize (ruleset: Ruleset) : int =
-        List.length ruleset.TileKinds * max 0 ruleset.CopiesPerKind
+        TileKindSet.count ruleset.TileKinds * max 0 ruleset.CopiesPerKind
 
     /// 配牌阶段要发出去的总张数。
     let haipaiTotal (ruleset: Ruleset) : int =
@@ -140,7 +144,7 @@ module Ruleset =
     /// 这是**洗牌前**的规范形（mjai 顺序升序）；张数恒为 `wallSize`，红宝牌只换不加。
     let wallTiles (ruleset: Ruleset) : Tile list =
         let normals =
-            ruleset.TileKinds
+            TileKindSet.kinds ruleset.TileKinds
             |> List.collect (fun kind -> List.replicate (max 0 ruleset.CopiesPerKind) kind)
 
         let replaceOne (tiles: Tile list) (akadora: Tile) =

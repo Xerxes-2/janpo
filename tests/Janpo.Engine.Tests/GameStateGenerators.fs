@@ -11,7 +11,7 @@ module GameStateFixtures =
 
     let context = KyokuContext.initial ruleset
 
-    let kindSet = TileKindSet.ofKinds ruleset.TileKinds
+    let kindSet = ruleset.TileKinds
 
     /// 开一局。开不出来说明前序票坏了，直接让测试失败。
     let start (seed: int) : GameState * Rng =

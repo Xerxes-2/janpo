@@ -164,7 +164,7 @@ module KyokuTests =
     let ``开不了局时给出开局失败的理由`` () =
         let tiny =
             { ruleset with
-                TileKinds = Tile.kinds |> List.truncate 4
+                TileKinds = Tile.kinds |> List.truncate 4 |> TileKindSet.ofKinds
                 Akadora = []
             }
 

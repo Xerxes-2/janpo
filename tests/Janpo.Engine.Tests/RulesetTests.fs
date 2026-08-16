@@ -78,7 +78,10 @@ module RulesetTests =
     let ``牌山张数随牌种与张数变化而不是写死的 136`` () =
         let manzuOnly =
             { Ruleset.yonma with
-                TileKinds = Tile.kinds |> List.filter (fun tile -> Tile.suit tile = Manzu)
+                TileKinds =
+                    Tile.kinds
+                    |> List.filter (fun tile -> Tile.suit tile = Manzu)
+                    |> TileKindSet.ofKinds
                 Akadora = []
             }
 
@@ -89,7 +92,10 @@ module RulesetTests =
     let ``对应正牌不在牌山里的红宝牌不会凭空加牌`` () =
         let withoutManzu =
             { Ruleset.yonma with
-                TileKinds = Tile.kinds |> List.filter (fun tile -> Tile.suit tile <> Manzu)
+                TileKinds =
+                    Tile.kinds
+                    |> List.filter (fun tile -> Tile.suit tile <> Manzu)
+                    |> TileKindSet.ofKinds
             }
 
         let tiles = Ruleset.wallTiles withoutManzu

@@ -113,7 +113,7 @@ module WallTests =
     let ``牌不够发时配牌返回 None`` () =
         let tiny =
             { ruleset with
-                TileKinds = Tile.kinds |> List.truncate 4
+                TileKinds = Tile.kinds |> List.truncate 4 |> TileKindSet.ofKinds
                 Akadora = []
             }
 

@@ -94,9 +94,9 @@ type Phase =
 type GameState =
     private
         {
+            /// 规则集。**牌种全集也在它身上**（`Ruleset.TileKinds : TileKindSet`，
+            /// ADR-0004 决定 4），因此局面不再另存一份派生的牌种集合。
             Ruleset: Ruleset
-            /// 由 `Ruleset.TileKinds` 派生的牌种集合，形态判定要它。
-            KindSet: TileKindSet
             /// 开局时由上层给定的既定条件：场风、局数、本场、供托、亲与**局初**点数。
             Context: KyokuContext
             Wall: Wall
@@ -370,7 +370,6 @@ module GameState =
     ///   立直中的座位鸣不了牌（`responsesTo`），因此那两支里 `drawn` 恒非 None。
     let private awaitingDahaiActions
         (ruleset: Ruleset)
-        (kindSet: TileKindSet)
         (context: YakuContext)
         (remaining: int)
         (canKan: bool)
@@ -414,7 +413,7 @@ module GameState =
                 ankanCandidates (PlayerState.hand player)
                 |> List.filter (fun (kind, _) ->
                     RiichiState.allowsAnkan
-                        kindSet
+                        ruleset.TileKinds
                         (PlayerState.riichi player)
                         (PlayerState.naki player)
                         (PlayerState.hand player)
@@ -437,7 +436,7 @@ module GameState =
         match PlayerState.riichi player with
         | RiichiState.Declared _ ->
             let keeps =
-                RiichiState.tenpaiDahai kindSet (PlayerState.nakiCount player) (PlayerState.hand player)
+                RiichiState.tenpaiDahai ruleset.TileKinds (PlayerState.nakiCount player) (PlayerState.hand player)
 
             let tedashi, tsumogiri = dahai (fun pai -> List.contains (Tile.deaka pai) keeps)
             tedashi @ tsumogiri
@@ -449,7 +448,7 @@ module GameState =
                 if
                     RiichiState.canDeclare
                         ruleset
-                        kindSet
+                        ruleset.TileKinds
                         remaining
                         (PlayerState.score player)
                         (PlayerState.naki player)
@@ -763,7 +762,6 @@ module GameState =
             | Some player ->
                 awaitingDahaiActions
                     state.Ruleset
-                    state.KindSet
                     (yakuContext state actor)
                     (Wall.remaining state.Wall)
                     (canKan state)
@@ -789,8 +787,6 @@ module GameState =
                 context.Scores
                 started.Hands
 
-        let kindSet = TileKindSet.ofKinds ruleset.TileKinds
-
         let flags =
             {
                 Rinshan = false
@@ -804,7 +800,6 @@ module GameState =
         let opening =
             {
                 Ruleset = ruleset
-                KindSet = kindSet
                 Context = context
                 Wall = started.Wall
                 Players = players
@@ -856,7 +851,9 @@ module GameState =
 
     /// 荒牌流局：可摸区摸完，按听牌家数授受听牌料，一局告终。
     let private exhaustiveDraw (state: GameState) : GameState * Event list =
-        let tenpais = state.Players |> List.map (PlayerState.isTenpai state.KindSet)
+        let tenpais =
+            state.Players |> List.map (PlayerState.isTenpai state.Ruleset.TileKinds)
+
         let deltas = notenBappu state.Ruleset tenpais
         let settled = List.map2 PlayerState.addScore deltas state.Players
 
@@ -1081,7 +1078,9 @@ module GameState =
                 // 打完这张，自家的听牌就变了，永久振听要按新的听牌与自己的河重算。
                 Players =
                     state.Players
-                    |> updatePlayer actor (PlayerState.discard pai >> PlayerState.refreshFuriten state.KindSet)
+                    |> updatePlayer
+                        actor
+                        (PlayerState.discard pai >> PlayerState.refreshFuriten state.Ruleset.TileKinds)
                 Flags =
                     {
                         Rinshan = false

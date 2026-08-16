@@ -658,8 +658,7 @@ module Yaku =
     /// 因此这里把每一种读法都算一遍再排序。无役的读法不会出现在结果里。
     /// 排序键：役满倍数 → 番数（含宝牌）→ `fuLikeness`。
     let candidates (ruleset: Ruleset) (context: YakuContext) (hand: AgariHand) : YakuTally list =
-        let kindSet = TileKindSet.ofKinds ruleset.TileKinds
-        let shapes = AgariShape.classify kindSet (AgariHand.toHandShape hand)
+        let shapes = AgariShape.classify ruleset.TileKinds (AgariHand.toHandShape hand)
 
         let readings =
             [
@@ -700,9 +699,7 @@ module Yaku =
         match candidates ruleset context hand with
         | best :: _ -> Ok best
         | [] ->
-            let kindSet = TileKindSet.ofKinds ruleset.TileKinds
-
-            if List.isEmpty (AgariShape.classify kindSet (AgariHand.toHandShape hand)) then
+            if List.isEmpty (AgariShape.classify ruleset.TileKinds (AgariHand.toHandShape hand)) then
                 Error YakuError.NoAgariShape
             else
                 Error YakuError.NoYaku

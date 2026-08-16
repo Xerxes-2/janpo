@@ -1061,3 +1061,13 @@ ADR-0004 决定 3：默认值对齐天凤鳳凰卓。`Ruleset.yonma.Atamahane` �
 否决：留 `withoutAtamahane` 作 no-op 别名（读的人会以为默认是开的）。
 `RulesetTests` 里新增两行把新默认值钉死（`Assert.False(...Atamahane)` + `withAtamahane` 打得开）。
 测试期望值的改动见 `reports/morning-rulings-R1-R4-R5-R6.md`，一条用例都没删。
+
+### R-4 / `Ruleset.TileKinds` 的类型换成 `TileKindSet`，并删掉 `GameState.KindSet`
+
+ADR-0004 决定 4。字段名不变、类型从 `Tile list` 变成 `TileKindSet`，在规则集构造时派生一次。
+`wallSize` / `wallTiles` 改用 `TileKindSet.count` / `TileKindSet.kinds`（两个 API 都已存在，没新增）。
+顺带删掉 `GameState.KindSet`——它当初就是「每次 `ofKinds` 太贵」的缓解措施，规则集自己带了之后
+它是同一份东西的第二个表示，正是 ADR 要消掉的那种重复。`awaitingDahaiActions` 的 `kindSet` 形参
+也一并去掉（同一个函数已经收着 `ruleset`）。
+否决：加一个 `Ruleset.kindSet` 派生函数而保留 `Tile list` 字段（那就是两份表示，ADR 明确否掉）。
+封装未破：`TileKindSet` 仍是私有 record，`legalFlags` 仍是 `internal`。

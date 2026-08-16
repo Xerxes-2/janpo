@@ -158,7 +158,7 @@ module KyokuStartTests =
     let ``牌不够发配牌时开不了局`` () =
         let tiny =
             { ruleset with
-                TileKinds = Tile.kinds |> List.truncate 4
+                TileKinds = Tile.kinds |> List.truncate 4 |> TileKindSet.ofKinds
                 Akadora = []
             }
 
@@ -171,7 +171,7 @@ module KyokuStartTests =
     let ``配牌发得出但 Oya 摸不到第一张时也开不了局`` () =
         let exact =
             { ruleset with
-                TileKinds = Tile.kinds |> List.truncate 17
+                TileKinds = Tile.kinds |> List.truncate 17 |> TileKindSet.ofKinds
                 Akadora = []
                 DeadWallSize = 16
             }
@@ -205,6 +205,7 @@ module KyokuStartTests =
                 TileKinds =
                     Tile.kinds
                     |> List.filter (fun tile -> Tile.suit tile <> Manzu || Tile.number tile = 1 || Tile.number tile = 9)
+                    |> TileKindSet.ofKinds
                 Akadora = Tile.akadoraKinds |> List.filter (fun tile -> Tile.suit tile <> Manzu)
             }
 
