@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # JS 侧的关卡（M1 起）。`scripts/ci.sh` 会调它，也可以单独跑。
 #
-# 九道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
+# 十道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
 # （node --test，回放录制的响应）→ Fable 编译 → Vite 产物 → **浏览器内跑引擎并与 dotnet 侧对拍**
-# → **浏览器内跑黄金用例** → **浏览器内导出牌谱并回放** → **那道 key 闸门的反向自证**。
+# → **浏览器内跑黄金用例** → **浏览器内导出牌谱并回放** → **那道 key 闸门的反向自证**
+# → **回显 key 的端点跑一手，牌谱里仍然没有它**。
 #
 # 第四道是 19 票的验收：同一种子在浏览器里跑出的终局点数与顺位，必须与
 # `janpo kyoku` / `janpo game` 逐项相同（跑的是 Vite 打包后的产物）。
@@ -16,6 +17,10 @@
 # fold 一遍，事件流逐条相同、点数与牌桌上的一致（ADR-0002 的回放）；它同时带着票 34 那条
 # 「导出物里没有 key」。第九道是票 34 的反向自证：**一道从不失败的闸门等于没有闸门**，
 # 因此每次 CI 都把那条断言按红一次（拌了 key 的导出物），并核实它红得就是因为那把 key。
+# 第十道是票 36 的验收：provider 的报错原文会流进牌谱的三处（`fallback` / `output` /
+# 重试那一轮的 prompt），而自建网关完全可能把收到的 key 原样回显。那一道拿一个
+# **真的会回显 key 的本机假端点**跑一手，导出牌谱，既查「里面没有 key」，
+# 也查「打码记号在不在」（阳性对照：端点哪天不回显了，这道闸门就该告诉人它白给了）。
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -27,7 +32,7 @@ fi
 
 # 无头验收要一个 Chrome/Chromium。跑批机器上有 /usr/bin/google-chrome-stable；
 # 别处用 JANPO_CHROME 指过去，或 `pnpm dlx playwright install chromium`。
-# 实在没有浏览器的环境（例：最小容器）可以 JANPO_NO_BROWSER=1 跳过**后三道**，
+# 实在没有浏览器的环境（例：最小容器）可以 JANPO_NO_BROWSER=1 跳过**后五道**，
 # 前四道照跑——但那样 19、21 与 26 票的 JS 侧验收就没被验，别拿它当绿。
 NO_BROWSER="${JANPO_NO_BROWSER:-0}"
 
@@ -56,7 +61,7 @@ echo "== vite build =="
 (cd web && node node_modules/vite/bin/vite.js build)
 
 if [[ "$NO_BROWSER" == "1" ]]; then
-  echo "== 浏览器内的三道（曳光弹对拍 / 黄金用例 / 牌谱导出）：按 JANPO_NO_BROWSER=1 跳过 =="
+  echo "== 浏览器内的那几道（曳光弹对拍 / 黄金用例 / 牌谱导出 / 两道 key 闸门）：按 JANPO_NO_BROWSER=1 跳过 =="
 else
   echo "== 浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带自证默认视图里没有它）=="
   (cd web && node scripts/verify-tracer.mjs)
@@ -88,6 +93,12 @@ else
     exit 1
   fi
   echo "拌了 key 的导出物被闸门当场逮住：$(grep "里出现了 API key" "$poison_log")"
+
+  # 票 36：上面那两道守的是「key 只是躺在 localStorage 里」。这一道守的是另一半：
+  # key **真的交给了端点**，而端点把它原样抠在报错里回了回来。全程本机（本地假端点），
+  # 不出网、不花 token。它自带阳性对照，因此不需要另一道 poison。
+  echo "== 回显 key 的自建网关：报错原文进牌谱前必须已打码 =="
+  (cd web && node scripts/verify-redaction.mjs)
 fi
 
 echo "== JS 侧全绿 =="

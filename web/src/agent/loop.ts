@@ -18,6 +18,7 @@
 import type { Ask, AskResult } from "./ask.ts";
 import { missingConfig } from "./endpoint.ts";
 import { messagesOf, promptSections } from "./prompt.ts";
+import { redactSecrets } from "./redact.ts";
 import { renderVersion, resolveTemplate } from "./template.ts";
 import { CHOOSE_ACTION, toolsShape } from "./tools.ts";
 import type { DecideRequest, DecideResponse } from "./types.ts";
@@ -152,8 +153,22 @@ function refuse(why: string, attempts: number, latencyMs: number): DecideRespons
 /**
  * 决策一手。**永远 resolve，永远不 reject**：所有失败都变成 `failure` 字段，
  * 由 F# 侧据此兜底。`retry_limit` 是重试次数上限，因此最多问 `retry_limit + 1` 次。
+ *
+ * **回执在这里过一道打码**（票 36），而且**只在这里**：provider 的报错原文原样流进
+ * `failure`、`output` 与重试那一轮的 prompt，而这三样连同页面上那句话，全都是从这份
+ * 回执组装出来的（`TablePage.settle`）—— 这就是那条通道唯一的出海口。每个 sink
+ * 各打一遍的做法漏一个就等于没做，而 sink 会长出来。
+ *
+ * 代价说清楚：牌谱里存的 `prompt_tail` 因此是**打码后的**那一份，与真发出去的那一次
+ * 差这几个字。真发出去的那一份不打码是有意的 —— 那把 key 本来就是这个端点给回来的，
+ * 抄回去它不多知道一个字节，而牌谱是要发给别人的。
  */
 export async function decideWith(ask: Ask, request: DecideRequest): Promise<DecideResponse> {
+  return redactSecrets(await answered(ask, request), request.seat);
+}
+
+/** 打码前的那一份回执。**除了上面那一行没有第二个调用方**，因此它出不去这个文件。 */
+async function answered(ask: Ask, request: DecideRequest): Promise<DecideResponse> {
   const options = request.decision.actions;
   if (options.length === 0) {
     // 引擎给的合法动作集非空，走到这里说明契约破了。仍然不抛。

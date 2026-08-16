@@ -7,8 +7,9 @@
 //   node scripts/fake-endpoint.mjs                        # 不带 CORS 头（浏览器会拦）
 //   node scripts/fake-endpoint.mjs --cors http://localhost:4181   # 放行那个 origin
 //   node scripts/fake-endpoint.mjs --cors '*' --https     # 端点自己上 https（自签证书）
+//   node scripts/fake-endpoint.mjs --cors '*' --echo-key  # **回一条把 key 原样抄回来的 401**（票 36）
 //
-// 选项：--port N（默认 4199）、--action-id N（默认 0）、--cors <origin|*>、--https、--quiet。
+// 选项：--port N（默认 4199）、--action-id N（默认 0）、--cors <origin|*>、--https、--quiet、--echo-key。
 // **CORS 默认关**：本地端点默认就不放行浏览器，这份默认值本身就是要验的那个坑。
 
 import { execFileSync } from "node:child_process";
@@ -29,6 +30,16 @@ const actionId = flag("--action-id", "0");
 const origin = flag("--cors", null);
 const https = argv.includes("--https");
 const quiet = argv.includes("--quiet");
+
+/**
+ * **会原样回显 key 的那种网关**（票 36）：回一条 401，报错正文里把收到的 `Authorization`
+ * 与被请求的地址一字不改地抄回去。
+ *
+ * 官方那八家都打码（DeepSeek 只回末 4 位），所以这种端点**只可能是用户自建的**——
+ * 而票 30 正是放开了这一条路。它是「provider 报错原文会进牌谱」这条通道的
+ * 反向自证用的靶子：`scripts/verify-redaction.mjs` 拿它跑一手再导出牌谱。
+ */
+const echoKey = argv.includes("--echo-key");
 
 /** 自签证书（只为验 mixed content 的对策那一条：端点上 https）。浏览器要 --ignore-certificate-errors。 */
 function selfSigned() {
@@ -133,6 +144,25 @@ const handler = (request, response) => {
     return;
   }
 
+  if (echoKey) {
+    const bearer = (request.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+    const scheme = https ? "https" : "http";
+    const at = `${scheme}://${request.headers.host ?? `127.0.0.1:${port}`}${url.pathname}`;
+    if (!quiet) console.log(`  收到 authorization：${bearer || "（空）"}　原样回显进 401`);
+
+    request.resume();
+    request.on("end", () => {
+      cors(response, request);
+      response.writeHead(401, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          error: { message: `invalid api key: ${bearer} for ${at}`, type: "invalid_request_error" },
+        }),
+      );
+    });
+    return;
+  }
+
   request.resume();
   request.on("end", () => {
     cors(response, request);
@@ -149,7 +179,6 @@ const handler = (request, response) => {
 const server = https ? createHttpsServer(selfSigned(), handler) : createHttpServer(handler);
 server.listen(port, () => {
   const scheme = https ? "https" : "http";
-  console.log(
-    `假端点在 ${scheme}://127.0.0.1:${port}/v1（CORS：${origin ?? "不放行"}），固定选 action_id=${actionId}`,
-  );
+  const what = echoKey ? "固定回 401 并把收到的 key 原样抄进报错" : `固定选 action_id=${actionId}`;
+  console.log(`假端点在 ${scheme}://127.0.0.1:${port}/v1（CORS：${origin ?? "不放行"}），${what}`);
 });

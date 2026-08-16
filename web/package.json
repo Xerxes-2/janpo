@@ -18,7 +18,8 @@
     "verify:llm": "node scripts/verify-llm-seat.mjs",
     "verify": "node scripts/verify-tracer.mjs",
     "verify:golden": "node scripts/verify-golden.mjs",
-    "verify:export": "node scripts/verify-export.mjs"
+    "verify:export": "node scripts/verify-export.mjs",
+    "verify:redaction": "node scripts/verify-redaction.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",
