@@ -29,7 +29,8 @@
 | W4 | 24 Assisted 档脚手架 ∥ 26 DecisionRecord 与 Paifu 导出 | ws-a ∥ ws-b | **调度器改的班**：26 只阻塞于 23，不必等 24。23 号票的简报把两者的扩展点分得很清（24 改 `prompt.ts` 的 RENDERERS 与 `scaffold` 槽位，26 往响应加字段并在 `TablePage.settle` 组装记录），可以并行 |
 | W5 | 25 Danger | ws-a | 阻塞于 24，独占 |
 | W6 | 28 裁决落地 | ws-a | 三项裁决都碰 `Observation` / 决策包编解码 / 黄金用例，与 25、26 抢文件，故排在其后合成一票 |
-| W7 | 29 事件流投影与可缓存 prompt | ws-a | 主人 8/16 提的改造；与 28 抢黄金用例与 prompt，故串在其后 |
+| W7 | 29a 掩蔽事件流成为唯一投影 | ws-a | 纯引擎，expand–contract |
+| W7.5 | 29b 可缓存 prompt | ws-a | 阻塞于 29a |
 | W8 | 27 M1 验收 | ws-a | 收官 |
 
 DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；24←20,23；25←24；26←23；27←21,24,25,26。
@@ -45,11 +46,12 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 | 22 | **done** | rvwmxlzo | ws-b；上帝视角＝切换消费哪个投影；`Table.decide`/`apply` 两半分离，23 只需改前一半 |
 | 23 | **done** | kwyryxrz | ws-a；兜底策略落在引擎 `Fallback.action`，Agent 层只回「交不出来」 |
 | 24 | **done** | xkrnkzww | ws-a；`scaffold` 槽位变成引擎的 `Scaffold` 记录；包恒带脚手架，档位只决定 prompt 渲不渲染 |
-| 25 | 派工中 | | ws-a |
+| 25 | **done** | txxznwps | ws-a；Assisted 四项齐；无人立直也无人副露时整份危险度是 None |
 | 26 | **done** | mwuloxvq | ws-b；Paifu 版本 1，thinking 是「值上的一次变换」可省；200 场回放逐条相同 |
 | 28 | 待派 | | 裁决落地（21-c 逐字段 + 23-A Roster），阻塞于 25、26；PendingKan 与立直宣言牌已抽给 29 |
-| 29 | 待派 | | 每座位掩蔽事件流 + 前缀可缓存 prompt，阻塞于 28 |
-| 27 | 待派 | | 阻塞于 21、24、25、26、28、**29** |
+| 29a | 待派 | | 掩蔽事件流成为唯一投影、快照降为 fold 派生（expand–contract），阻塞于 28 |
+| 29b | 待派 | | 前缀可缓存 prompt + 缓存指标 + 牌谱只存尾部，阻塞于 29a |
+| 27 | 待派 | | 阻塞于 21、24、25、26、28、29a、29b |
 
 ## 集成记录
 
@@ -71,6 +73,10 @@ DAG（18 已 done）：19、20 无阻塞；21←19；22←19；23←18,20,22；2
 - **26 集成**（调度器）：两处冲突。`DECISIONS.md` 照旧；`web/scripts/record-agent-fixtures.mjs`
   被 24 与 26 各自重构过——取 24 的结构（`record()` 助手 + `ask-assisted` 用例），
   补回 26 的语义增量（text-only 那条的 `thinking: null`）。合并后 CI 全绿，含无头下载验收。
+
+- **25 集成**（调度器）：两处纯追加冲突（`DECISIONS.md`、`TablePage.fs` 各加一个 Msg 分支），
+  用 `run/resolve-append-conflicts.py` 解——那个脚本只处理「两侧各自新增」，一见删改就报错交人，不许猜。
+  合流后 `./scripts/ci.sh` 全绿（含牌谱导出下载与回放）。
 
 ## 主人回来先看哪里
 
