@@ -162,27 +162,38 @@ module Soak =
             Coverage.EndGame
         ]
 
-    /// 跑批里**稀到不该当闸门**的那几种流局形态。断言它们等于自找一种噪声式的红：
-    /// 任何一处改动挪动了随机流，稀有事件就可能从 1 次变成 0 次。
+    /// **默认规模上稀到不该当闸门、换一道扫到为止的跑批才守得住的那几种**，按「谁到得了」分两份。
     ///
-    /// - **四杠散了**：默认规模上碰得到（60 场 2 次、1500 场 9 次），但两次不足以当闸门；
-    /// - **四风连打 / 四家立直 / 三家和了 / 流し満貫**：1500 场 7536 局 63 万手跑批里
-    ///   **一次都没碰到**。它们各要一组联合条件（四家都立直成立、三家听同一张、
-    ///   第一巡四张同风且无人鸣、一家整局只打幺九牌且一张不被鸣），随机探索走不到。
-    ///   它们的覆盖靠 12 票摊好的剧本用例，那才是它们该待的地方。
-    ///   （四家立直是个例外：把 `Riichi` 权重推到极端、几乎不鸣牌时，400 场 1993 局里
-    ///   出了 3 次——引擎那条路走得通，只是覆盖型偏好的立直密度到不了。）
+    /// 四杠散了归覆盖型偏好：实测 6000 场 **32 次**（0.53%/场），有主见的那个 0 次（它几乎不杠）。
+    /// **不能因此把它挤进 `required`**：默认的 60 场里碰到 1-2 次是运气不是闸门（期望才 0.3 次），
+    /// 断言它等于自找一种噪声式的红——任何一处改动挪动了随机流，1 次就变 0 次。
+    /// 守它的是 `Soak.firstSeen`：扫到为止、上限 `Soak.rareGames`（实测扫到第 7 场）。
+    let rareByCovering: Coverage list = [ Coverage.Ryuukyoku Suukaikan ]
+
+    /// 同上，但只有**有主见的选手**（票 42 的 `OpinionatedPlayer`）到得了——**换个选手就是换一门语料**。
     ///
-    /// 数字与推导见 14 票的报告。`Soak.uncovered` 会把这一批里没走到的如实列出来，
-    /// 因此「没覆盖」是一句显式的话而不是一处沉默。
-    let rare: Coverage list =
+    /// 只有**四家立直**一种：它要四家都听牌、都敢立，而覆盖型偏好的立直密度到不了
+    /// （实测 6000 场 29,986 局 **0 次**），有主见的那个 6000 场 30,703 局 **44 次**（0.73%/场，
+    /// 实测扫到第 21 场就碰上）。频率依据与两道扫描的取舍见 50 票的报告。
+    let rareByOpinionated: Coverage list = [ Coverage.Ryuukyoku SuuchaRiichi ]
+
+    /// **两种选手都走不到的那几种流局形态：它们至今没有任何跑批闸门。**
+    /// 这是一句显式的话——把它们塞进某份必覆盖名单才是假装有覆盖（50 票要消灭的正是那个）。
+    ///
+    /// **四风连打 / 三家和了 / 流し満貫**：两种选手各 6000 场（共 60,689 局）**一次都没有**。
+    /// 它们各要一组联合条件（第一巡四张同风且无人鸣、三家听同一张、
+    /// 一家整局只打幺九牌且一张不被鸣），随机探索走不到；它们的覆盖只有 12 票摊好的剧本用例。
+    /// `Soak.uncovered` 会把这一批里没走到的如实列出来，因此「没覆盖」看得见。
+    let unguarded: Coverage list =
         [
-            Coverage.Ryuukyoku Suukaikan
             Coverage.Ryuukyoku SuufonRenda
-            Coverage.Ryuukyoku SuuchaRiichi
             Coverage.Ryuukyoku SanchaHora
             Coverage.Ryuukyoku NagashiMangan
         ]
+
+    /// **默认规模的跑批碰不到也不算回归**的那几种流局形态：两道扫到为止的跑批守着的，
+    /// 加上至今无人能到的。默认规模的跑批断言的是「没走到的不多于它」。
+    let rare: Coverage list = rareByCovering @ rareByOpinionated @ unguarded
 
     /// 跑批**可能**走到的全部形态：断言的那些加上稀有的那些。
     /// `RyuukyokuReason` 的七种在这里必须一种不缺（有条用例钉着）。
@@ -196,6 +207,23 @@ module Soak =
     /// 阴影里，wall-clock 只多约 1 秒；核少的 runner 上就是实打实的 10 秒），
     /// 而覆盖率在这个规模上每一种都有富余。夜里想跑大的就把种子区间放大。
     let defaultGames = 60
+
+    /// 稀有形态那两道跑批**至多**扫几场（`firstSeen` 走到就停：实测四杠散了扫 7 场、
+    /// 四家立直扫 21 场就碰上）。
+    ///
+    /// **这个数字是算出来的，不是拍的**（各 6000 场实测）：
+    ///
+    /// | 形态 | 频率 | Wilson 95% 区间 | 最长空档 | 扫 2000 场的期望次数 | P（一次都没有）|
+    /// |---|---|---|---|---|---|
+    /// | 四家立直（有主见） | 0.73%/场 | 0.55%–0.98% | 435 场 | 14.7（下界 10.9）| 4×10⁻⁷（下界 2×10⁻⁵）|
+    /// | 四杠散了（覆盖型） | 0.53%/场 | 0.38%–0.75% | 985 场 | 10.7（下界 7.6）| 2×10⁻⁵（下界 5×10⁻⁴）|
+    ///
+    /// 即便拿区间下界算，两种「一次都碰不到」的概率也在千分之一以下；
+    /// 那 6000 场里**每一个 2000 场的滑动窗口（4001 个）都至少出过一次**。定得宽是因为
+    /// **上限只在闸门真的要红时收钱**（那一次一道约 45 秒），平时两道加起来不到一秒。
+    ///
+    /// 频率依据与取舍见 50 票的报告。放大用 `JANPO_SOAK_RARE_GAMES`。
+    let rareGames = 2000
 
     // ---- 内部：不变量 ----
 
@@ -449,6 +477,51 @@ module Soak =
                         Map.add coverage (seen + count) counts)
                 Issues = report.Issues @ game.Issues
             })
+
+    /// 按给定顺序扫种子，数每种事实**头一次出现在哪个种子**；`wanted` 里的都走到了就停。
+    /// 一场都没走到的事实不在表里，因此「没走到」是一件问得出来的事。
+    ///
+    /// **稀有形态的闸门要它**：四家立直与四杠散了都在 0.5-0.7%/场 量级，要把「碰不到」
+    /// 的概率压到万分之一以下得允许扫上千场（见 `rareGames`），而两件事让它仍然进得了 CI：
+    ///
+    /// - **只数事件、不逐手验不变量**：`run` 逐手重排 136 张牌验守恒、逐局重放，实测
+    ///   52 毫秒/场；走 `Game.run` 本尊只数事件是 22 毫秒/场。不变量那一半由 `run` 守。
+    /// - **走到就停**：门开着时只花到头一次为止的那几场（实测 21 场，约半秒）；
+    ///   上限那个代价只在它**真的走不到**时付——那一次本来就该花钱买确定性。
+    ///
+    /// 与 `run` 同一对发生器（牌山一条、选手一条）、同一条驱动，**两边看到的是同一批对局**
+    /// （有用例钉着）：因此报出来的种子拿 `janpo game <种子> --opinionated` 就能开出同一场。
+    ///
+    /// 跑不完的那一场连种子一起报出来：不验不变量不等于允许它把一场开不了的局吞掉。
+    let firstSeen
+        (ruleset: Ruleset)
+        (player: Player<Rng>)
+        (wanted: Coverage list)
+        (seeds: int list)
+        : Result<Map<Coverage, int>, int * KyokuError> =
+        let rec loop (seen: Map<Coverage, int>) (rest: int list) =
+            if wanted |> List.forall (fun coverage -> Map.containsKey coverage seen) then
+                Ok seen
+            else
+                match rest with
+                | [] -> Ok seen
+                | seed :: tail ->
+                    match Game.run player (playerRng seed) (Rng.ofSeed seed) (Game.start ruleset) with
+                    | Error error -> Error(seed, error)
+                    | Ok(game, _, _) ->
+                        let seen =
+                            (seen, Game.events game)
+                            ||> List.fold (fun seen event ->
+                                let coverage = Coverage.ofEvent event
+
+                                if Map.containsKey coverage seen then
+                                    seen
+                                else
+                                    Map.add coverage seed seen)
+
+                        loop seen tail
+
+        loop Map.empty seeds
 
     // ---- 拆解 ----
 

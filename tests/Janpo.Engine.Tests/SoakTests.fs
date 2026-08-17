@@ -16,18 +16,22 @@ module SoakTests =
 
     let private ruleset = Ruleset.yonma
 
-    /// 跑几场。**规模可配置**：`JANPO_SOAK_GAMES=500 dotnet test` 就能把它放大，
-    /// CI 用默认值（`Soak.defaultGames`，实测约 10 秒）。不认的取值一律退回默认。
-    ///
-    /// **它是给放大用的**：调到默认值以下时，稀有的那几种（九种九牌、暗杠）
-    /// 可能走不到，覆盖率断言于是不成立——那时该改的是这个变量，不是断言。
-    let private games =
-        match System.Environment.GetEnvironmentVariable "JANPO_SOAK_GAMES" with
-        | null -> Soak.defaultGames
+    /// 读一个“跑几场”的环境变量，不认的取值一律退回默认。
+    /// **不带 `private`**：同一文件里 `RareSoakTests` 那两道扫描用同一套规矩，另抄一份不如共用一份。
+    let gamesFrom (variable: string) (fallback: int) : int =
+        match System.Environment.GetEnvironmentVariable variable with
+        | null -> fallback
         | text ->
             match System.Int32.TryParse text with
             | true, value when value > 0 -> value
-            | _ -> Soak.defaultGames
+            | _ -> fallback
+
+    /// 跑几场。**规模可配置**：`JANPO_SOAK_GAMES=500 dotnet test` 就能把它放大，
+    /// CI 用默认值（`Soak.defaultGames`，实测约 10 秒）。
+    ///
+    /// **它是给放大用的**：调到默认值以下时，稀有的那几种（九种九牌、暗杠）
+    /// 可能走不到，覆盖率断言于是不成立——那时该改的是这个变量，不是断言。
+    let private games = gamesFrom "JANPO_SOAK_GAMES" Soak.defaultGames
 
     /// 跑批的种子：`1 .. games`。**跑一次存下来给全部用例共用**——一次跑批十秒起步，
     /// 每条用例各跑一次就没法进 CI 了。`lazy` 而不是模块级的值，理由同 `GameFixtures`。
@@ -92,6 +96,29 @@ module SoakTests =
 
         // 两份名单不重叠：同一种形态不会既当闸门又算稀有。
         Assert.Empty(Soak.required |> List.filter (fun coverage -> List.contains coverage Soak.rare))
+
+    [<Fact>]
+    let ``每一种流局形态都说得出归哪道闸门守——含「仍无闸门」那一类`` () =
+        // 50 票：三份名单把形态分完且不重叠。**`unguarded` 是一句显式的「它没人守」**，
+        // 新加一种流局形态时必须在三份里选一份表态，不能静静地滑过去。
+        let lists =
+            [
+                "required", Soak.required
+                "rareByCovering", Soak.rareByCovering
+                "rareByOpinionated", Soak.rareByOpinionated
+                "unguarded", Soak.unguarded
+            ]
+
+        for reason in RyuukyokuReason.all do
+            let owners =
+                lists
+                |> List.filter (fun (_, list) -> List.contains (Coverage.Ryuukyoku reason) list)
+                |> List.map fst
+
+            Assert.True(List.length owners = 1, $"流局形态 {RyuukyokuReason.toMjai reason} 归属不清：{owners}")
+
+        // 两道扫描守的那几种，默认规模的跑批碰不到也不算回归（它们在 `rare` 里）。
+        Assert.Equal<Coverage list>(Soak.rareByCovering @ Soak.rareByOpinionated @ Soak.unguarded, Soak.rare)
 
     [<Fact>]
     let ``报出问题的那一场用 janpo game --covering 原样重现`` () =
@@ -198,6 +225,89 @@ module SoakTests =
         Assert.Contains("第 3 局", rendered)
         Assert.Contains("第 17 手", rendered)
         Assert.Contains("135", rendered)
+
+/// 稀有流局形态那两道闸门（票 50）：**扫到为止的跑批**。
+///
+/// 上面那一模块的跑批只跑 60 场，于是四家立直（0.73%/场）与四杠散了（0.53%/场）
+/// 两条规则路径长期**没有任何跑批闸门**：代码有、剧本用例有，跑批碰不到
+/// （四杠散了偶尔碰得到，但那是运气，断言不得）。
+///
+/// 这里各开一道**走到就停**的扫描，每一种配一个到得了它的选手：
+/// 四杠散了配覆盖型偏好（实测扫 7 场）、四家立直配有主见的选手（票 42，实测扫 21 场）。
+/// **两个选手互补而不是二选一**：有主见的从不吃（`chi` 恒为 0）、几乎不杠
+/// （四杠散了 6000 场 0 次），拿它换掉默认那道就把 `required` 里的几种覆盖丢了。
+module RareSoakTests =
+
+    let private ruleset = Ruleset.yonma
+
+    /// 至多扫几场。默认值的频率依据写在 `Soak.rareGames`；
+    /// `JANPO_SOAK_RARE_GAMES=6000 dotnet test` 把它放大（夜里想跑大的就用它）。
+    let private games = SoakTests.gamesFrom "JANPO_SOAK_RARE_GAMES" Soak.rareGames
+
+    /// 一道扫描：那几种形态**头一次出现在哪个种子**。走 `Soak.firstSeen` 而不是 `Soak.run`：
+    /// 上千场的上限上逐手验不变量进不了 CI（实测 52 毫秒/场）。
+    /// 不变量那一半由上面那道跑批与 `OpinionatedPlayerTests` 里
+    /// 那条「有主见的选手跑一批种子零异常」守着。
+    let private scan (player: Player<Rng>) (wanted: Coverage list) : Map<Coverage, int> =
+        match Soak.firstSeen ruleset player wanted [ 1..games ] with
+        | Ok seen -> seen
+        | Error(seed, error) -> failwith $"种子 {seed} 这一场应当跑得完，却得到「{KyokuError.toDisplay error}」"
+
+    /// 一道扫描的断言：想要的那几种形态都在上限之内走到过。
+    /// **失败说明里带重跑命令**：扫描与 `janpo soak` 看到的是同一批对局（下面有条用例钉着）。
+    let private assertReached (rerun: string) (player: Player<Rng>) (wanted: Coverage list) =
+        let seen = scan player wanted
+
+        for coverage in wanted do
+            match Map.tryFind coverage seen with
+            | Some _ -> ()
+            | None -> failwith $"{Coverage.toMjai coverage} 在 {games} 场里一次都没走到（重跑：`{rerun}`）"
+
+    [<Fact>]
+    let ``稀有形态：有主见的选手把四家立直走到了`` () =
+        assertReached $"janpo soak 1 {games} --opinionated" OpinionatedPlayer.player Soak.rareByOpinionated
+
+    [<Fact>]
+    let ``稀有形态：覆盖型偏好的选手扫得够多时把四杠散了走到了`` () =
+        // `janpo soak` 不带开关时跑的就是覆盖型偏好，因此重跑命令上没有选手开关。
+        assertReached $"janpo soak 1 {games}" RandomPlayer.covering Soak.rareByCovering
+
+    [<Fact>]
+    let ``稀有形态：那几种仍然无人能到的形态，两道扫描也没守着`` () =
+        // **这一条是反着写的**：它不断言「没走到」（将来真走到了不算回归），
+        // 只钉住一件事：`unguarded` 里的形态**不在任何一道跑批的必覆盖名单里**。
+        // 把它们混进必覆盖名单假装有覆盖，正是 50 票要消灭的那件事。
+        let guarded = Soak.required @ Soak.rareByCovering @ Soak.rareByOpinionated
+
+        for coverage in Soak.unguarded do
+            Assert.False(
+                List.contains coverage guarded,
+                $"{Coverage.toMjai coverage} 记在 unguarded（“仍无闸门”），却又出现在某道跑批的必覆盖名单里"
+            )
+
+    [<Fact>]
+    let ``扫到为止的快路径与逐手验不变量的跑批看到的是同一批对局`` () =
+        // 快路径是那两道闸门的量具，也是失败说明里那句「重跑：`janpo soak ...`」的前提。
+        // 逐场跑一遍 `Soak.run`，把每种事实头一次出现在哪个种子算出来，两边逐字对。
+        // 两种选手各钉一遍。
+        let seeds = [ 1..5 ]
+
+        for player in [ RandomPlayer.covering; OpinionatedPlayer.player ] do
+            let verified =
+                (Map.empty, seeds)
+                ||> List.fold (fun seen seed ->
+                    (seen, (Soak.run ruleset player [ seed ]).Counts |> Map.toList)
+                    ||> List.fold (fun seen (coverage, _) ->
+                        if Map.containsKey coverage seen then
+                            seen
+                        else
+                            Map.add coverage seed seen))
+
+            // `wanted` 给一个跑批产不出的事实（`start_game`），扫描就不会早停，五场全走完。
+            Assert.Equal<Result<Map<Coverage, int>, int * KyokuError>>(
+                Ok verified,
+                Soak.firstSeen ruleset player [ Coverage.StartGame ] seeds
+            )
 
 /// 覆盖率的计量单位与 mjai 事件类型的对应。
 [<Properties(Arbitrary = [| typeof<EventArbitraries> |])>]
