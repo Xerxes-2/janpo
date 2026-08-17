@@ -10,11 +10,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# 部署要这三个权限；GITHUB_TOKEN 默认只有 contents:read。
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# 权限按 job 分（票 45）：**`id-token: write` 只给 deploy**。
+# 它是 `deploy-pages` 换 Pages 部署凭据用的 OIDC 令牌，build 一步用不着；
+# 而 build 里的 nix 安装器一旦看得见 OIDC 就会去登 FlakeHub，登不上便每跑印一条
+# `FlakeHub Login failure: …` 告警注解（见 ci.yml 里那段注释与 45 号票报告）。
+# 不给它，那条路径根本不会走到，同时也是最小权限该有的样子。
 
 # 同时只跑一份部署，但**不取消**跑到一半的那次（取消会留下半截的发布）。
 concurrency:
@@ -24,6 +24,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # configure-pages 要读（必要时建）仓库的 Pages 配置。
+      pages: write
     env:
       # ★★ 部署地址的**唯一**来源：站点会挂在 https://<owner>.github.io/janpo/ 。
       #    仓库改名（或换成自定义域名，那时填 "/"）**只改这一行**，别处没有第二处写着路径。
@@ -36,6 +40,20 @@ jobs:
       # 因此 Pages 上跑的那份产物与本地 `pnpm run build` 出来的是同一条链路。
       # 钉在发布 tag 上，理由同 ci.yml。
       - uses: DeterminateSystems/nix-installer-action@v22
+
+      # 与 ci.yml 同一条缓存、同一个键、同一份 paths（默认就是 /nix），因此两条 workflow 共用一份。
+      # 这里 `save: false`：写缓存的只有 ci.yml 那一条，避免两个 job 同时往同一个键上传 ~2 GiB
+      # 而其中一个必然收到「另一个 job 正在创建这份缓存」的告警——本票的活是**减**噪音。
+      # 代价：flake.lock 刚改过的那一次推送，Pages 这条会冷跑一次（ci.yml 跑完才把新缓存存上）。
+      - name: 缓存 /nix（整套工具链；只读，写由 ci.yml 负责）
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+          save: false
+
+      # 单独一步预热，为的是能把「拉工具链」的耗时从下面几步里读出来（同 ci.yml）。
+      - name: 预热 dev shell（这一步的耗时 = 拉工具链的耗时）
+        run: nix develop --command true
 
       - name: 装依赖
         run: nix develop --command bash -c "cd web && pnpm install --frozen-lockfile"
@@ -61,6 +79,10 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

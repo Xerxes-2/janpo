@@ -1,12 +1,18 @@
 name: CI
 
-# 仓库目前没有远端，这份 workflow 是与本地同一条关卡的声明：
-# CI 与本地跑的都是 `scripts/ci.sh`，唯一区别是 CI 把它放进 nix dev shell 里跑，
+# 这份 workflow 是与本地同一条关卡的声明：
+# CI 与本地跑的都是 `scripts/ci.sh`（**逐字同一份**，「本地绿 = 远端绿」靠的就是这个），
+# 唯一区别是 CI 把它放进 nix dev shell 里跑，
 # 工具版本因此以 flake.lock 为准，而不是跑批机器上装了什么。
 on:
   push:
   pull_request:
   workflow_dispatch:
+
+# 显式最小权限。**尤其不给 `id-token: write`**：给了它，安装器就会拿 OIDC 去登 FlakeHub
+# （见下面那条注释），而我们一件 FlakeHub 的收费货都不用。
+permissions:
+  contents: read
 
 jobs:
   ci:
@@ -16,9 +22,41 @@ jobs:
 
       # 钉在发布 tag 上而不是 @main：@main 是移动靶，每次跑的都是别人主干上的最新代码
       # ——既不可复现，也是一条无人看守的供应链入口。
-      # 注意：钉住这个 action 并不钉住 Nix 本身（官方文档明说它总装最新的 Determinate Nix）。
-      # 真被 Nix 版本咬到时，用 `with: determinate-nix-version: <版本>` 钉它。
+      # 注意：钉住这个 action 并不钉住 Nix 本身（官方 README 明说它总装最新的 Determinate Nix；
+      # 这个 action **没有** `determinate-nix-version` 这个输入，别照抄旧注释）。
+      # 真要钉 Nix 版本，换成 `DeterminateSystems/determinate-nix-action@v3.x.y`
+      # ——那个 action 就是本 action 加一个 `source-tag`，每个 Determinate 版本发一个 tag。
+      #
+      # 关于 FlakeHub（票 45 查清的根因）：这个 action 的 `determinate` 输入默认为 true，
+      # 于是它装完 Nix **必定**接着跑一次 `determinate-nixd login github-action`。
+      # 拿得到 OIDC 时登录失败 → 它 `core.warning` 出一条 `FlakeHub Login failure: ...` 注解（每跑必印）；
+      # 拿不到 OIDC 时它只 info 一句「workflow is misconfigured…请设 id-token: write」并跳过登录。
+      # **本仓库要的就是「跳过登录」这条路**，因此上面故意不给 id-token：
+      # 我们对 FlakeHub 的唯一依赖是 flake.nix 里那个**公开** nixpkgs-weekly tarball（免登录可取），
+      # 没有私有 flake，而 FlakeHub Cache 只对付费账号开放。那句 info 是预期内的，不是配置漏了。
       - uses: DeterminateSystems/nix-installer-action@v22
+
+      # 工具链缓存（票 45）。缓存的是 **/nix 本身**（GitHub Actions 自带的缓存，不是任何第三方
+      # 缓存服务，因此不需要账号、不需要 secret；没有它 CI 也照跑，只是每次重新拉一遍工具链）。
+      # 为什么不是二进制缓存（magic-nix-cache / Cachix / FlakeHub Cache）：那三家缓存的是
+      # **我们自己构建出来的** store path，而本仓库一个 nix 包都不构建，整份 dev shell
+      # （135 条路径 / 下载 463 MiB / 解开 1.5 GiB）全部来自 cache.nixos.org
+      # ——magic-nix-cache 的 `upstream-cache` 语义还明说了「来自上游缓存的路径不缓存」，
+      # 也就是对我们这种用法**一个字节都不会缓存**。详见 45 号票报告。
+      #
+      # 缓存键跟着 flake.nix / flake.lock 走：工具链没改就一直命中；改了就冷跑一次再存新的一份。
+      # 不给 restore 前缀是有意的——那样缓存内容永远严格等于「这份 flake.lock 的工具链」，
+      # 不会一代代把旧工具链驮着走。要强制冷跑：改这两个文件，或去 Actions → Caches 删掉那条。
+      - name: 缓存 /nix（整套工具链）
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+
+      # 单独一步预热，为的是**能读出数字**：这一步的耗时就是「拉工具链」的耗时，
+      # 缓存命中时它是几秒，未命中时它是几分钟。混在下面那步里就再也分不出来了。
+      # 它不是闸门，也不跳过任何闸门——下面那步照样跑整份 ci.sh。
+      - name: 预热 dev shell（这一步的耗时 = 拉工具链的耗时）
+        run: nix develop --command true
 
       # ci.sh 的 JS 段要一个 Chrome/Chromium 跑无头验收（浏览器内的引擎与 dotnet 侧对拍、
       # 以及浏览器内的黄金用例）。

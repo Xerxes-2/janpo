@@ -3342,3 +3342,49 @@ CI 的跑批闸门跑的仍是覆盖型偏好，把它挪进必覆盖名单会�
 顺带记票 41 的一处诚实：它真红过两次，**两次都是闸门自己的式子错**
 （漏了岭上摸牌算巡目 → 146 句红；加杠亮出的头一张仍在别人河里、被重复计数 → 378 句红），
 不是引擎错。新增语义闸门时，**「先怀疑自己的不变量，再怀疑被测物」**是对的顺序。
+
+## 45
+
+**45-1：缓存 `/nix` 本身，不用任何二进制缓存。** 选 `nix-community/cache-nix-action@v7`
+（后端是 GitHub 自带的 Actions 缓存，无账号、无 secret；删掉那一步 CI 行为不变，只是慢回今天的样子）。
+**否决 `magic-nix-cache` / `cachix` / FlakeHub Cache 三家**：它们缓存的是**本次构建出来的** store path，
+而本仓库一个 nix 包都不构建——整份 dev shell（**135 条路径 / 下载 463 MiB / 解开 1.5 GiB**）
+全部来自 `cache.nixos.org`。magic-nix-cache 的 README 甚至明说「来自上游缓存的路径不缓存」，
+也就是对我们这种用法一个字节都不会存。**否决裸 `actions/cache` 缓存 `/nix/store`**：
+路径的有效性记在 `/nix/var/nix/db/db.sqlite` 里，恢复一堆没登记的路径等于没恢复，
+那套「合并库 + 清 WAL」的逻辑正是 `cache-nix-action` 存在的理由。
+
+**45-2：缓存键只跟 `flake.nix` / `flake.lock` 走，且故意不给 restore 前缀。**
+代价是这两个文件一改就冷跑一次；收益是缓存内容**永远严格等于「这份 flake.lock 的工具链」**。
+给了前缀就会一代驮一代（旧 SDK 与新 SDK 一起存），越滚越大直到撞 GitHub 的 10 GB 上限。
+连带否决 `gc-max-store-size`（`nix store gc` 在跑批机器上没有 gc root 护着我们的 dev shell，
+可能把刚拉下来的工具链删掉）与 `purge`（要多要一个 `actions: write` 权限）。
+`ci.yml` 写缓存、`pages.yml` `save: false` 只读——两条 workflow 在推 main 时同时开跑，
+同一个键会撞出「另一个 job 正在创建这份缓存」的告警，**本票的活是减噪音**。
+
+**45-3：单独一步「预热 dev shell」，为的是能读出数字，不是为了快。**
+这一步的耗时就是「拉工具链」的耗时；混在闸门那一步里，命中与未命中就再也分不开，
+下一个人也无从判断这份缓存值不值。它不跳过任何东西（闸门那步照样跑整份 `ci.sh`）。
+
+**45-4：那条 `FlakeHub Login failure` 的根因是安装器的 `determinate` 输入默认 true，不是版本落后。**
+读的是 action 源码：`determinate` 为真 → 装完必定跑 `determinate-nixd login github-action`；
+**拿得到 OIDC 才会失败并 `core.warning`**，拿不到就只 info 一句然后跳过。
+本仓库唯一给 `id-token: write` 的是 `pages.yml`（原来写在 workflow 级，build 与 deploy 都拿得到），
+而 build 正是装 Nix 的那个 job。它想登的只有两样：私有 flake（我们没有）与 FlakeHub Cache
+（**仅付费账号**）；`flake.nix` 那条 FlakeHub 依赖是**公开** tarball，免登录可取。
+现场证据：本机 `determinate-nixd status` = `logged-out`，而 1.5 GiB 闭包一条不缺。
+**处置：把 `id-token: write` 收回到只给 `deploy`**——不是静音，是让那次登录尝试根本不发生，
+附带把一张能代表本仓库换凭据的 OIDC 令牌从「跑第三方 action 的 job」上撤掉。
+**否决 `determinate: false`**（那能把残留的那句 info 也消掉，但等于把 CI 换成上游 Nix，
+且该选项官方宣布 2026-01-01 后不再支持）——为一句 info 换掉跑 CI 的 Nix 实现，代价与收益不成比例。
+残留那句 info（「workflow is misconfigured…」）**在 `ci.yml` 里写了注释说明它是预期内的**，
+并作为待裁项列进报告 §5 末。
+
+**45-5（记录）：没给 NuGet 与 pnpm 加缓存。** 实测冷跑分别 **3.4 s**（112 MiB）与 **2.0 s**（224 MiB），
+一份 ~340 MiB 的缓存来回一趟很可能就把收益抵掉，而多两条缓存就是多两处会过期、会撞键的东西。
+同理没缓存 `~/.cache/nix`：store 热时把它整个清空，`nix develop` 仍是 1.24 s。
+
+**45-6（记录）：远端数字一个都不是我给的。** agent 没有推送权限。报告 §4 的「4m30s ± 1 分钟」
+是摆出算术的**估算**，§6 是给调度器的核对清单（命中/未命中各跑一次该读哪几个数、
+以及「省得少」与「更慢了」两种结果分别该怎么办）。`cache-nix-action` 自己的 README 就写着
+「本 action 可能拖慢你的 workflow，请实测」——这一条按它说的办。
