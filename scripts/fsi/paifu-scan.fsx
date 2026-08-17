@@ -56,6 +56,11 @@ let private kanTags (moves: PaifuEvent list) : string list =
         | PaifuEvent.Tsumo _ :: rest ->
             match List.skipWhile isDora rest with
             | PaifuEvent.Hora _ :: _ -> walk rest ($"{kind}-rinshan-hora" :: acc)
+            // **打牌之前又杠一次**：明杠欠着的那张指示牌的翻牌时机就卡在这里（票 59）。
+            // 按「前一杠是哪种 + 后一杠是哪种」分标：四种组合的事件顺序不同。
+            | PaifuEvent.Ankan _ :: _ -> walk rest ($"{kind}-then-ankan" :: acc)
+            | PaifuEvent.Kakan _ :: _ -> walk rest ($"{kind}-then-kakan" :: acc)
+            | PaifuEvent.Minkan _ :: _ -> walk rest ($"{kind}-then-daiminkan" :: acc)
             | _ -> walk rest acc
         // 加杠之后没补摸就有人和了：抢杠。
         | PaifuEvent.Hora _ :: rest -> walk rest ("chankan" :: acc)

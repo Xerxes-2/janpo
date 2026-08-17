@@ -303,9 +303,11 @@ module KanTests =
         Assert.Equal(1, GameState.kanCount kanned)
 
     [<Fact>]
-    let ``大明杠之后没打牌就又暗杠：暗杠那张当场翻，大明杠那张仍欠到打牌`` () =
-        // 两种时机同时在场的唯一形态。**两批语料 2110 局里一次都没出现过**（牌谱作证不了它），
-        // 因此取最保守的一种：按杠的种类各算各的，欠账累加、打牌那一刻一次翻光（DECISIONS 16-B）。
+    let ``大明杠之后没打牌就又暗杠：欠的那张排在宣言之前翻，暗杠那张排在它之后`` () =
+        // 两种时机同时在场的形态。票 16 写这条时两批语料 2110 局里一次都没出现过，取的是
+        // 「欠账累加、打牌那一刻一次翻光」（DECISIONS 16-B，它自己写着「有反例就改」）。
+        // **票 59 拿到了反例**：天凤把暗杠当成「宣言即成立」，因此欠的那张翻在 `ankan` **之前**，
+        // 暗杠自己那张翻在它之后——牌谱里的四局全是 `dora → ankan → dora → tsumo`。
         let state = startScriptedRinshan "9m 7m" minkanAnkanScript
         let opening = GameState.wall state |> Wall.doraIndicators
         let discarded, _ = stepped state (Action.Dahai(seat 0, pai "5s", true))
@@ -319,25 +321,89 @@ module KanTests =
         let twice, events = stepped kanned (Action.Ankan(seat 1, tilesOf "9m 9m 9m 9m"))
 
         match events with
-        | [ Ankan(actor, _); Dora _; Tsumo(drawer, drawn) ] ->
+        | [ Dora owed; Ankan(actor, _); Dora own; Tsumo(drawer, drawn) ] ->
             Assert.Equal(seat 1, actor)
             Assert.Equal(seat 1, drawer)
             Assert.Equal<Tile>(pai "7m", drawn)
-        | other -> failwith $"暗杠应当当场翻新宝牌，实际是 {other}"
+            // 先补翻大明杠欠的那张，再翻暗杠自己那张；两张都在补摸之前。
+            Assert.Equal<Tile list>(opening @ [ owed; own ], GameState.wall twice |> Wall.doraIndicators)
+        | other -> failwith $"暗杠那一步应当是 dora（欠的）→ ankan → dora（自己的）→ tsumo，实际是 {other}"
 
-        // 暗杠翻了它自己那张，大明杠那张仍欠着：两个杠而此刻只翻开两张（开局 1 + 暗杠 1）。
+        // 两个杠都兑现了：开局 1 + 大明杠 1 + 暗杠 1 = 3 张。
         Assert.Equal(2, GameState.kanCount twice)
-        Assert.Equal(2, GameState.wall twice |> Wall.doraIndicators |> List.length)
+        Assert.Equal(3, GameState.wall twice |> Wall.doraIndicators |> List.length)
 
-        // 打牌那一刻把欠的那张补翻出来：一个杠仍旧对应一张指示牌，一张不多一张不少。
+        // 打牌那一刻再没有欠账可补：那一步不再吐 `dora`，指示牌也不再涨。
         let played, playing = stepped twice (Action.Dahai(seat 1, pai "7m", true))
 
         match playing with
-        | Dora _ :: Dahai(actor, _, _) :: _ -> Assert.Equal(seat 1, actor)
-        | other -> failwith $"打牌那一步应当补翻欠着的那张，实际是 {other}"
+        | Dahai(actor, _, _) :: _ -> Assert.Equal(seat 1, actor)
+        | other -> failwith $"欠账已在上一步补完，打牌那一步不该再翻新宝牌，实际是 {other}"
 
         Assert.Equal(3, GameState.wall played |> Wall.doraIndicators |> List.length)
         Assert.Equal(3, GameState.wall played |> Wall.uraIndicators |> List.length)
+
+    [<Fact>]
+    let ``连着两次明杠：第二杠成立时补翻第一杠欠的那张，第二杠自己那张接着欠着`` () =
+        // 全量语料里这一类的大头（加杠 → 加杠 19 局、大明杠 → 加杠 6 局）。天凤的顺序是
+        //   `kakan → tsumo → kakan → dora → tsumo → dora → dahai`：
+        // 第二杠成立当场补翻第一杠欠的那张，而第二杠自己那张照旧欠到打牌。
+        let state = startScriptedRinshan kakanKakanRinshan kakanKakanScript
+        let opening = GameState.wall state |> Wall.doraIndicators
+
+        let discarded, _ = stepped state (Action.Dahai(seat 0, pai "5s", true))
+
+        let ponned, _ =
+            stepped discarded (Action.Pon(seat 1, seat 0, pai "5s", tilesOf "5s 5sr"))
+
+        let drawn, _ = stepped ponned (Action.Dahai(seat 1, pai "1m", false))
+        let discarded, _ = stepped drawn (Action.Dahai(seat 2, pai "9m", true))
+
+        let ponned, _ =
+            stepped discarded (Action.Pon(seat 1, seat 2, pai "9m", tilesOf "9m 9m"))
+
+        let discarded, _ = stepped ponned (Action.Dahai(seat 1, pai "2m", false))
+        let drawn = driveUntil passive (fun state -> junmeOf (seat 1) state = 1) discarded
+
+        // 第一次加杠：没人抢得了，它当场成立，而新宝牌欠着。
+        let once, events =
+            stepped drawn (Action.Kakan(seat 1, pai "5s", tilesOf "5s 5s 5sr"))
+
+        match events with
+        | [ Kakan(actor, _, _); Tsumo(drawer, rinshan) ] ->
+            Assert.Equal(seat 1, actor)
+            Assert.Equal(seat 1, drawer)
+            Assert.Equal<Tile>(pai "9m", rinshan)
+        | other -> failwith $"第一次加杠应当只产出 kakan → tsumo（新宝牌欠着），实际是 {other}"
+
+        Assert.Equal<Tile list>(opening, GameState.wall once |> Wall.doraIndicators)
+
+        // 第二次加杠：**它成立那一刻**把第一杠欠的 `1m` 补翻出来，且排在补摸之前。
+        let twice, events =
+            stepped once (Action.Kakan(seat 1, pai "9m", tilesOf "9m 9m 9m"))
+
+        match events with
+        | [ Kakan(actor, _, _); Dora owed; Tsumo(drawer, rinshan) ] ->
+            Assert.Equal(seat 1, actor)
+            Assert.Equal(seat 1, drawer)
+            Assert.Equal<Tile>(pai "1m", owed)
+            Assert.Equal<Tile>(pai "9s", rinshan)
+        | other -> failwith $"第二次加杠应当先补翻欠账再补摸，实际是 {other}"
+
+        // 第二杠自己那张仍欠着：两个杠而此刻只翻开两张。
+        Assert.Equal(2, GameState.kanCount twice)
+        Assert.Equal<Tile list>(opening @ [ pai "1m" ], GameState.wall twice |> Wall.doraIndicators)
+
+        // 打牌那一刻才轮到第二杠欠的 `9p`，且 `dora` 仍排在 `dahai` 之前。
+        let played, playing = stepped twice (Action.Dahai(seat 1, pai "9s", true))
+
+        match playing with
+        | Dora owed :: Dahai(actor, _, _) :: _ ->
+            Assert.Equal(seat 1, actor)
+            Assert.Equal<Tile>(pai "9p", owed)
+        | other -> failwith $"打牌那一步应当补翻第二杠欠的那张，实际是 {other}"
+
+        Assert.Equal<Tile list>(opening @ tilesOf "1m 9p", GameState.wall played |> Wall.doraIndicators)
 
     [<Fact>]
     let ``一局里连着三个杠：可摸区每杠少一张，王牌不变，指示牌每杠多一张`` () =
@@ -495,9 +561,13 @@ module KanTests =
 
     // ---- 责任支付（Sekinin Barai） ----
 
-    [<Fact>]
-    let ``大明杠后的岭上开花：喂杠的那家一家付光`` () =
-        let state = startScriptedRinshan "1z" minkanScript
+    /// 大明杠 → 岭上开花跑到和了那一步，规则集可换（责任支付的开关）。
+    ///
+    /// 王牌是摊死的：开局指示牌 `2z`（宝牌 3z，座位 1 一张没有），杠那叠的表指示牌 `4s`
+    /// （宝牌 5s，而它刚杠了四张）——它欠着不翻，因此这一手恒是 0 番宝牌，点数是确定的数字。
+    let private minkanRinshanHora (ruleset: Ruleset) =
+        let state = startScriptedRinshanIn ruleset "1z 9p 9p 8p 2z 8p 4s" minkanScript
+
         let discarded, _ = stepped state (Action.Dahai(seat 0, pai "5s", true))
 
         let kanned, _ =
@@ -506,15 +576,37 @@ module KanTests =
         Assert.Contains(Yaku.Rinshan, yakuOf (seat 1) kanned)
         // 大明杠的新宝牌欠着：岭上开花那一手看不到它。
         Assert.Equal(1, GameState.wall kanned |> Wall.doraIndicators |> List.length)
+        Assert.Equal(0, doraCountAt (seat 1) kanned)
 
         let ended, _ = stepped kanned (Action.Hora(seat 1, seat 1, pai "1z"))
         let hora = theHora ended
 
-        // 自摸，但**三家平摊变成喂杠那家一家付**：这就是大明杠的责任支付。
+        // 岭上开花 1 + 一气通贯（副露降一番）1 + 赤宝牌 1 = **3 番 40 符**，子的自摸 5200 点。
+        // 责任支付只改谁付，不改和了点——两口径共用这三行断言。
         Assert.Equal(seat 1, hora.Actor)
         Assert.Equal(seat 1, hora.Target)
-        Assert.Equal<int list>([ -hora.HoraPoints; hora.HoraPoints; 0; 0 ], hora.Deltas)
+        Assert.Equal(3, hora.Fan)
+        Assert.Equal(40, hora.Fu)
+        Assert.Equal(5200, hora.HoraPoints)
         Assert.Equal<int list>(hora.Scores, GameState.scores ended)
+        hora
+
+    [<Fact>]
+    let ``大明杠后的岭上开花：默认口径（天凤）不算责任支付，三家照常平摊`` () =
+        // 票 59：全量语料里「大明杠 → 岭上开花」24 次，**24 次天凤都按常规自摸分摊**，
+        // 引擎原来写死成喂杠那家一家付光，24/24 全错（连带 22 处终局点数错）。
+        let hora = minkanRinshanHora ruleset
+
+        // 子的 3 番 40 符自摸 = 亲 2600 + 两子各 1300。
+        Assert.Equal<int list>([ -2600; 5200; -1300; -1300 ], hora.Deltas)
+
+    [<Fact>]
+    let ``大明杠后的岭上开花：开关打开时喂杠的那家一家付光`` () =
+        // 现实中确有采用这条包的赛制，因此它是 `Ruleset` 上的一项（默认关）而不是删掉。
+        let hora = minkanRinshanHora (Ruleset.withMinkanRinshanSekinin ruleset)
+
+        // 自摸的三家平摊变成喂杠那家一家付：其余两家分文不动。
+        Assert.Equal<int list>([ -5200; 5200; 0; 0 ], hora.Deltas)
 
     [<Fact>]
     let ``大三元由副露凑齐：点出第三组的那家一家付光`` () =

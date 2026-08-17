@@ -33,6 +33,12 @@ WANTED_FLAT = [
     "ankan-rinshan-hora",
     "kakan-rinshan-hora",
     "daiminkan-rinshan-hora",
+    # 打牌之前连着两次杠（票 59 的第一处 bug）：四种组合的事件顺序不同，**四种都要有**。
+    # 全量 129,179 局里各 19 / 6 / 3 / 1 局（两个暗杠打头的那 24 局本来就无差异，不单列）。
+    "kakan-then-kakan",
+    "kakan-then-ankan",
+    "daiminkan-then-kakan",
+    "daiminkan-then-ankan",
     "chankan",
     "double-ron",
     "triple-ron",
@@ -54,7 +60,10 @@ WANTED_FLAT = [
 REPEAT = {
     "ankan-rinshan-hora": 2,
     "kakan-rinshan-hora": 2,
-    "daiminkan-rinshan-hora": 2,
+    # 大明杠 → 岭上开花是票 59 第二处 bug 的现场（责任支付）：全量 24 局里多拿一局。
+    "daiminkan-rinshan-hora": 3,
+    "kakan-then-kakan": 2,
+    "daiminkan-then-kakan": 2,
     "chankan": 2,
     "double-ron": 3,
     "form-四風連打": 2,

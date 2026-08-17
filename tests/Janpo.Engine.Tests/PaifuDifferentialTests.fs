@@ -7,7 +7,7 @@ open Janpo
 /// 与**真实牌谱**的对拍：用天凤鳳凰卓的牌谱重放引擎，逐局比动作序列、
 /// 每次和了的役种集合 / 符 / 番 / 和了点，以及流局的形态与逐座位清算。
 ///
-/// 固件 `fixtures/paifu/`（**87 场 / 908 kyoku**，票 57 按覆盖挑出来的）随测试工程复制到输出目录，
+/// 固件 `fixtures/paifu/`（**96 场 / 987 kyoku**，票 57 按覆盖挑出来、票 59 又补上两种杠的时机）随测试工程复制到输出目录，
 /// 因此这个测试**离线跑**；扩样本只需把 `JANPO_PAIFU_DIR` 指向更大的语料，不改代码
 /// （票 57 用同一套 API 扫过全量 12,188 场 / 129,179 kyoku，跑法见
 /// `.scratch/llm-riichi-arena/run/reports/57-wider-paifu-differential.md`）。
@@ -53,8 +53,8 @@ module PaifuDifferentialTests =
             |> List.toArray
 
         Assert.Equal<string array>([||], Array.truncate 10 rendered)
-        Assert.True(List.length loaded >= 87, $"语料只有 {List.length loaded} 场对局，对拍要有量")
-        Assert.True(List.length differential.Value.Kyokus >= 900, $"语料只有 {List.length differential.Value.Kyokus} 局")
+        Assert.True(List.length loaded >= 96, $"语料只有 {List.length loaded} 场对局，对拍要有量")
+        Assert.True(List.length differential.Value.Kyokus >= 980, $"语料只有 {List.length differential.Value.Kyokus} 局")
         Assert.True(loaded |> List.forall (snd >> Option.isSome), "固件里每一场都该配着天凤 JSON oracle")
 
     [<Fact>]
@@ -122,7 +122,7 @@ module PaifuDifferentialTests =
 
         // 「零差异」若没有覆盖率佐证，只说明没跑到（备注 N-8）。
         let seats = sumBy (fun kyoku -> kyoku.SettledSeats)
-        Assert.True(seats >= 440, $"只对拍了 {seats} 个座位的清算，锚点太细了")
+        Assert.True(seats >= 490, $"只对拍了 {seats} 个座位的清算，锚点太细了")
 
     [<Fact>]
     let ``对拍的覆盖率够得着长尾`` () =
@@ -130,9 +130,9 @@ module PaifuDifferentialTests =
         let fu = sumBy (fun kyoku -> kyoku.FuChecks)
         let yaku = sumBy (fun kyoku -> kyoku.YakuChecks)
 
-        Assert.True(horas >= 760, $"只对拍了 {horas} 次和了")
-        Assert.True(fu >= 560, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
-        Assert.True(yaku >= 1380, $"只比到了 {yaku} 行役")
+        Assert.True(horas >= 840, $"只对拍了 {horas} 次和了")
+        Assert.True(fu >= 615, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
+        Assert.True(yaku >= 1520, $"只比到了 {yaku} 行役")
 
         // 役名对照表里真正被牌谱走到的那几种。剩下的靠黄金用例，不靠对拍。
         let seen =
@@ -140,11 +140,13 @@ module PaifuDifferentialTests =
             |> List.collect (fun kyoku -> kyoku.YakuSeen)
             |> List.distinct
 
-        Assert.True(List.length seen >= 35, $"牌谱里只出现了 {List.length seen} 种役")
+        // 票 59 把三槓子那一场（全量语料里仅 1 次）从差异场变回了干净场，因此牌谱里出现过的
+        // 38 种役现在**一种不漏**都在固件里。
+        Assert.True(List.length seen >= 38, $"牌谱里只出现了 {List.length seen} 种役")
 
         // 每局终局点数：拿牌谱下一局的开局点数对拍（一场的最后一局没下局，比不了）。
         let carried = sumBy (fun kyoku -> kyoku.ScoreChecks)
-        Assert.True(carried >= 800, $"只对拍了 {carried} 局的终局点数")
+        Assert.True(carried >= 880, $"只对拍了 {carried} 局的终局点数")
 
     [<Fact>]
     let ``七种流局形态里，真牌谱守得住六种；三家和了守不住，且理由不是罕见`` () =
@@ -166,8 +168,8 @@ module PaifuDifferentialTests =
 
         for reason, atLeast in
             [
-                Fanpai, 110
-                KyuushuKyuuhai, 7
+                Fanpai, 120
+                KyuushuKyuuhai, 12
                 SuufonRenda, 4
                 NagashiMangan, 3
                 Suukaikan, 2
@@ -193,6 +195,79 @@ module PaifuDifferentialTests =
             |> List.map RyuukyokuReason.toMjai
 
         Assert.Equal<string list>([], missing)
+
+    /// 牌谱事件流里两种「杠的时机」各出现了几次，**从牌谱自己数**（不问引擎，
+    /// 避免拿被测物当期望值）：`<前一杠>-then-<后一杠>` 是「打牌之前又杠一次」，
+    /// `<杠>-rinshan-hora` 是「补摸的那张当场和了」。逻辑与 `scripts/fsi/paifu-scan.fsx`
+    /// 的 `kanTags` 同一份（那一份持着全量语料扫，这一份持着固件守 CI）。
+    let private kanTimings (moves: PaifuEvent list) : string list =
+        let isDora (event: PaifuEvent) =
+            match event with
+            | PaifuEvent.Dora _ -> true
+            | _ -> false
+
+        let rec walk (events: PaifuEvent list) (acc: string list) : string list =
+            match events with
+            | PaifuEvent.Ankan _ :: rest -> afterKan "ankan" rest acc
+            | PaifuEvent.Kakan _ :: rest -> afterKan "kakan" rest acc
+            | PaifuEvent.Minkan _ :: rest -> afterKan "daiminkan" rest acc
+            | _ :: rest -> walk rest acc
+            | [] -> acc
+
+        and afterKan (kind: string) (events: PaifuEvent list) (acc: string list) : string list =
+            match List.skipWhile isDora events with
+            | PaifuEvent.Tsumo _ :: rest ->
+                match List.skipWhile isDora rest with
+                | PaifuEvent.Hora _ :: _ -> walk rest ($"{kind}-rinshan-hora" :: acc)
+                | PaifuEvent.Ankan _ :: _ -> walk rest ($"{kind}-then-ankan" :: acc)
+                | PaifuEvent.Kakan _ :: _ -> walk rest ($"{kind}-then-kakan" :: acc)
+                | PaifuEvent.Minkan _ :: _ -> walk rest ($"{kind}-then-daiminkan" :: acc)
+                | _ -> walk rest acc
+            // 加杠之后没补摸就有人和了（抢杠），或者牌谱到此为止。
+            | rest -> walk rest acc
+
+        walk moves []
+
+    [<Fact>]
+    let ``两处杠的时机各自在固件里走到几次`` () =
+        // **判据 3：闸门要报「它在真语料上执行过几次」。** 票 57 挑固件时把带差异的场一律排除了，
+        // 而这两类恰恰局局带差异，于是它们在 CI 里的执行次数是 **0**（本票之前）。
+        // 下面每一种都带着次数，少一次就说明固件被换稀了。
+        let counted =
+            corpus.Value
+            |> fst
+            |> List.collect (fun (paifu, _) -> paifu.Kyokus)
+            |> List.collect (fun kyoku -> kanTimings kyoku.Moves)
+            |> List.countBy id
+            |> Map.ofList
+
+        let times (shape: string) : int =
+            counted |> Map.tryFind shape |> Option.defaultValue 0
+
+        let rendered =
+            counted |> Map.toList |> List.map (fun (shape, count) -> $"{shape}×{count}")
+
+        for shape, atLeast in
+            [
+                // 票 59 第一处：打牌之前连着两次杠。**前一杠是明杠的那四种就是那 28 局反例**，
+                // 四种的事件顺序两两不同，因此四种都要有（全量语料里各 19 / 6 / 3 / 1 局）。
+                "kakan-then-kakan", 2
+                "daiminkan-then-kakan", 2
+                "kakan-then-ankan", 1
+                "daiminkan-then-ankan", 1
+                // 暗杠打头的那两种两边本来就一致，一并守着（它们证明补翻没多翻）。
+                "ankan-then-ankan", 1
+                // 票 59 第二处：大明杠 → 岭上开花（责任支付的口径，全量 24 局 24 局全错）。
+                "daiminkan-rinshan-hora", 3
+                "kakan-rinshan-hora", 3
+                "ankan-rinshan-hora", 3
+            ] do
+            Assert.True(times shape >= atLeast, $"{shape} 在固件里只走到 {times shape} 次（要 {atLeast} 次）：{rendered}")
+
+        // `ankan-then-kakan` 与 `daiminkan-then-daiminkan` 不在名单里：前者全量语料里有 10 局但
+        // 两边本来就一致（暗杠不欠账），后者**规则上就不存在**（大明杠要他家打出一张，
+        // 而杠完没打牌）——判据 4：到不了的要写成代码里的一个值。
+        Assert.Equal(0, times "daiminkan-then-daiminkan")
 
     // ---- 牌谱适配器本身 ----
 

@@ -66,6 +66,13 @@ type Ruleset =
         /// `smly/RiichiEnv` issue #43），因此默认 false；其余牌型任何规则集都抢不了暗杠。
         /// 加杠不受它影响：加杠恒可抢。
         KokushiAnkanChankan: bool
+        /// 大明杠后的岭上开花算不算责任支付（Sekinin Barai，喂杠那家一家付光）。
+        /// **天凤不采用，因此默认 false**——票 59 在 129,179 局鳳凰卓牌谱里逐条实证：
+        /// 「大明杠 → 岭上开花」出现 24 次，24 次都按常规自摸三家分摊。
+        /// 现实中确有采用这条的赛制，要它用 `Ruleset.withMinkanRinshanSekinin`。
+        ///
+        /// **只管大明杠（`Minkan`）这一支**：大三元 / 大四喜由副露凑齐的包任何规则集都成立，不可配。
+        MinkanRinshanSekinin: bool
         /// 一本场的点数：荣和时放铳者多付这么多，自摸时由付家平摊。
         HonbaPoints: int
     }
@@ -101,6 +108,7 @@ module Ruleset =
             DoubleKazeJantouFu = 4
             RinshanTsumoFu = true
             KokushiAnkanChankan = false
+            MinkanRinshanSekinin = false
             HonbaPoints = 300
         }
 
@@ -129,6 +137,13 @@ module Ruleset =
     let withKokushiAnkanChankan (ruleset: Ruleset) : Ruleset =
         { ruleset with
             KokushiAnkanChankan = true
+        }
+
+    /// 打开大明杠后岭上开花的责任支付（喂杠那家一家付光）。关着的形态就是各预设本身——
+    /// 天凤不采用它（票 59 的 24/24 实证）。
+    let withMinkanRinshanSekinin (ruleset: Ruleset) : Ruleset =
+        { ruleset with
+            MinkanRinshanSekinin = true
         }
 
     /// 换对局长度（spec 的「对局长度」配置）。
@@ -213,6 +228,7 @@ module Ruleset =
                     "double_kaze_jantou_fu", Encode.int ruleset.DoubleKazeJantouFu
                     "rinshan_tsumo_fu", Encode.bool ruleset.RinshanTsumoFu
                     "kokushi_ankan_chankan", Encode.bool ruleset.KokushiAnkanChankan
+                    "minkan_rinshan_sekinin", Encode.bool ruleset.MinkanRinshanSekinin
                     "honba_points", Encode.int ruleset.HonbaPoints
                 ]
 
@@ -249,5 +265,6 @@ module Ruleset =
                 DoubleKazeJantouFu = get.Required.Field "double_kaze_jantou_fu" Decode.int
                 RinshanTsumoFu = get.Required.Field "rinshan_tsumo_fu" Decode.bool
                 KokushiAnkanChankan = get.Required.Field "kokushi_ankan_chankan" Decode.bool
+                MinkanRinshanSekinin = get.Required.Field "minkan_rinshan_sekinin" Decode.bool
                 HonbaPoints = get.Required.Field "honba_points" Decode.int
             })

@@ -116,9 +116,12 @@ type GameState =
             /// **明杠欠着还没翻的新宝牌指示牌张数**（大明杠 / 加杠）。
             /// 暗杠当场翻，因此暗杠一张也不欠——两种时机的差别只在这一个字段上。
             ///
-            /// **`completeKan` 置位、`applyDahai` 消费**：杠成立时加一，杠的那家打牌那一刻
-            /// 一次翻光并归零。天凤就是这个时机（13 票在 218 局真实牌谱上实证），
+            /// **`completeKan` 置位，`completeKan` 与 `applyDahai` 两处消费**：杠成立时加一，
+            /// 而欠的那张在**下一次杠成立时（补摸岭上牌之前）或者下一次打牌之前**翻出来。
+            /// 天凤就是这个时机（13 票在 218 局、票 59 又在 28 局真实牌谱上实证），
             /// 于是「明杠之后当场岭上开花」压根翻不到这一张。
+            ///
+            /// 因为下一次杠也消费它，**取值只可能是 0 或 1**（`KanProperties` 有一条属性执行它）。
             PendingKanDora: int
             Flags: KyokuFlags
             Phase: Phase
@@ -998,7 +1001,9 @@ module GameState =
         Tile.suit tile = Jihai && Tile.number tile <= 4
 
     /// 这次和了的责任支付者（Sekinin Barai，CONTEXT.md）；没人负责则为 None。
-    /// 范围按天凤：**大明杠后的岭上开花**与**大三元 / 大四喜由副露凑齐**，四杠子没有。
+    /// 范围：**大三元 / 大四喜由副露凑齐**任何规则集都算，**大明杠后的岭上开花**看
+    /// `Ruleset.MinkanRinshanSekinin`（**默认关，天凤不采用**；票 59 的 24/24 实证）。
+    /// 四杠子任何规则集都没有。
     ///
     /// - 大明杠：喂杠的那家为这一杠补摸的岭上牌负责，只在**杠完立刻自摸和**那一下成立
     ///   （`Rinshan` 亮着且最后一组副露就是那个大明杠）；打出一张之后这份责任就没了。
@@ -1044,7 +1049,7 @@ module GameState =
                 | EndGame -> Option.None)
 
         let rinshan =
-            if tsumo && state.Flags.Rinshan then
+            if tsumo && state.Flags.Rinshan && state.Ruleset.MinkanRinshanSekinin then
                 match lastKan with
                 | Some(Minkan(kanActor, target, _, _)) when kanActor = actor -> Some target
                 // 暗杠 / 加杠的那张是自己摸来的，不算谁的责任。
@@ -1201,11 +1206,11 @@ module GameState =
         | Some reason -> endWithAbortive state reason []
         | None -> drawNext state from
 
-    /// 把明杠欠着的那几张新宝牌指示牌翻出来，并把欠账归零。**只有打牌那一刻调得到**：
-    /// 它就是「明杠等打牌才翻」这条规则本身（`PendingKanDora`）。
+    /// 把明杠欠着的那几张新宝牌指示牌翻出来，并把欠账归零。**两个消费点**（`PendingKanDora`）：
+    /// 打牌那一刻（`applyDahai`）与**下一次杠成立那一刻**（`completeKan`，补摸岭上牌之前）。
     ///
-    /// 欠着不止一张只可能是「明杠之后没打牌就又杠一次」（岭上那张又成了杠）：
-    /// 那时逐张翻出来，一个杠仍旧对应一张指示牌。
+    /// 后一个是票 59 从 28 局真实牌谱上补回来的：天凤不会把欠账攒到打牌，
+    /// 一杠成立就先把前一杠欠的还清。因此欠账实际恒为 0 或 1。
     let private revealPendingKanDora (state: GameState) : GameState * Event list =
         let flushed, revealing =
             ((state, []), [ 1 .. state.PendingKanDora ])
@@ -1218,8 +1223,9 @@ module GameState =
         { flushed with PendingKanDora = 0 }, revealing
 
     let private applyDahai (state: GameState) (actor: Seat) (pai: Tile) (tsumogiri: bool) : GameState * Event list =
-        // 明杠欠着的新宝牌在**打牌这一刻**翻，且 `dora` 排在 `dahai` 之前（与牌谱同形）：
+        // 明杠欠着的新宝牌**最迟**在打牌这一刻翻，且 `dora` 排在 `dahai` 之前（与牌谱同形）：
         // 这张牌被荣和时新宝牌照算，而杠完当场岭上开花时压根没走到这里。
+        // （中间又杠了一次的话，欠账已在那一杠成立时还清，这里没得可翻。）
         let flushed, revealing = revealPendingKanDora state
 
         let discarded =
@@ -1399,25 +1405,32 @@ module GameState =
     ///
     /// - 暗杠：`ankan` → `dora` → `tsumo`（**当场翻**，先翻再补摸）；
     /// - 明杠：`daiminkan` / `kakan` → `tsumo` → …… → `dora` → `dahai`
-    ///   （**欠着**，等打牌那一刻才翻，见 `PendingKanDora` 与 `revealPendingKanDora`）。
+    ///   （**欠着**，见 `PendingKanDora` 与 `revealPendingKanDora`）。
     ///
     /// 事件流的顺序两者相同（`dora` 仍在 `dahai` 之前），差别在**哪一次 `step` 吐出它**：
     /// 明杠之后当场岭上开花时没有那一次打牌，因此新宝牌压根不翻。
     ///
+    /// **欠着的那张在下一次杠成立时先还清**（票 59，28 局真实牌谱）：事件顺序因此是
+    /// `kakan` → `dora`（前一杠欠的）→ `tsumo`，暗杠则是 `ankan` → `dora`（欠的）→ `dora`（自己的）
+    /// → `tsumo`。抢杠那一支进不了这里（杠没成立），因此欠账也不会被它提前翻出来。
+    ///
     /// 补摸的那张亮起 `Rinshan` 标志（岭上开花）。**岭上牌不是海底牌**：海底往前挪一张，
     /// 由 `Wall.drawRinshan` 把可摸区的最后一张补进王牌来体现。
     let private completeKan (state: GameState) (actor: Seat) (concealed: bool) : GameState * Event list =
+        // 前一个明杠欠着的那张先还清，排在这一杠自己那张与岭上牌之前。
+        let flushed, owed = revealPendingKanDora state
+
         let revealed, revealing =
             if concealed then
-                match Wall.reveal state.Wall with
-                | Some(marker, wall) -> { state with Wall = wall }, [ Event.Dora marker ]
+                match Wall.reveal flushed.Wall with
+                | Some(marker, wall) -> { flushed with Wall = wall }, owed @ [ Event.Dora marker ]
                 // 指示牌的叠数用完了：不产出 `dora` 事件，杠照样成立（可杠次数比叠数少，常规规则集里走不到）。
-                | Option.None -> state, []
+                | Option.None -> flushed, owed
             else
-                { state with
-                    PendingKanDora = state.PendingKanDora + 1
+                { flushed with
+                    PendingKanDora = flushed.PendingKanDora + 1
                 },
-                []
+                owed
 
         match Wall.drawRinshan revealed.Wall with
         // 补不到岭上牌：`canKan` 已经把这条路挡住了，走不到。
@@ -1440,7 +1453,8 @@ module GameState =
             { drawing with
                 Phase = awaitDahaiIn drawing actor (Some drawn) []
             },
-            // 明杠的 `revealing` 恒为空（那一张欠着），因此两种杠共用这一条。
+            // 两种杠共用这一条：`revealing` 里装的是前一杠欠的那张（两种杠都可能有）
+            // 加上暗杠自己那张（明杠没有，它欠着）。
             revealing @ [ Event.Tsumo(actor, drawn) ]
 
     /// 鸣牌成立：亮出的那几张离开暗牌进副露，被鸣的那张**仍留在打牌者的河里**
@@ -1524,6 +1538,11 @@ module GameState =
     /// mjai 的事件顺序也是这样：`ankan` / `kakan` 先播出去，随后才是抢杠的 `hora`，
     /// 或者杠成立的 `dora` / `tsumo`。**宣言这一步不改手牌与副露**，
     /// 因此被抢时无需回滚——那个杠只是没有发生而已。
+    ///
+    /// **暗杠是「宣言即成立」**（常规规则集里它抢不了），因此前一个明杠欠着的那张指示牌
+    /// 就在这一刻翻，**排在 `ankan` 之前**；加杠 / 大明杠要等抢杠的窗口过去才成立，
+    /// 宣言先播、欠的那张随后（`completeKan` 里翻）。两种顺序都是天凤的实测：
+    /// 牌谱里 `kakan → dora → tsumo`，而 `dora → ankan → dora → tsumo`（票 59）。
     let private declareKan
         (state: GameState)
         (actor: Seat)
@@ -1540,8 +1559,14 @@ module GameState =
         match responsesTo declaring (ResponseCause.Kan naki) actor pai with
         // 没人抢得了：当场成立，不经响应阶段。
         | [] ->
-            let advanced, events = applyKan state actor naki
-            advanced, event :: events
+            let flushed, owed =
+                if Naki.isConcealed naki then
+                    revealPendingKanDora state
+                else
+                    state, []
+
+            let advanced, events = applyKan flushed actor naki
+            advanced, owed @ (event :: events)
         | responses ->
             { declaring with
                 Phase =
