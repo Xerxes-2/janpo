@@ -24,7 +24,25 @@ module ShantenProperties =
     let ``等摸的手牌不可能已经是和了型`` (AwaitingHand hand) = shanten hand >= 0
 
     [<Property>]
-    let ``牌种集合与副露数不变时向听数是确定的`` (AnyHand hand) = shanten hand = shanten hand
+    let ``向听数只看牌种与副露数：五都写成红五、整把倒序重构，向听数不变`` (AnyHand hand) =
+        // 原来这条叫「牌种集合与副露数不变时向听数是确定的」，写的是 `shanten hand = shanten hand`——
+        // 同一表达式求值两次，**恒真式**（票 61 的同族扫描）。真正可红的判据是 `HandShape`
+        // 类型注释里那条「红宝牌在构造时一律 deaka：`5mr` 与 `5m` 是同一个牌种」——
+        // 同一把牌换个写法（每张五都写成红五、整把倒序）重新构造，向听数必须一个不差。
+        let asAkadora (tile: Tile) : Tile =
+            // 只有 5m / 5p / 5s 有红版本；别的牌 `tryCreate … true` 造不出来，保持原样。
+            Tile.tryCreate (Tile.suit tile) (Tile.number tile) true
+            |> Option.defaultValue tile
+
+        let rewritten =
+            HandShape.tiles hand
+            |> List.rev
+            |> List.map asAkadora
+            |> HandShape.create (HandShape.nakiCount hand)
+
+        match rewritten with
+        | Error _ -> false // 同一把牌换个写法必须构造得回来
+        | Ok rebuilt -> shanten rebuilt = shanten hand
 
     // ---- 摸打 ----
 
