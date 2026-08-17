@@ -7,12 +7,50 @@ namespace Janpo
 [<Struct>]
 type Shanten = private | Shanten of value: int
 
+/// 一批形态判定共用的暂存缓冲。**它是显式入参，不是全局状态**：
+/// 各线程各自的批各自的缓冲，因此公开函数的纯度与可并发性不变
+/// （属性测试开着 `Parallelism = 4/8`，共享一份可变数组会真的坏掉）。
+///
+/// 存在的理由：**产品从来不「调一次」向听，它按批调**。一次信息辅助档的决策要
+/// 跑 ~400 次形态判定，每次都新建一份 34 长数组时，光这一项就是 .NET 上约 70 µs/决策、
+/// 浏览器上约 0.7 ms/决策（`docs/research/engine-perf-caller-and-browser.md` §2.1 / §3.3）。
+///
+/// **四个格各有各的主**，不能互相借用——它们在同一条调用链上同时活着：
+/// `Scaffold` 的试打结果（`Dahai`）要活到 `Ukeire` 算完，而 `Ukeire` 在它上面
+/// 又要自己的试摸（`Tsumo`）与可见张数（`Seen`），最里层才是搜索（`Search`）。
+type internal ShantenScratch =
+    {
+        /// 面子分解搜索原地增删的那一份副本。
+        Search: int array
+        /// 「试打一张之后」的手牌计数：`Scaffold` 的逐张试打、`RiichiState.tenpaiDahai`、
+        /// `RandomPlayer` 的打牌评分。
+        Dahai: int array
+        /// 「试摸一张之后」的手牌计数：`Ukeire` 的逐种试摸、`AgariShape.waits`。
+        Tsumo: int array
+        /// 可见张数（手牌自己的 + 传入的）：`Ukeire`。
+        Seen: int array
+    }
+
+/// 暂存缓冲的构造。**一批建一个**：进批之前建好，批内所有形态判定共用。
+[<RequireQualifiedAccess>]
+module internal ShantenScratch =
+
+    /// 新建一份。**不要在循环里建**——那正是这个类型要消灭的那件事。
+    let create () : ShantenScratch =
+        {
+            Search = Array.zeroCreate Tile.KindCount
+            Dahai = Array.zeroCreate Tile.KindCount
+            Tsumo = Array.zeroCreate Tile.KindCount
+            Seen = Array.zeroCreate Tile.KindCount
+        }
+
 /// Shanten 的构造、计算与渲染。
 ///
 /// 一般型走面子分解搜索（`8 - 2 * 面子 - 搭子 - 雀头`，面子加搭子上限 4 组），
 /// 七对子与国士各有闭式公式，`calculate` 取三者最小值。
 ///
-/// 搜索为了速度直接在 34 长计数数组上原地增删，但每次调用都用自己的副本，
+/// 搜索为了速度直接在 34 长计数数组上原地增删，但那份数组永远是调用方的（公开入口
+/// 自己新建一份，批处理的入口收 `ShantenScratch`），手牌本身一个字节不动，
 /// 公开函数仍是纯的、可并发调用。
 [<RequireQualifiedAccess>]
 module Shanten =
@@ -56,31 +94,41 @@ module Shanten =
         else
             let number = numberInSuit index
             let suitStart = index - number
+            let last = min 6 number
 
-            [ max 0 (number - 2) .. min 6 number ]
-            |> List.exists (fun start ->
-                legal.[suitStart + start]
-                && legal.[suitStart + start + 1]
-                && legal.[suitStart + start + 2])
+            // 原来这里是 `[ max 0 (number - 2) .. last ] |> List.exists ...`：每次调用分配一个小 list，
+            // 而 `deadQuadKinds` 每碰上一种握满 4 张的牌就要问它一次。尾递归编成循环，不分配。
+            let rec anyRun (start: int) =
+                if start > last then
+                    false
+                elif
+                    legal.[suitStart + start]
+                    && legal.[suitStart + start + 1]
+                    && legal.[suitStart + start + 2]
+                then
+                    true
+                else
+                    anyRun (start + 1)
+
+            anyRun (max 0 (number - 2))
 
     /// 「死张」的种数：手里握满 4 张、且在这个规则集下永远进不了顺子的牌种。
     /// 它的第 4 张既凑不出需要第 5 张的刻子，也进不了顺子，只能打掉——每有一种就至少
     /// 多一次替换，因此它是向听数的下界。四麻里这就是字牌。
     ///
-    /// 每次 `standard` 只调一次（不在递归里），所以这里不为省一次遍历而用可变累加：
-    /// 紧挨着的 `canJoinRun` 每次都要分配一个小 list，省下的那点开销早被它吃掉了。
-    /// 预算好的牌种索引。`Array.sumBy` 要一个可遍历的索引源，每次调用现造
-    /// `seq { 0 .. 33 }` 会付枚举器的钱——实测 131 ns vs 88 ns，而 `calculate`
-    /// 本身只有约 1360 ns（2026-08-16，17 票剪枝之后）。
-    let private allKindIndices = [| 0 .. Tile.KindCount - 1 |]
-
+    /// 每次 `standard` 只调一次（不在递归里）。一道尾递归扫描：既不分配索引源，
+    /// 也不付 34 次委托调用的钱（原来是预算好的索引数组 + `Array.sumBy` 闭包）。
+    /// 它仍然是纯的，也不占可变绑定的预算（风格规则 5）。
     let private deadQuadKinds (legal: bool array) (original: int array) : int =
-        allKindIndices
-        |> Array.sumBy (fun index ->
-            if original.[index] = 4 && not (canJoinRun legal index) then
-                1
+        let rec scan (index: int) (dead: int) =
+            if index >= Tile.KindCount then
+                dead
+            elif original.[index] = 4 && not (canJoinRun legal index) then
+                scan (index + 1) (dead + 1)
             else
-                0)
+                scan (index + 1) dead
+
+        scan 0 0
 
     /// 面子分解搜索。`legal` 是规则集的牌种存在标志，`original` 是手牌的原始计数
     /// （判「4 张全在手里」用），`counts` 是可以原地增删的副本。
@@ -212,13 +260,13 @@ module Shanten =
         search 0 nakiCount 0 false false true (Array.sum counts)
         best
 
-    /// 一般型（四面子一雀头）的向听数。副露按已成面子计入。
-    let standard (kindSet: TileKindSet) (hand: HandShape) : Shanten =
+    /// `standard` 的真实实现，搜索用调用方给的 34 长缓冲（里面原来装的什么不要紧，这里先覆写）。
+    /// 库外拿不到（`internal`）：它与 `HandShape.counts` 同一个性质的快路径。
+    let internal standardIn (search: int array) (kindSet: TileKindSet) (hand: HandShape) : Shanten =
         let legal = TileKindSet.legalFlags kindSet
         let original = HandShape.counts hand
-
-        let searched =
-            searchStandard legal original (Array.copy original) (HandShape.nakiCount hand)
+        HandShape.countsInto search hand
+        let searched = searchStandard legal original search (HandShape.nakiCount hand)
 
         if searched <= -1 then
             agari
@@ -226,6 +274,10 @@ module Shanten =
             // 死张每种至少吃掉一次替换；已摸进的手牌（3n+2）本来就要打一张，白送一次。
             let spare = if HandShape.isAwaitingDraw hand then 0 else 1
             Shanten(max searched (max 0 (deadQuadKinds legal original - spare)))
+
+    /// 一般型（四面子一雀头）的向听数。副露按已成面子计入。
+    let standard (kindSet: TileKindSet) (hand: HandShape) : Shanten =
+        standardIn (Array.zeroCreate Tile.KindCount) kindSet hand
 
     // ---- 七对子 ----
 
@@ -235,11 +287,19 @@ module Shanten =
             None
         else
             let counts = HandShape.counts hand
-            let kinds = counts |> Array.sumBy (fun count -> if count >= 1 then 1 else 0)
-            let pairs = counts |> Array.sumBy (fun count -> if count >= 2 then 1 else 0)
 
-            // 牌种数不足 7 时，每缺一种就多要一次替换。
-            Some(Shanten(6 - pairs + max 0 (7 - kinds)))
+            // 有牌的牌种数与成对的牌种数一遍扫描取齐（原来是两遍 `Array.sumBy`）。
+            // 省的是遍历本身，不是闭包：两个平台上都成立（研究文档 §3.3(c)）。
+            let rec scan (index: int) (kinds: int) (pairs: int) =
+                if index >= Tile.KindCount then
+                    // 牌种数不足 7 时，每缺一种就多要一次替换。
+                    Some(Shanten(6 - pairs + max 0 (7 - kinds)))
+                else
+                    let count = counts.[index]
+
+                    scan (index + 1) (if count >= 1 then kinds + 1 else kinds) (if count >= 2 then pairs + 1 else pairs)
+
+            scan 0 0 0
 
     // ---- 国士无双 ----
 
@@ -258,26 +318,36 @@ module Shanten =
         else
             let counts = HandShape.counts hand
 
-            let kinds =
-                yaochuuIndexes
-                |> Array.sumBy (fun index -> if counts.[index] >= 1 then 1 else 0)
+            // 幺九牌里有牌的牌种数与有没有对子，同样一遍扫描取齐（原来是 `sumBy` + `exists` 两遍）。
+            let rec scan (position: int) (kinds: int) (hasPair: bool) =
+                if position >= Array.length yaochuuIndexes then
+                    Some(Shanten(13 - kinds - (if hasPair then 1 else 0)))
+                else
+                    let count = counts.[yaochuuIndexes.[position]]
+                    scan (position + 1) (if count >= 1 then kinds + 1 else kinds) (hasPair || count >= 2)
 
-            let hasPair = yaochuuIndexes |> Array.exists (fun index -> counts.[index] >= 2)
-
-            Some(Shanten(13 - kinds - (if hasPair then 1 else 0)))
+            scan 0 0 false
 
     // ---- 三者取最小 ----
 
-    /// 手牌的向听数：一般型、七对子、国士三者的最小值。
-    let calculate (kindSet: TileKindSet) (hand: HandShape) : Shanten =
+    let private calculateIn (search: int array) (kindSet: TileKindSet) (hand: HandShape) : Shanten =
         let lower (candidate: Shanten option) (best: Shanten) =
             match candidate with
             | Some shanten when value shanten < value best -> shanten
             | _ -> best
 
-        standard kindSet hand
+        standardIn search kindSet hand
         |> lower (chiitoitsu kindSet hand)
         |> lower (kokushi kindSet hand)
+
+    /// 手牌的向听数：一般型、七对子、国士三者的最小值。
+    let calculate (kindSet: TileKindSet) (hand: HandShape) : Shanten =
+        calculateIn (Array.zeroCreate Tile.KindCount) kindSet hand
+
+    /// 同上，但搜索缓冲由调用方持有（批内共用）。**数值与 `calculate` 逐个相同**：
+    /// 它们走的是同一份 `calculateIn`，差别只在那 34 个 int 从哪来。
+    let internal calculateWith (scratch: ShantenScratch) (kindSet: TileKindSet) (hand: HandShape) : Shanten =
+        calculateIn scratch.Search kindSet hand
 
     // ---- 渲染层出口（ADR-0001） ----
 

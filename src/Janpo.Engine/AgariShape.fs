@@ -18,11 +18,10 @@ module AgariShape =
 
     // ---- 判定 ----
 
-    /// 这副牌同时成立的全部和了型，按 `Standard` `Chiitoitsu` `Kokushi` 顺序；
-    /// 空表示不是和了型。和了型即「Shanten 为 -1」，与 `Shanten` 同一套分解，不另立一份规则。
-    let classify (kindSet: TileKindSet) (hand: HandShape) : AgariShape list =
+    /// `classify` 的真实实现。`search` 是一般型搜索的 34 长缓冲，由调用方持有（批内共用）。
+    let internal classifyIn (search: int array) (kindSet: TileKindSet) (hand: HandShape) : AgariShape list =
         [
-            if Shanten.isAgari (Shanten.standard kindSet hand) then
+            if Shanten.isAgari (Shanten.standardIn search kindSet hand) then
                 Standard
 
             match Shanten.chiitoitsu kindSet hand with
@@ -34,6 +33,11 @@ module AgariShape =
             | _ -> ()
         ]
 
+    /// 这副牌同时成立的全部和了型，按 `Standard` `Chiitoitsu` `Kokushi` 顺序；
+    /// 空表示不是和了型。和了型即「Shanten 为 -1」，与 `Shanten` 同一套分解，不另立一份规则。
+    let classify (kindSet: TileKindSet) (hand: HandShape) : AgariShape list =
+        classifyIn (Array.zeroCreate Tile.KindCount) kindSet hand
+
     /// 是否已成和了型（任意一种）。
     let isAgari (kindSet: TileKindSet) (hand: HandShape) : bool =
         classify kindSet hand |> List.isEmpty |> not
@@ -43,12 +47,33 @@ module AgariShape =
     ///
     /// **听什么只有这一份**：振听（06 经 `PlayerState.waits`）与立直后的暗杠判据
     /// （09 的 `RiichiState`）读的都是它。
+    ///
+    /// **逐种试摸是一批 34 次形态判定**：缓冲在进批之前建一个，批内共用。原来每一种要新建
+    /// 两个 34 长数组（`HandShape.add` 一个、一般型搜索的副本一个），一次 `waits` 就是 68 个；
+    /// 而永久振听每手重算一次，它是 `Observation` 重放里最贵的一段。
     let waits (kindSet: TileKindSet) (hand: HandShape) : Tile list =
-        TileKindSet.kinds kindSet
-        |> List.filter (fun kind ->
-            match HandShape.add kind hand with
-            | Ok drawn -> isAgari kindSet drawn
-            | Error _ -> false)
+        // 不是等摸形的手牌再摸一张就超了张数：原来由 `HandShape.add` 的全量校验逐种拒掉，
+        // 这里一次问清楚，结果同为空表。
+        if not (HandShape.isAwaitingDraw hand) then
+            []
+        else
+            let scratch = ShantenScratch.create ()
+            let drawn = scratch.Tsumo
+            HandShape.countsInto drawn hand
+            let trial = HandShape.ofScratch (HandShape.nakiCount hand) drawn
+
+            TileKindSet.kinds kindSet
+            |> List.filter (fun kind ->
+                let index = Tile.kindIndex kind
+
+                // 手里已有 4 张的牌种摸不到第 5 张（原来是 `HandShape.add` 的 `TileKindOverflow`）。
+                if drawn.[index] >= 4 then
+                    false
+                else
+                    drawn.[index] <- drawn.[index] + 1
+                    let agari = classifyIn scratch.Search kindSet trial |> List.isEmpty |> not
+                    drawn.[index] <- drawn.[index] - 1
+                    agari)
 
     // ---- 渲染层出口（ADR-0001） ----
 

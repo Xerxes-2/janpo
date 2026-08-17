@@ -3920,6 +3920,61 @@ README、页面说明、`docs/host/`、术语表、以及票据里的既有假�
 - **57**（扩牌谱对拍，阻塞于 55/56）：主人要求先提速再扩。它是 M0 唯一抓到过真 bug 的闸门，
   扩样本是在买下一个那种 bug；进 CI 那份**按覆盖挑而不是按场数挑**
 
+## 55
+
+**55-1 `ShantenScratch` 是自造词，作为提案报上来，没有动 `CONTEXT.md`。**
+新增的 `internal` 类型叫 `ShantenScratch`，四个格叫 `Search` / `Dahai` / `Tsumo` / `Seen`。
+`Dahai` / `Tsumo` 是罗马字术语；`Scratch` / `Search` / `Seen` 是英文机制词。
+先例是 `HandShape`、`TileKindSet`、`MentsuBreakdown`，以及术语表自己标着「本项目自造」的 `KawaTaken`。
+它是 `internal`、不上 wire、不进 UI 与 prompt，因此**没有**动术语表（RUNBOOK 硬约束 6）。
+要不要收词由人裁决。
+
+**55-2 带缓冲的那一支一律 `internal`，不公开。**
+票面写的是 `Shanten.calculateWith (scratch: ShantenScratch) kindSet hand`。做成了，但标 `internal`。
+被否决的选项：做成 public。理由是**一个公开的缓冲入参等于把「同一时刻只能有一条调用链在用它」这条约束
+交给库外调用者去守**，而守不住的后果是错的向听数（不是崩溃）。
+现有先例站在同一侧：`HandShape.counts` 与 `TileKindSet.legalFlags` 都是 `internal` 的裸数组快路径。
+`Ukeire.calculateWith` 更该 `internal`——它还收一个「已知的当前向听」，给错了直接是错的有效牌。
+公开的纯函数签名一个字符没动，库外调用者照旧。
+
+**55-3 A 级的四遍扫描做成了三遍，不是一遍。**
+票面写「`chiitoitsu`/`kokushi`/`deadQuadKinds` 四遍扫描融合成一遍」。实际做成：
+七对子的两遍 → 一遍，国士的两遍 → 一遍，死张那一遍去掉 34 次委托调用（共 5 遍 → 3 遍）。
+被否决的选项：字面意义上合成一遍。理由是**三组量的计算条件互不相同**——副露过的手牌压根不算七对子与国士
+（`nakiCount > 0` 直接 `None`），和了型压根不算死张（`searched <= -1` 就返回）。
+无条件合成一遍会在**最常见的副露路径上增加 34 次遍历**，那是把一处优化换成一处劣化。
+实测：`Shanten.calculate` 单次 0.58–0.73 → 0.51–0.59 µs（10 660 手真对局手牌，32 核机器）。
+
+**55-4 「缓冲不得越出批的边界」这条不变量，现在没有专门的静态闸门。**
+执行它的是：`internal` 可见性（全引擎五个建缓冲的调用点，全在本票的 diff 里）+ CI 里的常驻闸门
+（属性测试仍开着 `Parallelism = 4/8`、黄金 40 条 / 2069 字段、真牌谱对拍、soak）——
+缓冲一旦别名或逃逸，这些当场出错数。**提案**：在 `scripts/check-style.sh` 里给 `HandShape.ofScratch`
+记一条出现预算（形状与 `let mutable` 预算一样，改预算就被迫留一条记录）。本票没加，
+因为那个文件不在票面给的改动面（「你只改 `src/Janpo.Engine/`」）上。
+
+**55-5 分段计时推翻了研究文档两处口径，但我没有改 `docs/research/`。**
+（判据 13 的正向用法：先量再归因。）实测（32 核，1079 个真决策点）：
+
+| 段 | 改前 µs/决策 | 改前 34 长数组/决策 |
+|---|---|---|
+| `GameState.legalActions` | **0.1** | 0 |
+| **`Observation.ofState`** | **316.6** | **671.8** |
+| `Scaffold.calculate` | 234.5 | 596.8 |
+| `Danger.rank` | 10.9 | 0.9 |
+
+两处与研究文档不符：**(a)** §2.2 把 `tenpaiDahai` 当成决策路径上最密的调用点，
+但合法动作集在 `GameState.step` 里就算好了，`legalActions` 只是取出来（0.1 µs）——那笔钱在状态机里，不在决策包里；
+**(b)** §7 把 `Observation` 列为「一行没读性能」，而它其实是决策包里最大的一段，
+每决策分配的 34 长数组比 `Scaffold` 还多（振听每手重算一次 `AgariShape.waits`，一次 68 个数组）。
+**没有改 `docs/research/engine-perf-caller-and-browser.md`**：那是别的 agent 的产出，
+且票面明说「改法与预估都在里面，别重新调研」。回填与否请人裁决。
+
+**55-6 顺带把 `AgariShape.waits` 与 `RandomPlayer.shantenByKind` 也改了（票面没点名）。**
+两者与票面点名的三处是同一形状（一批 34 次形态判定），都在 `src/Janpo.Engine/` 内。
+`waits` 那处是 55-5 量出来的：它是每决策分配最多的那一支。
+`TileKindSet.Count` 也一并存了下来（`Shanten.chiitoitsu` 每次调用都要问一次牌种数，现算是一趟 34 长的 `sumBy`）。
+三处都被本票的四类语义证据盖住（37.4 万行差分、160 场 soak 事件流、黄金 40 条、真牌谱固件 18 局 + 扩样本 60 局）。
+
 ## 56（CI 结构提速：属性取样的浪费 + 浏览器七趟共用一条跑道）
 
 **`./scripts/ci.sh` 2m00.9s → 39.2s，闸门一道没少、断言一条没拆、用例数一个没降**

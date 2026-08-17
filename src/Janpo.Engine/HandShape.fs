@@ -115,6 +115,24 @@ module HandShape =
     /// 形态判定按牌种索引高频读写，每次复制的代价比判定本身还大。库外拿不到（`internal`）。
     let internal counts (hand: HandShape) : int array = hand.Counts
 
+    /// 引擎内部的批处理快路径：把牌种计数拷进**调用方持有的** 34 长缓冲，不新建数组。
+    ///
+    /// 一次决策要跑 ~400 次形态判定，每次都新建一份 34 长副本时光这一项就是
+    /// .NET 上约 70 µs/决策、浏览器上约 0.7 ms/决策（`Int32Array` 新建 0.8-1.4 µs/个，
+    /// `docs/research/engine-perf-caller-and-browser.md` §3.3）。
+    let internal countsInto (destination: int array) (hand: HandShape) : unit =
+        Array.blit hand.Counts 0 destination 0 Tile.KindCount
+
+    /// 引擎内部的批处理快路径：把调用方的缓冲**原样**包成形态，既不复制也不校验。
+    ///
+    /// **只能用在「批内的试打 / 试摸」上**：那些牌形都是从一副已经校验过的手牌
+    /// 加一张或减一张得来，在构造上就不可能违反张数与 4 张上限（调用方先自己挡一下：
+    /// 试打要求手里真有那张且手牌是已摸形，试摸要求那个牌种不足 4 张且手牌是等摸形）。
+    /// `ofCounts` 的全量校验是给库外调用者的，批内每次都跑一遍是白花的（研究文档 §4.2）。
+    ///
+    /// 缓冲仍归调用方所有：包出来的这个值不得越出批的边界，也不得被存进任何记录里。
+    let internal ofScratch (nakiCount: int) (counts: int array) : HandShape = { Counts = counts; Naki = nakiCount }
+
     // ---- 渲染层出口（ADR-0001） ----
 
     /// **渲染层的单向出口**：给人和 LLM 看的中文形式。

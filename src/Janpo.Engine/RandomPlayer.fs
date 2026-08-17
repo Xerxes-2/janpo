@@ -119,13 +119,23 @@ module RandomPlayer =
     let private shantenByKind (kindSet: TileKindSet) (nakiCount: int) (hand: Tile list) : (Tile * int) list =
         match HandShape.create nakiCount hand with
         | Error _ -> []
+        // 等摸形的手牌试打之后张数不成形态（原来由 `HandShape.remove` 逐张拒掉）。
+        | Ok shape when HandShape.isAwaitingDraw shape -> []
         | Ok shape ->
+            // 与 `RiichiState.tenpaiDahai` 同一条路子：一批建一份缓冲，逐张试打共用。
+            let scratch = ShantenScratch.create ()
+            let counts = scratch.Dahai
+            HandShape.countsInto counts shape
+            let rest = HandShape.ofScratch nakiCount counts
+
             HandShape.tiles shape
             |> List.distinct
-            |> List.choose (fun kind ->
-                match HandShape.remove kind shape with
-                | Error _ -> None
-                | Ok rest -> Some(kind, rest |> Shanten.calculate kindSet |> Shanten.value))
+            |> List.map (fun kind ->
+                let index = Tile.kindIndex kind
+                counts.[index] <- counts.[index] - 1
+                let shanten = Shanten.value (Shanten.calculateWith scratch kindSet rest)
+                counts.[index] <- counts.[index] + 1
+                kind, shanten)
 
     /// 这一手打得出去的牌种数。**一种以下就不必评分**：只剩一种打法时挑不挑都一样，
     /// 而立直成立之后每一手都是这个形状（只能摸切），跳过它省下的正是最贵的那一步。

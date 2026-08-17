@@ -54,8 +54,15 @@ module Scaffold =
     // ---- 计算 ----
 
     /// 有效牌；算不出来（手牌不是等摸形、可见张数越界）时是 None。
-    let private tryUkeire (kindSet: TileKindSet) (seen: Tile list) (hand: HandShape) : Ukeire option =
-        match Ukeire.calculate kindSet seen hand with
+    /// `current` 是这副手牌刚算过的向听，交给 `Ukeire` 省掉它内部那次重算。
+    let private tryUkeire
+        (scratch: ShantenScratch)
+        (kindSet: TileKindSet)
+        (seen: Tile list)
+        (current: Shanten)
+        (hand: HandShape)
+        : Ukeire option =
+        match Ukeire.calculateWith scratch kindSet (Some current) seen hand with
         | Ok ukeire -> Some ukeire
         | Error _ -> None
 
@@ -63,6 +70,7 @@ module Scaffold =
     ///
     /// 试打之后那张牌**进了可见集**（它马上就要落到自己河里），否则它自己的剩余枚数会多算一张。
     let private trials
+        (scratch: ShantenScratch)
         (kindSet: TileKindSet)
         (seen: Tile list)
         (hand: HandShape)
@@ -70,15 +78,26 @@ module Scaffold =
         (danger: Danger list)
         (dahai: (int * Tile) list)
         : DahaiScaffold list =
+        // 试打之后的手牌就在这份缓冲上（原来每张候选新建一份）。它要活到 `Ukeire` 算完，
+        // 因此与 `Ukeire` 自己的试摸缓冲各占一格，不能共用。
+        let counts = scratch.Dahai
+        let after = HandShape.ofScratch (HandShape.nakiCount hand) counts
+
         dahai
         |> List.map snd
         |> List.distinct
         |> List.choose (fun pai ->
+            let index = Tile.kindIndex pai
+
             // 打不出来的牌不该出现在合法动作集里；真出现了就跳过这一条，不编造数值。
-            match HandShape.remove pai hand with
-            | Error _ -> None
-            | Ok after ->
-                let shanten = Shanten.calculate kindSet after
+            // 两条合起来就是 `HandShape.remove` 会拒掉的那两种：手里没有那张（`TileNotInHand`）、
+            // 手牌本来就是等摸形打完就少一张（`ConcealedCountMismatch`）。
+            if HandShape.countOf pai hand = 0 || HandShape.isAwaitingDraw hand then
+                None
+            else
+                HandShape.countsInto counts hand
+                counts.[index] <- counts.[index] - 1
+                let shanten = Shanten.calculateWith scratch kindSet after
 
                 Some
                     {
@@ -86,7 +105,7 @@ module Scaffold =
                         ActionIds = dahai |> List.filter (fun (_, tile) -> tile = pai) |> List.map fst
                         Shanten = shanten
                         ShantenDelta = Shanten.value shanten - Shanten.value current
-                        Ukeire = tryUkeire kindSet (pai :: seen) after
+                        Ukeire = tryUkeire scratch kindSet (pai :: seen) shanten after
                         Danger = danger |> List.tryFind (fun danger -> danger.Pai = pai)
                     })
 
@@ -102,7 +121,9 @@ module Scaffold =
         | Error _ -> None
         | Ok hand ->
             let seen = Observation.visible observation
-            let current = Shanten.calculate kindSet hand
+            // **一次决策就是一批**：暂存缓冲在进批之前建一个，批内 ~400 次形态判定共用。
+            let scratch = ShantenScratch.create ()
+            let current = Shanten.calculateWith scratch kindSet hand
 
             let dahai =
                 actions
@@ -118,8 +139,8 @@ module Scaffold =
             Some
                 {
                     Shanten = current
-                    Ukeire = tryUkeire kindSet seen hand
-                    Dahai = trials kindSet seen hand current danger dahai
+                    Ukeire = tryUkeire scratch kindSet seen current hand
+                    Dahai = trials scratch kindSet seen hand current danger dahai
                     Threats = Danger.threats observation
                 }
 

@@ -90,14 +90,24 @@ module RiichiState =
     let tenpaiDahai (kindSet: TileKindSet) (nakiCount: int) (hand: Tile list) : Tile list =
         match HandShape.create nakiCount hand with
         // 张数不成形态（还没摸牌那 13 张）时打不出听牌形：立直无从谈起。
+        // 等摸形同理（原来由 `HandShape.remove` 的全量校验逐张拒掉，这里一次问清楚）。
         | Error _ -> []
+        | Ok shape when HandShape.isAwaitingDraw shape -> []
         | Ok shape ->
+            // 逐张试打是一批：缓冲在进批之前建一个，批内共用（原来每张新建两个 34 长数组）。
+            let scratch = ShantenScratch.create ()
+            let counts = scratch.Dahai
+            HandShape.countsInto counts shape
+            let rest = HandShape.ofScratch nakiCount counts
+
             HandShape.tiles shape
             |> List.distinct
             |> List.filter (fun kind ->
-                match HandShape.remove kind shape with
-                | Error _ -> false
-                | Ok rest -> Shanten.value (Shanten.calculate kindSet rest) = 0)
+                let index = Tile.kindIndex kind
+                counts.[index] <- counts.[index] - 1
+                let tenpai = Shanten.value (Shanten.calculateWith scratch kindSet rest) = 0
+                counts.[index] <- counts.[index] + 1
+                tenpai)
 
     /// 立直宣言的合法性（spec 的规则清单）：**门清、听牌、点数够一根立直棒、牌山还摸得完一圈**。
     ///
