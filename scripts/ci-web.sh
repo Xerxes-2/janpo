@@ -42,8 +42,9 @@ fi
 
 # 无头验收要一个 Chrome/Chromium。跑批机器上有 /usr/bin/google-chrome-stable；
 # 别处用 JANPO_CHROME 指过去，或 `pnpm dlx playwright install chromium`。
-# 实在没有浏览器的环境（例：最小容器）可以 JANPO_NO_BROWSER=1 跳过**后六道**，
-# 前五道照跑——但那样 19、21 与 26 票的 JS 侧验收就没被验，别拿它当绿。
+# 实在没有浏览器的环境（例：最小容器）可以 JANPO_NO_BROWSER=1 跳过**后七道**（下面那段 else 里
+# 逐道列着），前六道（biome / tsc / node --test / 语义不变量 / fable / vite build）照跑——
+# 但那样浏览器里那七道验收一道都没被验，别拿它当绿。
 NO_BROWSER="${JANPO_NO_BROWSER:-0}"
 
 echo "== pnpm install =="
