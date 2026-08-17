@@ -101,7 +101,10 @@ M1 暴露的三件事逐条闭合：
 
 | 65 | **done**（lyvltyyy） | G 族：大三元包牌荣和的本场归属（4 场，59 修掉 B 后现形）；顺带核两个 Ruleset 开关的解码器一致 |
 
-| 66 | 派工中（ws-b） | 引擎性能第 6 轮实现：waits 向听前置闸 + canRiichi 单次向听（预验证 2.06×） |
+| 66 | **done**（ttskxyqk） | 引擎性能第 6 轮实现：waits 向听前置闸 + canRiichi 单次向听（预验证 2.06×） |
+
+| 67 | 派工中（ws-a） | 第二批收词：重试判据核对 + MinkanRinshanSekinin + Doujun/RiichiAnkanMentsuUnchanged + Honba 措辞（第六次授权） |
+| 68 | 派工中（ws-c） | 扫剩余 17 个年度包（2009–2024，从新往旧）；四分类扩五分类（+年代口径）；oracle 超 500 场停下交清单 |
 
 ## 功能票
 
