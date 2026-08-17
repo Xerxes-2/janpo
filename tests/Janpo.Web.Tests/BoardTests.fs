@@ -326,7 +326,7 @@ module BoardTests =
             // 这里只验它确实被填了，判据本身在引擎侧有自己的用例。
             Assert.Equal(Seat.first, settlement.Oya)
 
-    // ---- 副露的画法（票 38） ----
+    // ---- 副露的画法（票 38，位置编码来源是票 51） ----
 
     let private tile (notation: string) : Tile =
         match Tile.parse notation with
@@ -344,32 +344,44 @@ module BoardTests =
     /// 副露方一律取座位 0：相对位置的参照系是**副露方**，验的就是这个。
     let private nakiView (naki: Naki) : NakiView = Board.nakiView ruleset Seat.first naki
 
+    /// 逐张摊平（从左往右，同一格里从下往上）。
+    let private flat (view: NakiView) : NakiTileView list = view.Slots |> List.concat
+
     let private faces (view: NakiView) : Tile option list =
-        view.Tiles |> List.map (fun each -> each.Pai)
+        flat view |> List.map (fun each -> each.Pai)
 
     let private fromOther (view: NakiView) : bool list =
-        view.Tiles |> List.map (fun each -> each.FromOther)
+        flat view |> List.map (fun each -> each.FromOther)
+
+    /// 横放那张落在第几格（从副露方自己的左边数起）。**这就是票 51 说的「位置即来源」**。
+    let private takenSlot (view: NakiView) : int option =
+        view.Slots |> List.tryFindIndex (List.exists (fun each -> each.FromOther))
 
     [<Fact>]
-    let ``吃：被鸣的那张就地横放，三张仍按升序摆`` () =
+    let ``吃：横放那张恒在最左，另两张在它右边按升序`` () =
         // 吃只吃上家（座位 0 的上家是座位 3），两种吃法的三张牌一模一样——
-        // 「哪一张是鸣来的」是它们唯一的区别，票 38 之前牌桌上看不出来。
+        // 「哪一张是鸣来的」是它们唯一的区别。位置编码之后**整组不再是数字顺序**（票 51）：
+        // 鸣来的那张搬到最左，剩下两张在它右边按升序。
         let middle = Naki.chi (seat 3) (tile "3p") (tiles "2p 4p") |> nakiOf |> nakiView
         let lowest = Naki.chi (seat 3) (tile "2p") (tiles "3p 4p") |> nakiOf |> nakiView
 
-        Assert.Equal<Tile option list>(tiles "2p 3p 4p" |> List.map Some, faces middle)
-        Assert.Equal<Tile option list>(faces middle, faces lowest)
+        Assert.Equal<Tile option list>(tiles "3p 2p 4p" |> List.map Some, faces middle)
+        Assert.Equal<Tile option list>(tiles "2p 3p 4p" |> List.map Some, faces lowest)
 
-        Assert.Equal<bool list>([ false; true; false ], fromOther middle)
+        // 两种吃仍然分得开：牌面顺序不同，而横放那张恒在最左（吃只来得了上家）。
+        Assert.NotEqual<Tile option list>(faces middle, faces lowest)
+        Assert.Equal<bool list>([ true; false; false ], fromOther middle)
         Assert.Equal<bool list>([ true; false; false ], fromOther lowest)
+        Assert.Equal<int option>(Some 0, takenSlot middle)
+        Assert.Equal<int option>(Some 0, takenSlot lowest)
 
         // 上家。吃恒来自上家——参照系一旦换成观测者，这条就会漂。
         Assert.Equal<int option>(Some 3, middle.Relative)
         Assert.Equal<Seat option>(Some(seat 3), middle.Target)
-        Assert.False(middle.Tiles |> List.exists (fun each -> each.Added))
+        Assert.False(flat middle |> List.exists (fun each -> each.Added))
 
     [<Fact>]
-    let ``碰：来源是被鸣那家相对副露方的第几家`` () =
+    let ``碰：横放那张的位置就是来源——上家最左、对家中间、下家最右`` () =
         let from (target: int) =
             Naki.pon (seat target) (tile "5z") (tiles "5z 5z") |> nakiOf |> nakiView
 
@@ -378,8 +390,13 @@ module BoardTests =
         Assert.Equal<int option>(Some 2, (from 2).Relative)
         Assert.Equal<int option>(Some 3, (from 3).Relative)
 
+        // **位置本身就是那句「来自X」**（M 联盟公式规则第 6 条第 2 款）。
+        Assert.Equal<int option>(Some 2, takenSlot (from 1))
+        Assert.Equal<int option>(Some 1, takenSlot (from 2))
+        Assert.Equal<int option>(Some 0, takenSlot (from 3))
+
         let view = from 1
-        Assert.Equal(3, List.length view.Tiles)
+        Assert.Equal(3, List.length view.Slots)
         Assert.Equal(1, fromOther view |> List.filter id |> List.length)
         Assert.Equal<Tile option list>(tiles "5z 5z 5z" |> List.map Some, faces view)
 
@@ -387,34 +404,66 @@ module BoardTests =
     let ``暗杠：没有来源，两端扣着，一张横放的也没有`` () =
         let view = Naki.ankan (tiles "1z 1z 1z 1z") |> nakiOf |> nakiView
 
+        Assert.Equal(4, List.length view.Slots)
         Assert.Equal<Tile option list>([ None; Some(tile "1z"); Some(tile "1z"); None ], faces view)
         Assert.Equal<bool list>([ false; false; false; false ], fromOther view)
         Assert.Equal<Seat option>(None, view.Target)
         Assert.Equal<int option>(None, view.Relative)
+        Assert.Equal<int option>(None, takenSlot view)
 
     [<Fact>]
-    let ``大明杠：四张里横放一张，来源在`` () =
-        let view = Naki.minkan (seat 2) (tile "7s") (tiles "7s 7s 7s") |> nakiOf |> nakiView
+    let ``大明杠：上家最左、对家左起第二、下家最右`` () =
+        let from (target: int) =
+            Naki.minkan (seat target) (tile "7s") (tiles "7s 7s 7s") |> nakiOf |> nakiView
 
-        Assert.Equal(4, List.length view.Tiles)
-        Assert.True(view.Tiles |> List.forall (fun each -> Option.isSome each.Pai), "大明杠一张也不扣着")
+        // 四张时「中间」落哪一格有明文：M 联盟公式规则第 6 条第 3 款
+        // 「明槓子（大明槓によるもの）… 上家からは左、対面から左2番目、下家からは右に並べる」。
+        Assert.Equal<int option>(Some 0, takenSlot (from 3))
+        Assert.Equal<int option>(Some 1, takenSlot (from 2))
+        Assert.Equal<int option>(Some 3, takenSlot (from 1))
+
+        let view = from 2
+        Assert.Equal(4, List.length view.Slots)
+        Assert.True(flat view |> List.forall (fun each -> Option.isSome each.Pai), "大明杠一张也不扣着")
         Assert.Equal(1, fromOther view |> List.filter id |> List.length)
         Assert.Equal<int option>(Some 2, view.Relative)
 
     [<Fact>]
-    let ``加杠：横放的是当初碰来的那张，加上去的那张另有记号`` () =
-        // 底那副碰来自座位 2（对家），亮出的两张里有一张赤 5——排序会把它挪到别处去，
-        // 所以加杠这一组**照 `Naki.consumed` 的原序**摆：第一张恒是当初被碰的那张。
+    let ``加杠：加上去那张叠在当初碰来的那张上，来源那一格不动`` () =
+        // 底那副碰来自座位 2（对家），亮出的两张里有一张赤 5。
         let pon = Naki.pon (seat 2) (tile "5p") (tiles "5pr 5p") |> nakiOf
         let view = Naki.kakan (tile "5p") pon |> nakiOf |> nakiView
 
-        Assert.Equal<Tile option list>(tiles "5p 5pr 5p 5p" |> List.map Some, faces view)
-        Assert.Equal<bool list>([ true; false; false; false ], fromOther view)
-        Assert.Equal<bool list>([ false; false; false; true ], view.Tiles |> List.map (fun each -> each.Added))
+        // 三格（底那副碰），来源那一格摞着两张：下面是当初碰来的，上面是后加的。
+        // M 联盟公式规则第 6 条第 4 款：「加槓子 加槓牌を指示牌の上に並べて重ねる」——
+        // 横放那张不挪位，因此「当初是谁打的」加杠之后仍读得出来。
+        Assert.Equal(3, List.length view.Slots)
+        Assert.Equal<int option>(Some 1, takenSlot view)
+        Assert.Equal<int list>([ 1; 2; 1 ], view.Slots |> List.map List.length)
+
+        let stacked = view.Slots |> List.item 1
+        Assert.Equal<bool list>([ true; false ], stacked |> List.map (fun each -> each.FromOther))
+        Assert.Equal<bool list>([ false; true ], stacked |> List.map (fun each -> each.Added))
+        Assert.Equal<Tile option list>([ Some(tile "5p"); Some(tile "5p") ], stacked |> List.map (fun each -> each.Pai))
 
         // 来源是**当初碰的那家**，不是加杠这一手的谁。
         Assert.Equal<Seat option>(Some(seat 2), view.Target)
         Assert.Equal<int option>(Some 2, view.Relative)
+
+    [<Fact>]
+    let ``位置的参照系是副露方自己：换个副露方，同一个来源就落到别的格`` () =
+        // 同一家（座位 1）打出的那张，被不同的人碰走：它相对座位 0 是下家（最右）、
+        // 相对座位 2 是上家（最左）、相对座位 3 是对家（中间）。
+        // 参照系一旦漂到观测者或屏幕左右，这三条就会一起变成同一格。
+        let by (owner: int) =
+            Naki.pon (seat 1) (tile "5z") (tiles "5z 5z")
+            |> nakiOf
+            |> Board.nakiView ruleset (seat owner)
+            |> takenSlot
+
+        Assert.Equal<int option>(Some 2, by 0)
+        Assert.Equal<int option>(Some 0, by 2)
+        Assert.Equal<int option>(Some 1, by 3)
 
     [<Fact>]
     let ``一组副露里至多一张横放、至多一张是加上去的`` () =
@@ -432,10 +481,18 @@ module BoardTests =
             let view = nakiView naki
 
             let count (pick: NakiTileView -> bool) =
-                view.Tiles |> List.filter pick |> List.length
+                flat view |> List.filter pick |> List.length
 
             Assert.True(count (fun each -> each.FromOther) <= 1, "横放的至多一张")
             Assert.True(count (fun each -> each.Added) <= 1, "加上去的至多一张")
             // 暗杠之外，从他家那儿来的那一张必然画得出来。
             Assert.Equal((if Naki.isConcealed naki then 0 else 1), count (fun each -> each.FromOther))
-            Assert.Equal(Naki.tiles naki |> List.length, List.length view.Tiles)
+            Assert.Equal(Naki.tiles naki |> List.length, List.length (flat view))
+            // 摞起来的只有加杠那一格：别的种类一格一张，因此「第几格」与「第几张」重合。
+            let expected =
+                if Naki.kind naki = NakiKind.Kakan then
+                    3
+                else
+                    List.length (flat view)
+
+            Assert.Equal(expected, List.length view.Slots)

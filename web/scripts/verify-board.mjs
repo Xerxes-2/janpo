@@ -40,6 +40,25 @@ const JUNME_STEPS = 6;
 /** 方位（`Board.position` 的输出），按「相对观测者第几家」排。 */
 const POSITIONS = ["self", "shimocha", "toimen", "kamicha"];
 
+/** 五个视角（四个座位 + 上帝视角）。 */
+const VIEWPOINTS = ["0", "1", "2", "3", "god"];
+
+/**
+ * 票 51 的位置断言走哪几局：两颗种子把**九种槽位结果**摆齐（四家均匀随机）。
+ * 挑它们的过程：`dotnet fsi` 直调引擎扫了 4000 颗种子（报告 51 §2）。
+ * `wants` 同时是**防空转**的清单：走完预算还摆不出来就报错，
+ * 而不是静静地少核几条（票 34 立的规矩）。
+ */
+const NAKI_CORPUS = [
+  // 吃恒在最左、碰落中与右、大明杠的「左起第二格」，外加一组暗杠（无位置编码）。
+  { seed: 237, wants: ["吃第0格", "碰第1格", "碰第2格", "大明杠第1格", "暗杠"] },
+  // 大明杠的两个端格、碰落最左，外加一组加杠（叠在横放那张上）。
+  { seed: 720, wants: ["碰第0格", "大明杠第0格", "大明杠第3格", "加杠第0格"] },
+];
+
+/** 走到覆盖清单齐为止的手数上限。 */
+const NAKI_BUDGET = 110;
+
 /** 走一手：点「单步」，等「上一手」那行变了。这一局打完了就返回 false。 */
 async function stepOnce(page) {
   if (await page.getByTestId("table-step").isDisabled()) return false;
@@ -432,6 +451,92 @@ async function checkLayout(page, problems) {
   return said;
 }
 
+// ---- 副露的位置编码（票 51） ----
+
+/** 这一组副露摆出了哪一种槽位结果（覆盖清单的单位）。 */
+function outcome(group) {
+  if (group.kind === "暗杠") return "暗杠";
+  return `${group.kind}第${group.slots.findIndex((slot) => slot.taken)}格`;
+}
+
+/**
+ * **横放那张落在第几格就是它来自谁**，而那个“第几格”按**副露方自己的左右**算。
+ *
+ * 两件事各自报警：
+ * 1. 逐组拿**绝对座位**（`data-naki-from-seat`）算出该落哪一格，与画出来的对拍
+ *    （`checkNakiGroups`）——参照系漂到观测者就红；
+ * 2. **五个视角看到的位置必须逐字相同**——位置不是屏幕左右，换个人坐不该把它翻过来。
+ *    票 44 把牌桌改成四家围坐、方位跟视角转之后，这一条才是真能坏掉的：
+ *    一旦拿 `Board.position` 的 anchor（观测者）去算槽位，四个视角就各说各的。
+ */
+async function checkNakiPositions(page, problems) {
+  // 语料是**均匀随机**那一档（上面八项那一段把它切成了「有主见」）。
+  await page.getByTestId("table-bot-random").click();
+  const said = [];
+
+  for (const corpus of NAKI_CORPUS) {
+    await page.getByTestId("table-seed").fill(String(corpus.seed));
+    await page.getByTestId("table-restart").click();
+
+    let walked = 0;
+    let groups = await readNakiGroups(page);
+    const covered = () => {
+      const seen = groups.map(outcome);
+      return corpus.wants.every((want) => seen.includes(want));
+    };
+
+    while (walked < NAKI_BUDGET && !covered()) {
+      if (!(await stepOnce(page))) break;
+      walked += 1;
+      groups = await readNakiGroups(page);
+    }
+
+    // 防空转：这一局没把该摆的摆出来的话，下面那些断言核的是别的东西（或者什么也没核）。
+    const seen = groups.map(outcome);
+    const uncovered = corpus.wants.filter((want) => !seen.includes(want));
+    if (uncovered.length > 0)
+      problems.push(
+        `种子 ${corpus.seed} 走了 ${walked} 手，这几种位置一次都没摆出来：${uncovered.join("、")}——位置断言在空转`,
+      );
+
+    // 逐视角：位置本身对不对（对拍绝对座位），以及换了视角它变没变。
+    let reference = null;
+    for (const viewpoint of VIEWPOINTS) {
+      await page
+        .getByTestId(viewpoint === "god" ? "table-view-god" : `table-view-${viewpoint}`)
+        .click();
+      const where = viewpoint === "god" ? "上帝视角" : `坐在座位 ${viewpoint}`;
+      const shot = await readNakiGroups(page);
+      const { missing } = checkNakiGroups(shot);
+      problems.push(...missing.map((each) => `种子 ${corpus.seed}・${where}：${each}`));
+
+      const shape = shot
+        .map((group) => `座位${group.seat}的${outcome(group)}`)
+        .sort()
+        .join("、");
+
+      if (reference === null) reference = { where, shape };
+      else if (shape !== reference.shape)
+        problems.push(
+          `种子 ${corpus.seed}：换了视角副露的位置跟着变了——${reference.where}看到「${reference.shape}」，${where}看到「${shape}」。位置的参照系是副露方自己，不是看牌桌的那个人`,
+        );
+    }
+
+    said.push(`种子 ${corpus.seed} 走 ${walked} 手：${[...new Set(seen)].sort().join("、")}`);
+  }
+
+  // 参照系那句话得写在牌桌上（M1 第六条）：位置编码是一套约定，不写出来读者只能猜。
+  const legend = await page.getByTestId("table-naki-legend").textContent();
+  for (const word of ["最左", "上家", "中间", "对家", "最右", "下家", "副露方"]) {
+    if (!legend.includes(word))
+      problems.push(
+        `牌桌上那句副露位置的说明里没有「${word}」：位置编码没声明参照系（读的是「${legend}」）`,
+      );
+  }
+
+  return said;
+}
+
 // ---- 跑 ----
 
 const executablePath = chromeExecutable();
@@ -453,6 +558,7 @@ let later = null;
 let total = 0;
 let naki = { seen: "无" };
 let bottoms = "";
+let positions = [];
 
 try {
   const page = await browser.newPage({ viewport: { width: 1180, height: 1200 } });
@@ -518,6 +624,9 @@ try {
   checkScores(later, total, problems);
 
   bottoms = await checkLayout(page, problems);
+  // 票 51：横放那张的**位置**就是来源。它另走两局均匀随机的牌（把九种槽位结果摆齐），
+  // 因此一定要摆在最后：上面八项读的是种子 9「有主见」那一局的快照。
+  positions = await checkNakiPositions(page, problems);
 } finally {
   await browser.close();
   await server.close();
@@ -572,3 +681,5 @@ console.log(
     `刚摸那张的间距 ${shot.seats.find((seat) => seat.hand.drawnGap !== null).hand.drawnGap}px ✓`,
 );
 console.log(`  方位 ✓（${bottoms}）`);
+console.log("  副露的位置就是来源 ✓（五个视角逐个对拍绝对座位，且五个视角看到的位置逐字相同）");
+for (const line of positions) console.log(`    ${line}`);

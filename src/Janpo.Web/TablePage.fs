@@ -552,8 +552,9 @@ module TablePage =
     /// 记号挑**朝向**而不是描边或换色：虚线加淡色是摸切、45° 斜纹是牌背、红字是赤牌、
     /// 额外间距是刚摸那张——四条都占了，而横放又正是牌谱的标准画法。
     ///
-    /// 加杠**加上去的那张**出自自家手里，不是鸣来的，所以不横放；它前面摆一枚「＋」
-    /// （牌谱文字记法里的 `中中中＋中`）——四张同种牌摆在一起，没这枚记号就看不出谁是后添的。
+    /// 加杠**加上去的那张**出自自家手里，不是鸣来的，所以**不横放**（真牌桌上它也是侧着的，
+    /// 但那样一来「横放 = 从他家来的」这条记号就得重定义，票 38 占的那一维不动）；
+    /// 它前面摆一枚「＋」（牌谱文字记法里的 `中中中＋中`），并且**叠在横放那张上**（见 `nakiSlot`）。
     /// `data-naki-taken` / `data-naki-added` 给无头闸门读（票 38）。
     let private nakiTile (takenTitle: string) (key: int) (tile: NakiTileView) : ReactElement list =
         match tile.Pai with
@@ -584,13 +585,25 @@ module TablePage =
 
             plus @ [ paiSpan key extra marks pai ]
 
-    /// 一组副露。三件事要看得出来：**种类**、**被鸣的是哪一张**（横放）、**来自谁**
-    /// （一枚「来自上家」的标签）。杠仍看得出形态：四张一组，暗杠两端扣着（牌桌上就是这个摆法）
-    /// 且**没有来源**——它不是鸣来的。
+    /// 副露里的一个**槽位**（票 51）：一格一张，只有加杠那一格是两张。
     ///
-    /// 来源走**文字**而不是牌谱那套位置编码（横放那张摆左 / 中 / 右）：这一页四家是竖排面板，
-    /// 没有真牌桌的方位可锚，位置约定读不出来；而挪位还会打乱吃的升序，
-    /// 把「2 3 4 是个顺子」读成一堆散牌。`data-naki-from` 上写着同一句话，无头闸门读的就是它。
+    /// DOM 里是**从下往上**（先写底下那张），样式拿 `column-reverse` 把它竖起来——
+    /// 于是「当初碰来的那张」仍在底下且仍在它当初那一格，加上去的那张在上面。
+    let private nakiSlot (takenTitle: string) (key: int) (slot: NakiSlot) =
+        Html.span [
+            prop.key key
+            prop.className "naki-slot"
+            prop.children (slot |> List.mapi (nakiTile takenTitle) |> List.concat)
+        ]
+
+    /// 一组副露。三件事要看得出来：**种类**、**被鸣的是哪一张**（横放）、**来自谁**。
+    /// 杠仍看得出形态：四张一组，暗杠两端扣着（牌桌上就是这个摆法）且**没有来源**
+    /// ——它不是鸣来的。
+    ///
+    /// **来源走位置编码**（票 51）：横放那张落在第几格就是它来自谁，牌桌上因此
+    /// **不再写那行「来自X」**（票 38 当初否决位置编码的理由是「四家是竖排面板、方位无锚」，
+    /// 票 44 把牌桌改成四家围坐之后那条理由就没了）。但那句中文**仍然写给读屏用户**
+    /// （`sr-only`），`data-naki-from` 也原样留着——两道闸门读的就是它。
     let private nakiGroup (ruleset: Ruleset) (owner: Seat) (key: int) (naki: Naki) =
         let view = Board.nakiView ruleset owner naki
         let kind = NakiKind.toDisplay view.Kind
@@ -615,12 +628,15 @@ module TablePage =
               ]
             | _, _ -> []
 
+        // 来源那句话在牌桌上**看不见了**（主人裁定：位置为主、文字不留），但它仍然写在 DOM 里
+        // 给**读屏用户**：位置读屏读不出来，删干净就是把来源对他们藏了。
+        // `sr-only` 是那一半的画法；闸门两头都核：文字必须在、且必须看不见。
         let sourceLabel =
             match from, view.Target with
             | Some who, Some target -> [
                 Html.span [
                     prop.key "from"
-                    prop.className "naki-from"
+                    prop.className "naki-from sr-only"
                     prop.title $"这一组是从座位 {Seat.index target} 那儿鸣来的"
                     prop.text $"来自{who}"
                 ]
@@ -634,7 +650,7 @@ module TablePage =
                 prop.children (
                     Html.span [ prop.key "kind"; prop.className "naki-kind"; prop.text kind ]
                     :: sourceLabel
-                    @ (view.Tiles |> List.mapi (nakiTile takenTitle) |> List.concat)
+                    @ (view.Slots |> List.mapi (nakiSlot takenTitle))
                 )
             ]
         )
@@ -852,6 +868,12 @@ module TablePage =
         // 参照系那一句。`data-anchor` 是它给机器看的那一半：闸门拿它与四家真画在哪个格子里对。
         let anchor = Board.anchor board
 
+        // 副露那一行的参照系（票 51）。它与上面那句不是同一个参照系，因此必须各说各的：
+        // 牌桌布局以**看牌桌的那个人**为准，副露里的左中右以**副露方自己**为准。
+        // M1 传下来的第六条（相对方位必须显式声明参照系）在这里就是这一句——
+        // 牌桌上不再写「来自X」之后，读者靠它才知道横放那张的位置该怎么读。
+        let nakiLegend = "副露：横放那张的位置就是来源，按副露方自己的左右算——最左＝上家、中间＝对家、最右＝下家（暗杠无源）"
+
         let frame =
             match board.Viewer with
             | Some seat -> $"坐在座位 {Seat.index seat}：自家在下、下家在右、对家在上、上家在左"
@@ -888,6 +910,12 @@ module TablePage =
                         prop.className "table-anchor"
                         prop.testId "table-anchor"
                         prop.text frame
+                    ]
+                    Html.p [
+                        prop.key "naki-legend"
+                        prop.className "table-anchor"
+                        prop.testId "table-naki-legend"
+                        prop.text nakiLegend
                     ]
                 ]
             )

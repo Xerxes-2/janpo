@@ -104,8 +104,15 @@ type NakiTileView = {
     Added: bool
 }
 
-/// 一组副露画出来的样子：种类、来源、逐张。**这一层不做规则判定**，只把 `Naki` 摆成
-/// 「哪一张横放、来自谁」这个形状——牌桌与它的无头验收读的都是它。
+/// 副露里的一个**槽位**：从下往上摆的那一两张。
+///
+/// 一格两张的只有**加杠**：加上去那张叠在当初碰来的那张上（M 联盟公式规则第 6 条第 4 款：
+/// 「加槓牌を指示牌の上に並べて重ねる」）——横放那张因此不挪位，
+/// 「当初那张是谁打的」加杠之后仍然读得出来。
+type NakiSlot = NakiTileView list
+
+/// 一组副露画出来的样子：种类、来源、逐格。**这一层不做规则判定**，只把 `Naki` 摆成
+/// 「哪一张横放、摆在第几格」这个形状——牌桌与它的无头验收读的都是它。
 type NakiView = {
     /// 种类。
     Kind: NakiKind
@@ -117,8 +124,9 @@ type NakiView = {
     /// 换成观测者的参照系，别人吃来的那一组会写成「来自对家」——那在日麻里根本不成立。
     /// （prompt 尾部的 `words.who` 是另一回事：它给的是**观测者**对每个座位的称呼。）
     Relative: int option
-    /// 逐张，从左到右。
-    Tiles: NakiTileView list
+    /// 逐格，从左到右。**左右是副露方自己的左右**（票 51）：横放那张落在哪一格
+    /// 就是它来自谁，与谁在看这张牌桌无关。
+    Slots: NakiSlot list
 }
 
 /// 一张牌桌该画的全部东西。**它只是两个投影的换装**，不含任何规则判定。
@@ -248,77 +256,6 @@ module Board =
         Ippatsu = seat.Ippatsu
     }
 
-    // ---- 副露 ----
-
-    /// 亮着的一张。
-    let private nakiTile (fromOther: bool) (added: bool) (pai: Tile) : NakiTileView = {
-        Pai = Some pai
-        FromOther = fromOther
-        Added = added
-    }
-
-    /// 扣着的一张（暗杠两端）。
-    let private nakiBack: NakiTileView = {
-        Pai = None
-        FromOther = false
-        Added = false
-    }
-
-    /// 暗杠：四张升序，两端扣着（牌桌上就是这个摆法）。没有来源，也没有横放的那张。
-    let private ankanTiles (naki: Naki) : NakiTileView list =
-        Naki.tiles naki
-        |> List.mapi (fun index pai ->
-            if index = 0 || index = 3 then
-                nakiBack
-            else
-                nakiTile false false pai)
-
-    /// 加杠：底是原来那副碰，**加上去的那张摆在末尾**。
-    ///
-    /// 这一组**不重排**：`Naki.consumed` 的第一张恒是当初被碰的那张（`Naki.kakan` 的注释写着），
-    /// 而四张同种牌一排序谁是谁就没了——那正是「加上去的那张看不出来」的成因。
-    let private kakanTiles (naki: Naki) : NakiTileView list =
-        let bottom =
-            Naki.consumed naki
-            |> List.mapi (fun index pai -> nakiTile (index = 0) false pai)
-
-        let added = Naki.taken naki |> Option.map (nakiTile false true) |> Option.toList
-
-        bottom @ added
-
-    /// 碰 / 吃 / 大明杠：**升序摆**（`Naki.tiles`），被鸣的那张就地横放，不挪位。
-    ///
-    /// 吃尤其要看这个顺序：`2p [3p] 4p` 与 `[2p] 3p 4p` 是两种不同的吃，
-    /// 挪位（把被鸣那张一律搬到最左）会把「2 3 4 是个顺子」这件事读没了。
-    let private calledTiles (naki: Naki) : NakiTileView list =
-        let all = Naki.tiles naki
-
-        // 同种牌互换无碍，取第一个对得上的位置即可（红 5 与正 5 是两个不同的值，不会认错）。
-        let fromOtherAt =
-            Naki.fromKawa naki
-            |> Option.bind (fun taken -> all |> List.tryFindIndex ((=) taken))
-
-        all
-        |> List.mapi (fun index pai -> nakiTile (Some index = fromOtherAt) false pai)
-
-    /// 一组副露画出来的样子。`owner` 是**副露方**（相对位置的参照系）。
-    let nakiView (ruleset: Ruleset) (owner: Seat) (naki: Naki) : NakiView =
-        let kind = Naki.kind naki
-        let target = Naki.target naki
-
-        {
-            Kind = kind
-            Target = target
-            Relative = target |> Option.map (Seat.distanceFrom ruleset owner)
-            Tiles =
-                match kind with
-                | NakiKind.Ankan -> ankanTiles naki
-                | NakiKind.Kakan -> kakanTiles naki
-                | NakiKind.Pon
-                | NakiKind.Chi
-                | NakiKind.Minkan -> calledTiles naki
-        }
-
     // ---- 一桌 ----
 
     /// 座位升序。观测给的是「自家 + 下家对家上家」，上帝视角给的已经是升序；
@@ -362,14 +299,135 @@ module Board =
     let anchor (board: BoardView) : Seat =
         board.Viewer |> Option.defaultValue Seat.first
 
-    /// 这一家在牌桌上的方位。**座位算术全交给引擎**（`Seat.distanceFrom` / `Seat.toimen`）：
-    /// 三麻没有对家，那时第二家就是上家，而那件事 `Seat.toimen` 已经知道了。
+    /// 这一家相对 `anchor` 在哪个方位。**座位算术全交给引擎**（`Seat.distanceFrom` /
+    /// `Seat.toimen`）：三麻没有对家，那时第二家就是上家，而那件事 `Seat.toimen` 已经知道了。
+    ///
+    /// **两处读它，参照系不同**：牌桌布局拿观测者当 `anchor`（票 44）；
+    /// 副露里横放那张落第几格拿**副露方**当 `anchor`（票 51，见 `takenSlot`）。
+    /// 参照系是参数而不是隐含的全局，因此两者不可能混到一起——票 40 那个错的形状就是
+    /// 「参照系从调用点隐含地拿」。
     let position (ruleset: Ruleset) (anchor: Seat) (seat: Seat) : Position =
         match Seat.distanceFrom ruleset anchor seat with
         | 0 -> Position.Self
         | 1 -> Position.Shimocha
         | _ when Seat.toimen ruleset anchor = Some seat -> Position.Toimen
         | _ -> Position.Kamicha
+
+    // ---- 副露 ----
+
+    /// 亮着的一张。
+    let private nakiTile (fromOther: bool) (added: bool) (pai: Tile) : NakiTileView = {
+        Pai = Some pai
+        FromOther = fromOther
+        Added = added
+    }
+
+    /// 扣着的一张（暗杠两端）。
+    let private nakiBack: NakiTileView = {
+        Pai = None
+        FromOther = false
+        Added = false
+    }
+
+    /// 一格一张（除了加杠那一格，都是这样）。
+    let private single (tile: NakiTileView) : NakiSlot = [ tile ]
+
+    /// 横放那张落在第几格——**位置本身就是来源**（票 51）。
+    ///
+    /// **参照系是副露方自己的左中右**（`anchor` 传的是 `owner`），不是屏幕的左右，
+    /// 也不是谁在看这张牌桌：同一组副露从哪个视角看都该摆成同一个样子。
+    /// 拿观测者当参照系就是票 40 那个「吃来自对家」换个层重演一遍。
+    ///
+    /// 上家最左、对家中间、下家最右；四张时对家那一档取**左起第二格**。
+    /// 四张的那一档不是自创：M 联盟公式规则第 6 条第 3 款写着「明槓子(大明槓によるもの)
+    /// … 上家からは左、対面から左2番目、下家からは右に並べる」（维基「槓」也写着对家取
+    /// 「中央的牌（任一张）」，两者不矛盾）。
+    let private takenSlot (ruleset: Ruleset) (owner: Seat) (target: Seat) (count: int) : int =
+        match position ruleset owner target with
+        | Position.Kamicha -> 0
+        | Position.Toimen -> 1
+        | Position.Shimocha -> count - 1
+        // 鸣不到自己打的牌。真走到这里，闸门那条「槽位 ↔ 绝对座位」当场就红。
+        | Position.Self -> 0
+
+    /// 把鸣来的那张插进第 `slot` 格，其余的依次填剩下的格子。
+    let private placed (slot: int) (taken: NakiSlot) (rest: NakiTileView list) : NakiSlot list =
+        (rest |> List.truncate slot |> List.map single)
+        @ [ taken ]
+        @ (rest |> List.skip (min slot (List.length rest)) |> List.map single)
+
+    /// 暗杠：四张升序，两端扣着（牌桌上就是这个摆法）。没有来源，也没有横放的那张，
+    /// **因此也没有位置编码**：它不是鸣来的，无源可编。
+    let private ankanSlots (naki: Naki) : NakiSlot list =
+        Naki.tiles naki
+        |> List.mapi (fun index pai ->
+            if index = 0 || index = 3 then
+                nakiBack
+            else
+                nakiTile false false pai)
+        |> List.map single
+
+    /// 碰 / 吃 / 大明杠：**横放那张按来源落格**，其余的在剩下的格子里按升序摆。
+    ///
+    /// 于是一组吃**不再是数字顺序**：吃只吃得了上家，横放那张恒在最左，
+    /// `[3筒]横 2筒 4筒` 与 `[2筒]横 3筒 4筒` 仍然分得开。这是真牌桌与牌谱的画法（票 51）：
+    /// 牌面的顺序让位给「来自谁」——后者是牌桌上看不到第二份的信息，
+    /// 而三张是不是顺子本来就写在牌面上。
+    let private calledSlots (ruleset: Ruleset) (owner: Seat) (naki: Naki) : NakiSlot list =
+        let all = Naki.tiles naki
+        let rest = Naki.fromHand naki |> List.map (nakiTile false false)
+
+        match Naki.fromKawa naki, Naki.target naki with
+        | Some pai, Some target ->
+            let slot = takenSlot ruleset owner target (List.length all)
+            placed slot [ nakiTile true false pai ] rest
+        // 碰 / 吃 / 大明杠两样都有（构造子定的），这一支走不到；真走到就升序摆、一张不横。
+        | _, _ -> all |> List.map (nakiTile false false >> single)
+
+    /// 加杠：底是原来那副碰，**加上去的那张叠在横放那张上**（同一格，它在上面）。
+    ///
+    /// 为什么不摆到末尾：摆到末尾就变成四格，而四格里横放那张的位置读出来是另一个来源
+    /// （维基「槓」点名了这个坏处：“上家からのポン”会变成“対面からの大明槓”）。
+    /// 叠上去就不会：横放那张不挪位，底仍然是三格。
+    let private kakanSlots (ruleset: Ruleset) (owner: Seat) (naki: Naki) : NakiSlot list =
+        // `Naki.consumed` 的第一张恒是当初被碰的那张（`Naki.kakan` 的注释写着），
+        // 四张同种牌一排序谁是谁就没了——因此这一组照原序拆，不重排。
+        match Naki.consumed naki with
+        // 加杠的底必是碰（三张），这一支走不到。
+        | [] -> []
+        | called :: others ->
+            let rest = others |> List.map (nakiTile false false)
+
+            let stack =
+                nakiTile true false called
+                :: (Naki.taken naki |> Option.map (nakiTile false true) |> Option.toList)
+
+            // 来源恒在（底那副碰必然鸣自某家）；真缺了就摆最左，闸门会说话。
+            let slot =
+                Naki.target naki
+                |> Option.map (fun target -> takenSlot ruleset owner target (List.length rest + 1))
+                |> Option.defaultValue 0
+
+            placed slot stack rest
+
+    /// 一组副露画出来的样子。`owner` 是**副露方**：来源的称呼与**横放那张落第几格**
+    /// 两件事的参照系都是它。
+    let nakiView (ruleset: Ruleset) (owner: Seat) (naki: Naki) : NakiView =
+        let kind = Naki.kind naki
+        let target = Naki.target naki
+
+        {
+            Kind = kind
+            Target = target
+            Relative = target |> Option.map (Seat.distanceFrom ruleset owner)
+            Slots =
+                match kind with
+                | NakiKind.Ankan -> ankanSlots naki
+                | NakiKind.Kakan -> kakanSlots ruleset owner naki
+                | NakiKind.Pon
+                | NakiKind.Chi
+                | NakiKind.Minkan -> calledSlots ruleset owner naki
+        }
 
     // ---- 投影选择 ----
 
