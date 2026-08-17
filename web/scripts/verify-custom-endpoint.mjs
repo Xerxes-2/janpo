@@ -151,7 +151,7 @@ async function runTable(plan) {
     await page.addInitScript(
       ([seat, baseUrl]) => {
         localStorage.setItem("janpo.llm.seat", String(seat));
-        localStorage.setItem("janpo.llm.provider", "custom");
+        localStorage.setItem("janpo.llm.provider", "custom-openai");
         localStorage.setItem("janpo.llm.model", "fake-model");
         localStorage.setItem("janpo.llm.base_url", baseUrl);
         localStorage.setItem("janpo.llm.api_key", "");

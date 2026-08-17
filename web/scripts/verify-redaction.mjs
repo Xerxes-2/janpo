@@ -48,8 +48,10 @@ const keep = flag("--keep", null);
 const FAKE_KEY = "sk-janpo-fake-key-ECHOED-BY-ENDPOINT-yi-7d31c8";
 
 /**
- * 打码留下的记号（`src/agent/redact.ts` 的那两个常量）。**这里写死一份是故意的**：
- * 闸门与被验的代码各写各的，改了实现这边就得跟着改一次 —— 那正是要人看一眼的时刻。
+ * 打码留下的记号（`src/agent/redact.ts` 的 `KEY_MASK` / `ENDPOINT_MASK`）。
+ * **这里写死一份是故意的，改一处必须改另一处**：闸门与被验的代码各写各的，
+ * 改了实现这边就得跟着改一次 —— 那正是要人看一眼的时刻（这两个字串会被用户读到）。
+ * **别把它抽成一份 `import`**：那样实现换成空串时，这道闸门照样是绿的。
  */
 const KEY_MASK = "[API key 已打码]";
 const URL_MASK = "[端点地址已打码]";
@@ -101,7 +103,7 @@ try {
   await page.addInitScript(
     ([seat, baseUrl, apiKey]) => {
       localStorage.setItem("janpo.llm.seat", String(seat));
-      localStorage.setItem("janpo.llm.provider", "custom");
+      localStorage.setItem("janpo.llm.provider", "custom-openai");
       localStorage.setItem("janpo.llm.model", "fake-model");
       localStorage.setItem("janpo.llm.base_url", baseUrl);
       localStorage.setItem("janpo.llm.api_key", apiKey);

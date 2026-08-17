@@ -21,6 +21,38 @@ type Awaiting = {
     Config: LlmSeat
 }
 
+/// 这一局定型的那两格：**人格与 prompt 模板**（CONTEXT.md 的 `Persona` / `PromptTemplate`）。
+///
+/// 术语表把 `Persona` 定成**一局内不变**：它俩都在可缓存前缀里，打到一半换等于把这一局攒下的
+/// provider 缓存全废，还让同一局面的对照多出一个自变量。这个类型就是那条不变量的执行者
+/// ——一局的**头一次问话**把它俩定住，改动落到面板与 localStorage，但要等下一局才发得出去。
+///
+/// **边界取「局」不是「场」**：局间更换仍然支持，牌谱按「座位 + 渲染版本」记得住每一版
+/// （那正是 `Paifu.Preamble` 是一个列表的理由，见 `src/Janpo.Engine/Paifu.fs` 那段注释）。
+///
+/// **只有这两格**：provider / 模型 / key / 超时 / 思考预算换了不动前缀的字节，
+/// 脚手架档位只动尾部——它们照旧下一手就生效。
+type Rendering = { Persona: string; Template: string }
+
+/// 定型那两格的取与用。
+[<RequireQualifiedAccess>]
+module Rendering =
+
+    /// 这份配置此刻的人格与模板。
+    let ofSeat (seat: LlmSeat) : Rendering = {
+        Persona = seat.Persona
+        Template = seat.Template
+    }
+
+    /// 把定型的那两格盖回配置里。**其余字段照面板现在的样子**：
+    /// 它们不在可缓存前缀里（provider / 模型 / key / 超时 / 思考预算），
+    /// 或者只动尾部（脚手架档位），换了下一手就该生效。
+    let applyTo (rendering: Rendering) (seat: LlmSeat) : LlmSeat = {
+        seat with
+            Persona = rendering.Persona
+            Template = rendering.Template
+    }
+
 /// Agent 层此刻处在哪一步。**页面上要看得见**：断电演习（故意配一把坏 key）时
 /// 对局照样打得完，但不能静惄惄地打——人得知道模型早就不说话了。
 [<RequireQualifiedAccess>]
@@ -57,7 +89,16 @@ type TableModel = {
     /// 默认视图上那几道闸门（曳光弹对拍、牌谱导出、副露来源）量的都是它跑出来的那几局。
     Bot: Bot
     /// 那个座位的配置（也就是配置面板里填的那份，同时落在 localStorage）。
+    ///
+    /// **它不一定就是这一手发出去的那份**：人格与模板在一局之内定住（见 `Rendering`），
+    /// 真正发出去的那份由 `TablePage.rosterOf` 推导。
     Llm: LlmSeat
+    /// 这一局已经定型的人格与模板；`None` = 这一局还没问过话，改了当场生效。
+    ///
+    /// **在一局的头一次问话时定住**，`Restarted` 与 `KyokuAdvanced` 时松开。
+    /// 定住之后面板照收编辑（`Llm` 会变），但发出去的仍是这一份——页面上那行
+    /// 「下一局生效」说的就是它俩不一致（`TablePage.renderingPending`）。
+    Pinned: Rendering option
     /// 在等回执吗。**等着的时候不续定时器**，否则牌桌会空转。
     Awaiting: Awaiting option
     /// 问话的票号，每问一次 +1。
@@ -147,13 +188,29 @@ module TablePage =
         else
             schedule playback
 
+    /// 这一手真正发出去的那份座位配置（票 46）：人格与模板取**本局定型的那一版**，
+    /// 其余字段取面板现在的值。还没定型（这一局一次都没问过）时就是面板上那份。
+    let private effective (model: TableModel) : LlmSeat =
+        match model.Pinned with
+        | None -> model.Llm
+        | Some pinned -> model.Llm |> Rendering.applyTo pinned
+
     /// 这一桌的配桌：一席交给 LLM（选了的话），其余交给选中的那种自带 bot。
     /// **推导出来而不存下来**：配置只有 `Bot` / `LlmAt` / `Llm` 这一份，不会与第二份对不上。
     ///
     /// **公开的**：页面逻辑的用例要问「这一桌到底谁坐哪里」，在用例里拄一份同样的推导
     /// 只会与这里漂（票 42 前它真的漂过一份，在 `PaifuExportTests`）。
     let rosterOf (model: TableModel) : Roster =
-        Roster.withLlm model.Ruleset model.Bot model.LlmAt model.Llm
+        Roster.withLlm model.Ruleset model.Bot model.LlmAt (effective model)
+
+    /// 面板上那两格改过了、但要等下一局才发得出去吗（票 46）。
+    ///
+    /// **它就是页面上那句「下一局生效」的判据**：不锁那两格，但也绝不静默地半局换掉。
+    /// **公开的**：视图与页面逻辑的用例读同一个判据，拄一份同样的推导只会漂。
+    let renderingPending (model: TableModel) : bool =
+        match model.Pinned with
+        | None -> false
+        | Some pinned -> pinned <> Rendering.ofSeat model.Llm
 
     /// 导出文件的名字。**种子只有解析得出来才进文件名**：输入框里是人随手填的文本，
     /// 原样拼进文件名会把斜杠之类的东西带进去。
@@ -202,6 +259,9 @@ module TablePage =
                 {
                     model with
                         Ticket = ticket
+                        // 这一局的头一次问话把人格与模板定住（票 46）：之后再改只落到面板，
+                        // 本局发出去的字节不再变。已经定型的局里重盖同一份，无影响。
+                        Pinned = Some(Rendering.ofSeat config)
                         Awaiting =
                             Some {
                                 Ticket = ticket
@@ -280,7 +340,7 @@ module TablePage =
         }
 
         // 那一手带来的前置：固定 preamble 与工具定义形状。**牌桌按「座位 + 渲染版本」去重**，
-        // 因此整场只存一份（中途换了人格就多一份）。
+        // 因此整场只存一份（局间换了人格就多一份；一局之内换不了，见 `Rendering`）。
         let prompting: Prompting = {
             Tools = answer.Tools
             Preambles = [
@@ -316,6 +376,8 @@ module TablePage =
             Bot = Bot.Uniform
             LlmAt = llmAt
             Llm = config
+            // 还没问过话：这一局的人格与模板还改得动（票 46）。
+            Pinned = None
             Awaiting = None
             Ticket = 0
             Agent = AgentStatus.Idle
@@ -335,6 +397,8 @@ module TablePage =
                 model with
                     Table = openTable (rosterOf model) model.SeedText
                     Playback = Playback.pause model.Playback
+                    // 重开一桌就是回到第一局：人格与模板跟着松开（票 46）。
+                    Pinned = None
                     Awaiting = None
                     Agent = AgentStatus.Idle
             },
@@ -371,6 +435,8 @@ module TablePage =
             {
                 model with
                     Table = Result.map Table.nextKyoku model.Table
+                    // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
+                    Pinned = None
                     Awaiting = None
             },
             Cmd.none
@@ -1082,6 +1148,42 @@ module TablePage =
             ]
         ]
 
+    /// 人格与模板那两格下面那一行（票 46 的 31-D 与「一局内不变」）。**两件事是一件事的两面**：
+    /// 渲染版号说「发出去的是哪一份」，后半句说「你刚才改的那一份什么时候生效」。
+    ///
+    /// 版号取自**最近一条决策记录**，不在这一层重算：它是 `模板 id@内容哈希`，
+    /// 哈希在 Agent 层算（`web/src/agent/template.ts`），F# 这边再算一份就是第二份权威。
+    /// 因此这行说的是**真发出去过的那一份**，不是推测。`data-*` 给无头验收读。
+    let private renderingLine (model: TableModel) =
+        // 空串也当「还没有」：没填 key 那几手连 prompt 都没渲染过（记录仍然留一条，
+        // 内容就是那句原因），印一个空版本号比不印更难读。
+        let version =
+            match model.Table with
+            | Ok table ->
+                table.Decisions
+                |> List.tryLast
+                |> Option.map (fun record -> record.RenderVersion)
+                |> Option.filter (fun version -> version <> "")
+            | Error _ -> None
+
+        let said =
+            match version with
+            | Some version -> $"最近一手的渲染版本：{version}"
+            | None -> "渲染版本：这一桌还没发出去过一次问话"
+
+        let pending = renderingPending model
+
+        let note = if pending then "　人格 / 模板改过了：本局仍用定型那一版，下一局生效。" else ""
+
+        Html.p [
+            prop.key "rendering"
+            prop.className (if pending then "rendering pending" else "rendering")
+            prop.testId "table-render-version"
+            prop.custom ("data-render-version", Option.defaultValue "" version)
+            prop.custom ("data-rendering-pending", (if pending then "true" else "false"))
+            prop.text (said + note)
+        ]
+
     /// 配桌：哪个座位交给 LLM，以及那个座位的 provider / 模型 / key / 超时 / 思考预算。
     ///
     /// **key 只进 localStorage**（`Store`），不外发到本平台——本平台根本没有后端。
@@ -1172,25 +1274,26 @@ module TablePage =
                     prop.children [
                         areaField
                             "table-llm-persona"
-                            "人格"
+                            "人格（一局内不变）"
                             "留空就没有人格。例：你是一位以防守见长的雀士，宁可少和一把，也不点炮。"
                             LlmField.Persona
                             model
                             dispatch
                         areaField
                             "table-llm-template"
-                            "prompt 模板"
+                            "prompt 模板（一局内不变）"
                             "留空就用默认模板。一段 JSON，给几项换几项：{\"id\":\"我的模板\",\"labels\":{\"history\":\"【战况回放】\"}}"
                             LlmField.Template
                             model
                             dispatch
                     ]
                 ]
+                renderingLine model
                 Html.p [
                     prop.key "note"
                     prop.className "intro"
                     prop.text
-                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的），对局不会卡住。"
+                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数；两格都在可缓存的前缀里，因此一局之内不会变——开局后再改照样存住，但要下一局才发得出去（上面那行会直说）。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的），对局不会卡住。"
                 ]
                 // 自定义端点那段话只在选中它时出现：两个坑（CORS、mixed content）说清楚要一整段，
                 // 而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。

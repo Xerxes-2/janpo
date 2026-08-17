@@ -15,8 +15,9 @@ import type { SeatConfig } from "./types.ts";
 export interface AskRequest {
   seat: SeatConfig;
   /**
-   * **system 消息**：人格 + 规则与读法（票 31）。整场逐字不变，
-   * 各家的前缀缓存语义更认它。
+   * **system 消息**：人格 + 规则与读法（票 31）。**一局内逐字不变**
+   * （各家的前缀缓存语义认的就是这一点），**局间可以换**——换了就是另一份前缀，
+   * 牌谱按「座位 + 渲染版本」各记一份（`src/Janpo.Engine/Paifu.fs` 的 `Preamble` 那段注释）。
    */
   system: string;
   /** **user 消息**：历史（append-only）+ 尾部现况与动作。 */

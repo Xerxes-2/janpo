@@ -28,6 +28,8 @@
    但页面上会一直红着说「连不上自定义端点 …」。
 
 配置只落在这台浏览器的 localStorage（键名 `janpo.llm.base_url` 等），不经任何后端。
+自己往 localStorage 里写值的话，`janpo.llm.provider` 要填 **`custom-openai`**；
+早先那个值叫 `custom`，读到旧值会自动升成新的（改名是为了不与将来某一家真叫 `custom` 的 provider 撞名）。
 
 ## 2. CORS：**这一步跳不过去**
 

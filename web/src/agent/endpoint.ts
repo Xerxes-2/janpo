@@ -24,8 +24,13 @@ import type { SeatConfig } from "./types.ts";
  * 按座位上的 `base_url` 现搭一个 OpenAI 兼容 provider。
  *
  * F# 侧的同名常量在 `src/Janpo.Web/Agent.fs` 的 `LlmSeat.customProvider`——**改一处要改两处**。
+ *
+ * **`-openai` 那个后缀是故意的**（票 46/30-A）：它原来叫 `custom`，pi-ai 哪天真有一家
+ * 叫 `custom`，那一家就会静默地进不来。**这一层不认旧 id**：旧值只可能来自
+ * localStorage，而那条迁移在 F# 侧的入口做完了（`LlmSeat.readProvider`）——在这里再认一次
+ * 等于把刚防住的撞名又放进来。
  */
-export const CUSTOM_PROVIDER = "custom";
+export const CUSTOM_PROVIDER = "custom-openai";
 
 /** 一个抄得走的例子。错误提示里带着它，比让人去猜 baseUrl 的写法便宜得多。 */
 const EXAMPLE = "http://localhost:11434/v1";

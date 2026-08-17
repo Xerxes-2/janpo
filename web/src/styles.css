@@ -351,9 +351,35 @@ h1 {
 }
 
 .llm-panel input,
-.llm-panel select {
+.llm-panel select,
+.llm-panel textarea {
   padding: 0.3rem 0.4rem;
   font: inherit;
+}
+
+/* 人格与模板那两格（31-C）：原来走浏览器默认，于是只有它俩是等宽小字。
+   归一只靠上面那条（同一份 `font` 与内边距），边框与配色仍然交给浏览器
+   ——旁边那几个 input / select 走的就是默认，单给 textarea 画一套才叫不一致。
+   另加两样多行文本自己要的：宽度对齐那一行控件，只允许竖直拉
+   （横向拉宽会把面板那一行挤断行）。 */
+.llm-panel textarea {
+  width: 18rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* 渲染版本那一行（31-D）：换了人格 / 模板要当场看得见。平时淡着（它是记账），
+   改过但还没生效时不淡——那一刻它是一句要人读到的话。颜色一律跟着正文走。 */
+.llm-panel .rendering {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.llm-panel .rendering.pending {
+  opacity: 1;
+  font-weight: 600;
 }
 
 .llm-panel input[type="password"],

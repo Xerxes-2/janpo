@@ -34,7 +34,7 @@ test("回执带着这一手 prompt 的尾部与工具定义的形状", async () 
   assert.ok(messages[0].user.endsWith(response.prompt_tail), "尾部就是那条 user 消息的末尾");
   assert.equal(response.prompt_tail.includes("【到目前为止你看到的】"), false, "历史不在尾部里");
 
-  // 固定 preamble 单独一段，进 system 消息；整场不变，牌谱里存一次。
+  // 固定 preamble 单独一段，进 system 消息；一局内不变、局间可换，牌谱按「座位 + 渲染版本」各存一份。
   assert.equal(response.preamble, messages[0].system);
   assert.match(response.preamble, /怎么读这份 prompt/);
   assert.match(response.render_version, /^janpo-default@[0-9a-f]{8}$/);

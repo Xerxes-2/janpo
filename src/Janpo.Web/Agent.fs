@@ -66,7 +66,10 @@ type AgentAnswer = {
     LatencyMs: int
     /// 最后一次问出去的 prompt 的**尾部**（票 31）。前缀不在里面：它是事件流的派生物。
     PromptTail: string
-    /// 这一手 system 消息的正文（人格 + 规则说明）。**整场不变**，牌谱里存一次。
+    /// 这一手 system 消息的正文（人格 + 规则说明）。**一局内不变，可在局间更换**
+    /// （CONTEXT.md 的 `Persona`；边界为什么取「局」见 `TablePage.Rendering`）：
+    /// 牌谱按「座位 + 渲染版本」各存一份，换过就多一条
+    /// （`src/Janpo.Engine/Paifu.fs` 的 `Preamble` 那段注释说的就是这件事）。
     Preamble: string
     /// 渲染版本号（`模板 id@内容哈希`，票 31）。**算出来的，不是手填的**；
     /// 它是决策记录与牌谱里那份 preamble 之间的键。
@@ -179,7 +182,14 @@ module LlmSeat =
     /// 自定义端点那一项的 provider id（票 30）。**它不是 pi-ai 认识的一家**：
     /// 选中它时 Agent 层按 `BaseUrl` 现搭一个 OpenAI 兼容 provider。
     /// TS 侧的同名常量在 `web/src/agent/endpoint.ts` 的 `CUSTOM_PROVIDER`——**改一处要改两处**。
-    let customProvider = "custom"
+    ///
+    /// **带个 `-openai` 后缀是故意的**（票 46/30-A）：它原来叫 `custom`，
+    /// pi-ai 哪天真有一家叫 `custom`，那一家就会**静默地**进不来（编译不会红）。
+    let customProvider = "custom-openai"
+
+    /// 旧的那个 id（票 30 定的，票 46 改掉）。**它只活在迁移路上**：
+    /// 下拉框里已经没有它，但上一版页面存进 localStorage 的就是这个字串。
+    let legacyCustomProvider = "custom"
 
     /// 能选的 provider。**Bedrock 不在里面**（Node-only，票 18 的实测）；
     /// 订阅制的 OAuth 登录同样只有 Node 有，因此这里只列「填一把 API key 就能用」的那几家。
@@ -202,8 +212,9 @@ module LlmSeat =
     /// provider 列表上的显示名。**渲染层的单向出口**（ADR-0001）：
     /// 官方八家就是它们自己的 id，只有自定义端点要一句中文说清它是什么。
     ///
-    /// 名字带 `toDisplay` 是故意的（README 的「渲染层出口」约定），前缀是因为它渲的
-    /// 不是 `LlmSeat` 而是里面那个 provider id（它至今只是一个 `string`）。
+    /// 名字带 `toDisplay` 是故意的（`docs/development.md`「加新模块时的约定」那节的
+    /// 「渲染层出口」），前缀是因为它渲的不是 `LlmSeat` 而是里面那个 provider id
+    /// （它至今只是一个 `string`）。
     let providerToDisplay (provider: string) : string =
         if provider = customProvider then
             "自定义端点（OpenAI 兼容）"
@@ -240,11 +251,27 @@ module LlmSeat =
         | LlmField.Persona -> seat.Persona
         | LlmField.Template -> seat.Template
 
+    /// 读一个 provider id。**只有一条迁移**（票 46/30-A）：旧的 `custom` 当场升成
+    /// `custom-openai`——两个 id 指的本来就是同一件事（自定义 OpenAI 兼容端点），
+    /// 而把旧值原样留着才是**静默地读成别的东西**：`isCustom` 会当它不是自定义端点，
+    /// 转而拿 `custom` 去 pi-ai 的目录里查一家。
+    ///
+    /// 迁移只在这一处（localStorage 的值全由 `LlmSeat.edit` 进来，见 `Store.readSeatConfig`）；
+    /// **TS 侧不认旧 id**，因为那正好是这次改名要防的撞名。其余值一律原样。
+    let readProvider (value: string) : string =
+        if value = legacyCustomProvider then
+            customProvider
+        else
+            value
+
     /// 改一个字段。**读不懂的值一律原样不改**（超时框里的非数字、认不出的思考档位）：
     /// 配置是人填的，不该因为一次误输入就把设定清掉。
     let edit (which: LlmField) (value: string) (seat: LlmSeat) : LlmSeat =
         match which with
-        | LlmField.Provider -> { seat with Provider = value }
+        | LlmField.Provider -> {
+            seat with
+                Provider = readProvider value
+          }
         | LlmField.Model -> { seat with Model = value }
         // baseUrl 原样存着，这一层不判读：合法与否是 Agent 层的事（`endpoint.ts`），
         // 而且人边打边存的中间态（`http://`）不该被吐回去。

@@ -240,9 +240,26 @@ module AgentTests =
     [<Fact>]
     let ``自定义端点是 provider 列表里多出来的那一项，排在最后`` () =
         // 它不是 pi-ai 认识的一家，而是「你自己那一家」；Agent 侧的同名常量在 `endpoint.ts`。
-        Assert.Equal("custom", LlmSeat.customProvider)
+        // **带后缀**（票 46/30-A）：叫 `custom` 的话，pi-ai 哪天真有同名的一家就静默地进不来。
+        Assert.Equal("custom-openai", LlmSeat.customProvider)
         Assert.Contains(LlmSeat.customProvider, LlmSeat.providers)
         Assert.Equal(Some LlmSeat.customProvider, List.tryLast LlmSeat.providers)
+        // 旧 id 不在下拉框里了，它只活在迁移路上。
+        Assert.DoesNotContain(LlmSeat.legacyCustomProvider, LlmSeat.providers)
+
+    [<Fact>]
+    let ``localStorage 里的旧 provider id 升成新的，不静默地读成另一家`` () =
+        // 上一版页面存进 localStorage 的是 `custom`（票 30）。读回来时当场升成
+        // `custom-openai`：两个 id 指的本来就是同一件事，而原样留着才是读成别的东西
+        // （`isCustom` 会当它不是自定义端点）。`Store.readSeatConfig` 走的就是 `edit`。
+        let migrated = config |> LlmSeat.edit LlmField.Provider LlmSeat.legacyCustomProvider
+
+        Assert.Equal(LlmSeat.customProvider, migrated.Provider)
+        Assert.True(LlmSeat.isCustom migrated)
+
+        // 其余 provider id 一律原样：迁移只有这一条。
+        Assert.Equal("deepseek", (config |> LlmSeat.edit LlmField.Provider "deepseek").Provider)
+        Assert.Equal("anthropic", (config |> LlmSeat.edit LlmField.Provider "anthropic").Provider)
 
     [<Fact>]
     let ``走不走自定义端点只看 provider：官方八家填了 baseUrl 也不走`` () =
@@ -267,7 +284,7 @@ module AgentTests =
                 }
             |> Encode.toString 0
 
-        Assert.Contains("\"provider\":\"custom\"", json)
+        Assert.Contains("\"provider\":\"custom-openai\"", json)
         Assert.Contains("\"base_url\":\"http://localhost:11434/v1\"", json)
         Assert.Contains("\"model\":\"qwen3:8b\"", json)
         // 官方座位：字段在，值是空串——Agent 侧一字不看它。

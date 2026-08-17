@@ -8,6 +8,11 @@ open Feliz
 /// 站点地址与仓库地址各有各的唯一真源，两边不互相抄。
 let private repoUrl = "https://github.com/Xerxes-2/janpo"
 
+/// 版权行（票 46/37-A）。**与 `LICENSE` 及 README 末尾那一行同一个说法**
+/// （`MIT © 2026 Xerxes-2`）：页面上只写这一处，改年份时连同那两份一起改。
+/// 年份**不拿 `DateTime.Now` 算**：版权年是一件法律上的事实，不是看页那一天的日历。
+let private copyright = "© 2026 Xerxes-2"
+
 /// 许可正文由仓库地址派生，不另写一份地址。
 ///
 /// `blob/HEAD/` 而不是 `blob/main/`：HEAD 由 GitHub 解析成当前默认分支，
@@ -31,8 +36,8 @@ let private link (url: string) (text: string) =
 ///
 /// 1. **它在默认视图里，不挂在 `?dev=1` 后面**（那个开关是票 35 给开发向内容用的）。
 ///    这一行正是给普通访客看的，藏起来就等于没有。
-/// 2. **措辞与页面其余部分同一个语感**：只说访客关心的三件事（能读到源码、现在做到哪一步、
-///    按什么许可放出），不提工具链——那些话属于仓库里的开发手册。
+/// 2. **措辞与页面其余部分同一个语感**：只说访客关心的那几件事（能读到源码、现在做到哪一步、
+///    按什么许可放出、是谁哪一年的），不提工具链——那些话属于仓库里的开发手册。
 ///
 /// 样式见 `web/src/styles.css` 的 `.site-footer`：小字、淡色、一条细线隔开，
 /// 不与牌桌抢注意力。
@@ -46,6 +51,6 @@ let Bar () =
             link repoUrl "GitHub 上的 Xerxes-2/janpo"
             Html.span "。按 "
             link licenseUrl "MIT 许可"
-            Html.span "放出。"
+            Html.span $"放出。{copyright}"
         ]
     ]

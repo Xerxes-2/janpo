@@ -96,7 +96,7 @@ function rawOutput(result: AskResult | null): string {
 interface Asked {
   /** 尾部：牌谱存的就是它（票 31）。 */
   tail: string;
-  /** system 消息正文：整场不变，牌谱存一次。 */
+  /** system 消息正文：**一局内不变，局间可换**，牌谱按「座位 + 渲染版本」各存一份。 */
   preamble: string;
   /** 渲染版本号：模板 id + 内容哈希，**算出来的**。 */
   version: string;

@@ -41,6 +41,12 @@ module TablePageTests =
 
     let private rosterOf (model: TableModel) : Roster = TablePage.rosterOf model
 
+    /// 这一桌那一席模型此刻**真正会用的**那份配置（配桌是每一手现推导的）。
+    let private llmConfigOf (model: TableModel) : LlmSeat =
+        match Roster.llmSeats (rosterOf model) with
+        | [ (_, config) ] -> config
+        | other -> failwith $"这一桌应当正好坐着一席模型，却有 {List.length other} 席"
+
     /// 模型好好答话：选 `id`。
     let private chose (id: int) : AgentAnswer =
         {
@@ -84,6 +90,29 @@ module TablePageTests =
             // 一次都没问成：没有账单可记。
             Usage = None
         }
+
+    /// 把这一局打完：轮到模型就喂 `answer`，其余座位随机。
+    let private playKyoku (answer: AgentAnswer) (model: TableModel) : TableModel =
+        let rec loop (left: int) (model: TableModel) =
+            match model.Awaiting with
+            | Some awaiting when left > 0 -> loop (left - 1) (model |> step (Answered(awaiting.Ticket, answer)))
+            | _ when left <= 0 -> failwith "这一局在预算内没打完"
+            | _ ->
+                match Table.pending (tableOf model) with
+                | Some _ -> loop (left - 1) (model |> step Advanced)
+                | None -> model
+
+        loop 800 model
+
+    /// 推到模型被问到那一手，喂一条回执就停。
+    let private askOnce (answer: AgentAnswer) (model: TableModel) : TableModel =
+        let rec loop (left: int) (model: TableModel) =
+            match model.Awaiting with
+            | Some awaiting -> model |> step (Answered(awaiting.Ticket, answer))
+            | None when left <= 0 -> failwith "这一段里模型应当被问到一次"
+            | None -> loop (left - 1) (model |> step Advanced)
+
+        loop 200 model
 
     // ---- 分派 ----
 
@@ -209,16 +238,7 @@ module TablePageTests =
     let ``模型一次都答不上话，这一局照样打得完（全程兜底）`` () =
         // 页面上的断电演习（故意配坏 key）在浏览器里跑；这里把「每一次都交不出来」
         // 当成值喂进 update，验的是同一件事：**对局永不卡死**。
-        let rec loop (left: int) (model: TableModel) =
-            match model.Awaiting with
-            | Some awaiting when left > 0 -> loop (left - 1) (model |> step (Answered(awaiting.Ticket, refused)))
-            | _ when left <= 0 -> failwith "这一局在预算内没打完"
-            | _ ->
-                match Table.pending (tableOf model) with
-                | Some _ -> loop (left - 1) (model |> step Advanced)
-                | None -> model
-
-        let ended = loop 800 (llmTable ())
+        let ended = llmTable () |> playKyoku refused
         let table = tableOf ended
 
         Assert.True(Table.isKyokuEnded table)
@@ -239,6 +259,99 @@ module TablePageTests =
 
         Assert.Equal("deepseek-v4", edited.Llm.Model)
         Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf edited).State)
+
+    // ---- 人格与模板：一局内不变（票 46；术语表的 `Persona` 词条） ----
+
+    /// 拿它当新人格：两条用例共用同一句，断言里不再各写各的。
+    let private newPersona = "你是一位以防守见长的雀士，宁可少和一把，也不点炮。"
+
+    /// 换了人格之后 Agent 层给回来的就是另一份 preamble 与另一个渲染版本。
+    let private rendered (preamble: string) (version: string) (answer: AgentAnswer) : AgentAnswer =
+        { answer with
+            Preamble = preamble
+            RenderVersion = version
+        }
+
+    [<Fact>]
+    let ``一局问过话之后再改人格，本局仍然发定型那一版`` () =
+        // 术语表：`Persona` **一局内不变**（否则废掉可缓存前缀，还让同一局面的对照多出一个变量）。
+        let asked = llmTable () |> step Advanced
+        let edited = asked |> step (LlmEdited(LlmField.Persona, newPersona))
+
+        // 面板上照收（localStorage 也照存）——这一条不是把那两格锁死。
+        Assert.Equal(newPersona, edited.Llm.Persona)
+        // 但本局发出去的仍是定型那一版。
+        Assert.Equal("", (llmConfigOf edited).Persona)
+        Assert.Equal("", (awaitingOf edited).Config.Persona)
+
+        // 下一手也一样：一局之内每一手都是同一份前缀。
+        let nextHand =
+            edited
+            |> step (Answered((awaitingOf edited).Ticket, refused))
+            |> askOnce refused
+
+        Assert.Equal("", (llmConfigOf nextHand).Persona)
+
+    [<Fact>]
+    let ``模板同理：一局内改不动，开下一局才生效`` () =
+        let overrides = """{"id":"我的模板"}"""
+        let asked = llmTable () |> step Advanced
+        let edited = asked |> step (LlmEdited(LlmField.Template, overrides))
+
+        Assert.Equal("", (llmConfigOf edited).Template)
+
+        let nextKyoku = edited |> playKyoku refused |> step KyokuAdvanced
+
+        Assert.Equal(overrides, (llmConfigOf nextKyoku).Template)
+
+    [<Fact>]
+    let ``改过的人格在面板上看得见“下一局生效”`` () =
+        let asked = llmTable () |> step Advanced
+
+        // 还没改之前没有这句话。
+        Assert.False(TablePage.renderingPending asked)
+
+        let edited = asked |> step (LlmEdited(LlmField.Persona, newPersona))
+        Assert.True(TablePage.renderingPending edited)
+
+        // 开了下一局就不欠着了。
+        let nextKyoku = edited |> playKyoku refused |> step KyokuAdvanced
+        Assert.False(TablePage.renderingPending nextKyoku)
+        Assert.Equal(newPersona, (llmConfigOf nextKyoku).Persona)
+
+    [<Fact>]
+    let ``局间换人格：牌谱里两版 preamble 都在，各自记着自己的渲染版本`` () =
+        // `Paifu.Preamble` 本来就是为这件事准备的（按「座位 + 渲染版本」去重）：
+        // 一局内不得变，但局间换得动，而换了之后两版都要在牌谱里找得回来。
+        let firstKyoku =
+            llmTable ()
+            |> playKyoku (refused |> rendered "第一版人格：你在打日本立直麻将……" "janpo-default@aaaaaaaa")
+
+        let secondKyoku =
+            firstKyoku
+            |> step (LlmEdited(LlmField.Persona, newPersona))
+            |> step KyokuAdvanced
+            |> askOnce (refused |> rendered "第二版人格：你在打日本立直麻将……" "janpo-default@bbbbbbbb")
+
+        let preambles = (tableOf secondKyoku).Prompting.Preambles
+
+        Assert.Equal(2, List.length preambles)
+        Assert.All(preambles, fun preamble -> Assert.Equal(Seat.first, preamble.Seat))
+
+        Assert.Equal<string list>(
+            [ "janpo-default@aaaaaaaa"; "janpo-default@bbbbbbbb" ],
+            preambles |> List.map (fun preamble -> preamble.RenderVersion)
+        )
+
+        Assert.Equal(
+            Some "第一版人格：你在打日本立直麻将……",
+            Prompting.preambleFor Seat.first "janpo-default@aaaaaaaa" (tableOf secondKyoku).Prompting
+        )
+
+        Assert.Equal(
+            Some "第二版人格：你在打日本立直麻将……",
+            Prompting.preambleFor Seat.first "janpo-default@bbbbbbbb" (tableOf secondKyoku).Prompting
+        )
 
     // ---- 危险度的显示开关（票 25） ----
 

@@ -177,7 +177,12 @@ export interface DecideResponse {
    * **前缀不在里面**：它是 (事件流 + 座位 + 模板) 的派生物，而事件流就在同一份牌谱里。
    */
   prompt_tail: string;
-  /** 这一手 system 消息的正文（人格 + 规则说明）。**整场不变**，牌谱里存一次。 */
+  /**
+   * 这一手 system 消息的正文（人格 + 规则说明）。**一局内不变，可在局间更换**
+   * （CONTEXT.md 的 `Persona`）：牌谱按「座位 + 渲染版本」各存一份，换过就多一条
+   * （`src/Janpo.Engine/Paifu.fs` 的 `Preamble` 那段注释）。
+   * 一局之内不得变这件事由页面执行（`src/Janpo.Web/TablePage.fs` 的 `Rendering`）。
+   */
   preamble: string;
   /** 渲染版本号 `模板 id@内容哈希`（票 31）。**算出来的，不是手填的**。 */
   render_version: string;
