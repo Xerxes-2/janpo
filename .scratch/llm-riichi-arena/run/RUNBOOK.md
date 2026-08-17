@@ -23,6 +23,7 @@
 3. `docs/adr/0001` `0002` `0003` — 记法、可分享物、范围边界
 4. `.scratch/llm-riichi-arena/spec.md` — 只读与你这票相关的段落
 5. `docs/agents/*.md` — issue tracker 与领域文档约定
+6. `docs/agents/judgments.md` — 跑批攒下的可复用判据（每条附真实案例）。开工时过一遍，收工前再过一遍你动过的那几条
 
 ## 流程
 
