@@ -23,8 +23,8 @@ dotnet tool restore    # 装 Fantomas 与 Fable（dotnet local tool，版本在 
 
 ```sh
 ./scripts/ci.sh                       # CI 的全部关卡：dotnet 侧 + JS 侧，一条命令两侧全绿
-./scripts/ci-web.sh                   # 只跑 JS 侧：Biome + tsc + Agent 层用例 + Fable + Vite + 浏览器内三道
-dotnet build janpo.slnx               # 构建五个工程
+./scripts/ci-web.sh                   # 只跑 JS 侧（Biome、tsc、Agent 层用例、prompt 语义不变量、Fable、Vite，再加浏览器内那几道）
+dotnet build janpo.slnx               # 构建解决方案里的全部工程
 dotnet test janpo.slnx                # 跑测试（xunit + FsCheck）
 dotnet fantomas .                     # 格式化（提交前必跑）
 dotnet fantomas --check .             # 只检查，CI 用这个
@@ -41,6 +41,8 @@ pnpm run build     # Fable 编译 + Vite 打包 → web/dist（可静态托管�
 pnpm run verify    # 无头验收：浏览器内跑同种子的一局 / 一整场，与 CLI 逐项对照
 pnpm run verify:golden  # 无头验收：浏览器内跑黄金用例，与 tests/fixtures/golden/ 逐字段逐行对照
 pnpm run verify:export  # 无头验收：浏览器内导出牌谱，把下下来的字节 fold 回去对照
+pnpm run verify:invariants  # prompt 的语义不变量：本机扫一批真实对局，零网络请求
+pnpm run verify:redaction   # 无头验收：会回显 key 的本机假端点跑一手，牌谱里仍然没有它
 pnpm run check     # Biome（TS/JS 的格式 + lint）
 pnpm run typecheck # tsc --noEmit：只管 Agent 层与它的用例（Fable 的输出不在 include 里）
 pnpm run test      # Agent 层的确定性用例（node --test，回放录制的响应，**不调真实 API**）
@@ -100,7 +102,10 @@ dotnet run --project src/Janpo.Cli -- golden write tests/fixtures/golden/dual-ta
 
 怎么加一条用例见 `tests/fixtures/golden/README.md`。
 
-CLI 目前的能力（`janpo tile / deal / kyoku / game / decide / golden / soak / shanten / yaku`）：
+CLI 目前的能力（`janpo tile / deal / kyoku / game / decide / golden / soak / shanten / yaku`）。
+子命令的开关以 `janpo --help` 为准（那份帮助文本就长在 `src/Janpo.Cli/Program.fs` 里，
+改实现时就在旁边）：对局长度 `--hanchan` / `--tonpuusen`、自带选手
+`--uniform` / `--covering` / `--opinionated`（有主见的那个才走得到立直与供托）、`--no-akadora` 等：
 
 ```sh
 $ dotnet run --project src/Janpo.Cli -- tile "1z 5sr 5s 9s 3m"
@@ -148,7 +153,7 @@ tests/Janpo.Engine.Tests/ 引擎测试：xunit 作 runner，FsCheck 属性测试
 tests/fixtures/golden/   黄金用例的**数据**（两侧读同一份），用法见同目录 README
 tests/fixtures/paifu/    真实牌谱固件（离线对拍用），样本扩大走环境变量不改代码
 scripts/ci.sh            CI 关卡，本地与 CI 同一份
-scripts/ci-web.sh        JS 侧的那八道，被 ci.sh 调，也能单跑
+scripts/ci-web.sh        JS 侧的关卡（道数与清单看脚本头部注释），被 ci.sh 调，也能单跑
 scripts/fsi/             `dotnet fsi` 探针：引用已编译的引擎 DLL 直调真实 API
 flake.nix                dev shell（dotnet SDK + node/pnpm + uv）
 .editorconfig            Fantomas 的 F# 格式规则（Web 工程另开 stroustrup，因为 Feliz 是嵌套 DSL）
