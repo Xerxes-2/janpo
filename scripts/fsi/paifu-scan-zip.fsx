@@ -192,6 +192,10 @@ let parseMember (line: string) : Member =
 
 /// 读一个成员的全文。本地头 30 字节里只用得到文件名与 extra 的长度（26–29 字节），
 /// 压缩尺寸取中央目录（索引）那份——带 data descriptor 的包本地头里是 0。
+///
+/// 成员正文可能**还套着一层 gzip**（票 68 实测：2009–2024 的包把 `<id>.mjson.gz`
+/// 原样塞进 zip、方法 0；2025/2026 是裸 JSON、方法 8）。这是打包方式差异不是牌谱格式差异，
+/// 在这里按 gzip 魔数剥掉——裸 JSON 以 `{` 开头，不会撞上 `1F 8B`。
 let readMember (file: FileStream) (member': Member) : string =
     let header = Array.zeroCreate 30
     file.Seek(member'.Offset, SeekOrigin.Begin) |> ignore
@@ -214,15 +218,25 @@ let readMember (file: FileStream) (member': Member) : string =
     let compressed = Array.zeroCreate member'.CompressedSize
     file.ReadExactly(compressed, 0, member'.CompressedSize)
 
-    match member'.Method with
-    | 0 -> Text.Encoding.UTF8.GetString compressed
-    | 8 ->
-        use inflate =
-            new DeflateStream(new MemoryStream(compressed), CompressionMode.Decompress)
+    let raw =
+        match member'.Method with
+        | 0 -> compressed
+        | 8 ->
+            use inflate =
+                new DeflateStream(new MemoryStream(compressed), CompressionMode.Decompress)
 
-        use reader = new StreamReader(inflate, Text.Encoding.UTF8)
+            use buffer = new MemoryStream()
+            inflate.CopyTo buffer
+            buffer.ToArray()
+        | other -> failwith $"{member'.Name}：不认识的压缩方法 {other}"
+
+    if raw.Length >= 2 && raw[0] = 0x1Fuy && raw[1] = 0x8Buy then
+        use gunzip = new GZipStream(new MemoryStream(raw), CompressionMode.Decompress)
+
+        use reader = new StreamReader(gunzip, Text.Encoding.UTF8)
         reader.ReadToEnd()
-    | other -> failwith $"{member'.Name}：不认识的压缩方法 {other}"
+    else
+        Text.Encoding.UTF8.GetString raw
 
 // ---- 分片与断点 ----
 

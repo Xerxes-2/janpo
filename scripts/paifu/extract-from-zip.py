@@ -11,8 +11,13 @@
 2. **留证据**：差异场的原始牌谱证据本体在压缩包里，报告要引用哪场就提哪场。
 
 已存在的文件跳过（幂等）。
+
+2009–2024 的包把 `<id>.mjson.gz` 原样塞进 zip（方法 0），成员正文自己还是 gzip；
+2025/2026 是裸 JSON。按 gzip 魔数剥掉那一层（裸 JSON 以 `{` 开头，不会撞上 1F 8B），
+落盘的一律是裸 mjson——与 `paifu-scan-zip.fsx` 的读法同一条口径（票 68）。
 """
 
+import gzip
 import os
 import sys
 import zipfile
@@ -37,8 +42,12 @@ def main():
                 continue
             target = os.path.join(mjai_dir, log_id + ".mjson")
             if not os.path.exists(target):
-                with archive.open(name) as source, open(target, "wb") as sink:
-                    sink.write(source.read())
+                with archive.open(name) as source:
+                    data = source.read()
+                if data[:2] == b"\x1f\x8b":
+                    data = gzip.decompress(data)
+                with open(target, "wb") as sink:
+                    sink.write(data)
                 written += 1
             wanted.discard(log_id)
 
