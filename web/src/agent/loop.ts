@@ -1,6 +1,9 @@
 /**
  * 兜底闭环的那个循环（票 23）：**问 → 判读 → 不行就带着理由重问 → 用尽了就说「交不出来」**。
  *
+ * **不是每种失败都值得重问**（票 47）：“再问一遍还是一样”的那几类（认证失败、
+ * 请求本身不合法、模型名不存在）**第一次就收手**，判据在 `retry.ts`。
+ *
  * 它不认识动作，只认识 id：判读的全部内容是「模型给回来的那个 id 在不在这一包里」。
  * **代打哪一手不是这里的事**——兜底策略要读规则（Bare 档摸切、Assisted 档不退向听的安全打），
  * 那在引擎的 `Fallback` 里。这一层的产出只有「选了 id」或者「我交不出来，原因是……」。
@@ -19,12 +22,18 @@ import type { Ask, AskResult } from "./ask.ts";
 import { missingConfig } from "./endpoint.ts";
 import { messagesOf, promptSections } from "./prompt.ts";
 import { redactSecrets } from "./redact.ts";
+import { type Retry, retryOf, WORTH } from "./retry.ts";
 import { renderVersion, resolveTemplate } from "./template.ts";
 import { CHOOSE_ACTION, toolsShape } from "./tools.ts";
 import type { DecideRequest, DecideResponse } from "./types.ts";
 
-/** 一次回答的判读。 */
-type Verdict = { ok: true; id: number; reason: string | null } | { ok: false; why: string };
+/**
+ * 一次回答的判读。失败那一支带着**这条失败值不值得再问一遍**（票 47）：
+ * 五类失败就在这个文件里定义，它们的重试判据也就在这里声明。
+ */
+type Verdict =
+  | { ok: true; id: number; reason: string | null }
+  | { ok: false; why: string; retry: Retry };
 
 /** 模型说的那段话，截短了放进原因里——原因是给人看的，不是给机器解析的。 */
 function excerpt(text: string): string {
@@ -41,15 +50,26 @@ function strictInt(value: unknown): number | null {
 
 /**
  * 这次回答能用吗。**四类失败在这里合流**（超时 / provider 报错 / 格式跑偏 / id 非法），
- * 之后走同一条重试与兜底路径。
+ * 之后走同一条兜底路径——但**重不重问各是各的**（票 47）。
+ *
+ * 这里只有 provider 报错那一支需要分类：其余四类都是**模型这一次**的事
+ * （没答完、没调工具、调错工具、给了个不存在的 id），把错在哪告诉它，
+ * 下一轮常常就对了（`loop.test.ts` 里那条「第二次答对了」就是它）。
  */
 function judge(result: AskResult, ids: Set<number>): Verdict {
   // 票 18 实测：这两样都是值，不是异常。
   if (result.stopReason === "aborted") {
-    return { ok: false, why: `模型超时（${result.latencyMs} ms 没答完）` };
+    // 超时是「这一次」的事：同一份请求再问一遍完全可能答得完。
+    return { ok: false, why: `模型超时（${result.latencyMs} ms 没答完）`, retry: WORTH };
   }
   if (result.stopReason === "error") {
-    return { ok: false, why: `provider 报错：${result.errorMessage ?? "没给原因"}` };
+    // **唯一需要分类的一支**（票 47）：401 与 429 都是 provider 报错，
+    // 前者再问一遍必然还是 401，后者可能就过了。
+    return {
+      ok: false,
+      why: `provider 报错：${result.errorMessage ?? "没给原因"}`,
+      retry: retryOf(result.errorMessage),
+    };
   }
 
   const call = result.toolCall;
@@ -57,18 +77,23 @@ function judge(result: AskResult, ids: Set<number>): Verdict {
     return {
       ok: false,
       why: `模型没有调用 ${CHOOSE_ACTION}，只回了一段话：「${excerpt(result.text)}」`,
+      retry: WORTH,
     };
   }
   if (call.name !== CHOOSE_ACTION) {
-    return { ok: false, why: `模型调了别的工具：${call.name}` };
+    return { ok: false, why: `模型调了别的工具：${call.name}`, retry: WORTH };
   }
 
   const id = strictInt(call.arguments.action_id);
   if (id === null) {
-    return { ok: false, why: `action_id 不是一个 id：${JSON.stringify(call.arguments.action_id)}` };
+    return {
+      ok: false,
+      why: `action_id 不是一个 id：${JSON.stringify(call.arguments.action_id)}`,
+      retry: WORTH,
+    };
   }
   if (!ids.has(id)) {
-    return { ok: false, why: `action_id=${id} 不在这一手的合法动作集里` };
+    return { ok: false, why: `action_id=${id} 不在这一手的合法动作集里`, retry: WORTH };
   }
 
   const reason = typeof call.arguments.reason === "string" ? call.arguments.reason : null;
@@ -138,6 +163,17 @@ function audited(asked: Asked, result: AskResult | null) {
   };
 }
 
+/**
+ * 交不出来那句话的收尾。**「没重试」与「少试了」必须一眼分得开**（票 47）——
+ * 这句话会原样印在牌桌上那一手的兜底原因里（`TablePage` 读的就是它），
+ * 也会进牌谱的 `fallback`。两边读的是**同一个字符串**，因此不必也不该各写一份。
+ */
+function gaveUpBecause(why: string, retry: Retry, rounds: number): string {
+  return retry.worth
+    ? `${why}（重试 ${rounds - 1} 次仍无结果）`
+    : `${why}（没有重试：${retry.because}，再问一遍还是一样）`;
+}
+
 /** 一条「我交不出来」。审计那几项默认是空的，真问过的那几条路上再盖上去。 */
 function refuse(why: string, attempts: number, latencyMs: number): DecideResponse {
   return {
@@ -194,6 +230,7 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
   let attempts = 0;
   let latencyMs = 0;
   let why = "没问出结果";
+  let retry: Retry = WORTH;
   let note: string | null = null;
   let asked: Asked = NOTHING_ASKED;
   let last: AskResult | null = null;
@@ -223,8 +260,9 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
       verdict = judge(result, ids);
     } catch (error) {
       // 不该发生（超时与报错都是值），但真抛了也只是这一次失败，不是整局崩掉。
+      // 归「值得重试」：走到这里就是适配器出了意外，而意外是分不清的那一类。
       last = null;
-      verdict = { ok: false, why: `Agent 层抛了异常：${String(error)}` };
+      verdict = { ok: false, why: `Agent 层抛了异常：${String(error)}`, retry: WORTH };
     }
     attempts += 1;
 
@@ -240,11 +278,15 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
     }
 
     why = verdict.why;
+    retry = verdict.retry;
+    // **不值得重试的立刻走兜底**（票 47）：重试发的是同一份请求，得到的也是同一个答案。
+    // 27 号实测：一整场 255 次请求里有 170 次是这么烧掉的。
+    if (!retry.worth) break;
     note = verdict.why;
   }
 
   return {
-    ...refuse(`${why}（重试 ${rounds - 1} 次仍无结果）`, attempts, latencyMs),
+    ...refuse(gaveUpBecause(why, retry, rounds), attempts, latencyMs),
     ...audited(asked, last),
   };
 }

@@ -1,0 +1,15 @@
+{
+  "_note": "真实录制：本机假端点固定回 503（`fake-endpoint.mjs --fail 503`），走真的 piAsk 与 pi-ai 适配器。",
+  "stopReason": "error",
+  "toolCall": null,
+  "text": "",
+  "thinking": null,
+  "errorMessage": "503: {\"message\":\"The engine is currently overloaded, please try again later.\",\"type\":\"server_error\"}",
+  "latencyMs": 3,
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  }
+}

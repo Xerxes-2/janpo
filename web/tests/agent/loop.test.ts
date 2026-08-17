@@ -20,10 +20,13 @@ import {
   dangerPackage,
   legal,
   localSeat,
+  noModel,
+  rateLimited,
   replay,
   request,
   responsePackage,
   seat,
+  serverError,
   textOnly,
 } from "./fixtures.ts";
 
@@ -77,6 +80,54 @@ test("provider 报错：401 的原文留在 failure 里，人看得见", async (
   assert.equal(response.action_id, null);
   assert.match(response.failure ?? "", /provider 报错/);
   assert.match(response.failure ?? "", /Authentication Fails/);
+});
+
+// 下面两条是票 47 的正题：**同一条路上的两类失败，分类器必须把它俩分开**。
+// 两份固件都是录下来的真响应（401 来自 DeepSeek，429 来自本机假端点的真 HTTP 响应）。
+
+test("不值得重试：401 只问一次就走兜底，不占额外请求", async () => {
+  const { ask, prompts } = replay(badKey);
+  const response = await decideWith(ask, request(dahaiPackage));
+
+  assert.equal(prompts.length, 1, "第一次 401 就已经注定后两次也是，那两个请求是白烧的");
+  assert.equal(response.attempts, 1);
+  assert.equal(response.action_id, null, "傅底的行为一字未改：仍然是「我交不出来」");
+  // 页面与牌谱上那句话要能看出「没重试是因为重试没意义」，而不是看着像少试了。
+  assert.match(response.failure ?? "", /没有重试/);
+  assert.match(response.failure ?? "", /不认这把 key/);
+  assert.doesNotMatch(response.failure ?? "", /重试 \d+ 次仍无结果/);
+  // 报错原文一个字不少（票 36 那道打码在出口，分类在它之前）。
+  assert.match(response.failure ?? "", /Authentication Fails/);
+});
+
+test("值得重试：限流（429）照样重试到上限", async () => {
+  const { ask, prompts } = replay(rateLimited);
+  const response = await decideWith(ask, request(dahaiPackage));
+
+  assert.equal(prompts.length, 3, "限流是「这一刻不行」，不是「你这份请求不对」");
+  assert.equal(response.attempts, 3);
+  assert.match(response.failure ?? "", /重试 2 次仍无结果/);
+  assert.doesNotMatch(response.failure ?? "", /没有重试/);
+});
+
+test("值得重试：端点自己挂了（503）也重试", async () => {
+  const { ask, prompts } = replay(serverError);
+  const response = await decideWith(ask, request(dahaiPackage));
+
+  assert.equal(prompts.length, 3);
+  assert.match(response.failure ?? "", /重试 2 次仍无结果/);
+});
+
+test("不值得重试：模型名不存在（404）也只问一次", async () => {
+  // 这一份固件还多守一件事：自定义端点的报错被 `explainFailure` 在前面加了一句中文，
+  // 因此状态码**不在句首**——分类器靠锚定开头的写法会在这里漏掉。
+  const { ask, prompts } = replay(noModel);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: localSeat }));
+
+  assert.equal(prompts.length, 1);
+  assert.equal(response.attempts, 1);
+  assert.match(response.failure ?? "", /没有重试/);
+  assert.match(response.failure ?? "", /模型名或这个端点地址不存在/);
 });
 
 test("重试成功就不再重试：第二次答对了就用第二次的", async () => {

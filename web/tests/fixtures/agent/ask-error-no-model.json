@@ -1,0 +1,15 @@
+{
+  "_note": "真实录制：本机假端点固定回 404「没这个模型」（`fake-endpoint.mjs --fail 404`），走真的 piAsk 与 pi-ai 适配器。",
+  "stopReason": "error",
+  "toolCall": null,
+  "text": "",
+  "thinking": null,
+  "errorMessage": "自定义端点 http://127.0.0.1:4294/v1 回了 404：baseUrl 多半漏了 /v1 之类的路径前缀。原始报错：404: {\"message\":\"The model `no-such-model` does not exist.\",\"type\":\"invalid_request_error\"}",
+  "latencyMs": 35,
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  }
+}

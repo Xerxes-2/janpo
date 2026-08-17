@@ -79,8 +79,25 @@ export const textOnly = load<AskResult>("ask-text-only");
 /** 超时：abort 之后 `stopReason: "aborted"`。 */
 export const aborted = load<AskResult>("ask-aborted");
 
-/** provider 报错：坏 key 的 401。 */
+/** provider 报错：坏 key 的 401。**不值得重试**那一类的标本（票 47）。 */
 export const badKey = load<AskResult>("ask-error-bad-key");
+
+/**
+ * provider 报错：限流的 429。**值得重试**那一类里唯一拿不到真 provider 样本的一档
+ * （限流不听人调度），因此录的是**本机假端点的真 HTTP 429** 过一遍真的 pi-ai 适配器。
+ *
+ * 它与 `badKey` 是一对：两者都是 `stopReason: "error"` 的 4xx，而分类器必须把它俩分开。
+ */
+export const rateLimited = load<AskResult>("ask-error-rate-limited");
+
+/** provider 报错：端点自己挂了的 503（同上，假端点录的）。**值得重试**。 */
+export const serverError = load<AskResult>("ask-error-server");
+
+/**
+ * provider 报错：模型名不存在的 404。**不值得重试**，且它的报错被 `explainFailure`
+ * 在前面加了一句中文——**状态码因此不在句首**。
+ */
+export const noModel = load<AskResult>("ask-error-no-model");
 
 export const seat: SeatConfig = {
   provider: "deepseek",

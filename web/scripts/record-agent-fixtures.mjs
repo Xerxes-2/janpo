@@ -9,13 +9,19 @@
 //   JANPO_KEY_FILE=/tmp/deepseek_key node scripts/record-agent-fixtures.mjs ask-assisted
 //                                        ^ 只重录点名的那几份，别的原样留着
 //
+// **最后两份不要 key**（票 47）：它们录的是限流与服务端故障，这两种响应**问真 provider 是要不来的**，
+// 由本机假端点（`fake-endpoint.mjs --fail`）回一个真的 HTTP 响应，仍然走 `piAsk` 与 pi-ai 的适配器。
+//   node scripts/record-agent-fixtures.mjs ask-error-rate-limited ask-error-server ask-error-no-model
+//
 // 重录之后请逐个看 diff：这些文件是「模型真的这么答过」的证据，不是随手编的。
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createModels } from "@earendil-works/pi-ai";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
+import { CUSTOM_PROVIDER } from "../src/agent/endpoint.ts";
 import { piAsk } from "../src/agent/piai.ts";
 import { promptMessages } from "../src/agent/prompt.ts";
 
@@ -23,7 +29,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = resolve(here, "../tests/fixtures/agent");
 
 const keyFile = process.env.JANPO_KEY_FILE ?? "/tmp/deepseek_key";
-const apiKey = readFileSync(keyFile, "utf8").trim();
+// 要 key 的那几份才读它：本机假端点那两份（票 47）一个字节都不要，
+// 没 key 的机器上也该重录得了。
+const apiKey = existsSync(keyFile) ? readFileSync(keyFile, "utf8").trim() : "";
 const MODEL = process.env.JANPO_MODEL ?? "deepseek-v4-flash";
 
 const decision = JSON.parse(readFileSync(resolve(fixtures, "decision-dahai.json"), "utf8"));
@@ -47,12 +55,19 @@ const seat = (overrides) => ({
 /** 两条消息摊进 `piAsk` 的请求（它的字段名是 `system` 与 `prompt`）。 */
 const messages = (rendered) => ({ system: rendered.system, prompt: rendered.user });
 
+/** 不要 key 的那几份（票 47）：本机假端点回的真 HTTP 错误。 */
+const FROM_FAKE_ENDPOINT = ["ask-error-rate-limited", "ask-error-server", "ask-error-no-model"];
+
 /** 点名了就只录点名的那几份；一份都没点名就全录。 */
 const named = process.argv.slice(2).filter((argument) => !argument.startsWith("-"));
 const wanted = (name) => named.length === 0 || named.includes(name);
 
 async function record(name, note, run) {
   if (!wanted(name)) return;
+  if (apiKey === "" && !FROM_FAKE_ENDPOINT.includes(name)) {
+    console.log(`${name}: 跳过（${keyFile} 不在，这一份要真 key）`);
+    return;
+  }
   const result = await run();
   const path = resolve(fixtures, `${name}.json`);
   writeFileSync(path, `${JSON.stringify({ _note: note, ...result }, null, 2)}\n`);
@@ -140,4 +155,66 @@ await record(
 // 6) provider 报错：故意用一把坏 key（**断电演习**在浏览器里的等价物）。
 await record("ask-error-bad-key", "真实录制：坏 key 的 401（stopReason=error，不抛异常）。", () =>
   piAsk({ seat: seat({ api_key: "sk-invalid-key-for-fixture" }), ...messages(bare), actionIds }),
+);
+
+/**
+ * 本机假端点起一个，固定回 `status`，拿 `piAsk` 真问一次（票 47）。
+ *
+ * **这仍然是录制，不是手编**：真的 HTTP 响应、真的 pi-ai `openai-completions` 适配器、
+ * 真的 `piAsk`——录下来的 `errorMessage` 就是这条链路拼出来的那一句。换成手编的话，
+ * 「pi-ai 把状态码写成 `401: {…}`」这个分类器唯一的输入假设就变成了无人看着的东西。
+ */
+async function fromFakeEndpoint(status) {
+  const port = 4290 + (status % 100);
+  const endpoint = spawn(
+    process.execPath,
+    [
+      resolve(here, "fake-endpoint.mjs"),
+      "--port",
+      String(port),
+      "--fail",
+      String(status),
+      "--quiet",
+    ],
+    { stdio: ["ignore", "pipe", "inherit"] },
+  );
+  await new Promise((done) => endpoint.stdout.once("data", done));
+
+  try {
+    return await piAsk({
+      seat: seat({
+        provider: CUSTOM_PROVIDER,
+        model: "no-such-model",
+        api_key: "",
+        base_url: `http://127.0.0.1:${port}/v1`,
+      }),
+      ...messages(bare),
+      actionIds,
+    });
+  } finally {
+    endpoint.kill();
+  }
+}
+
+// 7) 限流（票 47）：**「值得重试」那一类里唯一拿不到真样本的一档**——限流不听人调度。
+// 它与 401 是一对：两者都是 `stopReason: "error"` 的 4xx，分类器却必须把它俩分开。
+await record(
+  "ask-error-rate-limited",
+  "真实录制：本机假端点固定回 429（`fake-endpoint.mjs --fail 429`），走真的 piAsk 与 pi-ai 适配器。",
+  () => fromFakeEndpoint(429),
+);
+
+// 8) 服务端故障（票 47）：5xx 同样问不来。它守的是分类器那条「4xx / 5xx 分两边」的另一边。
+await record(
+  "ask-error-server",
+  "真实录制：本机假端点固定回 503（`fake-endpoint.mjs --fail 503`），走真的 piAsk 与 pi-ai 适配器。",
+  () => fromFakeEndpoint(503),
+);
+
+// 9) 模型名不存在（票 47）：官方八家这一档在**发请求之前**就被模型目录拦下了，
+// 拿不到 provider 的话；自定义端点（票 30）没有目录，因此这一档是真的从端点回来的。
+await record(
+  "ask-error-no-model",
+  "真实录制：本机假端点固定回 404「没这个模型」（`fake-endpoint.mjs --fail 404`），走真的 piAsk 与 pi-ai 适配器。",
+  () => fromFakeEndpoint(404),
 );

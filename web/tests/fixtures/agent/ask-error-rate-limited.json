@@ -1,0 +1,15 @@
+{
+  "_note": "真实录制：本机假端点固定回 429（`fake-endpoint.mjs --fail 429`），走真的 piAsk 与 pi-ai 适配器。",
+  "stopReason": "error",
+  "toolCall": null,
+  "text": "",
+  "thinking": null,
+  "errorMessage": "429: {\"message\":\"Rate limit reached for requests, please slow down.\",\"type\":\"rate_limit_error\"}",
+  "latencyMs": 34,
+  "usage": {
+    "input": 0,
+    "output": 0,
+    "cacheRead": 0,
+    "cacheWrite": 0
+  }
+}

@@ -25,12 +25,18 @@ const gateway: SeatConfig = {
   base_url: "http://192.168.1.5:11434/v1",
 };
 
-/** 那种会把收到的 key 原样抄回来的网关（`scripts/fake-endpoint.mjs --echo-key` 是它的实物）。 */
-function echoed(config: SeatConfig): AskResult {
+/**
+ * 那种会把收到的 key 原样抄回来的网关（`scripts/fake-endpoint.mjs --echo-key` 是它的实物）。
+ *
+ * **状态码开放出来是因为票 47**：回显是网关写报错的习惯，与它回哪个状态码无关
+ * （同一段拼报错的代码 401 与 429 都走），但**只有值得重试的那一类才会真的重问一遍**，
+ * 而「重试那一轮的 prompt」正是票 34 数出来的三个出口之一。
+ */
+function echoed(config: SeatConfig, status = 429): AskResult {
   return {
     ...badKey,
     errorMessage:
-      `401: {"message":"invalid api key: ${config.api_key} ` +
+      `${status}: {"message":"invalid api key: ${config.api_key} ` +
       `for ${config.base_url}/chat/completions","type":"invalid_request_error"}`,
   };
 }
@@ -122,6 +128,21 @@ test("端点原样回显 key：三个出口（fallback / output / 牌谱里的 p
   assert.ok(response.output.includes(KEY_MASK), "output.error_message");
   assert.ok(response.prompt_tail.includes(KEY_MASK), "重试那一句进了牌谱的 prompt");
   assert.ok(response.prompt_tail.includes(ENDPOINT_MASK), "baseUrl 也在那一句里");
+  assert.equal(response.attempts, 3, "值得重试的那一类才有「重试那一轮的 prompt」这个出口");
+});
+
+test("同一个回显的网关回 401（不重试）：两个出口照样打码，第三个根本不存在", async () => {
+  // 票 47 之后 401 只问一次，因此**根本没有重试那一轮的 prompt**——
+  // 少一个出口不是少守一个出口，但得有人盯着它真的没了，否则上面那条的覆盖会静静地缩水。
+  const { ask } = replay(echoed(gateway, 401));
+  const response = await decideWith(ask, request(dahaiPackage, { seat: gateway }));
+
+  assert.equal(response.attempts, 1);
+  assert.equal(JSON.stringify(response).includes(gateway.api_key), false, "key 进了牌谱");
+  assert.equal(JSON.stringify(response).includes(gateway.base_url), false, "baseUrl 进了牌谱");
+  assert.ok(response.failure?.includes(KEY_MASK), "fallback");
+  assert.ok(response.output.includes(KEY_MASK), "output.error_message");
+  assert.equal(response.prompt_tail.includes("invalid api key"), false, "没重问就没这一句");
 });
 
 test("没夹带的报错原文一字不改（官方八家那一档就是这样）", async () => {

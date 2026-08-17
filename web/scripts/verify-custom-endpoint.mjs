@@ -17,7 +17,9 @@
 // 每种模式都把**浏览器实际报的那句话**打出来（console + requestfailed），报告里抄的就是它。
 // 选项：--mode、--endpoint-host、--public-page、--seat N（默认 1）、--page-port、--endpoint-port、--budget ms、
 //       --base-url（盖掉座位上的 baseUrl，用来演填错的情形：`--mode allowed --base-url http://127.0.0.1:4199`
-//       就是「漏了 /v1」那一类）。
+//       就是「漏了 /v1」那一类）、
+//       --fail <status>（票 47：让端点固定回一个失败状态，用来**在真浏览器里数请求**
+//       ——`--fail 401` 该只看到一条 POST（重试没意义），`--fail 429` 该看到三条）。
 
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -43,6 +45,8 @@ const endpointPort = Number.parseInt(flag("--endpoint-port", "4199"), 10);
 const endpointHost = flag("--endpoint-host", "127.0.0.1");
 const publicPage = flag("--public-page", "https://example.com");
 const baseUrlOverride = flag("--base-url", null);
+/** 票 47：端点固定回这个状态（`0` = 不演失败，照常回一条 tool call）。 */
+const failStatus = flag("--fail", null);
 const budgetMs = Number.parseInt(flag("--budget", "60000"), 10);
 
 /**
@@ -113,6 +117,7 @@ async function runTable(plan) {
   const endpointArgs = ["--port", String(endpointPort)];
   if (plan.cors) endpointArgs.push("--cors", pageOrigin);
   if (plan.endpointHttps) endpointArgs.push("--https");
+  if (failStatus !== null) endpointArgs.push("--fail", failStatus);
   const endpoint = startEndpoint(endpointArgs);
   await new Promise((done) => setTimeout(done, 800));
 
@@ -198,12 +203,19 @@ async function runTable(plan) {
     console.log(`${await readText("table-latest")}`);
     console.log("");
     console.log(`端点收到的请求：${endpoint.log.slice(1).join(" | ") || "（一条都没有）"}`);
+    if (failStatus !== null) {
+      // 票 47 要的那个数：一手里真的发出去了几个 POST。
+      const posts = responses.filter((line) => line.includes("/chat/completions")).length;
+      console.log(`这一手发出去的 POST：${posts} 条（首问 + 重试）`);
+    }
     console.log(`浏览器看到的响应：${responses.join(" | ") || "（一条都没有）"}`);
     console.log(`请求失败（requestfailed）：${failures.join("\n  ") || "无"}`);
     console.log(`console.error：${errors.length > 0 ? `\n  ${errors.join("\n  ")}` : "无"}`);
     console.log("");
+    // `--fail` 是故意让端点报错的（票 47），那时该到的就是 troubled，不是这个模式原本的期望。
+    const expect = failStatus === null ? plan.expect : "troubled";
     console.log(
-      `实测过的是 ${plan.expect}，这一跑是 ${state} —— ${state === plan.expect ? "一致" : "**变了，看上面**"}`,
+      `实测过的是 ${expect}，这一跑是 ${state} —— ${state === expect ? "一致" : "**变了，看上面**"}`,
     );
     if (state === "troubled") {
       console.log("（这一条正是要写进文档的：请求被拦时主持人在页面上看到的是哪句话）");

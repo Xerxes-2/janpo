@@ -8,8 +8,10 @@
 //   node scripts/fake-endpoint.mjs --cors http://localhost:4181   # 放行那个 origin
 //   node scripts/fake-endpoint.mjs --cors '*' --https     # 端点自己上 https（自签证书）
 //   node scripts/fake-endpoint.mjs --cors '*' --echo-key  # **回一条把 key 原样抄回来的 401**（票 36）
+//   node scripts/fake-endpoint.mjs --fail 429             # **固定回一个失败状态**（票 47）
 //
-// 选项：--port N（默认 4199）、--action-id N（默认 0）、--cors <origin|*>、--https、--quiet、--echo-key。
+// 选项：--port N（默认 4199）、--action-id N（默认 0）、--cors <origin|*>、--https、--quiet、
+//       --echo-key、--fail <status>。
 // **CORS 默认关**：本地端点默认就不放行浏览器，这份默认值本身就是要验的那个坑。
 
 import { execFileSync } from "node:child_process";
@@ -40,6 +42,29 @@ const quiet = argv.includes("--quiet");
  * 反向自证用的靶子：`scripts/verify-redaction.mjs` 拿它跑一手再导出牌谱。
  */
 const echoKey = argv.includes("--echo-key");
+
+/**
+ * **固定回一个失败状态**（票 47）：录一份「provider 是这样报错的」固件，要的是一个真的
+ * HTTP 响应过一遍 pi-ai 的适配器。可**限流与 5xx 是问不来的**——429 不听人调度，
+ * 5xx 更不会点单，而它们恰恰是「值得重试」那一类的正样本。这个开关让假端点把它们演出来。
+ *
+ * 与 `--echo-key` 分成两个开关：那一个演的是「回显 key 的自建网关」（票 36 的靶子），
+ * 正文是它的正题；这一个只关心**状态码**，正文照各家真回的措辞写。
+ */
+const failStatus = Number.parseInt(flag("--fail", "0"), 10);
+
+/** 点名那几档的 OpenAI 风格正文。没点名的走一句通用的。 */
+const FAIL_BODIES = {
+  429: { message: "Rate limit reached for requests, please slow down.", type: "rate_limit_error" },
+  404: { message: "The model `no-such-model` does not exist.", type: "invalid_request_error" },
+  503: {
+    message: "The engine is currently overloaded, please try again later.",
+    type: "server_error",
+  },
+};
+
+const failBody = () =>
+  FAIL_BODIES[failStatus] ?? { message: `fake endpoint says ${failStatus}.`, type: "server_error" };
 
 /** 自签证书（只为验 mixed content 的对策那一条：端点上 https）。浏览器要 --ignore-certificate-errors。 */
 function selfSigned() {
@@ -144,6 +169,19 @@ const handler = (request, response) => {
     return;
   }
 
+  if (failStatus > 0) {
+    // 正文的形状与真端点一致（`{ error: { message, type } }`），因为 pi-ai 是从这个形状里
+    // 把正文抠出来拼成 `<status>: <body>` 的（`utils/error-body.ts`）——形状不对就录不到那句话。
+    if (!quiet) console.log(`  固定回 ${failStatus}`);
+    request.resume();
+    request.on("end", () => {
+      cors(response, request);
+      response.writeHead(failStatus, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: failBody() }));
+    });
+    return;
+  }
+
   if (echoKey) {
     const bearer = (request.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
     const scheme = https ? "https" : "http";
@@ -179,6 +217,10 @@ const handler = (request, response) => {
 const server = https ? createHttpsServer(selfSigned(), handler) : createHttpServer(handler);
 server.listen(port, () => {
   const scheme = https ? "https" : "http";
-  const what = echoKey ? "固定回 401 并把收到的 key 原样抄进报错" : `固定选 action_id=${actionId}`;
+  const what = echoKey
+    ? "固定回 401 并把收到的 key 原样抄进报错"
+    : failStatus > 0
+      ? `固定回 ${failStatus}`
+      : `固定选 action_id=${actionId}`;
   console.log(`假端点在 ${scheme}://127.0.0.1:${port}/v1（CORS：${origin ?? "不放行"}），${what}`);
 });
