@@ -168,7 +168,7 @@ type IllegalAction =
     | CannotNaki of actor: Seat * kind: NakiKind * pai: Tile * consumed: Tile list
     /// 此刻杠不了（**暗杠与加杠**这两种自家宣言的杠）：手里不够四张 / 没碰过那种牌、
     /// 不是刚摸完牌的那一手、牌山空了、岭上牌用完了，或者立直把它封住了
-    /// （送り杠 / 听牌变了 / 那一定不是暗刻，判据在 `RiichiState.allowsAnkan`）。
+    /// （送り杠 / 听牌变了，判据在 `RiichiState.allowsAnkan`）。
     ///
     /// 与 `CannotNaki` 分开：自家宣言的杠没有「被鸣的那张」也没有对方座位，
     /// 强塑进 `CannotNaki` 得编一个不存在的 `pai` 出来。
@@ -448,7 +448,7 @@ module GameState =
     /// **立直把这份收窄两次**：
     /// - 宣言了还没落定（`Declared`）：只剩「打完仍听牌」的那几张，自摸和、杠与再宣言都没了；
     /// - 立直已成立（`Accepted`）：**只能摸切**，只剩自摸和、摸切与那一个例外——暗杠
-    ///   （三条判据在 `RiichiState.allowsAnkan`，裁决 D-8）。
+    ///   （判据在 `RiichiState.allowsAnkan`，裁决 D-8 / 票 63）。
     ///   立直中的座位鸣不了牌（`responsesTo`），因此那两支里 `drawn` 恒非 None。
     let private awaitingDahaiActions
         (ruleset: Ruleset)
@@ -486,8 +486,8 @@ module GameState =
                 | Ok _ -> [ Action.Hora(actor, actor, drawn) ]
                 | Error _ -> []
 
-        /// 暗杠：手里四张同种，且立直没把它封住。**立直后那三条判据在 `RiichiState.allowsAnkan`**
-        /// （禁送り杠、听牌不变、每种读法里都作暗刻），本票只调用不重写（裁决 D-8）；
+        /// 暗杠：手里四张同种，且立直没把它封住。**立直后的判据在 `RiichiState.allowsAnkan`**
+        /// （禁送り杠、听牌不变；面子构成不变只在开关开着时附加，票 63），只调用不重写（裁决 D-8）；
         /// 没立直时它恒为 true，因此「摸进的那张才能杠」这一层得在这里守（`drawn` 非 None）。
         let ankan =
             if not canKan || Option.isNone (PlayerState.drawn player) then
@@ -496,7 +496,7 @@ module GameState =
                 ankanCandidates (PlayerState.hand player)
                 |> List.filter (fun (kind, _) ->
                     RiichiState.allowsAnkan
-                        ruleset.TileKinds
+                        ruleset
                         (PlayerState.riichi player)
                         (PlayerState.naki player)
                         (PlayerState.hand player)
@@ -1620,8 +1620,9 @@ module GameState =
             | Some(Action.None _)
             | Option.None -> couldRon
 
-        // 见逃一次可以荣和的牌 → 同巡振听，到自己下次摸牌为止不能荣和。
-        // 鸣走它也算见逃：鸣牌不摸牌，因此这份同巡振听要到鸣的那家下次真正摸牌才解除。
+        // 见逃一次可以荣和的牌 → 同巡振听，到自己下次摸打为止不能荣和。
+        // 鸣走它也算见逃，但**自家鸣牌接着的打牌同样翻篇**（票 63 的天凤实证）：
+        // settle 之后套用鸣牌时 `PlayerState.addNaki` 把鸣牌那家的同巡振听清掉。
         //
         // **先记在这一轮上，收齐才落**（票 29a，见 `AwaitingResponse.Minogashi`）。
         let minogashiSeats = waiting.Minogashi @ (if minogashi then [ actor ] else [])

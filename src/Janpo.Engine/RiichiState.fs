@@ -173,19 +173,25 @@ module RiichiState =
                                 | Shuntsu
                                 | Kantsu -> false)))
 
-    /// **立直后能不能暗杠这一种牌**（裁决 D-8 切给 09 的那条判据）。
+    /// **立直后能不能暗杠这一种牌**（裁决 D-8 切给 09 的那条判据；第三条改成开关是票 63）。
     ///
     /// 暗杠这个**动作**完全属于 11 票——它的其余条件（手里真有四张、岭上牌还有、
     /// 四杠散了……）也都在那边；这里只回答立直独有的那一层：
     ///
     /// 1. **禁送り杠**：杠的必须是刚摸进的那张（`drawn`），手里早就攒着的四张杠不得；
-    /// 2. **听牌不变**：杠掉那四张之后听的牌种与立直时完全一样；
-    /// 3. **面子构成不变**：立直时的手牌在每一种和了读法里都把那个牌种当暗刻用。
+    /// 2. **听牌不变**：杠掉那四张之后听的牌种与立直时完全一样，且**杠的不是自己的
+    ///    待ち牌**——后半句单独写出来是因为纯空听那个角（如 `333s45s` 听 `3s/6s`
+    ///    摸进第四张 `3s`）：第五张也算听（R-1），光比听牌集合拦不住它。
+    ///    2025 整年语料零出现，取最保守的一种（与改前行为一致），有反例就改（照 16-B 的先例）；
+    /// 3. **面子构成不变**（仅 `Ruleset.RiichiAnkanMentsuUnchanged` 开着时）：立直时的手牌
+    ///    在每一种和了读法里都把那个牌种当暗刻用。**天凤不附加这条**（手册明文
+    ///    「牌姿が変わるのは可」；票 63 的 20/20 实证：被它拦下而天凤放行的暗杠，
+    ///    2025 整年语料里 20 处，全部只敗在这一条上），M-League / 连盟 / 最高位战 / WRC 附加。
     ///
     /// 没立直的家返回 `true`（这一层限制对它不存在）；宣言了还没落定的返回 `false`
     /// （那一手只能打宣言牌）。
     let allowsAnkan
-        (kindSet: TileKindSet)
+        (ruleset: Ruleset)
         (state: RiichiState)
         (naki: Naki list)
         (hand: Tile list)
@@ -199,6 +205,7 @@ module RiichiState =
             match drawn with
             | Option.None -> false
             | Some tsumo ->
+                let kindSet = ruleset.TileKinds
                 let target = Tile.deaka kind
                 let nakiCount = List.length naki
                 // 立直时的那 13 张：现在的手牌去掉刚摸进的那一张。
@@ -209,8 +216,10 @@ module RiichiState =
                 Tile.deaka tsumo = target
                 && List.length held = 4
                 && not (List.isEmpty waits)
+                && not (List.contains target waits)
                 && waits = waitsOf kindSet (nakiCount + 1) (withoutKind target hand)
-                && waits |> List.forall (alwaysAnkou target naki declared)
+                && (not ruleset.RiichiAnkanMentsuUnchanged
+                    || waits |> List.forall (alwaysAnkou target naki declared))
 
     // ---- 渲染层出口（ADR-0001） ----
 

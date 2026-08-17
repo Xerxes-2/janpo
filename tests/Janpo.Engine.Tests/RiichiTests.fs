@@ -632,17 +632,17 @@ module RiichiTests =
         let riichi = RiichiState.Accepted RiichiDeclaration.Riichi
 
         // 123m 444m 567m + 55p + 99s 双碰听 5p / 9s，摸进第四张 4m：杠掉不动听牌，
-        // 而且 444m 在每一种读法里都是暗刻——三条都过。
-        Assert.True(RiichiState.allowsAnkan kindSet riichi [] hand (Some(pai "4m")) (pai "4m"))
+        // 而且 444m 在每一种读法里都是暗刻——哪种口径下都过。
+        Assert.True(RiichiState.allowsAnkan ruleset riichi [] hand (Some(pai "4m")) (pai "4m"))
 
         // 送り杠：杠的不是刚摸进的那张。
-        Assert.False(RiichiState.allowsAnkan kindSet riichi [] hand (Some(pai "5p")) (pai "4m"))
+        Assert.False(RiichiState.allowsAnkan ruleset riichi [] hand (Some(pai "5p")) (pai "4m"))
         // 压根没摸牌（鸣牌之后那一手）。
-        Assert.False(RiichiState.allowsAnkan kindSet riichi [] hand None (pai "4m"))
+        Assert.False(RiichiState.allowsAnkan ruleset riichi [] hand None (pai "4m"))
         // 手里只有三张，杠不成。
         Assert.False(
             RiichiState.allowsAnkan
-                kindSet
+                ruleset
                 riichi
                 []
                 (tiles "1m 2m 3m 4m 4m 4m 5m 6m 7m 5p 5p 9s 9s 5p")
@@ -664,24 +664,87 @@ module RiichiTests =
         waitsOf 0 hand, waitsOf 1 afterKan
 
     [<Fact>]
-    let ``立直后的暗杠判据：听牌没变但面子构成变了，照样杠不得`` () =
+    let ``立直后的暗杠判据：听牌没变但面子构成变了，默认（天凤）杠得，开关开着才挡`` () =
         // 123m 66m + 333s 44s 555s：和 6m 时索子只能读成 333s + 555s + 44s，
         // 而和 4s 时它又能读成 345s + 345s + 345s——**后一种读法里 3s 不是暗刻**。
+        // 天凤只问听牌变没变（手册「牌姿が変わるのは可」，票 63 的 20/20 实证），
+        // 面子构成那一条是 M-League / 连盟 / 最高位战 / WRC 的口径，开关才附加。
         let declared = "1m 2m 3m 6m 6m 3s 3s 3s 4s 4s 5s 5s 5s"
         let before, after = waitsBeforeAfter "3s" declared
 
-        // 杠掉四张 3s 之后仍然是 6m / 4s 两面——**听牌一模一样**，挡住这一杠的是第三条。
+        // 杠掉四张 3s 之后仍然是 6m / 4s 两面——**听牌一模一样**。
         Assert.Equal<Tile list>(before, after)
         Assert.Equal<Tile list>([ pai "6m"; pai "4s" ], before)
 
+        let hand = tiles declared @ [ pai "3s" ]
+        let riichi = RiichiState.Accepted RiichiDeclaration.Riichi
+
+        Assert.True(RiichiState.allowsAnkan ruleset riichi [] hand (Some(pai "3s")) (pai "3s"))
+
         Assert.False(
             RiichiState.allowsAnkan
-                kindSet
-                (RiichiState.Accepted RiichiDeclaration.Riichi)
+                (Ruleset.withRiichiAnkanMentsuUnchanged ruleset)
+                riichi
                 []
-                (tiles declared @ [ pai "3s" ])
+                hand
                 (Some(pai "3s"))
                 (pai "3s")
+        )
+
+    [<Fact>]
+    let ``立直后的暗杠判据：天凤实证的那一杠（2025010516-63ff5735 第 11 局）默认杠得`` () =
+        // 2025 整年语料 E 族的第一例：立直手 345m 79m + 333s 456s 66s，听 8m；
+        // 摸进第四张 3s，杠前杠后都只听 8m（②过），但和 8m 的读法里索子可读作
+        // 3s3s + 3s4s5s + 6s6s6s——那读法里 3s 不是暗刻，旧第三条拒杠，而天凤让杠了。
+        let declared = "3m 4m 5m 7m 9m 3s 3s 3s 4s 5s 6s 6s 6s"
+        let before, after = waitsBeforeAfter "3s" declared
+
+        Assert.Equal<Tile list>(before, after)
+        Assert.Equal<Tile list>([ pai "8m" ], before)
+
+        let hand = tiles declared @ [ pai "3s" ]
+        let riichi = RiichiState.Accepted RiichiDeclaration.Riichi
+
+        Assert.True(RiichiState.allowsAnkan ruleset riichi [] hand (Some(pai "3s")) (pai "3s"))
+
+        // 严口径（M-League 等）仍拦得住它。
+        Assert.False(
+            RiichiState.allowsAnkan
+                (Ruleset.withRiichiAnkanMentsuUnchanged ruleset)
+                riichi
+                []
+                hand
+                (Some(pai "3s"))
+                (pai "3s")
+        )
+
+    [<Fact>]
+    let ``立直后的暗杠判据：杠的是自己的待ち牌，哪种口径都杠不得`` () =
+        // D-8 文档里的经典形：111m + 23m 听 1m / 4m，摸进第四张 1m。天凤的口径下它也杠不得：
+        // 杠前那手能把 111m 拆成 1m1m 雀头 + 123m，于是 5z 也是待ち（三面）；杠掉之后
+        // 那个读法死了，听牌集合缩水——②本就拦得住。除②外还有一道显式的
+        // 「杠的不是自己的待ち牌」（第二条后半句）：它不依赖上面那个拆对读法的巧合
+        // （`CopiesPerKind` 可配，第五张真存在时②两侧可以相等），语料零出现，
+        // 取最保守的一种（与票 63 改前的行为一致），有反例就改（照 16-B 的先例）。
+        let declared = "1m 1m 1m 2m 3m 4p 5p 6p 7p 8p 9p 5z 5z"
+        let before, after = waitsBeforeAfter "1m" declared
+
+        Assert.Equal<Tile list>(tiles "1m 4m 5z", before)
+        Assert.Equal<Tile list>(tiles "1m 4m", after)
+
+        let hand = tiles declared @ [ pai "1m" ]
+        let riichi = RiichiState.Accepted RiichiDeclaration.Riichi
+
+        Assert.False(RiichiState.allowsAnkan ruleset riichi [] hand (Some(pai "1m")) (pai "1m"))
+
+        Assert.False(
+            RiichiState.allowsAnkan
+                (Ruleset.withRiichiAnkanMentsuUnchanged ruleset)
+                riichi
+                []
+                hand
+                (Some(pai "1m"))
+                (pai "1m")
         )
 
     [<Fact>]
@@ -695,7 +758,7 @@ module RiichiTests =
 
         Assert.False(
             RiichiState.allowsAnkan
-                kindSet
+                ruleset
                 (RiichiState.Accepted RiichiDeclaration.Riichi)
                 []
                 (tiles declared @ [ pai "3m" ])
@@ -708,11 +771,11 @@ module RiichiTests =
         let hand = tiles "1m 2m 3m 4m 4m 4m 5m 6m 7m 5p 5p 9s 9s 4m"
 
         // 没立直：这条判据放行（能不能杠由 11 票的其余条件说了算）。
-        Assert.True(RiichiState.allowsAnkan kindSet RiichiState.none [] hand (Some(pai "4m")) (pai "4m"))
+        Assert.True(RiichiState.allowsAnkan ruleset RiichiState.none [] hand (Some(pai "4m")) (pai "4m"))
         // 宣言了还没落定：那一手只能打宣言牌。
         Assert.False(
             RiichiState.allowsAnkan
-                kindSet
+                ruleset
                 (RiichiState.Declared RiichiDeclaration.Riichi)
                 []
                 hand

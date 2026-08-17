@@ -68,6 +68,30 @@ let private kanTags (moves: PaifuEvent list) : string list =
 
     walk moves [] |> List.rev
 
+/// 立直后的自家暗杠（票 63 E 族的形）：`reach_accepted` 之后同一家的 `ankan`。
+let private riichiAnkanTags (moves: PaifuEvent list) : string list =
+    let folder (accepted: Set<int>, acc: string list) (event: PaifuEvent) =
+        match event with
+        | PaifuEvent.RiichiAccepted actor -> Set.add (Seat.index actor) accepted, acc
+        | PaifuEvent.Ankan(actor, _) when Set.contains (Seat.index actor) accepted -> accepted, "riichi-ankan" :: acc
+        | _ -> accepted, acc
+
+    ((Set.empty, []), moves) ||> List.fold folder |> snd |> List.rev
+
+/// 鸣完打完、下一次摸牌之前就荣和（票 63 F 族的形）：和了者最近一次进张是碰 / 吃
+/// （三种杠都会补摸岭上牌，走不进这一形）。
+let private ronAfterNakiTags (moves: PaifuEvent list) : string list =
+    let folder (fromNaki: Set<int>, acc: string list) (event: PaifuEvent) =
+        match event with
+        | PaifuEvent.Tsumo(actor, _) -> Set.remove (Seat.index actor) fromNaki, acc
+        | PaifuEvent.Pon(actor, _, _, _)
+        | PaifuEvent.Chi(actor, _, _, _) -> Set.add (Seat.index actor) fromNaki, acc
+        | PaifuEvent.Hora hora when hora.Actor <> hora.Target && Set.contains (Seat.index hora.Actor) fromNaki ->
+            fromNaki, "ron-after-own-naki" :: acc
+        | _ -> fromNaki, acc
+
+    ((Set.empty, []), moves) ||> List.fold folder |> snd |> List.rev
+
 let private tags (kyoku: PaifuKyoku) : string list =
     let start = kyoku.Start
     let horas = kyoku.Moves |> List.choose PaifuEvent.hora
@@ -101,6 +125,8 @@ let private tags (kyoku: PaifuKyoku) : string list =
                 | PaifuEvent.Chi _ -> true
                 | _ -> false)
         yield! kanTags kyoku.Moves
+        yield! riichiAnkanTags kyoku.Moves
+        yield! ronAfterNakiTags kyoku.Moves
         match List.length horas with
         | 0 -> ()
         | 1 -> yield "hora"

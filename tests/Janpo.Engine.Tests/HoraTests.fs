@@ -333,6 +333,43 @@ module HoraTests =
             actionsOf (seat 2) again
         )
 
+    [<Fact>]
+    let ``见逃后自家鸣牌再打牌，同巡振听解除`` () =
+        // 天凤口径（票 63，2025 整年语料 4/4 实证）：同巡振听的窗口到自家下一次**摸打**为止，
+        // 鸣牌接着的打牌同样翻篇——不是只有摸牌才解除。
+        let opening = startScripted nakiLiftsFuritenScript
+
+        // 座位 0 摸切 1z，座位 1 摸切 4p——座位 2 听 1p / 4p，进响应阶段。
+        let discarded, _ = stepped opening (Action.Dahai(seat 0, pai "1z", true))
+        let offered, _ = stepped discarded (Action.Dahai(seat 1, pai "4p", true))
+
+        Assert.Contains(Action.Hora(seat 2, seat 1, pai "4p"), actionsOf (seat 2) offered)
+        Assert.Contains(Action.Chi(seat 2, seat 1, pai "4p", tilesOf "3p 5p"), actionsOf (seat 2) offered)
+
+        // 不荣而吃：这是见逃，但吃完自己的那一手打牌就翻篇了——
+        // 同巡振听不留到鸣后的新听牌上（吃碰之后听牌都换了）。
+        let called, _ =
+            stepped offered (Action.Chi(seat 2, seat 1, pai "4p", tilesOf "3p 5p"))
+
+        Assert.Equal<Furiten>(Furiten.none, furitenOf (seat 2) called)
+
+        // 吃完打 2p：新听 5p 单骑，无人响应，座位 3 摸进 5p。
+        let switched, _ = stepped called (Action.Dahai(seat 2, pai "2p", false))
+        Assert.Equal<Furiten>(Furiten.none, furitenOf (seat 2) switched)
+
+        // 座位 3 摸切 5p：天凤让座位 2 荣和（断幺九）——修前的引擎在这里拒绝进响应阶段。
+        let final, _ = stepped switched (Action.Dahai(seat 3, pai "5p", true))
+        Assert.Contains(Action.Hora(seat 2, seat 3, pai "5p"), actionsOf (seat 2) final)
+
+        let ended, _ = stepped final (Action.Hora(seat 2, seat 3, pai "5p"))
+
+        match horasOf ended with
+        | [ hora ] ->
+            Assert.Equal(seat 2, hora.Actor)
+            Assert.Equal(seat 3, hora.Target)
+            Assert.Equal<Tile>(pai "5p", hora.Pai)
+        | other -> failwith $"应当恰有一条和了，实际是 {other}"
+
     // ---- 头跳与双响 ----
 
     /// 跑到座位 0 打出 4p、座位 2 与座位 3 都能荣和的那一步

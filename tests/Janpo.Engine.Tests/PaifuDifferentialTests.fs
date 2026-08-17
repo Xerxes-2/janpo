@@ -7,7 +7,8 @@ open Janpo
 /// 与**真实牌谱**的对拍：用天凤鳳凰卓的牌谱重放引擎，逐局比动作序列、
 /// 每次和了的役种集合 / 符 / 番 / 和了点，以及流局的形态与逐座位清算。
 ///
-/// 固件 `fixtures/paifu/`（**96 场 / 987 kyoku**，票 57 按覆盖挑出来、票 59 又补上两种杠的时机）随测试工程复制到输出目录，
+/// 固件 `fixtures/paifu/`（**106 场 / 1,093 kyoku**，票 57 按覆盖挑出来、票 59 补上两种杠的时机、
+/// 票 63 补上立直后暗杠与鸣后荣和两族）随测试工程复制到输出目录，
 /// 因此这个测试**离线跑**；扩样本只需把 `JANPO_PAIFU_DIR` 指向更大的语料，不改代码
 /// （票 57 用同一套 API 扫过全量 12,188 场 / 129,179 kyoku，跑法见
 /// `.scratch/llm-riichi-arena/run/reports/57-wider-paifu-differential.md`）。
@@ -53,8 +54,8 @@ module PaifuDifferentialTests =
             |> List.toArray
 
         Assert.Equal<string array>([||], Array.truncate 10 rendered)
-        Assert.True(List.length loaded >= 96, $"语料只有 {List.length loaded} 场对局，对拍要有量")
-        Assert.True(List.length differential.Value.Kyokus >= 980, $"语料只有 {List.length differential.Value.Kyokus} 局")
+        Assert.True(List.length loaded >= 106, $"语料只有 {List.length loaded} 场对局，对拍要有量")
+        Assert.True(List.length differential.Value.Kyokus >= 1090, $"语料只有 {List.length differential.Value.Kyokus} 局")
         Assert.True(loaded |> List.forall (snd >> Option.isSome), "固件里每一场都该配着天凤 JSON oracle")
 
     [<Fact>]
@@ -67,6 +68,9 @@ module PaifuDifferentialTests =
         Assert.False(ruleset.KiriageMangan, "牌谱里 30符4飜 给 7700 点，切上满贯必须关")
         Assert.True(ruleset.SanchaHoraRyuukyoku, "天凤把三家和了判成途中流局")
         Assert.False(ruleset.KokushiAnkanChankan, "天凤禁止国士抢暗杠")
+        Assert.False(ruleset.MinkanRinshanSekinin, "天凤不采用大明杠岭上的责任支付（票 59 的 337/337 实证）")
+
+        Assert.False(ruleset.RiichiAnkanMentsuUnchanged, "天凤的立直后暗杠只要求禁送り杠 + 听不变（票 63 的 20/20 实证）")
         Assert.True(ruleset.RinshanTsumoFu, "天凤给岭上自摸加自摸符")
         Assert.True(ruleset.Kuitan, "`鳳南喰赤` 的「喰」")
         Assert.Equal(4, ruleset.DoubleKazeJantouFu)
@@ -122,7 +126,7 @@ module PaifuDifferentialTests =
 
         // 「零差异」若没有覆盖率佐证，只说明没跑到（备注 N-8）。
         let seats = sumBy (fun kyoku -> kyoku.SettledSeats)
-        Assert.True(seats >= 490, $"只对拍了 {seats} 个座位的清算，锚点太细了")
+        Assert.True(seats >= 560, $"只对拍了 {seats} 个座位的清算，锚点太细了")
 
     [<Fact>]
     let ``对拍的覆盖率够得着长尾`` () =
@@ -130,9 +134,9 @@ module PaifuDifferentialTests =
         let fu = sumBy (fun kyoku -> kyoku.FuChecks)
         let yaku = sumBy (fun kyoku -> kyoku.YakuChecks)
 
-        Assert.True(horas >= 840, $"只对拍了 {horas} 次和了")
-        Assert.True(fu >= 615, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
-        Assert.True(yaku >= 1520, $"只比到了 {yaku} 行役")
+        Assert.True(horas >= 930, $"只对拍了 {horas} 次和了")
+        Assert.True(fu >= 680, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
+        Assert.True(yaku >= 1680, $"只比到了 {yaku} 行役")
 
         // 役名对照表里真正被牌谱走到的那几种。剩下的靠黄金用例，不靠对拍。
         let seen =
@@ -140,13 +144,13 @@ module PaifuDifferentialTests =
             |> List.collect (fun kyoku -> kyoku.YakuSeen)
             |> List.distinct
 
-        // 票 59 把三槓子那一场（全量语料里仅 1 次）从差异场变回了干净场，因此牌谱里出现过的
-        // 38 种役现在**一种不漏**都在固件里。
-        Assert.True(List.length seen >= 38, $"牌谱里只出现了 {List.length seen} 种役")
+        // 票 59 把三槓子那一场（全量语料里仅 1 次）从差异场变回了干净场；票 63 补的 2025 十场
+        // 又带进**大三元**（此前只有黄金用例守它），牌谱里出现过的 39 种役一种不漏都在固件里。
+        Assert.True(List.length seen >= 39, $"牌谱里只出现了 {List.length seen} 种役")
 
         // 每局终局点数：拿牌谱下一局的开局点数对拍（一场的最后一局没下局，比不了）。
         let carried = sumBy (fun kyoku -> kyoku.ScoreChecks)
-        Assert.True(carried >= 880, $"只对拍了 {carried} 局的终局点数")
+        Assert.True(carried >= 980, $"只对拍了 {carried} 局的终局点数")
 
     [<Fact>]
     let ``七种流局形态里，真牌谱守得住六种；三家和了守不住，且理由不是罕见`` () =
@@ -268,6 +272,50 @@ module PaifuDifferentialTests =
         // 两边本来就一致（暗杠不欠账），后者**规则上就不存在**（大明杠要他家打出一张，
         // 而杠完没打牌）——判据 4：到不了的要写成代码里的一个值。
         Assert.Equal(0, times "daiminkan-then-daiminkan")
+
+    /// 立直后的自家暗杠（票 63 E 族的形）：`reach_accepted` 之后同一家的 `ankan`，
+    /// **从牌谱自己数**（逻辑与 `scripts/fsi/paifu-scan.fsx` 的 `riichiAnkanTags` 同一份）。
+    let private riichiAnkans (moves: PaifuEvent list) : int =
+        let folder (accepted: Set<int>, count: int) (event: PaifuEvent) =
+            match event with
+            | PaifuEvent.RiichiAccepted actor -> Set.add (Seat.index actor) accepted, count
+            | PaifuEvent.Ankan(actor, _) when Set.contains (Seat.index actor) accepted -> accepted, count + 1
+            | _ -> accepted, count
+
+        ((Set.empty, 0), moves) ||> List.fold folder |> snd
+
+    /// 鸣完打完、下一次摸牌之前就荣和（票 63 F 族的形）：和了者最近一次进张是碰 / 吃。
+    /// 同巡振听由自家鸣牌解除的那四场就在这一形里（见逃不是事件，流里数不出比它更紧的形）。
+    let private ronsAfterOwnNaki (moves: PaifuEvent list) : int =
+        let folder (fromNaki: Set<int>, count: int) (event: PaifuEvent) =
+            match event with
+            | PaifuEvent.Tsumo(actor, _) -> Set.remove (Seat.index actor) fromNaki, count
+            | PaifuEvent.Pon(actor, _, _, _)
+            | PaifuEvent.Chi(actor, _, _, _) -> Set.add (Seat.index actor) fromNaki, count
+            | PaifuEvent.Hora hora when hora.Actor <> hora.Target && Set.contains (Seat.index hora.Actor) fromNaki ->
+                fromNaki, count + 1
+            | _ -> fromNaki, count
+
+        ((Set.empty, 0), moves) ||> List.fold folder |> snd
+
+    [<Fact>]
+    let ``立直后的暗杠与鸣后的荣和各自在固件里走到几次`` () =
+        // **判据 3：闸门要报「它在真语料上执行过几次」。** 票 63 之前，旧③（面子构成
+        // 不变）拦错的那种立直后暗杠与同巡振听被自家鸣牌解除的荣和局局带差异，
+        // 因此它们在 CI 里的执行次数是 **0**。现在带着次数，少一次就说明固件被换稀了：
+        // 2025 补进来的 10 场里 E 族 6 场各带一次立直后暗杠（旧固件另有 18 次旧③也放行的），
+        // F 族 4 场各带一次鸣后荣和（旧固件另有 45 次不涉振听的同形）。
+        let moves =
+            corpus.Value
+            |> fst
+            |> List.collect (fun (paifu, _) -> paifu.Kyokus)
+            |> List.map (fun kyoku -> kyoku.Moves)
+
+        let ankans = moves |> List.sumBy riichiAnkans
+        let rons = moves |> List.sumBy ronsAfterOwnNaki
+
+        Assert.True(ankans >= 25, $"立直后的暗杠在固件里只走到 {ankans} 次（要 25 次）")
+        Assert.True(rons >= 54, $"鸣完打完、下次摸牌前的荣和在固件里只走到 {rons} 次（要 54 次）")
 
     // ---- 牌谱适配器本身 ----
 

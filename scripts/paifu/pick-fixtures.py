@@ -40,6 +40,11 @@ WANTED_FLAT = [
     "daiminkan-then-kakan",
     "daiminkan-then-ankan",
     "chankan",
+    # 立直后的自家暗杠（票 63 E 族）：天凤只要求禁送り杠 + 听不变，
+    # 面子构成会变的那一撑（旧③拦下的）必须在固件里有代表。
+    "riichi-ankan",
+    # 鸣完打完、下次摸牌前的荣和（票 63 F 族的形）：同巡振听由自家鸣牌解除的那四场在这一形里。
+    "ron-after-own-naki",
     "double-ron",
     "triple-ron",
     "honba",
@@ -58,6 +63,12 @@ WANTED_FLAT = [
     "reason:kyushukyuhai",
 ]
 REPEAT = {
+    # 票 63 E 族：旧固件里已有 18 次（全是旧③也放行的那种）+ F 种子场带 1 次，
+    # 抵到 25 迫使贪心步从 2025 的 20 场 E 族里补进代表（它们才是旧③拦错的那种）。
+    "riichi-ankan": 25,
+    # 票 63 F 族：四场全部在 `--seed` 里无条件保留（全量语料仅 4 场，两种子形各 2），
+    # 这里的下限守着固件不被换稀（旧固件 45 次 + 那四场各 1 次）。
+    "ron-after-own-naki": 49,
     "ankan-rinshan-hora": 2,
     "kakan-rinshan-hora": 2,
     # 大明杠 → 岭上开花是票 59 第二处 bug 的现场（责任支付）：全量 24 局里多拿一局。

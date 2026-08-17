@@ -73,6 +73,13 @@ type Ruleset =
         ///
         /// **只管大明杠（`Minkan`）这一支**：大三元 / 大四喜由副露凑齐的包任何规则集都成立，不可配。
         MinkanRinshanSekinin: bool
+        /// 立直后暗杠的附加限制：除「杠刚摸进的那张（禁送り杠）+ 听牌不变」外，
+        /// 还要求**面子构成不变**（立直时的手牌在每一种和了读法里都把那牌种当暗刻用）。
+        /// **天凤不采用，因此默认 false**——票 63 在 2025 整年 1,893,891 局鳳凰卓牌谱里逐条实证：
+        /// 天凤手册明文「牌姿が変わるのは可」，20 处只因面子构成会变而被引擎拒绝的暗杠，
+        /// 20 处天凤全部放行。M-League / 日本プロ麻雀連盟 / 最高位戦 / WRC 采用这条，
+        /// 要它用 `Ruleset.withRiichiAnkanMentsuUnchanged`。
+        RiichiAnkanMentsuUnchanged: bool
         /// 一本场的点数：荣和时放铳者多付这么多，自摸时由付家平摊。
         HonbaPoints: int
     }
@@ -109,6 +116,7 @@ module Ruleset =
             RinshanTsumoFu = true
             KokushiAnkanChankan = false
             MinkanRinshanSekinin = false
+            RiichiAnkanMentsuUnchanged = false
             HonbaPoints = 300
         }
 
@@ -144,6 +152,13 @@ module Ruleset =
     let withMinkanRinshanSekinin (ruleset: Ruleset) : Ruleset =
         { ruleset with
             MinkanRinshanSekinin = true
+        }
+
+    /// 打开立直后暗杠的面子构成限制（M-League / 连盟 / 最高位战 / WRC 的口径）。
+    /// 关着的形态就是各预设本身——天凤只要求「禁送り杠 + 听牌不变」（票 63 的 20/20 实证）。
+    let withRiichiAnkanMentsuUnchanged (ruleset: Ruleset) : Ruleset =
+        { ruleset with
+            RiichiAnkanMentsuUnchanged = true
         }
 
     /// 换对局长度（spec 的「对局长度」配置）。
@@ -229,6 +244,7 @@ module Ruleset =
                     "rinshan_tsumo_fu", Encode.bool ruleset.RinshanTsumoFu
                     "kokushi_ankan_chankan", Encode.bool ruleset.KokushiAnkanChankan
                     "minkan_rinshan_sekinin", Encode.bool ruleset.MinkanRinshanSekinin
+                    "riichi_ankan_mentsu_unchanged", Encode.bool ruleset.RiichiAnkanMentsuUnchanged
                     "honba_points", Encode.int ruleset.HonbaPoints
                 ]
 
@@ -266,5 +282,6 @@ module Ruleset =
                 RinshanTsumoFu = get.Required.Field "rinshan_tsumo_fu" Decode.bool
                 KokushiAnkanChankan = get.Required.Field "kokushi_ankan_chankan" Decode.bool
                 MinkanRinshanSekinin = get.Required.Field "minkan_rinshan_sekinin" Decode.bool
+                RiichiAnkanMentsuUnchanged = get.Required.Field "riichi_ankan_mentsu_unchanged" Decode.bool
                 HonbaPoints = get.Required.Field "honba_points" Decode.int
             })

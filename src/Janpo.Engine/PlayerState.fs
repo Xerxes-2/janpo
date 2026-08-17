@@ -150,6 +150,12 @@ module PlayerState =
     /// 鸣牌：亮出的那几张离开暗牌进副露，**不摸牌**（`Drawn` 因此是 None，接下来那一手必定是手切）。
     /// 被鸣的那张不进手牌——它已经在 `Naki` 里（`Naki.taken`）。
     /// 牌不在手里时原样返回：合法性由 `GameState` 在此之前判掉（不在这里重复一份）。
+    ///
+    /// **自家鸣牌也解除同巡振听**（票 63，2025 整年语料 4/4 实证）：同巡的窗口到自家
+    /// 下一次**摸打**为止，鸣牌接着的打牌同样翻篇。解除点取在鸣牌这一步：鸣牌到打牌
+    /// 之间自家没有荣和的机会，行为上与「打完才解除」无异；且必须排在见逃落地之后
+    /// （`GameState` 先 settle 见逃再套用鸣牌，因此「鸣走能荣的那张」也被这里清掉）。
+    /// 暗杠与大明杠随后补摸岭上牌，`draw` 本就会清；这里统一清掉不多一层分支。
     let addNaki (naki: Naki) (player: PlayerState) : PlayerState =
         let hand =
             (player.Hand, Naki.consumed naki)
@@ -159,6 +165,7 @@ module PlayerState =
             Hand = Tile.sort hand
             Naki = player.Naki @ [ naki ]
             Drawn = None
+            Furiten = { player.Furiten with Doujun = false }
         }
 
     /// 加杠：手里那张离开暗牌，原来那组碰**原地换成加杠**——副露数不变、位置不变，
@@ -188,7 +195,7 @@ module PlayerState =
     let markKawaTaken (player: PlayerState) : PlayerState = { player with KawaTaken = true }
 
     /// 摸进一张：进手牌，并记成「刚摸进的那张」。**同巡振听到此解除**
-    /// （它的定义就是「到自己下次摸牌为止」）；永久振听不受影响。
+    /// （它的窗口到自家下次摸打为止，摸牌是其一，另一支在 `addNaki`）；永久振听不受影响。
     let draw (tile: Tile) (player: PlayerState) : PlayerState =
         { player with
             Hand = Tile.sort (tile :: player.Hand)
@@ -196,7 +203,8 @@ module PlayerState =
             Furiten = { player.Furiten with Doujun = false }
         }
 
-    /// 见逃：本巡放过了一张可以荣和的牌——同巡振听成立，到自己下次摸牌为止不能荣和。
+    /// 见逃：本巡放过了一张可以荣和的牌——同巡振听成立，到自己下次摸打
+    /// （摸牌或鸣牌）为止不能荣和。
     /// 放过的那张在他家的河里而不在自己的河里，因此平时它不永久。
     ///
     /// **立直中的见逃是永久振听**：立直后手牌不再变，这一位从此闩死
