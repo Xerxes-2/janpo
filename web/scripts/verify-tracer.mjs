@@ -7,15 +7,16 @@
 // 只有这个开关能把它摆回牌桌下面（判据在 `src/Janpo.Web/Main.fs`）。
 //
 // 跑法：`cd web && pnpm run build && pnpm run verify [-- --seed 1177]`
+// 它也是 `verify-browser.mjs` 里的一道（七道共用一个浏览器与一台服务器）。
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
-import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
-import { pageUrl, startPreview } from "./serve.mjs";
+import { stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
@@ -33,13 +34,27 @@ function parseSeed(argv) {
 
 // ---- dotnet 侧 ----
 
-/** 跑一条 CLI 子命令，返回它的 stdout 全文。 */
+/** 已经构好的 CLI（`dotnet build -c Release` 的产物）。 */
+const CLI_DLL = resolve(repoRoot, "src/Janpo.Cli/bin/Release/net10.0/janpo.dll");
+
+/**
+ * 跑一条 CLI 子命令，返回它的 stdout 全文。
+ *
+ * **构好了就直接跑那份 DLL**：`dotnet run` 每调一次都要重新求一遍 MSBuild
+ * （实测 1.20s vs 直调 DLL 0.12s，而这一道要调两次）。`ci.sh` 先 build 后才跑到这里，
+ * 因此 CI 里恒走前一条；没构过的工作区里单跑它时自动退回 `dotnet run`（跑得慢一点，
+ * 但**跑的是同一个 CLI、对拍的是同一堆数**）。
+ */
 function runCli(args) {
-  return execFileSync(
-    "dotnet",
-    ["run", "--project", "src/Janpo.Cli", "--configuration", "Release", "--", ...args],
-    { cwd: repoRoot, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 },
-  );
+  const command = existsSync(CLI_DLL)
+    ? [CLI_DLL, ...args]
+    : ["run", "--project", "src/Janpo.Cli", "--configuration", "Release", "--", ...args];
+
+  return execFileSync("dotnet", command, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 128 * 1024 * 1024,
+  });
 }
 
 /**
@@ -72,23 +87,6 @@ const DEV_WORDS = ["曳光弹", "Fable", "dotnet"];
 const NAKI_SEED = 1223;
 const NAKI_TURNS = 90;
 
-/** 走 n 手：一手一手点「单步」，等「上一手」那行变了再点下一手（写法照 `shoot-table.mjs`）。 */
-async function stepTable(page, count) {
-  for (let turn = 0; turn < count; turn += 1) {
-    if (await page.getByTestId("table-step").isDisabled()) return turn; // 这一局打完了
-    const before = (await page.getByTestId("table-latest").textContent()).trim();
-    await page.getByTestId("table-step").click();
-    if (await page.getByTestId("table-step").isDisabled()) continue;
-    await page.waitForFunction(
-      (previous) =>
-        document.querySelector('[data-testid="table-latest"]').textContent.trim() !== previous,
-      before,
-      { timeout: 30000 },
-    );
-  }
-  return count;
-}
-
 /**
  * 票 38：副露上**被鸣的是哪一张、来自谁**必须真的挂在 DOM 上。
  *
@@ -107,7 +105,8 @@ async function stepTable(page, count) {
 async function checkNaki(page) {
   await page.getByTestId("table-seed").fill(String(NAKI_SEED));
   await page.getByTestId("table-restart").click();
-  const walked = await stepTable(page, NAKI_TURNS);
+  // 一手一手点「单步」，等牌桌真的走动了再点下一手（驱动在 `table-drive.mjs`）。
+  const { walked } = await stepTurns(page, { limit: NAKI_TURNS });
 
   const groups = await readNakiGroups(page);
   const { missing, seen } = checkNakiGroups(groups);
@@ -168,21 +167,20 @@ async function checkDefaultView(page, url) {
  * **先用一个诱饵种子跑一遍**：否则当请求的种子恰好等于页面默认种子时，
  * 「输入框没生效」与「输入框生效了」两种情况读到的数一模一样，这条验收就名存实亡。
  */
-async function readBrowser(seed, executablePath) {
-  const server = await startPreview(webRoot);
-  const browser = await chromium.launch({ executablePath, headless: true });
+async function readBrowser(lane, seed) {
+  const url = await lane.previewUrl();
+  const page = await lane.newPage();
   const problems = [];
 
   try {
-    const page = await browser.newPage();
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
     page.on("console", (message) => {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    const { leaks, missing, naki } = await checkDefaultView(page, pageUrl(server));
+    const { leaks, missing, naki } = await checkDefaultView(page, url);
 
-    await page.goto(`${pageUrl(server)}/${DEV_QUERY}`, { waitUntil: "load" });
+    await page.goto(`${url}/${DEV_QUERY}`, { waitUntil: "load" });
 
     const rerunWith = async (value) => {
       await page.getByTestId("seed-input").fill(String(value));
@@ -213,8 +211,7 @@ async function readBrowser(seed, executablePath) {
       naki,
     };
   } finally {
-    await browser.close();
-    await server.close();
+    await page.close();
   }
 }
 
@@ -232,56 +229,40 @@ function compare(label, keys, dotnetSide, browserSide, failures) {
   return rows;
 }
 
-const seed = parseSeed(process.argv.slice(2));
-const executablePath = chromeExecutable();
+/** 曳光弹对拍那一道（顺带默认视图与副露来源）。返回的是失败清单（空 = 绿）。 */
+export async function verifyTracer(lane, { seed = DEFAULT_SEED } = {}) {
+  console.log(`种子 ${seed}，浏览器 ${lane.executablePath}`);
 
-if (!executablePath) {
-  console.error(missingChrome);
-  process.exit(1);
+  const dotnetSide = {
+    kyoku: summaryLines(runCli(["kyoku", String(seed)])),
+    game: summaryLines(runCli(["game", String(seed)])),
+  };
+  const browserSide = await readBrowser(lane, seed);
+
+  const drifted = [];
+  const rows = [
+    ...compare("kyoku", ["scores", "juni"], dotnetSide.kyoku, browserSide.kyoku, drifted),
+    ...compare("game", ["scores", "juni", "kyokus"], dotnetSide.game, browserSide.game, drifted),
+  ];
+
+  console.log("dotnet 侧 vs 浏览器侧：");
+  console.log(rows.join("\n"));
+
+  if (browserSide.problems.length > 0) return failure("页面报了错：", browserSide.problems);
+  if (browserSide.leaks.length > 0)
+    return failure("默认视图（不带 ?dev=1）里漏出了开发向内容：", browserSide.leaks);
+  if (browserSide.missing.length > 0)
+    return failure("默认视图里少了该给访客的东西：", browserSide.missing);
+  if (drifted.length > 0) return failure("双目标语义漂了：", drifted);
+
+  console.log("默认视图里没有曳光弹，带上 ?dev=1 它回来了 ✓");
+  console.log("默认视图的页脚里有回仓库的外链与许可（MIT）✓");
+  console.log(`副露看得出被鸣的那张与来源 ✓（${browserSide.naki}）`);
+  console.log("浏览器内的引擎与 dotnet 侧逐项相同 ✓");
+  return [];
 }
 
-console.log(`种子 ${seed}，浏览器 ${executablePath}`);
-
-const dotnetSide = {
-  kyoku: summaryLines(runCli(["kyoku", String(seed)])),
-  game: summaryLines(runCli(["game", String(seed)])),
-};
-const browserSide = await readBrowser(seed, executablePath);
-
-const failures = [];
-const rows = [
-  ...compare("kyoku", ["scores", "juni"], dotnetSide.kyoku, browserSide.kyoku, failures),
-  ...compare("game", ["scores", "juni", "kyokus"], dotnetSide.game, browserSide.game, failures),
-];
-
-console.log("dotnet 侧 vs 浏览器侧：");
-console.log(rows.join("\n"));
-
-if (browserSide.problems.length > 0) {
-  console.error("页面报了错：");
-  console.error(browserSide.problems.join("\n"));
-  process.exit(1);
+if (isEntry(import.meta.url)) {
+  const seed = parseSeed(process.argv.slice(2));
+  await runStandalone((lane) => verifyTracer(lane, { seed }));
 }
-
-if (browserSide.leaks.length > 0) {
-  console.error("默认视图（不带 ?dev=1）里漏出了开发向内容：");
-  console.error(browserSide.leaks.join("\n"));
-  process.exit(1);
-}
-
-if (browserSide.missing.length > 0) {
-  console.error("默认视图里少了该给访客的东西：");
-  console.error(browserSide.missing.join("\n"));
-  process.exit(1);
-}
-
-if (failures.length > 0) {
-  console.error("双目标语义漂了：");
-  console.error(failures.join("\n"));
-  process.exit(1);
-}
-
-console.log("默认视图里没有曳光弹，带上 ?dev=1 它回来了 ✓");
-console.log("默认视图的页脚里有回仓库的外链与许可（MIT）✓");
-console.log(`副露看得出被鸣的那张与来源 ✓（${browserSide.naki}）`);
-console.log("浏览器内的引擎与 dotnet 侧逐项相同 ✓");

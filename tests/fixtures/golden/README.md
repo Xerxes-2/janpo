@@ -6,7 +6,7 @@
 | 侧 | 跑法 | 谁在 CI 里跑它 |
 |---|---|---|
 | dotnet | `dotnet run --project src/Janpo.Cli -- golden check tests/fixtures/golden/dual-target.json` | `GoldenSuiteTests`（`dotnet test`） |
-| 浏览器（Fable → JS） | `cd web && pnpm run verify:golden` | `scripts/ci-web.sh` 的第五道 |
+| 浏览器（Fable → JS） | `cd web && pnpm run verify:golden` | `scripts/ci-web.sh` 里浏览器那七趟之一（`verify-browser.mjs`） |
 
 跑与对照的代码是**同一段 F#**（`src/Janpo.Golden/`），两个编译器各编一遍。
 因此「一侧红一侧绿」只有一个意思：那条用例的那个字段在两个目标上算出来不一样——

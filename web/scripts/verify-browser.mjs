@@ -1,0 +1,133 @@
+// 浏览器里那**七趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
+// 七趟各开自己的 page / context。
+//
+//   1 曳光弹对拍（顺带默认视图与副露来源，票 19/35/37/38）
+//   2 牌桌上人看得见的八项 + 副露的位置就是来源（票 44/51）
+//   3 浏览器内黄金用例（票 21）
+//   4 牌谱导出走 40 手（票 26/34）
+//   5 牌谱导出打完一整场（票 39）
+//   6 **反向自证**：拌了 key 的导出物必须让第 4 趟那条断言当场红（票 34）
+//   7 回显 key 的自建网关：报错原文进牌谱前必须已打码（票 36）
+//
+// **一趟都没少、一条断言都没拆**：每一趟调的就是 `verify-*.mjs` 里那个同名函数，
+// 单跑（`pnpm run verify:board` 等）与合并跑跑的是**同一段代码**，只是跑道不同。
+//
+// 单跑仍然是调试时的第一手段：这里每趟印的抬头就是它单跑时的命令。
+//
+// 跑法：`cd web && pnpm run fable && node node_modules/vite/bin/vite.js build && pnpm run verify:browser`
+
+import { failure, openLane, printFailures } from "./browser-lane.mjs";
+import { verifyBoard } from "./verify-board.mjs";
+import { verifyExport } from "./verify-export.mjs";
+import { verifyGolden } from "./verify-golden.mjs";
+import { verifyRedaction } from "./verify-redaction.mjs";
+import { verifyTracer } from "./verify-tracer.mjs";
+
+/**
+ * 反向自证那一趟（票 34）：`--poison` 往导出物里拌一把 key，那条断言**必须**当场红，
+ * **且必须是因为那把 key**。两种失法各报各的话——从前它是 `ci-web.sh` 里的一段
+ * shell（跑一趟、看退出码、再 grep 一次红的原因），这里逐字搬过来，一条没少。
+ */
+async function poisonProof(lane) {
+  const failures = await verifyExport(lane, { turns: 12, poison: true });
+  const lines = failures.flatMap((each) => each.lines);
+  const caught = lines.find((line) => line.includes("里出现了 API key"));
+
+  if (failures.length === 0)
+    return failure("反向自证没过：拌了 key 的导出物竟然过了闸门——那条断言等于没有。", []);
+  if (caught === undefined)
+    return failure("反向自证没过：闸门是红了，但不是因为那把 key（红的原因见下）。", lines);
+
+  console.log(`拌了 key 的导出物被闸门当场逮住：${caught}`);
+  return [];
+}
+
+/** 七趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+const gates = [
+  {
+    name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验默认视图：没有曳光弹、有回仓库那一行、副露看得出来源）",
+    how: "node scripts/verify-tracer.mjs",
+    run: (lane) => verifyTracer(lane),
+  },
+  // 票 44：牌桌上**人能看见的八项**各一条断言，外加方位（切了视角布局要跟着转）。
+  // 它把其余座位换成「有主见」那一档（票 42）才走得到立直与供托：均匀随机几乎不立直。
+  // 票 51 又在它尾上接了一段：**副露里横放那张的位置就是来源**，另走两局把九种槽位结果
+  // （吃 / 碰左中右 / 大明杠三格 / 加杠叠放 / 暗杠）摆齐，逐组与**绝对座位**对拍，
+  // 并且五个视角看到的位置必须逐字相同——位置的参照系是**副露方自己**。
+  {
+    name: "牌桌上人看得见的八项 + 副露的位置就是来源（真对局）",
+    how: "node scripts/verify-board.mjs",
+    run: (lane) => verifyBoard(lane),
+  },
+  {
+    name: "浏览器内黄金用例（与 tests/fixtures/golden/ 逐字段逐行对照）",
+    how: "node scripts/verify-golden.mjs",
+    run: (lane) => verifyGolden(lane),
+  },
+  // 票 26 的验收：点一下真的下载得到一份牌谱，而那份字节回放出逐条相同的事件流。
+  // 四家随机选手，**一个网络请求都不发**（M1 增量约束 6）；带真模型的那一档是 `--llm`，人工跑。
+  // 票 34 把「导出物里没有 key」一并放进这一道：假 key 灌进 localStorage、模型坐席不给。
+  {
+    name: "浏览器内牌谱导出（下载事件 + 把下下来的字节 fold 回去）",
+    how: "node scripts/verify-export.mjs --turns 40",
+    run: (lane) => verifyExport(lane, { turns: 40 }),
+  },
+  // 同一道闸门再跑一趟**打完整场**的（票 39）。两趟不是重复：上面那趟停在局中
+  // （牌桌与回放都读 `GameState`），这一趟走到终局那一屏（两边都改读 `Game` 的精算后点数）。
+  // 种子 447：那一场终局时场上还剩着供托，因此「局末点数」与「精算后点数」真的不同
+  // ——不同才验得出口径。仍旧一个请求都不发。
+  {
+    name: "浏览器内打完一整场：终局那一屏的点数只许有一种说法",
+    how: "node scripts/verify-export.mjs --to-end --seed 447",
+    run: (lane) => verifyExport(lane, { toEnd: true, seed: "447" }),
+  },
+  // 票 34 的反向自证：拿同一份导出物拌一把 key 进去，上面那条断言**必须**当场红。
+  // 没这一趟的话，「代码里有那行断言」与「那行断言真的拦得住东西」就又分不开了
+  // （立这张票的起因就是上一次只核到了前者）。手数压到 12：它只需要导出得成。
+  {
+    name: "反向自证：拌了 key 的导出物必须让那道闸门变红",
+    how: "node scripts/verify-export.mjs --turns 12 --poison（它单跑时**该**以 1 退出）",
+    run: poisonProof,
+  },
+  // 票 36：上面那两趟守的是「key 只是躺在 localStorage 里」。这一趟守的是另一半：
+  // key **真的交给了端点**，而端点把它原样抠在报错里回了回来。全程本机（本地假端点），
+  // 不出网、不花 token。它自带阳性对照（打码记号必须在），因此不需要另一道 poison。
+  {
+    name: "回显 key 的自建网关：报错原文进牌谱前必须已打码",
+    how: "node scripts/verify-redaction.mjs",
+    run: (lane) => verifyRedaction(lane),
+  },
+];
+
+const lane = await openLane();
+const results = [];
+
+try {
+  for (const gate of gates) {
+    console.log("");
+    console.log(`== ${gate.name} ==`);
+    console.log(`（单跑：${gate.how}）`);
+    const started = Date.now();
+    const failures = await gate.run(lane);
+    results.push({ gate, failures, ms: Date.now() - started });
+  }
+} finally {
+  await lane.close();
+}
+
+console.log("");
+console.log("七趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+for (const { gate, failures, ms } of results) {
+  console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
+}
+
+const reds = results.filter((each) => each.failures.length > 0);
+if (reds.length > 0) {
+  console.error("");
+  for (const { gate, failures } of reds) {
+    console.error(`【${gate.name}】红了。单独重跑它：${gate.how}`);
+    printFailures(failures);
+  }
+  process.exit(1);
+}

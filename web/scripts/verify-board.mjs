@@ -18,15 +18,11 @@
 // 全绿的闸门等于没有闸门（票 34 立的规矩）。
 //
 // 跑法：`cd web && pnpm run build && node scripts/verify-board.mjs`
+// 它也是 `verify-browser.mjs` 里的一道（七道共用一个浏览器与一台服务器）。
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
-import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
-import { pageUrl, startPreview } from "./serve.mjs";
-
-const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { stepOnce } from "./table-drive.mjs";
 
 /** 这一局走哪颗种子。挑它的过程见报告 44：`有主见` 档下它第 35 手就把八项全摆出来了。 */
 const SEED = 9;
@@ -58,21 +54,6 @@ const NAKI_CORPUS = [
 
 /** 走到覆盖清单齐为止的手数上限。 */
 const NAKI_BUDGET = 110;
-
-/** 走一手：点「单步」，等「上一手」那行变了。这一局打完了就返回 false。 */
-async function stepOnce(page) {
-  if (await page.getByTestId("table-step").isDisabled()) return false;
-  const before = (await page.getByTestId("table-latest").textContent()).trim();
-  await page.getByTestId("table-step").click();
-  if (await page.getByTestId("table-step").isDisabled()) return false;
-  await page.waitForFunction(
-    (previous) =>
-      document.querySelector('[data-testid="table-latest"]').textContent.trim() !== previous,
-    before,
-    { timeout: 30000 },
-  );
-  return true;
-}
 
 /**
  * 把牌桌上人能看见的东西**连同它的 `data-`** 一起读回来。
@@ -539,147 +520,138 @@ async function checkNakiPositions(page, problems) {
 
 // ---- 跑 ----
 
-const executablePath = chromeExecutable();
-if (!executablePath) {
-  console.error(missingChrome);
-  process.exit(1);
-}
+/** 牌桌那一道（票 44 + 票 51）。返回的是失败清单（空 = 绿）。 */
+export async function verifyBoard(lane) {
+  const url = await lane.previewUrl();
+  const page = await lane.newPage({ viewport: { width: 1180, height: 1200 } });
+  const problems = [];
+  const pageProblems = [];
 
-const server = await startPreview(webRoot);
-const browser = await chromium.launch({ executablePath, headless: true });
-const problems = [];
-const pageProblems = [];
+  // try 里只收集，`finally` 关页面，报告放在最后——写法照 `verify-export.mjs`：
+  // 在 try 里 `process.exit` 会把 `finally` 整个跳过，页面与服务器都关不掉。
+  let walked = 0;
+  let shot = null;
+  let later = null;
+  let total = 0;
+  let naki = { seen: "无" };
+  let bottoms = "";
+  let positions = [];
 
-// try 里只收集，`finally` 关浏览器，报告与退出码放在最后——写法照 `verify-export.mjs`：
-// 在 try 里 `process.exit` 会把 `finally` 整个跳过，浏览器与 preview 都关不掉。
-let walked = 0;
-let shot = null;
-let later = null;
-let total = 0;
-let naki = { seen: "无" };
-let bottoms = "";
-let positions = [];
+  try {
+    page.on("pageerror", (error) => pageProblems.push(`[pageerror] ${error.message}`));
+    page.on("console", (message) => {
+      if (message.type() === "error") pageProblems.push(`[console.error] ${message.text()}`);
+    });
 
-try {
-  const page = await browser.newPage({ viewport: { width: 1180, height: 1200 } });
-  page.on("pageerror", (error) => pageProblems.push(`[pageerror] ${error.message}`));
-  page.on("console", (message) => {
-    if (message.type() === "error") pageProblems.push(`[console.error] ${message.text()}`);
-  });
+    await page.goto(`${url}/`, { waitUntil: "load" });
+    await page.getByTestId("table-board").waitFor();
 
-  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
-  await page.getByTestId("table-board").waitFor();
+    // 其余座位换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），
+    // 而立直、供托与立直棒这三项要立直才走得到。
+    await page.getByTestId("table-bot-opinionated").click();
+    await page.getByTestId("table-seed").fill(String(SEED));
+    await page.getByTestId("table-restart").click();
 
-  // 其余座位换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），
-  // 而立直、供托与立直棒这三项要立直才走得到。
-  await page.getByTestId("table-bot-opinionated").click();
-  await page.getByTestId("table-seed").fill(String(SEED));
-  await page.getByTestId("table-restart").click();
+    // 开局那一刻的总点：下面拿它验守恒（不写死起手总点——那是规则集的事，不是闸门的事）。
+    const opening = await readBoard(page);
+    total = tally(opening);
+    shot = opening;
+    while (walked < TURN_BUDGET) {
+      if (!(await stepOnce(page))) break;
+      walked += 1;
+      shot = await readBoard(page);
+      const seen = coverage(shot);
+      if (Object.values(seen).every((each) => each)) break;
+    }
 
-  // 开局那一刻的总点：下面拿它验守恒（不写死起手总点——那是规则集的事，不是闸门的事）。
-  const opening = await readBoard(page);
-  total = tally(opening);
-  shot = opening;
-  while (walked < TURN_BUDGET) {
-    if (!(await stepOnce(page))) break;
-    walked += 1;
-    shot = await readBoard(page);
     const seen = coverage(shot);
-    if (Object.values(seen).every((each) => each)) break;
+    const uncovered = Object.entries(seen)
+      .filter(([, ok]) => !ok)
+      .map(([name]) => name);
+    if (uncovered.length > 0)
+      problems.push(
+        `种子 ${SEED} 走了 ${walked} 手，这几项一次都没摆出来：${uncovered.join("、")}——断言在空转`,
+      );
+
+    if (shot.bot !== "opinionated")
+      problems.push(`其余座位该是「有主见」那一档，data-bot 却是「${shot.bot}」`);
+    if (!shot.agent.includes("有主见"))
+      problems.push(`状态行写着「${shot.agent}」，可其余座位坐的是「有主见」那一档`);
+
+    checkHands(shot, problems);
+    checkKawa(shot, problems);
+
+    const groups = await readNakiGroups(page);
+    naki = checkNakiGroups(groups);
+    problems.push(...naki.missing);
+    if (groups.length === 0)
+      problems.push(`种子 ${SEED} 走了 ${walked} 手，一组副露都没有：副露那几条断言在空转`);
+
+    checkScores(shot, total, problems);
+    checkCenter(shot, problems);
+    checkDora(shot, problems);
+    checkRiichi(shot, problems);
+    checkAka(shot, problems);
+
+    let stepped = 0;
+    for (let step = 0; step < JUNME_STEPS; step += 1) if (await stepOnce(page)) stepped += 1;
+    later = await readBoard(page);
+    checkJunme(shot, later, stepped, problems);
+    checkScores(later, total, problems);
+
+    bottoms = await checkLayout(page, problems);
+    // 票 51：横放那张的**位置**就是来源。它另走两局均匀随机的牌（把九种槽位结果摆齐），
+    // 因此一定要摆在最后：上面八项读的是种子 9「有主见」那一局的快照。
+    positions = await checkNakiPositions(page, problems);
+  } finally {
+    await page.close();
   }
 
-  const seen = coverage(shot);
-  const uncovered = Object.entries(seen)
-    .filter(([, ok]) => !ok)
-    .map(([name]) => name);
-  if (uncovered.length > 0)
-    problems.push(
-      `种子 ${SEED} 走了 ${walked} 手，这几项一次都没摆出来：${uncovered.join("、")}——断言在空转`,
-    );
+  if (pageProblems.length > 0) return failure("页面报了错：", pageProblems);
+  if (problems.length > 0) return failure("牌桌上少了该给人看的东西：", problems);
 
-  if (shot.bot !== "opinionated")
-    problems.push(`其余座位该是「有主见」那一档，data-bot 却是「${shot.bot}」`);
-  if (!shot.agent.includes("有主见"))
-    problems.push(`状态行写着「${shot.agent}」，可其余座位坐的是「有主见」那一档`);
+  const kawa = shot.seats.reduce(
+    (sum, seat) => ({
+      tsumogiri: sum.tsumogiri + seat.kawa.tsumogiri,
+      tegiri: sum.tegiri + seat.kawa.tegiri,
+    }),
+    { tsumogiri: 0, tegiri: 0 },
+  );
+  const riichi = shot.seats.filter((seat) => seat.riichi !== "none").map((seat) => seat.seat);
 
-  checkHands(shot, problems);
-  checkKawa(shot, problems);
-
-  const groups = await readNakiGroups(page);
-  naki = checkNakiGroups(groups);
-  problems.push(...naki.missing);
-  if (groups.length === 0)
-    problems.push(`种子 ${SEED} 走了 ${walked} 手，一组副露都没有：副露那几条断言在空转`);
-
-  checkScores(shot, total, problems);
-  checkCenter(shot, problems);
-  checkDora(shot, problems);
-  checkRiichi(shot, problems);
-  checkAka(shot, problems);
-
-  let stepped = 0;
-  for (let step = 0; step < JUNME_STEPS; step += 1) if (await stepOnce(page)) stepped += 1;
-  later = await readBoard(page);
-  checkJunme(shot, later, stepped, problems);
-  checkScores(later, total, problems);
-
-  bottoms = await checkLayout(page, problems);
-  // 票 51：横放那张的**位置**就是来源。它另走两局均匀随机的牌（把九种槽位结果摆齐），
-  // 因此一定要摆在最后：上面八项读的是种子 9「有主见」那一局的快照。
-  positions = await checkNakiPositions(page, problems);
-} finally {
-  await browser.close();
-  await server.close();
+  console.log(`种子 ${SEED}（有主见档）走 ${walked} 手，再走 ${JUNME_STEPS} 手验巡目`);
+  console.log(
+    `  手牌 ✓（自家 ${shot.seats.find((seat) => seat.hand.hidden === "false").hand.faces} 张牌面，` +
+      `他家 ${shot.seats
+        .filter((seat) => seat.hand.hidden === "true")
+        .map((seat) => seat.hand.backs)
+        .join("/")} 张牌背，牌背画得出来）`,
+  );
+  console.log(
+    `  河 ✓（共 ${kawa.tsumogiri + kawa.tegiri} 张：摸切 ${kawa.tsumogiri} 虚线、手切 ${kawa.tegiri} 实线）`,
+  );
+  console.log(`  副露 ✓（${naki.seen}）`);
+  console.log(
+    `  点数 ✓（四家 ${shot.seats.map((seat) => seat.score.data).join("/")}，与供托之和恒为 ${total}）`,
+  );
+  console.log(
+    `  供托与本场 ✓（${shot.center.kyokuText}・供托 ${shot.center.kyotaku} 根 = 立直棒 ${shot.center.bou ?? 0} 根）`,
+  );
+  console.log(`  宝牌指示牌 ✓（${shot.center.dora.data} 张：${shot.center.dora.text}）`);
+  console.log(
+    `  巡目 ✓（${shot.seats.map((seat) => seat.junme.data).join("/")} → ${later.seats.map((seat) => seat.junme.data).join("/")}）`,
+  );
+  console.log(`  立直状态 ✓（座位 ${riichi.join("、")} 立直，头上有标签）`);
+  console.log(
+    `  （顺带）赤牌红字 ${shot.aka.text}=${shot.aka.color} ≠ 普通牌 ${shot.aka.plain}、` +
+      `刚摸那张的间距 ${shot.seats.find((seat) => seat.hand.drawnGap !== null).hand.drawnGap}px ✓`,
+  );
+  console.log(`  方位 ✓（${bottoms}）`);
+  console.log("  副露的位置就是来源 ✓（五个视角逐个对拍绝对座位，且五个视角看到的位置逐字相同）");
+  for (const line of positions) console.log(`    ${line}`);
+  return [];
 }
 
-if (pageProblems.length > 0) {
-  console.error("页面报了错：");
-  console.error(pageProblems.join("\n"));
-  process.exit(1);
+if (isEntry(import.meta.url)) {
+  await runStandalone(verifyBoard);
 }
-
-if (problems.length > 0) {
-  console.error("牌桌上少了该给人看的东西：");
-  console.error(problems.join("\n"));
-  process.exit(1);
-}
-
-const kawa = shot.seats.reduce(
-  (sum, seat) => ({
-    tsumogiri: sum.tsumogiri + seat.kawa.tsumogiri,
-    tegiri: sum.tegiri + seat.kawa.tegiri,
-  }),
-  { tsumogiri: 0, tegiri: 0 },
-);
-const riichi = shot.seats.filter((seat) => seat.riichi !== "none").map((seat) => seat.seat);
-
-console.log(`种子 ${SEED}（有主见档）走 ${walked} 手，再走 ${JUNME_STEPS} 手验巡目`);
-console.log(
-  `  手牌 ✓（自家 ${shot.seats.find((seat) => seat.hand.hidden === "false").hand.faces} 张牌面，` +
-    `他家 ${shot.seats
-      .filter((seat) => seat.hand.hidden === "true")
-      .map((seat) => seat.hand.backs)
-      .join("/")} 张牌背，牌背画得出来）`,
-);
-console.log(
-  `  河 ✓（共 ${kawa.tsumogiri + kawa.tegiri} 张：摸切 ${kawa.tsumogiri} 虚线、手切 ${kawa.tegiri} 实线）`,
-);
-console.log(`  副露 ✓（${naki.seen}）`);
-console.log(
-  `  点数 ✓（四家 ${shot.seats.map((seat) => seat.score.data).join("/")}，与供托之和恒为 ${total}）`,
-);
-console.log(
-  `  供托与本场 ✓（${shot.center.kyokuText}・供托 ${shot.center.kyotaku} 根 = 立直棒 ${shot.center.bou ?? 0} 根）`,
-);
-console.log(`  宝牌指示牌 ✓（${shot.center.dora.data} 张：${shot.center.dora.text}）`);
-console.log(
-  `  巡目 ✓（${shot.seats.map((seat) => seat.junme.data).join("/")} → ${later.seats.map((seat) => seat.junme.data).join("/")}）`,
-);
-console.log(`  立直状态 ✓（座位 ${riichi.join("、")} 立直，头上有标签）`);
-console.log(
-  `  （顺带）赤牌红字 ${shot.aka.text}=${shot.aka.color} ≠ 普通牌 ${shot.aka.plain}、` +
-    `刚摸那张的间距 ${shot.seats.find((seat) => seat.hand.drawnGap !== null).hand.drawnGap}px ✓`,
-);
-console.log(`  方位 ✓（${bottoms}）`);
-console.log("  副露的位置就是来源 ✓（五个视角逐个对拍绝对座位，且五个视角看到的位置逐字相同）");
-for (const line of positions) console.log(`    ${line}`);

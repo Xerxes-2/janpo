@@ -1024,31 +1024,37 @@ module GameStateFixtures =
 /// 局面与动作的生成器。局面只生成**可达**的那些：随机开一局、随机走若干步。
 type GameStateArbitraries =
 
+    /// 十条轨迹与它们的权重。**每一条都是 `Gen.fresh`，不是 `Gen.constant`**：
+    /// `Gen.constant` 的参数是即时求值的，那张表每构造一次就把十条轨迹全跑完、只用其中一条
+    /// （实测：取 400 个样本调了 4000 次 `traceFrom`，而一条轨迹是「把一局用 seeking 选手打完」）。
+    /// `Gen.fresh` 在**选中之后**才求值，因此一个样本只跑一条（4000 → 400）。
+    ///
+    /// **权重与轨迹一条没改**，且 `Gen.fresh` 与 `Gen.constant` 都不消耗随机流：
+    /// 同一颗种子取出来的样本改前改后逐个相同（报告 56 §2 里有一份 400 个样本的对拍）。
+    static member private tracesFor(seed: int) : (int * Gen<GameState list>) list =
+        [
+            4, Gen.fresh (fun () -> GameStateFixtures.trace Kyoku.randomPlayer seed)
+            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed)
+            // 副露密集的一局：鸣牌的不变量（牌数守恒、手牌张数、河被鸣走的记号）靠它验。
+            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.nakiSeeking seed)
+            // 杠密集的一局：王牌、岭上牌与新宝牌的不变量靠它验。
+            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.kanSeeking seed)
+            // 摊好的三局：一局三个暗杠、一局大明杠后岭上开花、一局暗杠后岭上开花。
+            // 随机取样里杠太稀，杠的不变量非得有这几条轨迹不可。
+            2, Gen.fresh (fun () -> GameStateFixtures.kanTrace "2m 3m 7z" GameStateFixtures.threeKanScript)
+            1, Gen.fresh (fun () -> GameStateFixtures.kanTrace "1z" GameStateFixtures.minkanScript)
+            1, Gen.fresh (fun () -> GameStateFixtures.kanTrace "5z" GameStateFixtures.ankanScript)
+            // 立直密集的一局：立直棒、供托守恒与「立直后只能摸切」靠它验。
+            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.riichiSeeking seed)
+            // 摊好的两局：一局自摸和收尾、一局荣和收尾。
+            1, Gen.fresh (fun () -> GameStateFixtures.horaTrace GameStateFixtures.tsumoHoraScript)
+            1, Gen.fresh (fun () -> GameStateFixtures.horaTrace GameStateFixtures.doubleRonScript)
+        ]
+
     static member GameState() : Arbitrary<GameState> =
         gen {
             let! seed = Gen.choose (1, 400)
-
-            let! states =
-                Gen.frequency
-                    [
-                        4, Gen.constant (GameStateFixtures.trace Kyoku.randomPlayer seed)
-                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed)
-                        // 副露密集的一局：鸣牌的不变量（牌数守恒、手牌张数、河被鸣走的记号）靠它验。
-                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.nakiSeeking seed)
-                        // 杠密集的一局：王牌、岭上牌与新宝牌的不变量靠它验。
-                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.kanSeeking seed)
-                        // 摊好的三局：一局三个暗杠、一局大明杠后岭上开花、一局暗杠后岭上开花。
-                        // 随机取样里杠太稀，杠的不变量非得有这几条轨迹不可。
-                        2, Gen.constant (GameStateFixtures.kanTrace "2m 3m 7z" GameStateFixtures.threeKanScript)
-                        1, Gen.constant (GameStateFixtures.kanTrace "1z" GameStateFixtures.minkanScript)
-                        1, Gen.constant (GameStateFixtures.kanTrace "5z" GameStateFixtures.ankanScript)
-                        // 立直密集的一局：立直棒、供托守恒与「立直后只能摸切」靠它验。
-                        4, Gen.constant (GameStateFixtures.trace GameStateFixtures.riichiSeeking seed)
-                        // 摊好的两局：一局自摸和收尾、一局荣和收尾。
-                        1, Gen.constant (GameStateFixtures.horaTrace GameStateFixtures.tsumoHoraScript)
-                        1, Gen.constant (GameStateFixtures.horaTrace GameStateFixtures.doubleRonScript)
-                    ]
-
+            let! states = seed |> GameStateArbitraries.tracesFor |> Gen.frequency
             let! index = Gen.choose (0, List.length states - 1)
             return List.item index states
         }
