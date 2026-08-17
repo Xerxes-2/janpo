@@ -47,10 +47,6 @@ jobs:
       # 缓存键跟着 flake.nix / flake.lock 走：工具链没改就一直命中；改了就冷跑一次再存新的一份。
       # 不给 restore 前缀是有意的——那样缓存内容永远严格等于「这份 flake.lock 的工具链」，
       # 不会一代代把旧工具链驮着走。要强制冷跑：改这两个文件，或去 Actions → Caches 删掉那条。
-      - name: 缓存 /nix（整套工具链）
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock') }}
 
       # 单独一步预热，为的是**能读出数字**：这一步的耗时就是「拉工具链」的耗时，
       # 缓存命中时它是几秒，未命中时它是几分钟。混在下面那步里就再也分不出来了。

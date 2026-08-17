@@ -41,15 +41,9 @@ jobs:
       # 钉在发布 tag 上，理由同 ci.yml。
       - uses: DeterminateSystems/nix-installer-action@v22
 
-      # 与 ci.yml 同一条缓存、同一个键、同一份 paths（默认就是 /nix），因此两条 workflow 共用一份。
-      # 这里 `save: false`：写缓存的只有 ci.yml 那一条，避免两个 job 同时往同一个键上传 ~2 GiB
-      # 而其中一个必然收到「另一个 job 正在创建这份缓存」的告警——本票的活是**减**噪音。
-      # 代价：flake.lock 刚改过的那一次推送，Pages 这条会冷跑一次（ci.yml 跑完才把新缓存存上）。
-      - name: 缓存 /nix（整套工具链；只读，写由 ci.yml 负责）
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock') }}
-          save: false
+      # 【实测后拆掉】曾在这里挂 nix-community/cache-nix-action@v7（只读，写由 ci.yml 负责）。
+      # 调度器实测冷热两跑后拆除：缓存 restore 花 20 秒、而冷拉工具链只要 18 秒——**净亏**。
+      # 详见 ci.yml 里同一处注释与票 45 报告 §8。别再加，除非先量。
 
       # 单独一步预热，为的是能把「拉工具链」的耗时从下面几步里读出来（同 ci.yml）。
       - name: 预热 dev shell（这一步的耗时 = 拉工具链的耗时）
