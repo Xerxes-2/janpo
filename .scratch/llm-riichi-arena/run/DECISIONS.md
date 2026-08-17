@@ -4279,3 +4279,45 @@ CPU 总和 507.7s → 126.4s 是**远端**最该看的那个数（远端 4 核�
 唯一还可能付得起的候选是 **`pnpm install` 的缓存**（它真的在下载与链接，与 `/nix` 那次不同）——
 但按判据 13 与它的补强，**先量再信**：要先把 JS 前段那 43 秒拆开，看 install 占几秒。
 `/nix` 缓存那条路已经被实测否掉（票 45），别重走。
+
+## 60
+
+**恒真式先证实、再替换。** 票 58 说 `MaskedStreamProperties` 那条属性是恒真式——
+按判据 1（「它失败过」才算证据）逐个弄坏 `src/` 复核，结论**证实并且比 58 细一格**：
+弄坏 `SeatStream.absorb`、`SeatStream.advance`、`MaskedEvent.forSeat` 它**一次都不红**，
+唯一红得了的是 `SeatStream.advanceAll` 那两行包装（左侧手写 `List.fold advance`、
+右侧走 `ofEvents → advanceAll`，两侧唯一不共用的就是它）。四份原始输出在
+`reports/60-tautological-gate.md` §1。
+
+**60-1：两侧独立靠的是「第三个锚点」，不是重新造一份实现。**
+`src/` 里只有一个 fold，「增量」与「一次性」都从它出——只要两侧都是观测，就必然共用它。
+因此闸门做成**三条腿**：A 增量（只吃 `GameState.step` 吐出来的 `produced`）vs 一次性（`ofState`）、
+B 增量 vs **引擎的权威状态**逐字段、C 一次性 vs **引擎的权威状态**逐字段。
+B/C 的右侧既不经过掩蔽也不经过 fold，归并不到同一个 fold 上去。
+**被否决的两种做法**：① 把 29a 删掉的 `Observation.ofStateDirect` 请回来当第二实现——
+那是把 29a 有意退役的死代码养起来，且要改 `src/`；② 只比「每个前缀的增量 vs 一次性」——
+仍是同一个 fold，换汤不换药。
+
+**60-2：三次弄坏各点亮不同的两条腿**，这本身就是三条腿彼此独立的证据：
+弄坏增量侧（`step` 交出的 `produced` 漏一类事件）→ A+B 红、C 绿；
+弄坏一次性侧（`ofState` 少吃一条）→ A+C 红、B 绿；只弄坏掩蔽（`forSeat`）→ B+C 红、A 绿。
+其中第一类此前**引擎侧一条守卫都没有**，只有 Web 侧 `TableTests` 一颗种子碰得到。
+
+**60-3：`src/Janpo.Engine/` 一行没动**，票面那条「必须动 `src/` 就先记 DECISIONS」没用上：
+三条腿要的入口（`SeatStream.start`/`advance`/`observation`、`Observation.ofState`、`GameState`）
+全是现成的公开 API。
+
+**60-4：执行次数（判据 3）。** 临时插 `Interlocked` 计数器跑一次完整 `dotnet test`，
+三条腿**各 15,428 次**（200 局 × 平均 77.1 手），计数器测完全部拆掉；
+顺带量到 `ObservationProperties` 那两条各 400 次（100 局面 × 4 座位）。
+CI 墙钟 39.1/39.8 s → 36.4/36.5/37.4 s（同机同轮，噪声带内，**不宣称变快**），
+测试条数与属性用例数一条没减。
+
+**60-5：顺带发现两条同形空转的属性，只报不改**（判据 17：不编号）。
+`DecisionPackageProperties` 的「包里的历史就是那条唯一的掩蔽流」（两侧是同一个表达式）
+与「包里的历史 fold 出来的就是包里的那份观测」（两侧是同一个 fold）——
+实测弄坏 `absorb` 与弄坏 `forSeat` 它们都全绿。它们**挡得住「两个字段建在不同座位/局面上」**，
+但守不到名字宣称的那件事。不在本票范围内，建议照本票的形状改（`ObservationFixtures.mismatches` 现成）。
+
+**60-6：判据清单开头那句「已抓到五例」现在该是六例**（本票是唯一一次「执行体存在但空转」）。
+改 `docs/agents/judgments.md` 要授权，没改，记提案。

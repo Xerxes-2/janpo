@@ -88,6 +88,7 @@
 
   <!-- 决策包与观测投影（票 20）。局面取自 GameStateGenerators 的可达局面。 -->
   <ItemGroup>
+    <Compile Include="ObservationFixtures.fs" />
     <Compile Include="MaskedStreamTests.fs" />
     <Compile Include="MaskedStreamProperties.fs" />
     <Compile Include="ObservationTests.fs" />
