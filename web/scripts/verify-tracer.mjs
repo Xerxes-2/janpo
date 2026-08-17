@@ -14,6 +14,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
 import { pageUrl, startPreview } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -71,9 +72,6 @@ const DEV_WORDS = ["曳光弹", "Fable", "dotnet"];
 const NAKI_SEED = 1223;
 const NAKI_TURNS = 90;
 
-/** 相对位置的中文（CONTEXT.md 的 Shimocha / Toimen / Kamicha），参照系是**副露方**。 */
-const WHO = { 1: "下家", 2: "对家", 3: "上家" };
-
 /** 走 n 手：一手一手点「单步」，等「上一手」那行变了再点下一手（写法照 `shoot-table.mjs`）。 */
 async function stepTable(page, count) {
   for (let turn = 0; turn < count; turn += 1) {
@@ -107,67 +105,21 @@ async function stepTable(page, count) {
  * 头一条是防空转的：一组鸣来的副露都没走出来的话，下面全部断言都会空着全绿。
  */
 async function checkNaki(page) {
-  const missing = [];
   await page.getByTestId("table-seed").fill(String(NAKI_SEED));
   await page.getByTestId("table-restart").click();
   const walked = await stepTable(page, NAKI_TURNS);
 
-  const groups = await page.evaluate(() =>
-    [0, 1, 2, 3].flatMap((seat) =>
-      [...document.querySelectorAll(`[data-testid="seat-${seat}-naki"] [data-naki]`)].map(
-        (node) => ({
-          seat,
-          kind: node.getAttribute("data-naki"),
-          from: node.getAttribute("data-naki-from"),
-          fromSeat: node.getAttribute("data-naki-from-seat"),
-          taken: node.querySelectorAll("[data-naki-taken]").length,
-          added: node.querySelectorAll("[data-naki-added]").length,
-        }),
-      ),
-    ),
-  );
+  const groups = await readNakiGroups(page);
+  const { missing, seen } = checkNakiGroups(groups);
 
+  // 防空转：一组鸣来的副露都没走出来的话，上面那几条断言会空着全绿。
   const called = groups.filter((group) => group.kind !== "暗杠");
   if (called.length === 0)
     missing.push(
       `种子 ${NAKI_SEED} 走了 ${walked} 手，一组鸣来的副露都没有：副露那几条断言全在空转`,
     );
 
-  for (const group of groups) {
-    const where = `座位 ${group.seat} 的「${group.kind}」`;
-
-    if (group.kind === "暗杠") {
-      if (group.taken !== 0) missing.push(`${where}画了横放的那张，可暗杠没有被鸣的牌`);
-      if (group.from !== null) missing.push(`${where}标了来源「${group.from}」，可暗杠不是鸣来的`);
-    } else {
-      // 两件事分开报（而不是 else if 一路串下去）：「哪一张」与「来自谁」是两条信息，
-      // 坐坐丢掉一条时得看得出丢的是哪一条。
-      if (group.taken !== 1)
-        missing.push(`${where}里被鸣的那张有 ${group.taken} 处记号（该有且只有一处）`);
-
-      if (group.from === null || group.fromSeat === null) {
-        missing.push(`${where}没写来源（data-naki-from / data-naki-from-seat）`);
-      } else {
-        const relative = (Number(group.fromSeat) - group.seat + 4) % 4;
-        if (WHO[relative] !== group.from)
-          missing.push(
-            `${where}写着「来自${group.from}」，可座位 ${group.fromSeat} 相对副露方是「${WHO[relative] ?? relative}」`,
-          );
-        if (group.kind === "吃" && group.from !== "上家")
-          missing.push(`${where}写着「来自${group.from}」：吃只吃得了上家`);
-      }
-    }
-
-    const expected = group.kind === "加杠" ? 1 : 0;
-    if (group.added !== expected)
-      missing.push(`${where}里「加上去的那张」有 ${group.added} 处记号（该有 ${expected} 处）`);
-  }
-
-  const seen = groups
-    .map((group) => `${group.kind}${group.from === null ? "" : `←${group.from}`}`)
-    .join("、");
-
-  return { missing, seen: `种子 ${NAKI_SEED} 走 ${walked} 手：${seen || "无"}` };
+  return { missing, seen: `种子 ${NAKI_SEED} 走 ${walked} 手：${seen}` };
 }
 
 /**

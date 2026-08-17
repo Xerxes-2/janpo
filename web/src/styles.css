@@ -127,16 +127,6 @@ h1 {
   max-width: none;
 }
 
-.board-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-}
-
 .field {
   display: inline-flex;
   gap: 0.4rem;
@@ -152,15 +142,84 @@ h1 {
   opacity: 0.8;
 }
 
+/* 真牌桌（票 44）：四家围着中央坐，**方位跟着观测视角转**——自家在下、下家在右、
+   对家在上、上家在左。上下两家占满整行（手牌 14 张要地方），左右两家夹着中央那一块。
+
+   摆到哪个格子里**只由 `data-seat-position` 决定**，而那个属性就是 `Board.position` 的输出
+   （参照系是观测者，上帝视角退回起家）。样式与那个属性同源，因此不存在「属性写着下家、
+   却画在左边」；闸门仍旧两样都核：属性对不对、画出来的坐标对不对。 */
 .seats-board {
   display: grid;
-  gap: 0.75rem;
+  grid-template-areas:
+    "toimen toimen toimen"
+    "kamicha center shimocha"
+    "self self self";
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 0.6rem;
+  margin-top: 1rem;
 }
 
+.seats-board [data-seat-position="toimen"] {
+  grid-area: toimen;
+}
+
+.seats-board [data-seat-position="kamicha"] {
+  grid-area: kamicha;
+}
+
+.seats-board [data-seat-position="shimocha"] {
+  grid-area: shimocha;
+}
+
+.seats-board [data-seat-position="self"] {
+  grid-area: self;
+}
+
+/* 牌桌中央：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间。 */
+.table-center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+}
+
+/* 方位的参照系（M1 第六条：相对方位必须显式声明参照系）。小字、淡色：它是脚注不是场况。 */
+.table-anchor {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+/* 一家的三排牌**从外往内**摆：副露在最外、手牌居中、河贴着桌心。
+   上下两家靠翻转纵向顺序（自家那块整个 `column-reverse`），
+   左右两家纵向翻不出「朝中心」，改由横向对齐说：河贴中心那一侧、副露贴外侧。 */
 .seat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
+}
+
+.seat[data-seat-position="self"] {
+  flex-direction: column-reverse;
+}
+
+.seat[data-seat-position="kamicha"] .kawa,
+.seat[data-seat-position="shimocha"] .naki-row {
+  align-self: flex-end;
+}
+
+.seat[data-seat-position="kamicha"] .naki-row,
+.seat[data-seat-position="shimocha"] .kawa {
+  align-self: flex-start;
 }
 
 .seat-head {
@@ -173,6 +232,15 @@ h1 {
 
 .seat-name {
   font-weight: 600;
+}
+
+/* 这一家相对观测者是第几家。**坐着看才写**：上帝视角没有观测者，那时参照系写在中央。 */
+.seat-position {
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+  opacity: 0.85;
 }
 
 .seat-score,
@@ -196,9 +264,19 @@ h1 {
   min-height: 1.6rem;
 }
 
+/* 河摆成**每行 6 张**的方阵：真牌桌与牌谱都是这个摆法，一眼看得出打到第几巡。
+   标题（「河 11」）独占头一行，免得它挤掉一张牌的位置。 */
 .tiles.kawa {
-  max-width: 24rem;
+  display: grid;
+  grid-template-columns: repeat(6, auto);
+  justify-content: start;
   opacity: 0.9;
+}
+
+/* 上下两家的三排居中摆（真牌桌上手牌就在自己正前方）。 */
+.seat[data-seat-position="self"] .tiles,
+.seat[data-seat-position="toimen"] .tiles {
+  justify-content: center;
 }
 
 .tile {
@@ -332,6 +410,11 @@ h1 {
   opacity: 0.6;
 }
 
+/* 河那一排是 6 列的方阵，标题独占头一行——免得它挤掉一张牌的位置。 */
+.tiles.kawa .row-label {
+  grid-column: 1 / -1;
+}
+
 /* LLM 座位（23 票）。同样是「能看清就行」：配置面板不过夜。 */
 
 .llm-panel {
@@ -421,4 +504,50 @@ h1 {
 .agent.error {
   opacity: 1;
   font-weight: 600;
+}
+
+/* 窄视口（票 44）。**820px 仍然是真牌桌**（M1 验过那个宽度，这一票也验了）：
+   三列各约 240px，河那块 6 列方阵约 190px，放得下。
+   再窄就不强撑了：40rem 以下排成一列，顺序仍然是对家→上家→中央→下家→自家
+   （对家在最上、自家在最下这两条保住）。手机上左右两家叠成上下，但它们的方位文字
+   （`.seat-position`）还写在头上，读得出来。 */
+@media (max-width: 40rem) {
+  .seats-board {
+    grid-template-areas:
+      "toimen"
+      "kamicha"
+      "center"
+      "shimocha"
+      "self";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .seat[data-seat-position="kamicha"] .kawa,
+  .seat[data-seat-position="kamicha"] .naki-row,
+  .seat[data-seat-position="shimocha"] .kawa,
+  .seat[data-seat-position="shimocha"] .naki-row {
+    align-self: flex-start;
+  }
+}
+
+/* 窄视口（票 44）：三列的真牌桌在约 40rem 以下会把每一列挤到放不下半排河，
+   那时**改成竖排**——自家仍在最下、对家仍在最上，左右两家按上家 → 下家的顺序夹在中间。
+   方位关系因此只退化不颠倒。M1 验的 820px 仍走三列那一套（一列约 15rem，放得下 6 张一行的河）。 */
+@media (max-width: 40rem) {
+  .seats-board {
+    grid-template-areas:
+      "toimen"
+      "kamicha"
+      "center"
+      "shimocha"
+      "self";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .seat[data-seat-position="kamicha"] .kawa,
+  .seat[data-seat-position="kamicha"] .naki-row,
+  .seat[data-seat-position="shimocha"] .kawa,
+  .seat[data-seat-position="shimocha"] .naki-row {
+    align-self: flex-start;
+  }
 }

@@ -138,8 +138,10 @@ module BoardTests =
     let ``座位不在这个规则集里就没有牌桌`` () =
         Assert.True((Board.ofTable (Viewpoint.Seated(seat 9)) (table seed)) |> Option.isNone)
 
+    /// **列表的顺序**恒按座位升序：`seat-N` 这些钩子与 DOM 的先后不随视角跳。
+    /// 画出来的**方位**是另一回事——它跟着观测视角转（见下面那几条与 `Board.position`）。
     [<Fact>]
-    let ``各家一律按座位升序排，画出来的位置不随视角跳`` () =
+    let ``各家一律按座位升序排，DOM 的顺序不随视角跳`` () =
         let table = table seed
 
         let seatsOf (viewpoint: Viewpoint) =
@@ -147,6 +149,49 @@ module BoardTests =
 
         Assert.Equal<int list>([ 0; 1; 2; 3 ], seatsOf Viewpoint.God)
         Assert.Equal<int list>([ 0; 1; 2; 3 ], seatsOf (Viewpoint.Seated(seat 2)))
+
+    // ---- 方位（票 44） ----
+
+    /// 这张牌桌上四家各在哪个方位，按座位升序。
+    let private positionsOn (board: BoardView) : Position list =
+        board.Seats
+        |> List.map (fun view -> Board.position ruleset (Board.anchor board) view.Seat)
+
+    [<Fact>]
+    let ``坐着看：自家在下、下家在右、对家在上、上家在左`` () =
+        let board = table seed |> board (Viewpoint.Seated(seat 2))
+
+        // 参照系是观测者（座位 2）：它自己是自家，座位 3 是它的下家，座位 0 是对家，座位 1 是上家。
+        Assert.Equal<Position list>(
+            [ Position.Toimen; Position.Kamicha; Position.Self; Position.Shimocha ],
+            positionsOn board
+        )
+
+    [<Fact>]
+    let ``换个座位坐，四家的方位跟着转`` () =
+        let table = table seed
+
+        let positions (viewpoint: Viewpoint) = board viewpoint table |> positionsOn
+
+        // 「切了视角但布局没转」正是这一条要抓的错：四家没有一家留在原来的方位上。
+        for left, right in List.zip (positions (Viewpoint.Seated Seat.first)) (positions (Viewpoint.Seated(seat 1))) do
+            Assert.NotEqual<Position>(left, right)
+
+        // 而每个方位恒有且只有一家（不管坐哪儿）：四家四个不同的方位。
+        for viewpoint in [ Viewpoint.Seated Seat.first; Viewpoint.Seated(seat 1); Viewpoint.God ] do
+            Assert.Equal(4, positions viewpoint |> List.distinct |> List.length)
+
+    [<Fact>]
+    let ``上帝视角的参照系是起家：座位 0 在下`` () =
+        let table = table seed
+
+        // 上帝视角没有观测者，方位得有个说得出口的参照系——取起家（座位 0）。
+        Assert.Equal(Seat.first, Board.anchor (board Viewpoint.God table))
+
+        Assert.Equal<Position list>(
+            positionsOn (board (Viewpoint.Seated Seat.first) table),
+            positionsOn (board Viewpoint.God table)
+        )
 
     [<Fact>]
     let ``场况两个视角一致：只有暗牌不一样`` () =

@@ -15,6 +15,47 @@ type Viewpoint =
     /// 上帝视角（CONTEXT.md 的 God View）：四家全亮，里宝牌也亮着。
     | God
 
+/// 牌桌上的四个方位（票 44）：**自家在下、下家在右、对家在上、上家在左**。
+///
+/// **参照系是观测者**（`Board.anchor`），因此切座位时四家要跟着换位置——
+/// 下家永远在右手边，而“谁是下家”随坐哪里变。这与副露那枚「来自上家」标签不是同一件事：
+/// 那一枚的参照系是**副露方**（吃恒来自上家，票 38），这一个的参照系是**看牌桌的那个人**。
+///
+/// 座位数不是 4 时没有对家（三麻），那时只有三个方位用得上；判据在 `Board.position`，
+/// 用的是引擎的 `Seat.toimen`（它三麻返 None），不在这一层重写一份座位算术。
+[<RequireQualifiedAccess>]
+type Position =
+    /// 观测者自己：下方。
+    | Self
+    /// 下家：右侧。
+    | Shimocha
+    /// 对家：上方。
+    | Toimen
+    /// 上家：左侧。
+    | Kamicha
+
+/// 方位的两种渲法（ADR-0001 的单向出口）。
+[<RequireQualifiedAccess>]
+module Position =
+
+    /// 机器可读的那一半：`data-seat-position` 与 CSS 的格子名字读的都是它。
+    /// **样式与它同源**（`styles.css` 里按属性选择器摆格子），因此不存在
+    /// 「属性写对了但画到了别处」这种情形。
+    let toWire (position: Position) : string =
+        match position with
+        | Position.Self -> "self"
+        | Position.Shimocha -> "shimocha"
+        | Position.Toimen -> "toimen"
+        | Position.Kamicha -> "kamicha"
+
+    /// 给人看的那一半（CONTEXT.md 的 Shimocha / Toimen / Kamicha）。
+    let toDisplay (position: Position) : string =
+        match position with
+        | Position.Self -> "自家"
+        | Position.Shimocha -> "下家"
+        | Position.Toimen -> "对家"
+        | Position.Kamicha -> "上家"
+
 /// 牌桌上一家的暗牌部分：亮着的那几张，还是只有张数。
 ///
 /// **`MaskedSeat` 只映得到 `Concealed`**——它没有手牌字段，映射函数想漏也没地方漏。
@@ -281,7 +322,8 @@ module Board =
     // ---- 一桌 ----
 
     /// 座位升序。观测给的是「自家 + 下家对家上家」，上帝视角给的已经是升序；
-    /// 一律排一遍，画出来的位置就不随视角跳。
+    /// 一律排一遍，**列表的顺序**就不随视角跳（`seat-N` 那几个钩子因此稳定）。
+    /// 画出来的**方位**是另一回事，它跟着观测视角转（`Board.position`）。
     let private bySeat (seats: SeatView list) : SeatView list =
         seats |> List.sortBy (fun view -> Seat.index view.Seat)
 
@@ -309,6 +351,25 @@ module Board =
         Seats = view.Seats |> List.map ofRevealed |> bySeat
         Viewer = None
     }
+
+    // ---- 方位（票 44） ----
+
+    /// 方位的**参照系**：坐着看就是观测者自己；上帝视角没有观测者，取**起家**（座位 0）。
+    ///
+    /// 上帝视角那一档得有个说得出口的参照系，否则「下家」指不向任何人；挑起家而不是
+    /// 「上一个坐过的座位」：后者要多一份状态，而起家是牌谱与 CLI 一直在用的那个锚点。
+    /// **页面上要把这句话说出来**（M1 传下来的第六条：相对方位必须显式声明参照系）。
+    let anchor (board: BoardView) : Seat =
+        board.Viewer |> Option.defaultValue Seat.first
+
+    /// 这一家在牌桌上的方位。**座位算术全交给引擎**（`Seat.distanceFrom` / `Seat.toimen`）：
+    /// 三麻没有对家，那时第二家就是上家，而那件事 `Seat.toimen` 已经知道了。
+    let position (ruleset: Ruleset) (anchor: Seat) (seat: Seat) : Position =
+        match Seat.distanceFrom ruleset anchor seat with
+        | 0 -> Position.Self
+        | 1 -> Position.Shimocha
+        | _ when Seat.toimen ruleset anchor = Some seat -> Position.Toimen
+        | _ -> Position.Kamicha
 
     // ---- 投影选择 ----
 
