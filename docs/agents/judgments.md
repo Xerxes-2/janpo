@@ -173,6 +173,6 @@ DECISIONS「调度器失误：票 50 的文件没提交就派工了」）。
 
 ## 不在这份清单里的
 
-硬约束（只用 jj、资源预算、用 `dotnet fsi` 验引擎而不移植）在 `.scratch/llm-riichi-arena/run/RUNBOOK.md`
-与 `AGENTS.md`；F# 写法与性能测量的那条教训在 `fsharp-style.md`；领域词与它们的不变量在 `CONTEXT.md`；
+硬约束（只用 jj、资源预算、用 `dotnet fsi` 验引擎而不移植）在 `docs/agents/workbook.md` 与 `AGENTS.md`
+（跑批当次特有的那点在 `.scratch/llm-riichi-arena/run/RUNBOOK.md`）；F# 写法与性能测量的那条教训在 `fsharp-style.md`；领域词与它们的不变量在 `CONTEXT.md`；
 一票一议的取舍在 `DECISIONS.md` 与各票报告里。**这份清单只收「下次遇到同类情形该怎么判」。**

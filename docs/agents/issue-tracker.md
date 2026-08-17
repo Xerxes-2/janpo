@@ -2,7 +2,7 @@
 
 Issues and specs for this repo live as markdown files in `.scratch/`.
 
-This repo has no git remote, and it is a **colocated `jj` repo** (`.jj/` + `.git/`) — use `jj` for all version-control operations, never `git`.
+This repo is a **colocated `jj` repo** (`.jj/` + `.git/`) with a remote at `github.com/Xerxes-2/janpo` — use `jj` for all version-control operations, never `git`. **Only the scheduler pushes**; if you are working a ticket, commit locally and stop there.
 
 ## Active features
 
