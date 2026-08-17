@@ -26,9 +26,9 @@
  *
  * ## 换了模板就是换了一份前缀
  *
- * `renderVersion` 是**算出来的**（模板 id + 模板内容的哈希），不是手填的数字：
- * 没有任何东西保证改措辞的人会去 +1（裁决 29b-A）。它进 `DecisionRecord`，
- * M2 看命中率掉时能一眼归因到「换了模板」。
+ * `renderVersion`（`render-version.ts`）是**算出来的**，不是手填的数字：没有任何东西保证
+ * 改措辞的人会去 +1（裁决 29b-A）。它进 `DecisionRecord`，M2 看命中率掉时一眼归因到
+ * 「换了措辞」还是「换了排版的那几行代码」——票 43 把后一半也补进去了。
  *
  * **运维含义：改渲染 = 废缓存**。人格与措辞都在可缓存前缀里，改一个字，那一局之前攒下的
  * provider 缓存全废。前缀属性测试只保证**同一次运行内**单调，不保证跨版本一致——
@@ -64,7 +64,7 @@ export interface Labels {
 
 /** 一份 prompt 模板。**它就是 prompt 的全部可变部分**。 */
 export interface PromptTemplate {
-  /** 模板标识。它与内容哈希一起构成渲染版本号，**给人看的那一半**。 */
+  /** 模板标识。它排在渲染版本号最前面，是**给人看的那一截**。 */
   id: string;
   /**
    * 座位级的人格 / 风格文本，**排在 system 消息的最前面**；空串就是不写。
@@ -215,60 +215,4 @@ export function resolveTemplate(seat: Pick<SeatConfig, "persona" | "template">):
   const persona = (seat.persona ?? "").trim();
 
   return persona === "" ? template : { ...template, persona };
-}
-
-// ---- 渲染版本号 ----
-
-/**
- * FNV-1a（32 位）。**不是密码学哈希**：它只要「改一个字就换一个值」且跨运行稳定，
- * 用来当版本号的后半截。按 UTF-16 码元走，因此同一份文本在哪台机器上都是同一个值。
- */
-function fnv1a(text: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    // FNV 质数 16777619，用移位加法算，避免 32 位乘法溢出成浮点。
-    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0");
-}
-
-/** 一张表的规范写法：键排过序，因此同样的内容恒是同一段字节。 */
-function canonicalTable(table: Record<string, string>): string {
-  return Object.keys(table)
-    .sort()
-    .map((key) => `${key}=${table[key]}`)
-    .join("\u0001");
-}
-
-/**
- * 这份模板的**渲染版本号**：`模板 id@内容哈希`（票 31 第三之二节，收 29b-A）。
- *
- * **它是算出来的，不是手填的**——手填的数字没有任何东西保证有人改措辞时会 +1。
- * 内容包括人格：换人格就是换一份可缓存前缀，账单上看得出来，版本号也该看得出来。
- *
- * 它进 `DecisionRecord`，并且是牌谱里「这一手的 preamble 是哪一份」的键
- * （`Paifu.Prompting.Preambles` 按它索引）。
- */
-export function renderVersion(template: PromptTemplate): string {
-  const labels = template.labels;
-  const canonical = [
-    template.persona,
-    template.system,
-    labels.history,
-    labels.board,
-    labels.hand,
-    labels.others,
-    labels.actions,
-    labels.scaffold,
-    labels.retry,
-    labels.retryTail,
-    canonicalTable(template.wording.kaze),
-    canonicalTable(template.wording.riichi),
-    canonicalTable(template.wording.relative),
-    canonicalTable(template.wording.naki),
-    canonicalTable(template.wording.ryuukyoku),
-  ].join("\u0000");
-
-  return `${template.id}@${fnv1a(canonical)}`;
 }

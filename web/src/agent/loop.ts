@@ -22,8 +22,9 @@ import type { Ask, AskResult } from "./ask.ts";
 import { missingConfig } from "./endpoint.ts";
 import { messagesOf, promptSections } from "./prompt.ts";
 import { redactSecrets } from "./redact.ts";
+import { renderVersion } from "./render-version.ts";
 import { type Retry, retryOf, WORTH } from "./retry.ts";
-import { renderVersion, resolveTemplate } from "./template.ts";
+import { resolveTemplate } from "./template.ts";
 import { CHOOSE_ACTION, toolsShape } from "./tools.ts";
 import type { DecideRequest, DecideResponse } from "./types.ts";
 
@@ -123,7 +124,7 @@ interface Asked {
   tail: string;
   /** system 消息正文：**一局内不变，局间可换**，牌谱按「座位 + 渲染版本」各存一份。 */
   preamble: string;
-  /** 渲染版本号：模板 id + 内容哈希，**算出来的**。 */
+  /** 渲染版本号：模板 id + 模板哈希 + 渲染器摘要，**算出来的**（票 43）。 */
   version: string;
   /** 工具定义的**形状**（enum 留空）：真发出去的那份 = 形状 + 下面那一行的 id 集。 */
   tools: string;

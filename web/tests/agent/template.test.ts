@@ -4,17 +4,18 @@
  * 三件事在这里钉住：
  * 1. 默认模板仍在代码里，且它渲出来的字节与 29b 那一版逐字相同（换法不许悄悄改默认）；
  * 2. **档位与人格是两个独立维度**——换人格只动 system，换档位只动尾部那一节；
- * 3. 渲染版本号是**算出来的**：改一个字就换一个值，同样的内容恒是同一个值。
+ * 3. 渲染版本号里**模板那一半**是算出来的：改一个字就换一个值，同样的内容恒是同一个值。
+ *    （渲染器那一半在 `render-version.test.ts`。）
  */
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { promptMessages, promptSections, renderPrompt } from "../../src/agent/prompt.ts";
+import { renderVersion, templateDigest } from "../../src/agent/render-version.ts";
 import {
   DEFAULT_TEMPLATE,
   preambleOf,
   readTemplate,
-  renderVersion,
   resolveTemplate,
 } from "../../src/agent/template.ts";
 import type { SeatConfig } from "../../src/agent/types.ts";
@@ -126,18 +127,20 @@ test("模板读不动就退回默认，而不是把这一手卡死", () => {
 
 // ---- 渲染版本号是算出来的 ----
 
-test("渲染版本号 = 模板 id + 内容哈希，同样的内容恒是同一个值", () => {
-  assert.match(renderVersion(DEFAULT_TEMPLATE), /^janpo-default@[0-9a-f]{8}$/);
+test("渲染版本号 = 模板 id + 内容哈希（+ 渲染器摘要），同样的内容恒是同一个值", () => {
+  assert.match(renderVersion(DEFAULT_TEMPLATE), /^janpo-default@[0-9a-f]{8}\.[0-9a-f]{8}$/);
   assert.equal(renderVersion(DEFAULT_TEMPLATE), renderVersion(readTemplate("{}")));
 
   // **跨进程、跨机器稳定**：它是牌谱里的键，换一台机器读出来必须还是同一个。
   // 钉的是**这里写死的那份模板**而不是默认模板：改默认 prompt 的措辞不该让 CI 变红
   // （票面明写），而“同样的内容恒是同一个值”这条性质跟它是哪份模板无关。
+  // 钉的也只是**模板那一半**：渲染器摘要本就该随渲染器改而变，钉它等于钉死代码。
   const pinned = readTemplate(
     JSON.stringify({ id: "pinned", persona: "甲", system: "乙", labels: { history: "丙" } }),
   );
 
-  assert.equal(renderVersion(pinned), "pinned@f6eb3b4c");
+  assert.equal(templateDigest(pinned), "f6eb3b4c");
+  assert.ok(renderVersion(pinned).startsWith("pinned@f6eb3b4c."));
 });
 
 test("改任何一个字都换一个版本号——手填的数字漏得掉，算出来的漏不掉", () => {
@@ -156,7 +159,8 @@ test("改任何一个字都换一个版本号——手填的数字漏得掉，�
   ].map(renderVersion);
 
   assert.equal(new Set([base, ...changed]).size, 5, "五份不同的模板该有五个不同的版本号");
-  // id 换了、内容没换：前半截变，后半截不变——「这是同一份措辞的另一个名字」看得出来。
+  // id 换了、内容没换：`@` 前面那一截变，后面两截不变
+  // ——「这是同一份措辞的另一个名字」看得出来。
   const renamed = renderVersion({ ...DEFAULT_TEMPLATE, id: "another" });
   assert.equal(renamed.split("@")[1], base.split("@")[1]);
 });

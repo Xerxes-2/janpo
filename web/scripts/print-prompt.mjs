@@ -20,7 +20,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderPrompt } from "../src/agent/prompt.ts";
-import { renderVersion, resolveTemplate } from "../src/agent/template.ts";
+import { renderVersion } from "../src/agent/render-version.ts";
+import { resolveTemplate } from "../src/agent/template.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");

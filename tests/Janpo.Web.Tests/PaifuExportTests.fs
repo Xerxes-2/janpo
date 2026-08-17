@@ -52,7 +52,7 @@ module PaifuExportTests =
             LatencyMs = 640
             PromptTail = "【现在】东1局 0 本场……\n【可选动作】只能从下面这些 id 里选一个：\n- id=0：摸切1索"
             Preamble = "你在打日本立直麻将（天凤规则，四人东）……"
-            RenderVersion = "janpo-default@08fcaec3"
+            RenderVersion = "janpo-default@08fcaec3.4b9e57c0"
             Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
             ActionIds = [ 0 ]
             Output = """{"stop_reason":"toolUse","content":[{"type":"toolCall","name":"choose_action"}]}"""
@@ -77,7 +77,7 @@ module PaifuExportTests =
             LatencyMs = 91000
             PromptTail = "【现在】东1局 0 本场……"
             Preamble = "你在打日本立直麻将（天凤规则，四人东）……"
-            RenderVersion = "janpo-default@08fcaec3"
+            RenderVersion = "janpo-default@08fcaec3.4b9e57c0"
             Tools = """[{"name":"choose_action","parameters":{"properties":{"action_id":{"enum":[]}}}}]"""
             ActionIds = [ 0 ]
             Output = ""

@@ -45,6 +45,7 @@ pnpm run check     # Biome（TS/JS 的格式 + lint）
 pnpm run typecheck # tsc --noEmit：只管 Agent 层与它的用例（Fable 的输出不在 include 里）
 pnpm run test      # Agent 层的确定性用例（node --test，回放录制的响应，**不调真实 API**）
 pnpm run format    # Biome 写回格式
+pnpm run render-digest  # 改了 prompt 渲染器后重算渲染器摘要（渲染版本号的后一截）
 ```
 
 ### 开发向内容的开关：`?dev=1`

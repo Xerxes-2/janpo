@@ -37,7 +37,8 @@ test("回执带着这一手 prompt 的尾部与工具定义的形状", async () 
   // 固定 preamble 单独一段，进 system 消息；一局内不变、局间可换，牌谱按「座位 + 渲染版本」各存一份。
   assert.equal(response.preamble, messages[0].system);
   assert.match(response.preamble, /怎么读这份 prompt/);
-  assert.match(response.render_version, /^janpo-default@[0-9a-f]{8}$/);
+  // 两截：模板内容的哈希 + 渲染器代码的摘要（票 43）。
+  assert.match(response.render_version, /^janpo-default@[0-9a-f]{8}\.[0-9a-f]{8}$/);
 
   // 工具定义存的是**形状**（enum 留空），这一手真发出去的 enum 在 `action_ids` 里。
   const ids = dahaiPackage.actions.map((option) => option.id);

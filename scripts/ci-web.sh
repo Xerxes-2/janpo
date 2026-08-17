@@ -61,6 +61,9 @@ echo "== tsc --noEmit（Agent 层的类型闸门）=="
 # **这一道不调真实 API**：它回放 `web/tests/fixtures/agent/` 里录制下来的响应
 # （合法输出 / 越界 id / 格式跑偏 / 超时 / provider 报错）。
 # 重录用 `pnpm run record:agent`，需要一把真 key，手动跑。
+# 它还带着票 43 那道**新鲜度闸门**：改了 prompt 渲染器却没重算渲染器摘要，
+# `render-version.test.ts` 当场红（改法：`pnpm run render-digest`）——没它的话，
+# “改渲染＝废缓存”那一半就又静默了。
 echo "== node --test（Agent 层的确定性用例）=="
 (cd web && pnpm run test)
 

@@ -121,14 +121,14 @@ module AgentTests =
             answer
                 """{"action_id":3,"reason":"这张最安全","failure":null,"attempts":2,"latency_ms":2446,
                     "prompt_tail":"【可选动作】只能从下面这些 id 里选一个：","tools":"[{\"name\":\"choose_action\"}]",
-                    "preamble":"你在打日本立直麻将……","render_version":"janpo-default@08fcaec3","action_ids":[0,3],
+                    "preamble":"你在打日本立直麻将……","render_version":"janpo-default@08fcaec3.4b9e57c0","action_ids":[0,3],
                     "output":"{\"stop_reason\":\"toolUse\"}","thinking":"先数向听……"}"""
 
         Assert.Contains("可选动作", answer.PromptTail)
         Assert.Contains("choose_action", answer.Tools)
         // prompt 的前后两半分开过界（票 31）：尾部每手一份，preamble 与渲染版本号整场一份。
         Assert.Contains("你在打日本立直麻将", answer.Preamble)
-        Assert.Equal("janpo-default@08fcaec3", answer.RenderVersion)
+        Assert.Equal("janpo-default@08fcaec3.4b9e57c0", answer.RenderVersion)
         Assert.Equal<int list>([ 0; 3 ], answer.ActionIds)
         Assert.Contains("toolUse", answer.Output)
         Assert.Equal(Some "先数向听……", answer.Thinking)

@@ -71,7 +71,7 @@ type AgentAnswer = {
     /// 牌谱按「座位 + 渲染版本」各存一份，换过就多一条
     /// （`src/Janpo.Engine/Paifu.fs` 的 `Preamble` 那段注释说的就是这件事）。
     Preamble: string
-    /// 渲染版本号（`模板 id@内容哈希`，票 31）。**算出来的，不是手填的**；
+    /// 渲染版本号（`模板 id@模板哈希.渲染器摘要`，票 31 + 43）。**算出来的，不是手填的**；
     /// 它是决策记录与牌谱里那份 preamble 之间的键。
     RenderVersion: string
     /// 工具定义的**形状**（`choose_action` 的 schema，动作 id 的 enum 留空）。**F# 不解释它**：

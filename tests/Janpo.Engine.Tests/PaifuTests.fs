@@ -26,7 +26,7 @@ module PaifuTests =
                 Turn = 0
                 Seat = seat 1
                 PromptTail = "【现在】东1局 0 本场，你是座位 1……\n【可选动作】\n- id=0：摸切1索\n- id=1：手切9万"
-                RenderVersion = "janpo-default@08fcaec3"
+                RenderVersion = "janpo-default@08fcaec3.4b9e57c0"
                 ActionIds = [ 0; 1 ]
                 Output = """{"stop_reason":"toolUse","content":[{"type":"toolCall","name":"choose_action"}]}"""
                 Reason = Some "9万是孤张，先切它"
@@ -48,7 +48,7 @@ module PaifuTests =
                 Turn = 7
                 Seat = seat 1
                 PromptTail = "【现在】东1局 0 本场，你是座位 1……"
-                RenderVersion = "janpo-default@08fcaec3"
+                RenderVersion = "janpo-default@08fcaec3.4b9e57c0"
                 ActionIds = [ 0 ]
                 Output = ""
                 Reason = None
@@ -70,7 +70,7 @@ module PaifuTests =
                 [
                     {
                         Seat = seat 1
-                        RenderVersion = "janpo-default@08fcaec3"
+                        RenderVersion = "janpo-default@08fcaec3.4b9e57c0"
                         Text = "你在打日本立直麻将（天凤规则，四人东）……"
                     }
                 ]
@@ -192,12 +192,12 @@ module PaifuTests =
 
         Assert.Equal(
             Some "你在打日本立直麻将（天凤规则，四人东）……",
-            Prompting.preambleFor (seat 1) "janpo-default@08fcaec3" round.Prompting
+            Prompting.preambleFor (seat 1) "janpo-default@08fcaec3.4b9e57c0" round.Prompting
         )
 
         // 换了人格（渲染版本跟着变）就取不到那一份：**版本号就是那把键**。
         Assert.Equal(None, Prompting.preambleFor (seat 1) "janpo-default@ffffffff" round.Prompting)
-        Assert.Equal(None, Prompting.preambleFor (seat 0) "janpo-default@08fcaec3" round.Prompting)
+        Assert.Equal(None, Prompting.preambleFor (seat 0) "janpo-default@08fcaec3.4b9e57c0" round.Prompting)
 
     [<Fact>]
     let ``同一座位同一版本只存一份 preamble，换了人格才多一份`` () =
@@ -257,6 +257,37 @@ module PaifuTests =
         Assert.Contains("\"prompt\":", text)
         Assert.DoesNotContain("prompt_tail", text)
         Assert.DoesNotContain("prompting", text)
+        Assert.Equal(old, decode text)
+
+    /// 票 43 之前的那一版：形状与 v3 逐字相同，只有 `render_version` 那一串只哈希了模板内容
+    /// （`模板 id@内容哈希`，后面没有渲染器那一截）。
+    let private v2 =
+        """{"version":2,"ruleset":RULESET,"events":[],"decisions":[
+             {"turn":0,"seat":1,"prompt_tail":"【现在】东1局","render_version":"janpo-default@08fcaec3",
+              "action_ids":[0],"output":"o","attempts":1,"latency_ms":5,"applied":0}],
+           "prompting":{"tools":"[shape]","preambles":[
+             {"seat":1,"render_version":"janpo-default@08fcaec3","text":"你在打日本立直麻将……"}]}}"""
+            .Replace("RULESET", Ruleset.encoder Ruleset.yonma |> Encode.toString 0)
+
+    [<Fact>]
+    let ``版本 2 的牌谱照样读得动，那一版的渲染版本号仍然当键用`` () =
+        let old = decode v2
+        let record = Paifu.decisionAt 0 old |> Option.get
+
+        Assert.Equal(2, old.Version)
+        // 那一串原样读进来，**不补一截假的渲染器摘要**：当年没有记下来就是没有。
+        Assert.Equal("janpo-default@08fcaec3", record.RenderVersion)
+        // 键仍然对得上：同一份牌谱里两处写的是同一串，重建 prompt 那条链没断。
+        Assert.Equal(Some "你在打日本立直麻将……", Prompting.preambleFor (seat 1) record.RenderVersion old.Prompting)
+
+    [<Fact>]
+    let ``版本 2 读进来再写出去仍是版本 2：不把当年那个版本号说成它懂渲染器`` () =
+        let old = decode v2
+        let text = json old
+
+        // 形状与 v3 逐字相同，因此只有牌谱头那个数字能告诉读的人「这个版本号说得了什么」。
+        Assert.Contains("\"version\":2", text)
+        Assert.Contains("\"prompt_tail\"", text)
         Assert.Equal(old, decode text)
 
     [<Fact>]
