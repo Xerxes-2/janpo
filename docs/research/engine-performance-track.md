@@ -22,18 +22,28 @@
 | 1–2 | 向听算法本身与替代方案的调研 | 函数级别已经不是瓶颈；与 libriichi 的差距不在单次调用上 | `shanten-vs-libriichi.md`、`shanten-search-alternatives.md`、`shanten-tenpai-boundaries.md` |
 | 3 | 调用形状与浏览器原语标定 | **一次 Assisted 决策 ≈397 次 `Shanten.calculate`、≈772 个 34 长数组**；V8 里新建 `Int32Array(34)` 比复用缓冲贵 45×；`tenpaiDahai` 比 `Scaffold.calculate` 便宜 40 倍（前一轮的优先级判断要对调） | `engine-perf-caller-and-browser.md` |
 | 4 | **落地 B 级 + A 级**（调用方持有暂存缓冲） | 每决策 34 长数组 **596.8 → 5.9**（101×）；浏览器 1.37–1.49×；`dotnet test` 用例 duration 之和 430.6s → 99.8s（与票 56 叠加）；公开签名一字未改，语义零分歧 | 票 55 报告 |
+| 5 | `Observation.ofState` 那一段的真实成本（**只量，不改 `src/`**） | **fold 占 99.3%（.NET）/ 99.8%（浏览器）**，掩蔽与组装 <0.7%；一局被问 **88.6 次**、Σn≈**6703**；增量维护（`SeatStream`）**票 29a 早已造好、是不可变值 + 纯函数**，接上去是「一个新入口 + 三个调用点」；整局净决策包成本 **两侧都是 2.2×**（.NET 44.6→20.3 ms/局，浏览器 192.0→87.2）。**但 CI 收益只 0.33%、扩语料收益为 0**（两条本轮量掉了） | `observation-cost-and-incremental-seat-stream.md` |
 
 ## 未答（下一轮的入口）
 
-- **`Observation.ofState` 是每决策最大的一段**（票 55 实测），而 `legalActions` 只 0.1 µs、不是热点。
-  → **票 58 在查**。已知的关键事实：`DecisionPackage.forSeat` 调 `Observation.ofState`，
-  它内部从头 fold 整条掩蔽流（每决策 O(n)、一局 O(n²)）；而**票 29a 早已造好增量维护**
-  （`SeatStream.start/advance/absorb`），**牌桌在用**（`Table.fs` 每座位维护一份，0.56 ms vs 重头 fold 29 ms）。
-  所以这一轮的问题**不是「要不要造增量状态」，而是「决策路径为什么没用上已经有的那份」**。
-- 研究文档第 3 轮的 C 级（**段级缓存**：花色段键，一次 `Ukeire` 内命中率约 75%）没做也没量。
+- **第 5 轮给出的那张实现票还没立**：`DecisionPackage.forSeatWith`（收调用方已持有的 `SeatStream`）
+  加三个调用点。票面草案在 `observation-cost-and-incremental-seat-stream.md` §15，
+  三道闸门（G1/G2/G3）在 §8.4。**它的正当理由不是 CI 也不是扩语料**（两条已量掉），
+  而是危险度面板每帧 2.1 ms 挂主线程 + 把 `ofState` 注释里那句话做成真的。
+- **那条「增量与一次性 fold 一致」的属性测试是恒真式**（`MaskedStreamProperties.incrementalAgrees`，
+  本轮反向自证：弄坏 `absorb` 它照样绿）。**不许删不许放宽，只许往硬里改**——改法见 §8.4 G2。
+  真在守这件事的只有 Web 侧 `TableTests` 那一条（一颗种子、一局）。
+- 研究文档第 3 轮的 C 级（**段级缓存**：花色段键，一次 `Ukeire` 内命中率约 75%）仍然没做也没量。
+  第 5 轮只给了外推（乐观上限 1.20×，而第 5 轮那条路实测 2.20×，**两者正交、可以同时做**）；
+  第 3 轮要的那个**批级实测**至今没人做。
+- **第 3 轮的「D 级」指的是「34 长牌种计数常驻进 `PlayerState`」，不是观测的增量维护**
+  （第 5 轮 §4 逐字核过）。那件事仍然没做、仍然是架构决策，**第 3 轮对它的判断仍然成立**。
 - 研究文档里两处口径要不要回填（票 55 提案，待人裁）：`legalActions` 不是热点、
-  `Observation.ofState` 才是——文档第 3 轮的优先级排序据此要改。
-- `ShantenScratch` 要不要进术语表（票 55 提案，待人裁）。
+  `Observation.ofState` 才是——文档第 3 轮的优先级排序据此要改。**第 5 轮把这两条重量了一遍，两条都成立。**
+- `ShantenScratch`（票 55 提案）与 `SeatStream`（票 29a 的 29a-B，至今悬着）要不要进术语表，待人裁。
+- **真浏览器里的帧时间从来没量过**。前五轮的「浏览器侧」全部是 node 跑 Fable 产物；
+  危险度面板那 2.1 ms/帧是「一次 `forSeat` 多少钱 × 每帧几次」推的。
+- `Danger.rank` 仍然一行没读性能（第 3 轮 §7 列着，票 55 实测 11.9 µs/决策，第 5 轮也没拆）。
 
 ## 怎么开下一轮
 

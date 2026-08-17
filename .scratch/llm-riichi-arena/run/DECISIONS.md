@@ -4150,3 +4150,55 @@ CPU 总和 507.7s → 126.4s 是**远端**最该看的那个数（远端 4 核�
 **57-G 覆盖表的两个数据源严格不重名。** `paifu-scan.fsx` 数牌谱事件流里的形态，
 `corpus-features.py` 只数天凤写下的结果（`form-` / `yaku-` / `fu-` / `han-` / `limit-` / `pao`）。
 第一版两边都数了「本场 / 供托 / 双响」，挑固件时两份计数相加，**覆盖表当场在撒谎**（双响 8 报成 16）。
+
+## 58
+
+**58-1（本轮最要紧的一条）：第 3 轮的「D 级」说的不是观测的 fold，票面与登记册张冠李戴了。**
+票面要我「证实或推翻第 3 轮对 D 级的预估已经过时」。逐字核对之后**两个都没做**：
+第 3 轮 §4.4 的 D 级是「把 34 长牌种计数常驻进 `PlayerState`、事件驱动地维护」
+（那张表比的是 `PlayerState.Hand : Tile list` vs libriichi 的 `tehai: [u8; 34]`），
+而同一份文档 §7 自己写着「`Observation` / `GameState` / `Paifu` 一行没读性能」。
+**对它说的那件事，它的判断仍然成立**（那件事至今没做，仍是架构决策）。
+被推翻的是**读法**：观测的增量维护（a）票 29a 早已造好、是公开 API、牌桌在用；
+（b）不越第 3 轮画的那条边界——`SeatStream` 是不可变值、`advance` 是纯函数，
+与票 55 的 `ShantenScratch`「显式入参不是全局状态」同形，而第 3 轮把那一类划在**边界之内**。
+被否决的写法：把「第 3 轮的预估过时了」直接写进报告——那会把一句准确的话记成错的。
+处置：研究文档 §4 与本票报告 §3 各讲一遍，登记册「未答」那条同步改掉。
+
+**58-2：CI 与扩语料这两条正当理由被量掉了（判据 13 的同一形状）。**
+登记册第 4 条规矩说「做优化的正当理由通常是别的——例如 CI 的 CPU 总量、或扩大语料的可行性」，
+「未答」里还写着「O(n²) 是扩语料的天花板之一」。本轮各量了一次：
+（a）在树副本里给 `Observation.ofState` 加 `Interlocked` 计数器跑全量 `dotnet test`——
+**全套 818 条只调它 5713 次、共 fold 362 914 条事件，约 1.3 s CPU**，
+分母是票 55 实测的 403.7 s → **0.33%，是噪声**；
+（b）`Replay.fs` / `PaifuDifferential.fs` / `PaifuReplay.fs` **一次 `Observation` 都不建**
+（grep 只命中同名不同物的 `HoraObservation`）→ **扩语料收益为 0**。
+处置：登记册里那句「O(n²) 是它的天花板之一」删掉；实现票的验收改成
+「`dotnet test` CPU 变化在 ±2% 内（**预期无收益**）」，别让后人拿它当卖点。
+**剩下的正当理由只有一个半**：`TablePage.dangerPanels` 每帧调一次 `forSeat`（浏览器 2.1 ms 挂主线程），
+以及「把 `ofState` 注释里那句『逐手推进的牌桌别每帧调它』做成真的」。
+
+**58-3：`MaskedStreamProperties.incrementalAgrees` 是恒真式，永远红不了（判据 3）。**
+它比的是 `List.fold advance` 与 `Observation.ofEvents`，而 `ofEvents` 内部就是 `advanceAll`
+= `List.fold advance`——同一个 fold。被 `:159` 与 `:212` 两条属性共用。
+反向自证（树副本）：把 `absorb` 的摸牌支改成 `WallRemaining - 2`，
+`ObservationProperties` 那两条回归守卫**当场红**，这两条**照样绿**；
+反过来把 `Table.played` 的 `Views` 推进删掉，Web 侧 `TableTests` 那两条**当场红**，引擎侧 13 条**全绿**。
+**按硬约束 3，我一行都没动它**（删/放宽都不许）。实现票该做的是往硬里改（G2：被比的一侧换成
+`Observation.ofMasked ruleset seat (MaskedEvent.stream seat events)`）并补一条真的（G1）。
+这条要人点头它算「往硬里改」而不是「改期望值迎合实现」。
+
+**58-4：探针的绝对值一律取「一变体一进程」那一版。**
+六个变体放在同一个 node 进程里交错跑，`DecisionPackage.forSeat` 量到 2434 µs；
+一变体一进程是 2119 µs，与票 55 §2.3 的 2114–2172 逐位吻合。差的 15% 是探针自己预备的
+1079 份中间物压在堆上抬高的 GC 压力。被否决的做法：只跑交错版并报那个数——
+那会把探针自己的开销记成被测物的。交错版留着看相对分布，绝对值不用它。
+另：`§6` 的每一侧都同时跑「探针里逐行等价的现状版」做校准，与真 `forSeat` 差 1.1% / 0.1%。
+
+**58-5：不建票文件，实现票草案写进报告与研究文档（判据 17）。**
+票号是共享的可变状态，只有调度器有全局视图。草案在
+`docs/research/observation-cost-and-incremental-seat-stream.md` §15 与本票报告 §4。
+
+**58-6（提案，待人裁）：`SeatStream` 要不要收进 `CONTEXT.md`。**
+票 29a 的 29a-B 至今悬着。若实现票让 `SeatStream` 成为决策路径的公开接缝
+（`DecisionPackage.forSeatWith` 收它），这个词就更该进术语表了。**我不许改 `CONTEXT.md`，只记提案。**
