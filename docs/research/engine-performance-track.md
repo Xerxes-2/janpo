@@ -22,9 +22,14 @@
 | 1–2 | 向听算法本身与替代方案的调研 | 函数级别已经不是瓶颈；与 libriichi 的差距不在单次调用上 | `shanten-vs-libriichi.md`、`shanten-search-alternatives.md`、`shanten-tenpai-boundaries.md` |
 | 3 | 调用形状与浏览器原语标定 | **一次 Assisted 决策 ≈397 次 `Shanten.calculate`、≈772 个 34 长数组**；V8 里新建 `Int32Array(34)` 比复用缓冲贵 45×；`tenpaiDahai` 比 `Scaffold.calculate` 便宜 40 倍（前一轮的优先级判断要对调） | `engine-perf-caller-and-browser.md` |
 | 4 | **落地 B 级 + A 级**（调用方持有暂存缓冲） | 每决策 34 长数组 **596.8 → 5.9**（101×）；浏览器 1.37–1.49×；`dotnet test` 用例 duration 之和 430.6s → 99.8s（与票 56 叠加）；公开签名一字未改，语义零分歧 | 票 55 报告 |
+| 5 | 研究 `Observation.ofState`（一次性 fold vs 29a 的增量 `SeatStream`） | fold 占 99%+；一局被问 88.6 次；**`forSeatWith` 判为不做**——CI 收益 0.33%、扩语料收益 0（回放不建观测），只剩产品路径 2.2×，按规矩第 4 条不够格。**这一轮的价值是阻止了一次工作** | 票 58 报告、`observation-cost-and-incremental-seat-stream.md` |
 | 5 | `Observation.ofState` 那一段的真实成本（**只量，不改 `src/`**） | **fold 占 99.3%（.NET）/ 99.8%（浏览器）**，掩蔽与组装 <0.7%；一局被问 **88.6 次**、Σn≈**6703**；增量维护（`SeatStream`）**票 29a 早已造好、是不可变值 + 纯函数**，接上去是「一个新入口 + 三个调用点」；整局净决策包成本 **两侧都是 2.2×**（.NET 44.6→20.3 ms/局，浏览器 192.0→87.2）。**但 CI 收益只 0.33%、扩语料收益为 0**（两条本轮量掉了） | `observation-cost-and-incremental-seat-stream.md` |
 
 ## 未答（下一轮的入口）
+
+- **重放路径上 `GameState.step` 的 37µs 是黑盒**（票 62 只量到「占重放 93%」）。
+  → **票 64 在查（第 6 轮）**。动机：主人把整年语料扫描变成常态工具（修一轮 bug 全量重扫），
+  18 包 ≈ 2600 万局 ≈ 27 核时。基线先摆清：62 只用了 4 进程礼貌模式，**32 核全开已是 8× 零代码**。
 
 - **第 5 轮给出的那张实现票还没立**：`DecisionPackage.forSeatWith`（收调用方已持有的 `SeatStream`）
   加三个调用点。票面草案在 `observation-cost-and-incremental-seat-stream.md` §15，
