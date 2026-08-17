@@ -47,6 +47,16 @@ export const ankanPackage = load<DecisionPackage>("decision-ankan");
 export const kakanPackage = load<DecisionPackage>("decision-kakan");
 
 /**
+ * **自家立直已成立**那一手（`janpo decide 10 --seat 3 --steps 80 --opinionated`，票 49）：
+ * 历史里有一行「你 第4巡 宣言立直」，之后还有十一张打牌。
+ *
+ * 「立直后全摸切」那一条不变量在均匀随机的语料上**永远空转**（票 42 实测：
+ * 1..2000 号种子里只有 15 场立直成立），而一条永远执行不到的断言与一条从不失败的
+ * 断言危害相同。这份固件来自**有主见的选手**（票 42），它让那一条在 `pnpm test` 里也真的开口。
+ */
+export const riichiPackage = load<DecisionPackage>("decision-riichi");
+
+/**
  * **同一局里连续的 12 手**，同一个座位（`janpo decide 7 --seat 1 --sequence --steps 12`，票 29b）。
  *
  * 前缀的字节稳定性只有连续的几手才验得了：一手一份包看不出前缀在不在长。

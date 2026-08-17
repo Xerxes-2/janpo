@@ -28,6 +28,29 @@
  *   改坏的变异，改完必须当场被点名抓住）。
  * - `web/scripts/verify-invariants.mjs`：**扫一批种子的真实对局**，逐手渲染两档再逐条断言。
  *
+ * ## 它每一条各执行了几次（票 49）
+ *
+ * `promptAudit` 除了违反还报一份**逐条的执行次数**。理由是判据已经升级了
+ * （DECISIONS「票 41 与 42 撞出一件事」）：以前只问「这道闸门失败过吗」，
+ * 现在要多问一句**「它在真语料上执行过几次」**——反向自证只证明「这条断言写对了」，
+ * 不证明「它有机会开口」。一条永远执行不到的断言，与一条从不失败的断言危害相同。
+ *
+ * 一次「执行」= 一次**有对象可判的求值**，逐条的口径写在各自的 `judge(...)` 那一行旁边：
+ *
+ * | 不变量 | 一次执行是什么 |
+ * |---|---|
+ * | prompt 解析得动 | 一份 prompt 解析一遍 |
+ * | 吃恒来自上家 | 一组「吃」 |
+ * | 副露来源的参照系 | 一组**写了来源**的副露（暗杠本来就没有来源） |
+ * | 暗杠不带来源 | 一组副露 |
+ * | 副露的张数 | 一组副露 |
+ * | 河牌数与巡目 | 一家（读得出巡目的） |
+ * | 宝牌指示牌数与杠数 | 一份 prompt |
+ * | 立直后全摸切 | **立直宣言之后那一家打的每一张**（宣言牌不算） |
+ * | 手牌张数 3n+1 / 3n+2 | 一家 |
+ * | 可选动作的牌来自手牌 | 一条可选动作 |
+ * | 同一牌种最多 4 张 | 一份 prompt 里数到的一个牌种 |
+ *
  * ## 它不管什么
  *
  * **措辞与结构不归它管**（那是 M2 三档对照实验的自由变量，票 41 明写不许改）：
@@ -74,6 +97,15 @@ export interface Violation {
 /** 一行报错。`verify-invariants.mjs` 与用例的断言消息都用它，两处说法因此一致。 */
 export function formatViolation(violation: Violation): string {
   return `[${violation.rule}] ${violation.where}：${violation.detail}\n    原文：${violation.sentence}`;
+}
+
+/** 逐条不变量**真的求值了几次**（票 49）。键是 `RULES` 里的一条，口径见文件开头那张表。 */
+export type Judged = Record<string, number>;
+
+/** 一份 prompt 判下来的全部：不成立的那几句话，加上每一条各执行了几次。 */
+export interface Audit {
+  violations: Violation[];
+  judged: Judged;
 }
 
 // ---- 牌 ----
@@ -323,10 +355,21 @@ interface Check {
   parsed: Parsed;
   template: PromptTemplate;
   violations: Violation[];
+  judged: Map<string, number>;
 }
 
 function report(check: Check, rule: string, sentence: string, detail: string): void {
   check.violations.push({ rule, where: check.where, sentence, detail });
+}
+
+/**
+ * 这一条不变量在这里**真的对着一个对象求了一次值**（票 49）。
+ *
+ * 与 `report` 成对：那个记「它红了几次」，这个记「它张口说话的机会有几次」。
+ * **不该写在循环外面**：语料里一组副露都没有时，副露那几条的次数就该是 0。
+ */
+function judge(check: Check, rule: string, times = 1): void {
+  check.judged.set(rule, (check.judged.get(rule) ?? 0) + times);
 }
 
 /** 副露里那句「来自谁」，落在四种形态之一。 */
@@ -362,6 +405,7 @@ function checkChi(check: Check): void {
   for (const seat of check.parsed.seats) {
     for (const naki of seat.naki) {
       if (naki.wire !== "chi") continue;
+      judge(check, RULES.chiFromKamicha);
       const frame = frameOf(naki.from);
 
       if (frame.kind === "self") {
@@ -407,7 +451,9 @@ function checkNakiFrame(check: Check): void {
   for (const seat of check.parsed.seats) {
     for (const naki of seat.naki) {
       const frame = frameOf(naki.from);
+      // 暗杠本来就没有来源（那是上一条的事），这一条在它身上无从求值。
       if (frame.kind === "none") continue;
+      judge(check, RULES.nakiFrame);
 
       if (seat.isSelf) {
         if (frame.kind === "self") {
@@ -462,6 +508,7 @@ function checkNakiFrame(check: Check): void {
 function checkAnkanSource(check: Check): void {
   for (const seat of check.parsed.seats) {
     for (const naki of seat.naki) {
+      judge(check, RULES.ankanHasNoSource);
       const concealed = naki.wire === "ankan";
       if (concealed && (naki.from !== null || naki.pai !== null)) {
         report(
@@ -495,6 +542,7 @@ const CONSUMED_COUNT: Record<string, number> = {
 function checkNakiTileCount(check: Check): void {
   for (const seat of check.parsed.seats) {
     for (const naki of seat.naki) {
+      judge(check, RULES.nakiTileCount);
       const wanted = CONSUMED_COUNT[naki.wire];
       if (wanted !== undefined && naki.consumed.length !== wanted) {
         report(
@@ -538,6 +586,7 @@ function checkNakiTileCount(check: Check): void {
 function checkKawaJunme(check: Check): void {
   for (const seat of check.parsed.seats) {
     if (Number.isNaN(seat.junme)) continue;
+    judge(check, RULES.kawaJunme);
 
     const kinds = (...wires: string[]) =>
       seat.naki.filter((naki) => wires.includes(naki.wire)).length;
@@ -576,6 +625,7 @@ function checkDoraKan(check: Check): void {
   const open = naki.filter((group) => ["daiminkan", "kakan"].includes(group.wire)).length;
   const count = check.parsed.dora.length;
   const lowest = Math.max(1, kan + 1 - open);
+  judge(check, RULES.doraKan);
 
   if (count < lowest || count > kan + 1) {
     const range = lowest === kan + 1 ? `${lowest}` : `${lowest} 或 ${kan + 1}`;
@@ -622,6 +672,8 @@ function checkRiichiTsumogiri(check: Check): void {
     if (!declared.has(actor)) continue;
     // 宣言牌是宣言之后的第一张，它本来就可以手切。
     if (pending.delete(actor)) continue;
+    // 走到这里才真的在判一张牌：语料里没立直时它一次也不执行（票 41 的原状）。
+    judge(check, RULES.riichiTsumogiri);
 
     if (!dahai[2].endsWith("*")) {
       report(
@@ -648,6 +700,8 @@ function whoPattern(template: PromptTemplate): string {
  */
 function checkTehaiCount(check: Check): void {
   for (const seat of check.parsed.seats) {
+    judge(check, RULES.tehaiCount);
+
     if (seat.isSelf && seat.tehai.length !== seat.tehaiCount) {
       report(
         check,
@@ -709,6 +763,7 @@ function checkActionTiles(check: Check): void {
   if (self === undefined) return;
 
   for (const option of check.parsed.actions) {
+    judge(check, RULES.actionTilesFromHand);
     const wanted = tilesFromHand(option.label);
     if (wanted === null) {
       report(
@@ -782,6 +837,9 @@ function checkFourOfAKind(check: Check): void {
     }
   }
 
+  // 一个牌种算一次：数得出牌来这一条才有对象。
+  judge(check, RULES.fourOfAKind, counts.size);
+
   for (const [kind, total] of counts) {
     if (total > 4) {
       report(
@@ -804,33 +862,47 @@ export interface CheckOptions {
 }
 
 /**
- * 一份渲出来的 prompt 里，**在日麻规则下不成立的那几句话**。
+ * 一份渲出来的 prompt：**不成立的那几句话**，加上**每一条各执行了几次**。
  *
- * 返回空表就是这一手过了。**不抛**：一次扫一批局面，一句坏话不该让扫描停在那里。
+ * 违反为空就是这一手过了。**不抛**：一次扫一批局面，一句坏话不该让扫描停在那里。
+ *
+ * 执行次数要与违反一起看（票 49）：**执行次数为 0 的那几条，这一趟的「0 违反」不是证据**。
  */
-export function promptViolations(prompt: string, options: CheckOptions): Violation[] {
+export function promptAudit(prompt: string, options: CheckOptions): Audit {
   const template = options.template ?? DEFAULT_TEMPLATE;
   const parsed = parse(prompt, template);
-  const check: Check = { where: options.where, parsed, template, violations: [] };
+  const check: Check = {
+    where: options.where,
+    parsed,
+    template,
+    violations: [],
+    judged: new Map(),
+  };
 
   // 第 0 条：解析不动就没有下文——**空转的解析器等于没有闸门**。
+  judge(check, RULES.parsable);
   for (const problem of parsed.problems) {
     report(check, RULES.parsable, problem, "prompt 解析不动，底下十条因此一条也没验到");
   }
-  if (parsed.problems.length > 0) return check.violations;
+  if (parsed.problems.length === 0) {
+    checkChi(check);
+    checkNakiFrame(check);
+    checkAnkanSource(check);
+    checkNakiTileCount(check);
+    checkKawaJunme(check);
+    checkDoraKan(check);
+    checkRiichiTsumogiri(check);
+    checkTehaiCount(check);
+    checkActionTiles(check);
+    checkFourOfAKind(check);
+  }
 
-  checkChi(check);
-  checkNakiFrame(check);
-  checkAnkanSource(check);
-  checkNakiTileCount(check);
-  checkKawaJunme(check);
-  checkDoraKan(check);
-  checkRiichiTsumogiri(check);
-  checkTehaiCount(check);
-  checkActionTiles(check);
-  checkFourOfAKind(check);
+  return { violations: check.violations, judged: Object.fromEntries(check.judged) };
+}
 
-  return check.violations;
+/** 一份 prompt 里不成立的那几句话（只要这一半时用它）。 */
+export function promptViolations(prompt: string, options: CheckOptions): Violation[] {
+  return promptAudit(prompt, options).violations;
 }
 
 /**

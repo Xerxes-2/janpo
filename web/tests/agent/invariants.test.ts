@@ -24,10 +24,17 @@ import {
   dangerPackage,
   kakanPackage,
   responsePackage,
+  riichiPackage,
   sequencePackages,
 } from "./fixtures.ts";
 import { PROOFS } from "./invariant-proofs.ts";
-import { formatViolation, promptCoverage, promptViolations, RULES } from "./invariants.ts";
+import {
+  formatViolation,
+  promptAudit,
+  promptCoverage,
+  promptViolations,
+  RULES,
+} from "./invariants.ts";
 
 const TIERS: ScaffoldTier[] = ["bare", "assisted"];
 
@@ -38,6 +45,8 @@ const PACKAGES: { name: string; decision: DecisionPackage }[] = [
   // 桁上有杠的那两手（票 41）：三条不变量只有杠才验得到，而 29b 那一局里只有大明杠。
   { name: "decision-ankan", decision: ankanPackage },
   { name: "decision-kakan", decision: kakanPackage },
+  // 自家立直已成立的那一手（票 49）：没它的话「立直后全摸切」在固件上一次都执行不到。
+  { name: "decision-riichi", decision: riichiPackage },
   ...sequencePackages.map((decision, hand) => ({ name: `decision-sequence[${hand}]`, decision })),
 ];
 
@@ -60,6 +69,26 @@ test("固件上一句在日麻规则下不成立的话都没有", () => {
   const violations = CORPUS.flatMap((each) => promptViolations(each.prompt, { where: each.where }));
 
   assert.deepEqual(violations.map(formatViolation), [], "这几句话在日麻里不成立");
+});
+
+test("防空转：**每一条**不变量在固件语料上都真的执行过", () => {
+  // 判据升级（票 49，DECISIONS「票 41 与 42 撞出一件事」）：以前只问「这道闸门失败过吗」，
+  // 现在要多问一句「**它在真语料上执行过几次**」——一条永远执行不到的断言，
+  // 与一条从不失败的断言危害相同。扫真实对局那一趟（进 CI）同样守着这一条。
+  const judged: Record<string, number> = {};
+  for (const each of CORPUS) {
+    for (const [rule, count] of Object.entries(promptAudit(each.prompt, each).judged)) {
+      judged[rule] = (judged[rule] ?? 0) + count;
+    }
+  }
+
+  const idle = Object.values(RULES).filter((rule) => (judged[rule] ?? 0) === 0);
+  assert.deepEqual(idle, [], `这几条一次都没执行，它们的「0 违反」不是证据`);
+  // 一条一条地看得见各自执行了多少次（报告里那张表就是它）。
+  assert.ok(
+    judged[RULES.riichiTsumogiri] > 0,
+    "「立直后全摸切」靠 decision-riichi 那一手才开得了口（票 49）",
+  );
 });
 
 test("防空转：固件语料里真的有副露、有宝牌指示牌、有可选动作", () => {

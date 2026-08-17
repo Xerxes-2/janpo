@@ -10,7 +10,17 @@ import { promptSections, renderPrompt } from "../../src/agent/prompt.ts";
 import { DEFAULT_TEMPLATE, preambleOf } from "../../src/agent/template.ts";
 import type { DecisionPackage } from "../../src/agent/types.ts";
 import { DEFAULT_WORDING, wordsFor } from "../../src/agent/wording.ts";
-import { dahaiPackage, dangerPackage, responsePackage, sequencePackages } from "./fixtures.ts";
+import {
+  ankanPackage,
+  dahaiPackage,
+  dangerPackage,
+  kakanPackage,
+  responsePackage,
+  riichiPackage,
+  sequencePackages,
+} from "./fixtures.ts";
+import { formatViolation } from "./invariants.ts";
+import { crosscheckNaki, type NakiPair } from "./naki-crosscheck.ts";
 
 const bare = renderPrompt(dahaiPackage, "bare", null);
 
@@ -247,84 +257,15 @@ test("脚手架读不动时 Assisted 退回 Bare，而不是崩", () => {
 // 下面这几条钉的不是措辞而是**这句中文说的是不是真的**：黄金用例逐字段钉的是决策包
 // （里面是绝对座位，永远没错），前缀属性测试钉的是字节单调，两者都不检查这一层。
 
-/** 五种副露的中文（默认模板的 `wording.naki`）。 */
-const KINDS = ["碰", "吃", "暗杠", "大明杠", "加杠"] as const;
-
-interface CalledGroup {
-  /** 这一组副露挂在谁名下：`你` 或【他家】那一节的抬头（`下家` / `对家` / `上家`）。 */
-  owner: string;
-  kind: string;
-  /** 那句「来自X」里的 X；暗杠没有这一项。 */
-  from: string | null;
-}
-
-const OWNER = /^(?:你是座位 \d+|(下家|对家|上家|座位 \d+)（座位 \d+・)/;
-const GROUPS = new RegExp(
-  `(${KINDS.join("|")})(?: [^（]+)?（(?:来自([^，]+)，)?亮出 [^）]+）`,
-  "g",
-);
-
-/** 把渲染出来的 prompt 拆回「谁的哪一组副露、写着来自谁」。 */
-function calledGroups(prompt: string): CalledGroup[] {
-  const groups: CalledGroup[] = [];
-  let owner = "";
-
-  for (const line of prompt.split("\n")) {
-    const head = OWNER.exec(line);
-    if (head !== null) owner = head[1] ?? "你";
-
-    const naki = /^\s*副露：(.+)$/.exec(line);
-    if (naki === null) continue;
-
-    for (const [, kind, from] of naki[1].matchAll(GROUPS)) {
-      groups.push({ owner, kind, from: from ?? null });
-    }
-  }
-
-  return groups;
-}
-
-/** 决策包里那几家：座位号、观测者眼里的称呼、以及各自的副露。 */
-function seatsOf(decision: DecisionPackage) {
-  const words = wordsFor(
-    DEFAULT_WORDING,
-    decision.observation.self.seat,
-    decision.observation.others,
-  );
-  const self = decision.observation.self;
-
-  return [
-    { seat: self.seat, name: "你", naki: self.naki },
-    ...decision.observation.others.map((other) => ({
-      seat: other.seat,
-      name: words.who(other.seat),
-      naki: other.naki,
-    })),
-  ];
-}
-
-/**
- * 从 `owner` 起沿**下家方向**数到 `seat` 是第几家。
- *
- * 用例这一侧独立走一遍座位环（决策包给的 `relative` 排出来的那个圈），
- * 不去调渲染器用的那份——两边都错成同一个样子的话这条就白写了。
- */
-function distance(decision: DecisionPackage, owner: number, seat: number): number {
-  const ring = [
-    { seat: decision.observation.self.seat, relative: 0 },
-    ...decision.observation.others,
-  ]
-    .sort((left, right) => left.relative - right.relative)
-    .map((each) => each.seat);
-
-  const start = ring.indexOf(owner);
-  return [...ring.slice(start), ...ring.slice(0, start)].indexOf(seat);
-}
-
 const CORPUS: { name: string; decision: DecisionPackage }[] = [
   { name: "decision-dahai", decision: dahaiPackage },
   { name: "decision-response", decision: responsePackage },
   { name: "decision-danger", decision: dangerPackage },
+  // 桁上有杠与自家立直的那几手（票 41 / 49）：**加杠与暗杠那两格的换算**
+  // 只有桁上有杠时才对拍得到。
+  { name: "decision-ankan", decision: ankanPackage },
+  { name: "decision-kakan", decision: kakanPackage },
+  { name: "decision-riichi", decision: riichiPackage },
   ...sequencePackages.map((decision, hand) => ({ name: `decision-sequence[${hand}]`, decision })),
 ];
 
@@ -357,44 +298,22 @@ test("自家的副露一个字没变：它的参照系本来就是观测者自�
   );
 });
 
-/** 一份固件里渲出来的每一组副露，配上包里那一组的绝对座位。 */
-function paired(name: string, decision: DecisionPackage) {
-  const rendered = calledGroups(renderPrompt(decision, "bare", null));
-  const expected = seatsOf(decision).flatMap((seat) =>
-    seat.naki.map((group) => ({ seat: seat.seat, name: seat.name, group })),
-  );
-
-  assert.equal(rendered.length, expected.length, `${name}：渲出来的副露组数该与包里一样`);
-
-  return rendered.map((group, index) => {
-    const each = expected[index];
-    assert.equal(group.owner, each.name, `${name} 的那组「${group.kind}」挂错了人`);
-
-    return {
-      where: `${name} 的${each.name}那组「${group.kind}」`,
-      viewer: decision.observation.self.seat,
-      owner: each.seat,
-      target: each.group.target,
-      /** 从副露方起沿下家方向数到来源那家是第几家；暗杠没有来源，记 0。 */
-      step: each.group.target === null ? 0 : distance(decision, each.seat, each.group.target),
-      from: group.from,
-      kind: group.kind,
-    };
-  });
-}
-
-const CALLED = CORPUS.flatMap(({ name, decision }) => paired(name, decision));
+/** 全部固件上跑一遍对拍（判据在 `naki-crosscheck.ts`，与批量语料那一趟共用同一份）。 */
+const CHECKED = CORPUS.map(({ name, decision }) =>
+  crosscheckNaki(decision, renderPrompt(decision, "bare", null), name),
+);
+const CALLED: NakiPair[] = CHECKED.flatMap((each) => each.pairs);
 
 test("吃恒来自上家——规则那一条：写出来的那句话在日麻里得成立", () => {
   // 这条与实现无关，钉的是**规则**：吃只吃得了上家（`Naki.chi` 的不变量，`Action.fs:34`）。
   // 参照系一旦漂到观测者，它当场报「吃 来自对家」这种日麻里不成立的句子。
-  const chi = CALLED.filter((group) => group.kind === "吃");
+  const chi = CALLED.filter((group) => group.wire === "chi");
 
   for (const group of chi) {
-    assert.equal(group.step, 3, `${group.where}：包里的来源座位就不是它的上家，固件坏了`);
+    assert.equal(group.steps, 3, `${group.where}：包里的来源座位就不是它的上家，固件坏了`);
     assert.ok(
-      group.from === "你" || group.from?.endsWith("上家"),
-      `${group.where}写着「来自${group.from}」：吃只吃得了上家`,
+      group.rendered.from === "你" || group.rendered.from?.endsWith("上家"),
+      `${group.where}写着「来自${group.rendered.from}」：吃只吃得了上家`,
     );
   }
 
@@ -407,29 +326,27 @@ test("吃恒来自上家——规则那一条：写出来的那句话在日麻�
 });
 
 test("每一组副露的「来自谁」都与决策包里的绝对座位对得上（全部固件）", () => {
-  const words = ["下家", "对家", "上家"];
-  let others = 0;
+  const violations = CHECKED.flatMap((each) => each.violations);
+  assert.deepEqual(violations.map(formatViolation), [], "文本说法与包里的绝对座位对不上");
 
-  for (const group of CALLED) {
-    if (group.target === null) {
-      assert.equal(group.from, null, `${group.where}：暗杠没有来源`);
-      continue;
-    }
-
-    // 写出来的词必须就是「从副露方起数到那一家」的第几家；鸣的是观测者打的那张时写「你」。
-    const relative = words[group.step - 1];
-    const expected =
-      group.target === group.viewer
-        ? "你"
-        : group.owner === group.viewer
-          ? relative
-          : `他的${relative}`;
-
-    assert.equal(group.from, expected, `${group.where}：来源的参照系漂了`);
-    if (group.owner !== group.viewer) others += 1;
-  }
-
+  // 防空转：他家那几组（唯一要写「他的X」的一支）真的走到了。
+  const others = CALLED.filter((group) => group.owner !== group.viewer).length;
   assert.ok(others >= 6, `他家的副露只走到 ${others} 组，这条闸门在空转`);
+});
+
+test("把换算漂一格：同一批固件当场红（反向自证）", () => {
+  // 一道从不失败的闸门等于没有闸门（票 34 立的规矩）。把他家那几组的「他的」两个字
+  // 抹掉（票 40 那个错，一字不差），这道对拍必须点名它。
+  const drifted = CORPUS.map(({ name, decision }) =>
+    crosscheckNaki(
+      decision,
+      renderPrompt(decision, "bare", null).replaceAll("来自他的", "来自"),
+      name,
+    ),
+  ).flatMap((each) => each.violations);
+
+  assert.ok(drifted.length > 0, "把参照系漂到观测者之后这道对拍竟然还是绿的");
+  assert.match(formatViolation(drifted[0]), /参照系取副露方算出来该写/);
 });
 
 test("危险度那一节的参照系是**观测者**：威胁名单按你自己的方位说", () => {

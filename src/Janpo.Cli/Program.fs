@@ -25,7 +25,7 @@ let private usage =
                                  --uniform 均匀随机、--covering 跑批用的覆盖型偏好、
                                  --opinionated 有主见的那个（能和就和、听牌就立直、有役才鸣）。
                                  一个开关也不写时牌山与选手共用同一条随机流（黄金用例认的那一种）
-  janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence]
+  janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence] [--opinionated]
                                  用给定种子开一局、让随机选手先走 --steps 手（默认 0），
                                  再把那一手的**决策包 JSON** 打出来：某座位的合法观测
                                  加带 id 与中文 label 的动作列表。不给 --seat 就取正在被问的那家；
@@ -33,7 +33,9 @@ let private usage =
                                  走的选手与 `janpo kyoku <种子>` 同一个，因此第 N 手就是那一局的第 N 手。
                                  --sequence 改打**一个 JSON 数组**：那一局里 --seat 每一次被问的决策包，
                                  按手序（--steps 这时是「最多收几份」，0 表示收满一局）。
-                                 prompt 的前缀稳定性（票 29b）要的正是连续的几手
+                                 prompt 的前缀稳定性（票 29b）要的正是连续的几手。
+                                 --opinionated 换成有主见的那个选手（票 42）：**语料里才会出现立直**
+                                 （均匀随机 2000 颗种子只有 15 场），语义闸门要它才咬得到立直那几条
   janpo golden check <文件>          跑一份黄金用例文件，逐条逐字段逐行对照期望。
                                  对不上就退出码 1，每条报错指得出是哪条用例的哪个字段的第几行。
                                  **同一份文件浏览器里也要跑**（web/scripts/verify-golden.mjs）
@@ -82,6 +84,7 @@ yaku 的选项:
   janpo decide 42 --steps 8 --seat 1
   janpo decide 42 --steps 8 --god
   janpo decide 2088 --seat 1 --sequence
+  janpo decide 301 --seat 1 --sequence --opinionated
   janpo game 42
   janpo game 42 --hanchan
   janpo game 42 --covering
@@ -420,7 +423,7 @@ let private runGolden (arguments: string list) : int =
         eprintfn "golden 只认 `check <文件>` 与 `write <文件>`"
         2
 
-/// `<种子> [--seat N] [--steps N] [--no-akadora] [--god]`：decide 的参数形态。
+/// `<种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence] [--opinionated]`：decide 的参数形态。
 type private DecideArguments =
     {
         Seed: int option
@@ -433,7 +436,19 @@ type private DecideArguments =
         God: bool
         /// 收**同一座位在这一局里连续的每一份**决策包（票 29b）。
         Sequence: bool
+        /// 推局面的那个选手换成有主见的那个（票 42）。
+        /// **默认那一档一个字节都没动**（`Kyoku.randomPlayer`，黄金用例与已录的固件认的就是它）；
+        /// 票 49 加它是因为语义闸门里「立直后全摸切」那几条在均匀随机的语料上永远空转。
+        Opinionated: bool
     }
+
+/// 这一趟拿哪个选手推局面。**不写开关恒是 `Kyoku.randomPlayer`**：
+/// `janpo decide <种子> --steps N` 的第 N 手要与 `janpo kyoku <种子>` 的第 N 手是同一手。
+let private decidePlayer (parsed: DecideArguments) : Player<Rng> =
+    if parsed.Opinionated then
+        OpinionatedPlayer.player
+    else
+        Kyoku.randomPlayer
 
 let private parseDecideArguments (arguments: string list) : Result<DecideArguments, string> =
     let rec parse (parsed: DecideArguments) (rest: string list) =
@@ -442,6 +457,7 @@ let private parseDecideArguments (arguments: string list) : Result<DecideArgumen
         | "--no-akadora" :: tail -> parse { parsed with Akadora = false } tail
         | "--god" :: tail -> parse { parsed with God = true } tail
         | "--sequence" :: tail -> parse { parsed with Sequence = true } tail
+        | "--opinionated" :: tail -> parse { parsed with Opinionated = true } tail
         | "--seat" :: value :: tail ->
             match System.Int32.TryParse value with
             | true, index -> parse { parsed with Seat = Some index } tail
@@ -463,15 +479,17 @@ let private parseDecideArguments (arguments: string list) : Result<DecideArgumen
             Steps = 0
             God = false
             Sequence = false
+            Opinionated = false
         }
         arguments
 
-/// `--sequence`：把这一局从头打到底（四家随机选手），把**点名那一座位每一次被问**的
+/// `--sequence`：把这一局从头打到底（四家都是 `player`），把**点名那一座位每一次被问**的
 /// 决策包按手序收成一串。`limit` 为正时收满就停。
 ///
 /// **前缀可缓存的 prompt（票 29b）只有连续的几手才验得了**：一手一份包看不出前缀在不在长。
 /// 每一份包与 `janpo decide <种子> --steps N` 打出来的那一份是同一个 encoder 的产物。
 let private decideSequence
+    (player: Player<Rng>)
     (seat: Seat)
     (limit: int)
     (rng: Rng)
@@ -492,7 +510,7 @@ let private decideSequence
                     else
                         []
 
-                let action, advanced = Kyoku.randomPlayer rng state choice
+                let action, advanced = player rng state choice
 
                 match GameState.step state action with
                 | Error illegal -> Error(IllegalAction.toDisplay illegal)
@@ -506,7 +524,7 @@ let private decideSequence
 let private runDecide (arguments: string list) : int =
     match parseDecideArguments arguments with
     | Error token ->
-        eprintfn "decide 只认一个整数种子与可选的 --seat / --steps / --no-akadora / --god，不认「%s」" token
+        eprintfn "decide 只认一个整数种子与可选的 --seat / --steps / --no-akadora / --god / --sequence / --opinionated，不认「%s」" token
         2
     | Ok { Seed = None } ->
         eprintfn "decide 需要一个整数种子，例如: janpo decide 42"
@@ -520,11 +538,14 @@ let private runDecide (arguments: string list) : int =
             GameState.start ruleset context (Rng.ofSeed seed)
             |> Result.mapError KyokuStartError.toDisplay
 
-        // 走的选手与 `janpo kyoku` 同一个，因此同一种子的第 N 手两边对得上。
+        // 走的选手与 `janpo kyoku` 同一个（不写 `--opinionated` 时），
+        // 因此同一种子的第 N 手两边对得上。
+        let player = decidePlayer parsed
+
         let advanced =
             opened
             |> Result.bind (fun (state, rng) ->
-                Kyoku.runSteps parsed.Steps Kyoku.randomPlayer rng state
+                Kyoku.runSteps parsed.Steps player rng state
                 |> Result.map fst
                 |> Result.mapError IllegalAction.toDisplay)
 
@@ -540,7 +561,7 @@ let private runDecide (arguments: string list) : int =
                     |> Result.bind (fun (state, rng) ->
                         match Seat.ofIndex index with
                         | None -> Error $"这个规则集里没有座位 {index}"
-                        | Some seat -> decideSequence seat parsed.Steps rng state)
+                        | Some seat -> decideSequence player seat parsed.Steps rng state)
 
                 match collected with
                 | Error message ->

@@ -9,6 +9,7 @@
 | `decision-*.json` | 决策包（`DecisionPackage.encoder` 的产物，**含 `history` 与 `scaffold`**） | `janpo decide 2088 --steps 6`（打牌那一手）、`--steps 5`（响应那一手）与 `janpo decide 99 --steps 6 --seat 3`（**带危险度**那一手） |
 | `decision-sequence.json` | **同一局里连续 12 手**的决策包，同一个座位（票 29b） | `janpo decide 7 --seat 1 --sequence --steps 12` |
 | `decision-ankan.json` / `decision-kakan.json` | **桁上有杠**的两手（票 41） | `janpo decide 106 --seat 1 --steps 70`（暗杠 + 大明杠 + 碰 + 吃，3 张宝牌指示牌）与 `janpo decide 92 --seat 1 --steps 49`（自家与他家各一组加杠） |
+| `decision-riichi.json` | **自家立直已成立**的一手（票 49） | `janpo decide 10 --seat 3 --steps 80 --opinionated`（历史里一行「你 第4巡 宣言立直」，之后十一张打牌） |
 | `ask-*.json` | 模型的一次回答（`AskResult` 的形状） | `pnpm run record:agent`，**真的问过 DeepSeek** |
 
 每个 `ask-*.json` 的 `_note` 写着它是怎么录出来的。四条失败路径各一份，加上两档各一份合法输出：
@@ -41,6 +42,11 @@ JANPO_KEY_FILE=/tmp/deepseek_key pnpm run record:agent ask-assisted   # 只重�
 「宝牌指示牌数与杠数」与「同一牌种最多 4 张」（加杠亮出来的头一张仍在别人的河里）**只有桁上有杠时才验得到**，
 而 29b 那一局里没有暗杠与加杠。扫一批真实对局的那一道在 `web/scripts/verify-invariants.mjs`（进 CI）。
 
+`decision-riichi.json` 同理，它服务的是**「立直后全摸切」**（票 49）：均匀随机选手几乎不立直
+（票 42 实测：1..2000 号种子只有 15 场），因此它在其余固件上一次都执行不到。
+这一份来自**有主见的选手**（`--opinionated`，票 42）——一条永远执行不到的断言，
+与一条从不失败的断言危害相同。
+
 **决策包重生成**（例：`scaffold` 加了字段，或者 `history` 的形状变了）：
 
 ```sh
@@ -50,6 +56,7 @@ dotnet run --project src/Janpo.Cli -- decide 99 --steps 6 --seat 3 > web/tests/f
 dotnet run --project src/Janpo.Cli -- decide 7 --seat 1 --sequence --steps 12 > web/tests/fixtures/agent/decision-sequence.json
 dotnet run --project src/Janpo.Cli -- decide 106 --seat 1 --steps 70 > web/tests/fixtures/agent/decision-ankan.json
 dotnet run --project src/Janpo.Cli -- decide 92 --seat 1 --steps 49 > web/tests/fixtures/agent/decision-kakan.json
+dotnet run --project src/Janpo.Cli -- decide 10 --seat 3 --steps 80 --opinionated > web/tests/fixtures/agent/decision-riichi.json
 cd web && pnpm run format
 ```
 
