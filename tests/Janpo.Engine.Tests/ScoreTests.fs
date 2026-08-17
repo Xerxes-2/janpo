@@ -194,6 +194,56 @@ module ScoreTests =
         Assert.Equal(1000, List.sum score.Deltas)
 
     [<Fact>]
+    let ``包牌荣和：本场由包牌家付，供托照常归和了者`` () =
+        // 规则集：`Ruleset.yonma`。票 65：2025 整年语料的 4 场大三元包牌荣和（各 1 本场），
+        // 4/4 天凤都把本场 300 记在**包牌家**头上而不是放铳家：包牌家 -16300、放铳家 -16000
+        // （2025030716-d863b937 k7 等，见 65 号报告）。供托照常归和了者，与没包时一样
+        // （2025061121-5f8f6cdd k2：2 根供托，和了者收 32000+300+2000=34300，语料实证）。
+        let transfer =
+            { koRon with
+                Honba = 1
+                Sekinin = Some(seat 3)
+            }
+
+        let score = scoreIn ruleset transfer (yakuman 1)
+
+        // 和了点不含本场：役满 32000 由放铳家与包牌家各半，一分不多一分不少。
+        Assert.Equal(32000, score.HoraPoints)
+        Assert.Equal<int list>([ 0; 32300; -16000; -16300 ], score.Deltas)
+
+        // 连带供托（5f8f6cdd 的形）：供托只进和了者的增项，两个付家分文不变。
+        let withKyotaku = scoreIn ruleset { transfer with Kyotaku = 2 } (yakuman 1)
+        Assert.Equal<int list>([ 0; 34300; -16000; -16300 ], withKyotaku.Deltas)
+
+    [<Fact>]
+    let ``包牌家自己放铳：全额与本场都由它付`` () =
+        // 规则集：`Ruleset.yonma`。包牌家 = 放铳家时没有折半，全额 + 本场都是它的
+        // （2025 整年这个退化形 17 处、含本场 2 处，全部零差异——见 65 号报告的边界核对）。
+        let transfer =
+            { koRon with
+                Honba = 1
+                Sekinin = Some(seat 2)
+            }
+
+        let score = scoreIn ruleset transfer (yakuman 1)
+        Assert.Equal<int list>([ 0; 32300; -32300; 0 ], score.Deltas)
+
+    [<Fact>]
+    let ``包牌自摸：包牌家一家付光，本场也全归它`` () =
+        // 规则集：`Ruleset.yonma`。包牌自摸由责任者一家付光（含全部本场）——
+        // 2025 整年带本场的包牌自摸 7 处全部零差异（如 2025020101-5171bc17 k5：2 本场，
+        // 包牌家 -32600），引擎原行为即此，见 65 号报告的边界核对。
+        let transfer =
+            { koTsumo with
+                Honba = 1
+                Sekinin = Some(seat 3)
+            }
+
+        let score = scoreIn ruleset transfer (yakuman 1)
+        Assert.Equal(32000, score.HoraPoints)
+        Assert.Equal<int list>([ 0; 32300; 0; -32300 ], score.Deltas)
+
+    [<Fact>]
     let ``没有本场与供托时授受之和为零`` () =
         Assert.Equal(0, List.sum (deltas koRon (value 30 3)))
         Assert.Equal(0, List.sum (deltas koTsumo (value 30 3)))

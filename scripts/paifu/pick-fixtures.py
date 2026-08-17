@@ -63,6 +63,10 @@ WANTED_FLAT = [
     "reason:kyushukyuhai",
 ]
 REPEAT = {
+    # 票 65 G 族：包牌（天凤 JSON 自己写的 `包牌家 ≠ 和了家`）。全年带本场的包牌荣和
+    # 只有 4 场，全部在 `--seed` 里无条件保留；另加 1 场包牌自摸（带本场）钉自摸那一支。
+    # 这里的下限守着固件不被换稀。
+    "pao": 5,
     # 票 63 E 族：旧固件里已有 18 次（全是旧③也放行的那种）+ F 种子场带 1 次，
     # 抵到 25 迫使贪心步从 2025 的 20 场 E 族里补进代表（它们才是旧③拦错的那种）。
     "riichi-ankan": 25,
@@ -150,6 +154,10 @@ def main():
         scored = [
             (len(gap & set(merged(log_id))), -size(log_id), log_id) for log_id in pool if log_id not in picked
         ]
+        # 池子挑空了（`--seed` 已含全部候选）：剩下的缺口语料里本就没有，照常走到
+        # 末尾的「仍未覆盖」清单里报出来（票 65 碰到的边角：110 场全在 seed 里）。
+        if not scored:
+            break
         best = max(scored)
         if best[0] == 0:
             break

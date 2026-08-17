@@ -255,8 +255,13 @@ module Ruleset =
             | Some length -> Decode.succeed length
             | None -> Decode.fail ("unknown game length: " + wire))
 
-    /// 规则集的解码。**字段都是必需的**：缺一项就是读不动，而不是惄惄地用本机的默认值
+    /// 规则集的解码。**字段默认都是必需的**：缺一项就是读不动，而不是惄惄地用本机的默认值
     /// 把别人的牌谱回放成另一场对局。诊断文案用英文（ADR-0001）。
+    ///
+    /// **例外只有后加的两个规则开关**：`minkan_rinshan_sekinin`（票 59）与
+    /// `riichi_ankan_mentsu_unchanged`（票 63）可缺省，缺省都是 false（天凤口径）——
+    /// 旧导出件里没有这两个字段，而那些对局就是按天凤口径打的，补 false 回放逐字相同；
+    /// 按 26 号的版本策略「加可缺省字段不涨牌谱版本」（票 65 裁定，两个开关同一种处理）。
     let decoder: Decoder<Ruleset> =
         Decode.object (fun get ->
             {
@@ -281,7 +286,11 @@ module Ruleset =
                 DoubleKazeJantouFu = get.Required.Field "double_kaze_jantou_fu" Decode.int
                 RinshanTsumoFu = get.Required.Field "rinshan_tsumo_fu" Decode.bool
                 KokushiAnkanChankan = get.Required.Field "kokushi_ankan_chankan" Decode.bool
-                MinkanRinshanSekinin = get.Required.Field "minkan_rinshan_sekinin" Decode.bool
-                RiichiAnkanMentsuUnchanged = get.Required.Field "riichi_ankan_mentsu_unchanged" Decode.bool
+                MinkanRinshanSekinin =
+                    get.Optional.Field "minkan_rinshan_sekinin" Decode.bool
+                    |> Option.defaultValue false
+                RiichiAnkanMentsuUnchanged =
+                    get.Optional.Field "riichi_ankan_mentsu_unchanged" Decode.bool
+                    |> Option.defaultValue false
                 HonbaPoints = get.Required.Field "honba_points" Decode.int
             })

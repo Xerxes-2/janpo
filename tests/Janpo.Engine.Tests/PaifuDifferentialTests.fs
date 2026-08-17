@@ -7,8 +7,8 @@ open Janpo
 /// 与**真实牌谱**的对拍：用天凤鳳凰卓的牌谱重放引擎，逐局比动作序列、
 /// 每次和了的役种集合 / 符 / 番 / 和了点，以及流局的形态与逐座位清算。
 ///
-/// 固件 `fixtures/paifu/`（**106 场 / 1,093 kyoku**，票 57 按覆盖挑出来、票 59 补上两种杠的时机、
-/// 票 63 补上立直后暗杠与鸣后荣和两族）随测试工程复制到输出目录，
+/// 固件 `fixtures/paifu/`（**111 场 / 1,128 kyoku**，票 57 按覆盖挑出来、票 59 补上两种杠的时机、
+/// 票 63 补上立直后暗杠与鸣后荣和两族、票 65 补上包牌的荣和与自摸）随测试工程复制到输出目录，
 /// 因此这个测试**离线跑**；扩样本只需把 `JANPO_PAIFU_DIR` 指向更大的语料，不改代码
 /// （票 57 用同一套 API 扫过全量 12,188 场 / 129,179 kyoku，跑法见
 /// `.scratch/llm-riichi-arena/run/reports/57-wider-paifu-differential.md`）。
@@ -54,8 +54,8 @@ module PaifuDifferentialTests =
             |> List.toArray
 
         Assert.Equal<string array>([||], Array.truncate 10 rendered)
-        Assert.True(List.length loaded >= 106, $"语料只有 {List.length loaded} 场对局，对拍要有量")
-        Assert.True(List.length differential.Value.Kyokus >= 1090, $"语料只有 {List.length differential.Value.Kyokus} 局")
+        Assert.True(List.length loaded >= 111, $"语料只有 {List.length loaded} 场对局，对拍要有量")
+        Assert.True(List.length differential.Value.Kyokus >= 1120, $"语料只有 {List.length differential.Value.Kyokus} 局")
         Assert.True(loaded |> List.forall (snd >> Option.isSome), "固件里每一场都该配着天凤 JSON oracle")
 
     [<Fact>]
@@ -126,7 +126,7 @@ module PaifuDifferentialTests =
 
         // 「零差异」若没有覆盖率佐证，只说明没跑到（备注 N-8）。
         let seats = sumBy (fun kyoku -> kyoku.SettledSeats)
-        Assert.True(seats >= 560, $"只对拍了 {seats} 个座位的清算，锚点太细了")
+        Assert.True(seats >= 580, $"只对拍了 {seats} 个座位的清算，锚点太细了")
 
     [<Fact>]
     let ``对拍的覆盖率够得着长尾`` () =
@@ -134,9 +134,9 @@ module PaifuDifferentialTests =
         let fu = sumBy (fun kyoku -> kyoku.FuChecks)
         let yaku = sumBy (fun kyoku -> kyoku.YakuChecks)
 
-        Assert.True(horas >= 930, $"只对拍了 {horas} 次和了")
-        Assert.True(fu >= 680, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
-        Assert.True(yaku >= 1680, $"只比到了 {yaku} 行役")
+        Assert.True(horas >= 960, $"只对拍了 {horas} 次和了")
+        Assert.True(fu >= 700, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
+        Assert.True(yaku >= 1740, $"只比到了 {yaku} 行役")
 
         // 役名对照表里真正被牌谱走到的那几种。剩下的靠黄金用例，不靠对拍。
         let seen =
@@ -150,7 +150,7 @@ module PaifuDifferentialTests =
 
         // 每局终局点数：拿牌谱下一局的开局点数对拍（一场的最后一局没下局，比不了）。
         let carried = sumBy (fun kyoku -> kyoku.ScoreChecks)
-        Assert.True(carried >= 980, $"只对拍了 {carried} 局的终局点数")
+        Assert.True(carried >= 1010, $"只对拍了 {carried} 局的终局点数")
 
     [<Fact>]
     let ``七种流局形态里，真牌谱守得住六种；三家和了守不住，且理由不是罕见`` () =
@@ -316,6 +316,40 @@ module PaifuDifferentialTests =
 
         Assert.True(ankans >= 25, $"立直后的暗杠在固件里只走到 {ankans} 次（要 25 次）")
         Assert.True(rons >= 54, $"鸣完打完、下次摸牌前的荣和在固件里只走到 {rons} 次（要 54 次）")
+
+    /// 包牌（票 65）在牌谱事件流里的两种形，**从牌谱自己数**（不问引擎）：
+    /// 供托在 `reach_accepted` 时已扣，因此 `hora` 的负项只能是付钱的家——
+    /// 荣和没包只有放铳家一家为负，负项 ≥ 2 家就是包把和了点劈成了两份；
+    /// 自摸没包恒是三家为负，只剩一家为负就是包把三家平摊收成了一家付光。
+    let private paoHoras (moves: PaifuEvent list) : int * int =
+        let negatives (hora: PaifuHora) =
+            hora.Deltas |> List.filter (fun delta -> delta < 0) |> List.length
+
+        moves
+        |> List.fold
+            (fun (rons, tsumos) event ->
+                match event with
+                | PaifuEvent.Hora hora when hora.Actor <> hora.Target && negatives hora >= 2 -> rons + 1, tsumos
+                | PaifuEvent.Hora hora when hora.Actor = hora.Target && negatives hora = 1 -> rons, tsumos + 1
+                | _ -> rons, tsumos)
+            (0, 0)
+
+    [<Fact>]
+    let ``包牌的荣和与自摸在固件里各走到几次`` () =
+        // **判据 3：闸门要报「它在真语料上执行过几次」。** 票 65 之前包牌在固件里的
+        // 执行次数是 **0**（票 57 的 12,188 场里一次都没有，而 2025 的包牌荣和带本场的
+        // 那 4 场局局带差异，进不了候选池）。G 族全部 4 场都在 `--seed` 里，
+        // 另加 1 场包牌自摸（带本场，2025120619-df6f1a79 k2）钉自摸那一支；
+        // 少一次就是固件被换稀。
+        let rons, tsumos =
+            corpus.Value
+            |> fst
+            |> List.collect (fun (paifu, _) -> paifu.Kyokus)
+            |> List.map (fun kyoku -> paoHoras kyoku.Moves)
+            |> List.fold (fun (rons, tsumos) (r, t) -> rons + r, tsumos + t) (0, 0)
+
+        Assert.True(rons >= 4, $"包牌荣和在固件里只走到 {rons} 次（要 4 次）")
+        Assert.True(tsumos >= 1, $"包牌自摸在固件里只走到 {tsumos} 次（要 1 次）")
 
     // ---- 牌谱适配器本身 ----
 

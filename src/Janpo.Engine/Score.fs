@@ -172,7 +172,8 @@ module Score =
     ///
     /// 子自摸「子付 1 份、亲付 2 份」，亲自摸「三家各付 2 份」；
     /// 荣和由放铳者一家付子 4 份 / 亲 6 份。每一笔各自切上到 100。
-    /// 本场按 `HonbaPoints` 计：荣和由放铳者付，自摸由付家平摊。供托归和了者。
+    /// 本场按 `HonbaPoints` 计：荣和由放铳者付（**有包时改由责任者付**，见 `honbaPayers`），
+    /// 自摸由付家平摊。供托归和了者，有包没包都一样。
     ///
     /// **责任支付（`transfer.Sekinin`）只换付钱的人**：和了点一分不多一分不少，
     /// `HoraPoints` 因此与没包时完全一样，只是 `Deltas` 里负的那几项换了座位。
@@ -213,13 +214,17 @@ module Score =
             | Some _
             | None -> payers |> List.map (fun seat -> seat, payment seat)
 
-        /// 本场的付家：自摸由付和了点的那几家平摊（包了就只剩责任者一家），
-        /// 荣和恒由**放铳者**一家付，即使包把和了点分了一半出去。
+        /// 本场的付家：自摸由付和了点的那几家平摊（包了就只剩责任者一家）；
+        /// 荣和没包时由**放铳者**一家付，**有包时改由责任者**一家付——
+        /// 票 65：2025 整年语料里大三元包牌荣和 4 场（各 1 本场），4/4 天凤都把本场
+        /// 记在包牌家头上（包牌家 -16300、放铳家 -16000）。
         let honbaPayers =
             if tsumo then
                 charges |> List.map fst
             else
-                [ transfer.Target ]
+                match sekinin with
+                | Some liable -> [ liable ]
+                | None -> [ transfer.Target ]
 
         let honba =
             let total = max 0 ruleset.HonbaPoints * max 0 transfer.Honba
