@@ -132,6 +132,25 @@ module ShantenProperties =
                    | Ok drawn -> AgariShape.isAgari fourPlayer drawn
                    | Error _ -> false)
 
+    // ---- 向听等价性（票 66 的两道剪枝闸各自的判据；`docs/research/step-cost-on-replay-path.md` §10） ----
+
+    [<Property>]
+    let ``等摸的手牌有和了牌等价于向听数为 0`` (AwaitingHand hand) =
+        // 两侧是不同实现（`waits` 的逐种试摸批 vs 向听公式），不是恒真式（票 60 的判法）。
+        // 它守着 `AgariShape.waits` 的向听前置闸（E2）：闸多拦一只听牌手这条当场红
+        // （把 `> 0` 临时弄坏成 `>= 0` 验过一次，红样在票 66 报告里）。
+        (AgariShape.waits fourPlayer hand |> List.isEmpty |> not) = (shanten hand = 0)
+
+    [<Property>]
+    let ``已摸进的手牌打得出保持听牌的一张等价于向听数不超过 0`` (DrawnHand hand) =
+        // 它守着 `RiichiState.canDeclare` 的单次向听判据（E3）。**右侧是 ≤ 0 不是 = 0**：
+        // 向听 −1（已和牌形）的手打一张必然回到听牌，票 64 的 20 万手采样正是用这种手
+        // 否掉了 `= 0` 的第一版命题；具名反例钉在 RiichiTests。
+        let dahai =
+            RiichiState.tenpaiDahai fourPlayer (HandShape.nakiCount hand) (HandShape.tiles hand)
+
+        (dahai |> List.isEmpty |> not) = (shanten hand <= 0)
+
     [<Property>]
     let ``有效牌的剩余枚数是四减去可见张数`` (AwaitingHand hand) =
         match Ukeire.calculate fourPlayer [] hand with

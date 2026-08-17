@@ -109,10 +109,25 @@ module RiichiState =
                 counts.[index] <- counts.[index] + 1
                 tenpai)
 
+    /// 「打得出至少一张仍然听牌的牌」——与 `tenpaiDahai ≠ []` 逐值等价，但只花一次向听计算
+    /// 而不逐张试打（票 66，研究见 `docs/research/step-cost-on-replay-path.md` §6：每一手都要问
+    /// 一次立直合法性，而一局只有 0.76 次真的立直）。等价性是 3n+2 手上
+    /// `tenpaiDahai ≠ [] ⟺ 向听 ≤ 0`（ShantenProperties 的等价性属性守着，
+    /// 票 64 另有 20 万手采样零反例）：向听 > 0 时打牌只会不变或加一，哪张都到不了听牌；
+    /// 反过来**判据必须是 `≤ 0` 不是 `= 0`**——向听 −1（已和牌形）的手打一张必然回到听牌，
+    /// 规则上可以放弃自摸宣立直（票 64 的采样否掉过 `= 0` 的第一版，具名反例钉在 RiichiTests）。
+    /// 张数不成 3n+2（构造失败或等摸形）时 `tenpaiDahai` 本就是空表，这里同样 false。
+    let private hasTenpaiDahai (kindSet: TileKindSet) (nakiCount: int) (hand: Tile list) : bool =
+        match HandShape.create nakiCount hand with
+        | Error _ -> false
+        | Ok shape when HandShape.isAwaitingDraw shape -> false
+        | Ok shape -> Shanten.value (Shanten.calculate kindSet shape) <= 0
+
     /// 立直宣言的合法性（spec 的规则清单）：**门清、听牌、点数够一根立直棒、牌山还摸得完一圈**。
     ///
     /// - 门清：只有暗杠不破门清（`Naki.isConcealed`）；
-    /// - 听牌：打得出至少一张仍然听牌的牌（`tenpaiDahai`）——它同时定死了宣言牌能打哪几张；
+    /// - 听牌：打得出至少一张仍然听牌的牌（`hasTenpaiDahai`，与 `tenpaiDahai ≠ []` 等价）；
+    ///   宣言牌能打哪几张仍由 `tenpaiDahai` 定死（`Declared` 分支读它，那是一局 0.76 次的事）；
     /// - 点数：`Ruleset.RiichiBou` 那么多（裁决 D-6：一根立直棒的点数只有这一个字段）；
     /// - 牌山：可摸区剩的牌够全场再摸一圈，因此下界是**座位数**而不是写死的 4。
     ///
@@ -128,7 +143,7 @@ module RiichiState =
         List.forall Naki.isConcealed naki
         && score >= ruleset.RiichiBou
         && remaining >= ruleset.SeatCount
-        && (tenpaiDahai kindSet (List.length naki) hand |> List.isEmpty |> not)
+        && hasTenpaiDahai kindSet (List.length naki) hand
 
     /// 从牌列里去掉**一张**给定的牌（按实例；红 5 与正牌各算各的）。
     let private withoutOne (tile: Tile) (tiles: Tile list) : Tile list =

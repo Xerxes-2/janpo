@@ -392,6 +392,17 @@ module RiichiTests =
         )
 
     [<Fact>]
+    let ``已成和了形的手也立得了直：放弃自摸宣立直`` () =
+        // 向听 −1 的手（123m 456m 789m 123p 5z5z）：打一张必然回到听牌，规则上可以
+        // 放弃自摸宣立直，引擎一直允许。票 64 的 20 万手采样正是用这种手否掉过
+        // 「向听 = 0 才立得了直」的第一版剪枝（E3）——这里把那个反例钉死：
+        // `canDeclare` 的向听判据必须是 `≤ 0` 不是 `= 0`。
+        let agari = tiles "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z 5z"
+
+        Assert.NotEmpty(RiichiState.tenpaiDahai kindSet 0 agari)
+        Assert.True(RiichiState.canDeclare Ruleset.yonma kindSet 4 1000 [] agari)
+
+    [<Fact>]
     let ``立直宣言牌只能从「打完仍听牌」的那几张里挑`` () =
         // 123m 456m 789m 123p 5z 摸进 1z：打 1z 或 5z 都留一个单骑，其余都不听。
         Assert.Equal<Tile list>(

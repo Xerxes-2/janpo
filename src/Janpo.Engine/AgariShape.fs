@@ -51,6 +51,14 @@ module AgariShape =
     /// **逐种试摸是一批 34 次形态判定**：缓冲在进批之前建一个，批内共用。原来每一种要新建
     /// 两个 34 长数组（`HandShape.add` 一个、一般型搜索的副本一个），一次 `waits` 就是 68 个；
     /// 而永久振听每手重算一次，它是 `Observation` 重放里最贵的一段。
+    ///
+    /// **进批之前先花一次向听计算把不听牌的手挡掉**（票 66，研究见
+    /// `docs/research/step-cost-on-replay-path.md` §5）：重放实测 83.6% 的打牌后手牌不听牌，
+    /// 那些手的 34 次试摸全部返回空——等摸手上 `向听 = 0 ⟺ ∃ 牌种补上成和了型`
+    /// （ShantenProperties 的等价性属性守着，票 64 另有 20 万手采样零反例；
+    /// `Shanten.standardIn` 的 `deadQuadKinds` 修正正是它在「听自己抓完了的牌」上仍成立的原因）。
+    /// 剪枝判据是 `> 0` 不是 `<> 0`：取最保守的一侧，向听 ≤ 0 的手一律照常试摸
+    /// （等摸形向听不会是 −1，但这一条不在这里赌）。
     let waits (kindSet: TileKindSet) (hand: HandShape) : Tile list =
         // 不是等摸形的手牌再摸一张就超了张数：原来由 `HandShape.add` 的全量校验逐种拒掉，
         // 这里一次问清楚，结果同为空表。
@@ -58,22 +66,26 @@ module AgariShape =
             []
         else
             let scratch = ShantenScratch.create ()
-            let drawn = scratch.Tsumo
-            HandShape.countsInto drawn hand
-            let trial = HandShape.ofScratch (HandShape.nakiCount hand) drawn
 
-            TileKindSet.kinds kindSet
-            |> List.filter (fun kind ->
-                let index = Tile.kindIndex kind
+            if Shanten.value (Shanten.calculateWith scratch kindSet hand) > 0 then
+                []
+            else
+                let drawn = scratch.Tsumo
+                HandShape.countsInto drawn hand
+                let trial = HandShape.ofScratch (HandShape.nakiCount hand) drawn
 
-                // 手里已有 4 张的牌种摸不到第 5 张（原来是 `HandShape.add` 的 `TileKindOverflow`）。
-                if drawn.[index] >= 4 then
-                    false
-                else
-                    drawn.[index] <- drawn.[index] + 1
-                    let agari = classifyIn scratch.Search kindSet trial |> List.isEmpty |> not
-                    drawn.[index] <- drawn.[index] - 1
-                    agari)
+                TileKindSet.kinds kindSet
+                |> List.filter (fun kind ->
+                    let index = Tile.kindIndex kind
+
+                    // 手里已有 4 张的牌种摸不到第 5 张（原来是 `HandShape.add` 的 `TileKindOverflow`）。
+                    if drawn.[index] >= 4 then
+                        false
+                    else
+                        drawn.[index] <- drawn.[index] + 1
+                        let agari = classifyIn scratch.Search kindSet trial |> List.isEmpty |> not
+                        drawn.[index] <- drawn.[index] - 1
+                        agari)
 
     // ---- 渲染层出口（ADR-0001） ----
 
