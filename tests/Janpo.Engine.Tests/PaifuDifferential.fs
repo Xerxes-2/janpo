@@ -17,6 +17,8 @@ type KyokuDifferential =
         /// 比过的役行数（**不含**三种宝牌）。
         YakuChecks: int
         /// oracle 里出现过的役，去重前。役名对照表的覆盖率读它。
+        /// **无 oracle 时取引擎自己的读法**（票 62 的免 oracle 大扫描要做役种普查）：
+        /// 只当覆盖信息用，不当期望值——它不参与任何差异判定。
         YakuSeen: Yaku list
         /// **独立锚点**：逐座位对拍过天凤清算的荒牌流局座位数。
         SettledSeats: int
@@ -282,6 +284,10 @@ module PaifuDifferential =
         | None, None ->
             { baseline with
                 Horas = List.length replay.Horas
+                // 免 oracle 扫大语料时的役种普查：没有期望值可比，但引擎读出的役当覆盖信息仍然有用。
+                YakuSeen =
+                    replay.Horas
+                    |> List.collect (fun each -> each.Reading.Tally.Yaku |> List.map fst)
             }
 
     // ---- 入口 ----

@@ -545,6 +545,15 @@ module PaifuReplay =
             Scores = start.Scores
         }
 
+    /// **成本剖面的接缝**（票 62）：单独量「牌山重建」那一段用。
+    /// 它就是 `kyoku` 内部走的那一份实现，不是复制品——量的和跑的是同一段代码。
+    let wall (ruleset: Ruleset) (paifu: PaifuKyoku) : Result<Wall, string> = buildWall ruleset paifu
+
+    /// **成本剖面的接缝**（票 62）：单独量「事件流对拍」那一段用。
+    /// 同上，`kyoku` 末尾调的就是这一份。
+    let eventDiffs (seatCount: int) (label: string) (paifu: PaifuKyoku) (events: Event list) : PaifuDiff list =
+        compareEvents seatCount label paifu events
+
     /// 重放一局。`label` 进每一条差异，定位用。
     let kyoku (ruleset: Ruleset) (label: string) (kyoku: PaifuKyoku) : ReplayOutcome =
         if List.length kyoku.Start.Tehais <> ruleset.SeatCount then
