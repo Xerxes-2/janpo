@@ -7,8 +7,10 @@ open Janpo
 /// 与**真实牌谱**的对拍：用天凤鳳凰卓的牌谱重放引擎，逐局比动作序列、
 /// 每次和了的役种集合 / 符 / 番 / 和了点，以及流局的形态与逐座位清算。
 ///
-/// 固件 `fixtures/paifu/`（18 局 / 177 kyoku）随测试工程复制到输出目录，因此这个测试
-/// **离线跑**；扩样本只需把 `JANPO_PAIFU_DIR` 指向更大的语料，不改代码。
+/// 固件 `fixtures/paifu/`（**87 场 / 908 kyoku**，票 57 按覆盖挑出来的）随测试工程复制到输出目录，
+/// 因此这个测试**离线跑**；扩样本只需把 `JANPO_PAIFU_DIR` 指向更大的语料，不改代码
+/// （票 57 用同一套 API 扫过全量 12,188 场 / 129,179 kyoku，跑法见
+/// `.scratch/llm-riichi-arena/run/reports/57-wider-paifu-differential.md`）。
 ///
 /// **两个数据源各管一半**：动作序列从 mjai 牌谱取（上游把役 / 符 / 点数删了），
 /// 役 / 符 / 番 / 点数 / 流局形态从天凤官方 JSON 取作 oracle。
@@ -51,9 +53,9 @@ module PaifuDifferentialTests =
             |> List.toArray
 
         Assert.Equal<string array>([||], Array.truncate 10 rendered)
-        Assert.True(List.length loaded >= 18, $"语料只有 {List.length loaded} 局对局，对拍要有量")
-        Assert.True(List.length differential.Value.Kyokus >= 177, $"语料只有 {List.length differential.Value.Kyokus} 局")
-        Assert.True(loaded |> List.forall (snd >> Option.isSome), "固件里每一局都该配着天凤 JSON oracle")
+        Assert.True(List.length loaded >= 87, $"语料只有 {List.length loaded} 场对局，对拍要有量")
+        Assert.True(List.length differential.Value.Kyokus >= 900, $"语料只有 {List.length differential.Value.Kyokus} 局")
+        Assert.True(loaded |> List.forall (snd >> Option.isSome), "固件里每一场都该配着天凤 JSON oracle")
 
     [<Fact>]
     let ``默认规则集就是牌谱那一套天凤规则`` () =
@@ -120,7 +122,7 @@ module PaifuDifferentialTests =
 
         // 「零差异」若没有覆盖率佐证，只说明没跑到（备注 N-8）。
         let seats = sumBy (fun kyoku -> kyoku.SettledSeats)
-        Assert.True(seats >= 40, $"只对拍了 {seats} 个座位的清算，锚点太细了")
+        Assert.True(seats >= 440, $"只对拍了 {seats} 个座位的清算，锚点太细了")
 
     [<Fact>]
     let ``对拍的覆盖率够得着长尾`` () =
@@ -128,9 +130,9 @@ module PaifuDifferentialTests =
         let fu = sumBy (fun kyoku -> kyoku.FuChecks)
         let yaku = sumBy (fun kyoku -> kyoku.YakuChecks)
 
-        Assert.True(horas >= 150, $"只对拍了 {horas} 次和了")
-        Assert.True(fu >= 100, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
-        Assert.True(yaku >= 200, $"只比到了 {yaku} 行役")
+        Assert.True(horas >= 760, $"只对拍了 {horas} 次和了")
+        Assert.True(fu >= 560, $"只比到了 {fu} 次符（満貫以上天凤不写符）")
+        Assert.True(yaku >= 1380, $"只比到了 {yaku} 行役")
 
         // 役名对照表里真正被牌谱走到的那几种。剩下的靠黄金用例，不靠对拍。
         let seen =
@@ -138,20 +140,59 @@ module PaifuDifferentialTests =
             |> List.collect (fun kyoku -> kyoku.YakuSeen)
             |> List.distinct
 
-        Assert.True(List.length seen >= 20, $"牌谱里只出现了 {List.length seen} 种役")
+        Assert.True(List.length seen >= 35, $"牌谱里只出现了 {List.length seen} 种役")
 
         // 每局终局点数：拿牌谱下一局的开局点数对拍（一场的最后一局没下局，比不了）。
         let carried = sumBy (fun kyoku -> kyoku.ScoreChecks)
-        Assert.True(carried >= 150, $"只对拍了 {carried} 局的终局点数")
+        Assert.True(carried >= 800, $"只对拍了 {carried} 局的终局点数")
 
-        // 流局形态：荒牌流局与九种九牌两种在固件里都有。
-        let reasons =
+    [<Fact>]
+    let ``七种流局形态里，真牌谱守得住六种；三家和了守不住，且理由不是罕见`` () =
+        // **判据 3：闸门要报「它在真语料上执行过几次」。** 下面每一种都带着次数——
+        // 数字是票 57 从 12,188 场里按覆盖挑固件时定下的，少一次就说明固件被换稀了。
+        let counted =
             differential.Value.Kyokus
             |> List.choose (fun kyoku -> kyoku.Reason)
-            |> List.distinct
+            |> List.countBy id
+            |> Map.ofList
 
-        Assert.Contains(Fanpai, reasons)
-        Assert.Contains(KyuushuKyuuhai, reasons)
+        let times (reason: RyuukyokuReason) : int =
+            counted |> Map.tryFind reason |> Option.defaultValue 0
+
+        let rendered =
+            counted
+            |> Map.toList
+            |> List.map (fun (reason, count) -> $"{RyuukyokuReason.toMjai reason}×{count}")
+
+        for reason, atLeast in
+            [
+                Fanpai, 110
+                KyuushuKyuuhai, 7
+                SuufonRenda, 4
+                NagashiMangan, 3
+                Suukaikan, 2
+                SuuchaRiichi, 2
+            ] do
+            Assert.True(
+                times reason >= atLeast,
+                $"{RyuukyokuReason.toMjai reason} 在固件里只走到 {times reason} 次（要 {atLeast} 次）：{rendered}"
+            )
+
+        // **到不了的那一种要写成一个值**（判据 4），别留在注释里当旁白。
+        // **三家和了不是罕见**：全量语料里有 6 局（天凤 JSON 逐条确认写的就是 `三家和了`），
+        // 是**上游转换器把三条 `hora` 宣言删成了一条裸 `ryukyoku`**，mjai 流里那三家荣和的事实
+        // 已经没了，重放喂不出来（票 57 报告第三节 D）。换一份保留宣言的牌谱源就守得住。
+        //
+        // 这条断言只会变硬：`RyuukyokuReason` 新增一个 case 而固件没跟上，它当场红。
+        let unreachable = [ SanchaHora ]
+
+        let missing =
+            RyuukyokuReason.all
+            |> List.filter (fun reason -> times reason = 0)
+            |> List.except unreachable
+            |> List.map RyuukyokuReason.toMjai
+
+        Assert.Equal<string list>([], missing)
 
     // ---- 牌谱适配器本身 ----
 

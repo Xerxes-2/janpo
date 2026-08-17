@@ -481,12 +481,44 @@ module PaifuReplay =
                 PaifuEvent.Hora { hora with UraDoraMarkers = [] }
             | other -> other)
 
+    /// 上游转换器的第二处噪声（票 57 扫 129,179 局找出来的）：**四家立直那一手，
+    /// 第四条 `reach` 后面没有 `reach_accepted`**——牌谱直接给 `ryukyoku`。
+    ///
+    /// 那 1000 点到底收没收，**由牌谱自己的钱流说了算**：10/10 局的下一局都是
+    /// 四家各 −1000、供托 +4，即第四根立直棒**确实放下了**，上游只是没写那条事件。
+    /// 因此这里按牌谱补回它——判据取自牌谱（宣言了几条、收了几条、这一手怎么收尾），
+    /// 不问引擎。终局点数那条对拍照旧严比，引擎真要多收/少收 1000 仍然当场报红。
+    let private denoiseSuuchaRiichi (seatCount: int) (moves: PaifuEvent list) : PaifuEvent list =
+        let declared = moves |> List.choose PaifuEvent.riichi
+        let accepted = moves |> List.choose PaifuEvent.riichiAccepted
+
+        let abortive =
+            match List.tryLast moves with
+            | Some(PaifuEvent.Ryuukyoku _) -> true
+            | _ -> false
+
+        let missing =
+            declared |> List.filter (fun seat -> not (List.contains seat accepted))
+
+        if not abortive || List.length declared < seatCount || List.isEmpty missing then
+            moves
+        else
+            let head, tail = List.splitAt (List.length moves - 1) moves
+            head @ List.map PaifuEvent.RiichiAccepted missing @ tail
+
     /// 逐条比引擎产出的事件流与牌谱。**这是本票最粗的那道网**：
     /// 摸到的牌、鸣牌的时机、翻宝牌的时机、立直成立的时机与钱流全在里面。
-    let private compareEvents (label: string) (kyoku: PaifuKyoku) (events: Event list) : PaifuDiff list =
+    let private compareEvents
+        (seatCount: int)
+        (label: string)
+        (kyoku: PaifuKyoku)
+        (events: Event list)
+        : PaifuDiff list =
+        // 两处上游噪声依次抹掉，再把开局那条接回头上。
+        let denoised = kyoku |> denoiseUra |> denoiseSuuchaRiichi seatCount
+
         let expected =
-            (PaifuEvent.StartKyoku kyoku.Start :: denoiseUra kyoku)
-            |> List.choose renderPaifu
+            PaifuEvent.StartKyoku kyoku.Start :: denoised |> List.choose renderPaifu
 
         let actual = events |> List.choose renderEngine
 
@@ -548,7 +580,7 @@ module PaifuReplay =
                         if driven.Aborted then
                             []
                         else
-                            compareEvents label kyoku events
+                            compareEvents ruleset.SeatCount label kyoku events
 
                     let horas =
                         GameState.horas driven.State

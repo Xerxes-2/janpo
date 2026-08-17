@@ -274,6 +274,27 @@ module PaifuEvent =
         | PaifuEvent.EndKyoku
         | PaifuEvent.EndGame -> None
 
+    /// 这条事件里**宣言**立直的座位；不是 `reach` 事件则为 None。
+    /// 与 `riichiAccepted` 成对：宣言了而没成立的那几家由两者之差认出来。
+    let riichi (event: PaifuEvent) : Seat option =
+        match event with
+        | PaifuEvent.Riichi actor -> Some actor
+        | PaifuEvent.StartGame _
+        | PaifuEvent.StartKyoku _
+        | PaifuEvent.Tsumo _
+        | PaifuEvent.Dahai _
+        | PaifuEvent.Pon _
+        | PaifuEvent.Chi _
+        | PaifuEvent.Ankan _
+        | PaifuEvent.Kakan _
+        | PaifuEvent.Minkan _
+        | PaifuEvent.Dora _
+        | PaifuEvent.RiichiAccepted _
+        | PaifuEvent.Hora _
+        | PaifuEvent.Ryuukyoku _
+        | PaifuEvent.EndKyoku
+        | PaifuEvent.EndGame -> None
+
     /// 这条事件里立直**成立**的座位；不是 `reach_accepted` 事件则为 None。
     /// 里宝牌只在和了者立了直时才翻，判据就是它。
     let riichiAccepted (event: PaifuEvent) : Seat option =

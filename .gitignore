@@ -23,5 +23,9 @@ web/dist/
 .idea/
 .ionide/
 
-# 牌谱样本（13 票对拍用；大文件不入版本控制，取法见 run/reports/13-prep-paifu-data.md）
+# Python（scripts/ 下的取数与统计脚本被 import 时会生成）
+__pycache__/
+
+# 牌谱样本（13 票对拍用；大文件不入版本控制，取法见 run/reports/13-prep-paifu-data.md，
+# 全量 12,188 场的拉法见 run/reports/57-wider-paifu-differential.md）
 data/paifu/
