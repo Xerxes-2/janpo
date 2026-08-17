@@ -29,6 +29,24 @@ export const responsePackage = load<DecisionPackage>("decision-response");
 export const dangerPackage = load<DecisionPackage>("decision-danger");
 
 /**
+ * **桁上有暗杠**那一手（`janpo decide 106 --seat 1 --steps 70`，票 41）：
+ * 上家暗杠、下家大明杠、对家吃与碰，宝牌指示牌 3 张。
+ *
+ * 语义闸门里有三条只有**杠**才验得到（暗杠不带来源 / 宝牌指示牌数与杠数 / 河牌数与巡目里那一项），
+ * 而 29b 那一局里一个暗杠都没有。
+ */
+export const ankanPackage = load<DecisionPackage>("decision-ankan");
+
+/**
+ * **桁上有加杠**那一手（`janpo decide 92 --seat 1 --steps 49`，票 41）：
+ * 自家一组加杠、上家一组加杠，宝牌指示牌 3 张。
+ *
+ * 加杠亮出来的头一张**仍然躺在别人的河里**（`Naki.fromKawa`），
+ * 「同一牌种最多 4 张」那一条得知道这件事，否则每一组加杠都会被数出一张幻牌。
+ */
+export const kakanPackage = load<DecisionPackage>("decision-kakan");
+
+/**
  * **同一局里连续的 12 手**，同一个座位（`janpo decide 7 --seat 1 --sequence --steps 12`，票 29b）。
  *
  * 前缀的字节稳定性只有连续的几手才验得了：一手一份包看不出前缀在不在长。

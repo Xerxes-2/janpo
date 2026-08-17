@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # JS 侧的关卡（M1 起）。`scripts/ci.sh` 会调它，也可以单独跑。
 #
-# 十一道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
-# （node --test，回放录制的响应）→ Fable 编译 → Vite 产物 → **浏览器内跑引擎并与 dotnet 侧对拍**
+# 十二道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
+# （node --test，回放录制的响应）→ **prompt 的语义不变量**（扫一批真实对局）→ Fable 编译
+# → Vite 产物 → **浏览器内跑引擎并与 dotnet 侧对拍**
 # → **浏览器内跑黄金用例** → **浏览器内导出牌谱并回放** → **同一道闸门再走一整场**
 # → **那道 key 闸门的反向自证** → **回显 key 的端点跑一手，牌谱里仍然没有它**。
 #
@@ -57,6 +58,14 @@ echo "== tsc --noEmit（Agent 层的类型闸门）=="
 # 重录用 `pnpm run record:agent`，需要一把真 key，手动跑。
 echo "== node --test（Agent 层的确定性用例）=="
 (cd web && pnpm run test)
+
+# 票 41 的验收：黄金用例钉的是**决策包**（结构化数据），前缀属性钉的是**字节单调**，
+# 两道都不检查**渲出来的那句中文在日麻规则下成不成立**——票 40 那句「吃 来自对家」
+# 就是从这个缺口漏过去的。这一道扫一批真实对局（`janpo decide --sequence`，本机跑引擎、
+# **零网络请求**），逐手渲染两档再逐条断言，最后把十一条不变量各自**按红一次**
+# （反向自证：一道从不失败的闸门等于没有闸门）。
+echo "== prompt 的语义不变量（扫真实对局 + 逐条反向自证）=="
+(cd web && node scripts/verify-invariants.mjs)
 
 echo "== fable 编译（引擎 + Feliz 页面 → JS）=="
 (cd web && pnpm run fable)

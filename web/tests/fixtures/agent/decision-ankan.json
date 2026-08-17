@@ -1,0 +1,2755 @@
+{
+  "seat": 1,
+  "history": [
+    {
+      "type": "start_kyoku",
+      "bakaze": "1z",
+      "dora_marker": "6z",
+      "kyoku": 1,
+      "honba": 0,
+      "kyotaku": 0,
+      "oya": 0,
+      "scores": [25000, 25000, 25000, 25000],
+      "tehai": ["2m", "4m", "9m", "3p", "5pr", "7p", "8p", "9p", "1s", "3s", "5s", "2z", "7z"]
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "1z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "6m"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "7p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "1m",
+      "tsumogiri": true
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "5z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "2z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "7s"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "3s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "4s",
+      "tsumogiri": false
+    },
+    {
+      "type": "chi",
+      "actor": 3,
+      "target": 2,
+      "pai": "4s",
+      "consumed": ["3s", "5s"]
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "7z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "8s",
+      "tsumogiri": true
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "1z"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "7s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "5m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "8s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "ankan",
+      "actor": 0,
+      "consumed": ["1p", "1p", "1p", "1p"]
+    },
+    {
+      "type": "dora",
+      "dora_marker": "7s"
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "5m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "6s"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "2m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "1m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "9m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "9p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "3m"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "3m",
+      "tsumogiri": true
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "7p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "2p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "3p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "2m"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "8p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "7s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "3m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "5p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "6p"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "2m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "6s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "7z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "7s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "1m"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "5s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "7m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "5z",
+      "tsumogiri": true
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "6m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "4s"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "3p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "2z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "8s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "3z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "3z"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "9p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "9m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "4s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "5z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "8s"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "9m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "7m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "1s",
+      "tsumogiri": true
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "3m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "4z"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "6p",
+      "tsumogiri": false
+    },
+    {
+      "type": "pon",
+      "actor": 3,
+      "target": 1,
+      "pai": "6p",
+      "consumed": ["6p", "6p"]
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "9s",
+      "tsumogiri": false
+    },
+    {
+      "type": "daiminkan",
+      "actor": 2,
+      "target": 3,
+      "pai": "9s",
+      "consumed": ["9s", "9s", "9s"]
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dora",
+      "dora_marker": "6z"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "3z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "2s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "2s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "4p"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "8s",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "6s",
+      "tsumogiri": true
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "4p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "4z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "8m"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "1z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "6m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "2p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "2p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "1z"
+    },
+    {
+      "type": "dahai",
+      "actor": 1,
+      "pai": "7z",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 2,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 2,
+      "pai": "5m",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 3,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 3,
+      "pai": "7p",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 0,
+      "pai": "?"
+    },
+    {
+      "type": "dahai",
+      "actor": 0,
+      "pai": "5sr",
+      "tsumogiri": false
+    },
+    {
+      "type": "tsumo",
+      "actor": 1,
+      "pai": "4z"
+    }
+  ],
+  "observation": {
+    "seat": 1,
+    "bakaze": "1z",
+    "kyoku": 1,
+    "honba": 0,
+    "kyotaku": 0,
+    "dora_markers": ["6z", "7s", "6z"],
+    "wall_remaining": 8,
+    "self": {
+      "seat": 1,
+      "jikaze": "2z",
+      "junme": 16,
+      "score": 25000,
+      "tehai": [
+        "1m",
+        "4m",
+        "6m",
+        "8m",
+        "4p",
+        "5pr",
+        "1s",
+        "4s",
+        "6s",
+        "1z",
+        "2z",
+        "3z",
+        "4z",
+        "4z"
+      ],
+      "tsumo": "4z",
+      "kawa": [
+        {
+          "pai": "7p",
+          "tsumogiri": false
+        },
+        {
+          "pai": "3s",
+          "tsumogiri": false
+        },
+        {
+          "pai": "7s",
+          "tsumogiri": false
+        },
+        {
+          "pai": "2m",
+          "tsumogiri": false
+        },
+        {
+          "pai": "3m",
+          "tsumogiri": true
+        },
+        {
+          "pai": "8p",
+          "tsumogiri": false
+        },
+        {
+          "pai": "2m",
+          "tsumogiri": false
+        },
+        {
+          "pai": "5s",
+          "tsumogiri": false
+        },
+        {
+          "pai": "3p",
+          "tsumogiri": false
+        },
+        {
+          "pai": "9p",
+          "tsumogiri": false
+        },
+        {
+          "pai": "9m",
+          "tsumogiri": false
+        },
+        {
+          "pai": "6p",
+          "tsumogiri": false
+        },
+        {
+          "pai": "8s",
+          "tsumogiri": false
+        },
+        {
+          "pai": "1z",
+          "tsumogiri": false
+        },
+        {
+          "pai": "7z",
+          "tsumogiri": false
+        }
+      ],
+      "naki": [],
+      "riichi": "none",
+      "ippatsu": false,
+      "furiten": {
+        "permanent": false,
+        "doujun": false
+      }
+    },
+    "others": [
+      {
+        "seat": 2,
+        "jikaze": "3z",
+        "junme": 15,
+        "score": 25000,
+        "tehai_count": 10,
+        "relative": 1,
+        "kawa": [
+          {
+            "pai": "1m",
+            "tsumogiri": true
+          },
+          {
+            "pai": "4s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "5m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "1m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "6s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "9m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "3z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "6s",
+            "tsumogiri": true
+          },
+          {
+            "pai": "6m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "5m",
+            "tsumogiri": false
+          }
+        ],
+        "naki": [
+          {
+            "type": "daiminkan",
+            "target": 3,
+            "pai": "9s",
+            "consumed": ["9s", "9s", "9s"]
+          }
+        ],
+        "riichi": "none",
+        "ippatsu": false
+      },
+      {
+        "seat": 3,
+        "jikaze": "4z",
+        "junme": 14,
+        "score": 25000,
+        "tehai_count": 7,
+        "relative": 2,
+        "kawa": [
+          {
+            "pai": "5z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "8s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "9m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "3m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "5z",
+            "tsumogiri": true
+          },
+          {
+            "pai": "8s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "4s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "1s",
+            "tsumogiri": true
+          },
+          {
+            "pai": "9s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "4p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7p",
+            "tsumogiri": false
+          }
+        ],
+        "naki": [
+          {
+            "type": "chi",
+            "target": 2,
+            "pai": "4s",
+            "consumed": ["3s", "5s"]
+          },
+          {
+            "type": "pon",
+            "target": 1,
+            "pai": "6p",
+            "consumed": ["6p", "6p"]
+          }
+        ],
+        "riichi": "none",
+        "ippatsu": false
+      },
+      {
+        "seat": 0,
+        "jikaze": "1z",
+        "junme": 17,
+        "score": 25000,
+        "tehai_count": 10,
+        "relative": 3,
+        "kawa": [
+          {
+            "pai": "1z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "8s",
+            "tsumogiri": true
+          },
+          {
+            "pai": "5m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "9p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "3p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "5p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "7s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "6m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "3z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "5z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "3m",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2s",
+            "tsumogiri": false
+          },
+          {
+            "pai": "4z",
+            "tsumogiri": false
+          },
+          {
+            "pai": "2p",
+            "tsumogiri": false
+          },
+          {
+            "pai": "5sr",
+            "tsumogiri": false
+          }
+        ],
+        "naki": [
+          {
+            "type": "ankan",
+            "target": null,
+            "pai": null,
+            "consumed": ["1p", "1p", "1p", "1p"]
+          }
+        ],
+        "riichi": "none",
+        "ippatsu": false
+      }
+    ]
+  },
+  "actions": [
+    {
+      "id": 0,
+      "label": "手切1万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "1m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 1,
+      "label": "手切4万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "4m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 2,
+      "label": "手切6万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "6m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 3,
+      "label": "手切8万",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "8m",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 4,
+      "label": "手切4筒",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "4p",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 5,
+      "label": "手切赤5筒",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "5pr",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 6,
+      "label": "手切1索",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "1s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 7,
+      "label": "手切4索",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "4s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 8,
+      "label": "手切6索",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "6s",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 9,
+      "label": "手切东",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "1z",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 10,
+      "label": "手切南",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "2z",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 11,
+      "label": "手切西",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "3z",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 12,
+      "label": "手切北",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "4z",
+        "tsumogiri": false
+      }
+    },
+    {
+      "id": 13,
+      "label": "摸切北",
+      "action": {
+        "type": "dahai",
+        "actor": 1,
+        "pai": "4z",
+        "tsumogiri": true
+      }
+    }
+  ],
+  "scaffold": {
+    "shanten": {
+      "value": 4,
+      "display": "4 向听"
+    },
+    "ukeire": null,
+    "dahai": [
+      {
+        "pai": "1m",
+        "action_ids": [0],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 28,
+          "kinds": 18,
+          "tiles": [
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "下家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "no_evidence",
+              "display": "上家无依据"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "4m",
+        "action_ids": [1],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 20,
+          "kinds": 14,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "suji",
+              "display": "下家 1m 7m 筋"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "no_evidence",
+              "display": "上家无依据"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "6m",
+        "action_ids": [2],
+        "shanten": {
+          "value": 5,
+          "display": "5 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 35,
+          "kinds": 23,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "4p",
+              "remaining": 2
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "4s",
+              "remaining": 1
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "6s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "suji",
+            "display": "筋"
+          },
+          "rank": 1,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "下家现物"
+            },
+            {
+              "value": "suji",
+              "display": "对家 3m 9m 筋"
+            },
+            {
+              "value": "genbutsu",
+              "display": "上家现物"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "8m",
+        "action_ids": [3],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 19,
+          "kinds": 14,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "suji",
+              "display": "下家 5m 筋"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "suji",
+              "display": "上家 5m 筋"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "4p",
+        "action_ids": [4],
+        "shanten": {
+          "value": 5,
+          "display": "5 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 36,
+          "kinds": 24,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "4p",
+              "remaining": 2
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "7p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "4s",
+              "remaining": 1
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "6s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "no_evidence",
+              "display": "下家无依据"
+            },
+            {
+              "value": "genbutsu",
+              "display": "对家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "上家无依据"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "5p",
+        "action_ids": [5],
+        "shanten": {
+          "value": 5,
+          "display": "5 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 36,
+          "kinds": 24,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "2p",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "4p",
+              "remaining": 2
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "4s",
+              "remaining": 1
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "6s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "no_evidence",
+              "display": "下家无依据"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "genbutsu",
+              "display": "上家现物"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "1s",
+        "action_ids": [6],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 23,
+          "kinds": 16,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "suji",
+              "display": "下家 4s 筋"
+            },
+            {
+              "value": "genbutsu",
+              "display": "对家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "上家无依据"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "4s",
+        "action_ids": [7],
+        "shanten": {
+          "value": 5,
+          "display": "5 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 35,
+          "kinds": 25,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "4p",
+              "remaining": 2
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "4s",
+              "remaining": 1
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "6s",
+              "remaining": 1
+            },
+            {
+              "pai": "7s",
+              "remaining": 0
+            },
+            {
+              "pai": "8s",
+              "remaining": 0
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "下家现物"
+            },
+            {
+              "value": "genbutsu",
+              "display": "对家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "上家无依据"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "6s",
+        "action_ids": [8],
+        "shanten": {
+          "value": 5,
+          "display": "5 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 35,
+          "kinds": 23,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "4p",
+              "remaining": 2
+            },
+            {
+              "pai": "5p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "4s",
+              "remaining": 1
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "6s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 13,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "下家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "no_evidence",
+              "display": "上家无依据"
+            },
+            {
+              "value": "kabe",
+              "display": "7s 8s 四张全见"
+            },
+            {
+              "value": "near_dora",
+              "display": "宝牌 8s 周边"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "1z",
+        "action_ids": [9],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 28,
+          "kinds": 18,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "no_evidence",
+              "display": "下家无依据"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "genbutsu",
+              "display": "上家现物"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "2z",
+        "action_ids": [10],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 28,
+          "kinds": 18,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "下家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "genbutsu",
+              "display": "上家现物"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "3z",
+        "action_ids": [11],
+        "shanten": {
+          "value": 4,
+          "display": "4 向听"
+        },
+        "shanten_delta": 0,
+        "ukeire": {
+          "total": 28,
+          "kinds": 18,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "genbutsu",
+              "display": "下家现物"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "genbutsu",
+              "display": "上家现物"
+            }
+          ]
+        }
+      },
+      {
+        "pai": "4z",
+        "action_ids": [12, 13],
+        "shanten": {
+          "value": 5,
+          "display": "5 向听"
+        },
+        "shanten_delta": 1,
+        "ukeire": {
+          "total": 29,
+          "kinds": 19,
+          "tiles": [
+            {
+              "pai": "1m",
+              "remaining": 1
+            },
+            {
+              "pai": "2m",
+              "remaining": 2
+            },
+            {
+              "pai": "3m",
+              "remaining": 1
+            },
+            {
+              "pai": "4m",
+              "remaining": 3
+            },
+            {
+              "pai": "5m",
+              "remaining": 1
+            },
+            {
+              "pai": "6m",
+              "remaining": 1
+            },
+            {
+              "pai": "7m",
+              "remaining": 2
+            },
+            {
+              "pai": "8m",
+              "remaining": 3
+            },
+            {
+              "pai": "9m",
+              "remaining": 1
+            },
+            {
+              "pai": "3p",
+              "remaining": 2
+            },
+            {
+              "pai": "6p",
+              "remaining": 1
+            },
+            {
+              "pai": "1s",
+              "remaining": 2
+            },
+            {
+              "pai": "2s",
+              "remaining": 2
+            },
+            {
+              "pai": "3s",
+              "remaining": 2
+            },
+            {
+              "pai": "5s",
+              "remaining": 1
+            },
+            {
+              "pai": "1z",
+              "remaining": 1
+            },
+            {
+              "pai": "2z",
+              "remaining": 1
+            },
+            {
+              "pai": "3z",
+              "remaining": 1
+            },
+            {
+              "pai": "4z",
+              "remaining": 1
+            }
+          ]
+        },
+        "danger": {
+          "tier": {
+            "value": "no_evidence",
+            "display": "无依据"
+          },
+          "rank": 2,
+          "reasons": [
+            {
+              "value": "no_evidence",
+              "display": "下家无依据"
+            },
+            {
+              "value": "no_evidence",
+              "display": "对家无依据"
+            },
+            {
+              "value": "genbutsu",
+              "display": "上家现物"
+            }
+          ]
+        }
+      }
+    ],
+    "threats": [
+      {
+        "seat": 2,
+        "relative": 1,
+        "riichi": false,
+        "naki": true,
+        "display": "下家有副露"
+      },
+      {
+        "seat": 3,
+        "relative": 2,
+        "riichi": false,
+        "naki": true,
+        "display": "对家有副露"
+      },
+      {
+        "seat": 0,
+        "relative": 3,
+        "riichi": false,
+        "naki": true,
+        "display": "上家有副露"
+      }
+    ]
+  }
+}

@@ -18,6 +18,7 @@
     "verify:llm": "node scripts/verify-llm-seat.mjs",
     "verify": "node scripts/verify-tracer.mjs",
     "verify:golden": "node scripts/verify-golden.mjs",
+    "verify:invariants": "node scripts/verify-invariants.mjs",
     "verify:export": "node scripts/verify-export.mjs",
     "verify:redaction": "node scripts/verify-redaction.mjs"
   },

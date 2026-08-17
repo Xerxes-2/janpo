@@ -8,6 +8,7 @@
 |---|---|---|
 | `decision-*.json` | 决策包（`DecisionPackage.encoder` 的产物，**含 `history` 与 `scaffold`**） | `janpo decide 2088 --steps 6`（打牌那一手）、`--steps 5`（响应那一手）与 `janpo decide 99 --steps 6 --seat 3`（**带危险度**那一手） |
 | `decision-sequence.json` | **同一局里连续 12 手**的决策包，同一个座位（票 29b） | `janpo decide 7 --seat 1 --sequence --steps 12` |
+| `decision-ankan.json` / `decision-kakan.json` | **桁上有杠**的两手（票 41） | `janpo decide 106 --seat 1 --steps 70`（暗杠 + 大明杠 + 碰 + 吃，3 张宝牌指示牌）与 `janpo decide 92 --seat 1 --steps 49`（自家与他家各一组加杠） |
 | `ask-*.json` | 模型的一次回答（`AskResult` 的形状） | `pnpm run record:agent`，**真的问过 DeepSeek** |
 
 每个 `ask-*.json` 的 `_note` 写着它是怎么录出来的。四条失败路径各一份，加上两档各一份合法输出：
@@ -36,6 +37,10 @@ JANPO_KEY_FILE=/tmp/deepseek_key pnpm run record:agent ask-assisted   # 只重�
 一手一份包证不了它们——前缀在不在长、有没有被改写，只有连续的几手看得出来。
 那一局里碰、吃、大明杠与杠宝牌都出得来，因此历史那一段的每种行都被真数据走过一遍。
 
+带杠的那两份只服务语义不变量（`invariants.test.ts`，票 41）：「暗杠不带来源」、
+「宝牌指示牌数与杠数」与「同一牌种最多 4 张」（加杠亮出来的头一张仍在别人的河里）**只有桁上有杠时才验得到**，
+而 29b 那一局里没有暗杠与加杠。扫一批真实对局的那一道在 `web/scripts/verify-invariants.mjs`（进 CI）。
+
 **决策包重生成**（例：`scaffold` 加了字段，或者 `history` 的形状变了）：
 
 ```sh
@@ -43,6 +48,8 @@ dotnet run --project src/Janpo.Cli -- decide 2088 --steps 6 > web/tests/fixtures
 dotnet run --project src/Janpo.Cli -- decide 2088 --steps 5 > web/tests/fixtures/agent/decision-response.json
 dotnet run --project src/Janpo.Cli -- decide 99 --steps 6 --seat 3 > web/tests/fixtures/agent/decision-danger.json
 dotnet run --project src/Janpo.Cli -- decide 7 --seat 1 --sequence --steps 12 > web/tests/fixtures/agent/decision-sequence.json
+dotnet run --project src/Janpo.Cli -- decide 106 --seat 1 --steps 70 > web/tests/fixtures/agent/decision-ankan.json
+dotnet run --project src/Janpo.Cli -- decide 92 --seat 1 --steps 49 > web/tests/fixtures/agent/decision-kakan.json
 cd web && pnpm run format
 ```
 
