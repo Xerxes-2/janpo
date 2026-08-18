@@ -369,7 +369,7 @@ module ReplayTimelineTests =
 
     [<Fact>]
     let ``Live 那一页的默认视角不动，也没有时间轴`` () =
-        let model, _ = TablePage.initial None hostConfig
+        let model, _ = TablePage.initial RulesetDraft.initial None hostConfig
 
         Assert.Equal(Viewpoint.Seated Seat.first, model.Viewpoint)
         Assert.True(Option.isNone (TablePage.timeline model), "Live 里点历史某一手是票 76")
