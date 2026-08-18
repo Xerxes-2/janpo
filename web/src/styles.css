@@ -1277,4 +1277,13 @@ input[type="range"] {
   .seat[data-seat-position="shimocha"] .naki-slot {
     flex-direction: row-reverse;
   }
+
+  /* 左右两家那两列只有约 188 px，`deepseek/deepseek-v4-flash` 会在**字中间**断成
+     「deepseek/deepseek-v4-」+「flash」——难看得像坏了（票 82 自查时报的）。
+     字号小一档就一行放得下；`data-player` 与 textContent 一字不动，闸门读的是它们。
+     再长的名字仍会折行，但那是名字本身的问题，不是这一格的。 */
+  .seat[data-seat-position="kamicha"] .seat-player,
+  .seat[data-seat-position="shimocha"] .seat-player {
+    font-size: 0.82em;
+  }
 }
