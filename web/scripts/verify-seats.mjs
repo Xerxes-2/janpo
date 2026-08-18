@@ -18,7 +18,7 @@
 //   而且**迁移只做一次**（再打开一次，人后来改的东西不会被老键盖回去）。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:seats`
-// 它也是 `verify-browser.mjs` 里的一趟（十二趟共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一趟（十三趟共用一个浏览器与一台服务器）。
 //
 // 选项：--budget ms、--keep <路径>（把导出的牌谱另存一份）。
 

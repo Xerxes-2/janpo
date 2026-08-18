@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # JS 侧的关卡（M1 起）。`scripts/ci.sh` 会调它，也可以单独跑。
 #
-# 十八道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
+# 十九道：TS/JS 的格式与 lint（Biome）→ **TS 类型闸门**（tsc --noEmit）→ **Agent 层的用例**
 # （node --test，回放录制的响应）→ **prompt 的语义不变量**（扫一批真实对局）→ Fable 编译
-# → Vite 产物 → 之后是**浏览器里的那十二趟**：**浏览器内跑引擎并与 dotnet 侧对拍**
+# → Vite 产物 → 之后是**浏览器里的那十三趟**：**浏览器内跑引擎并与 dotnet 侧对拍**
 # → **首页就是一局回放** → **牌桌上人看得见的八项** → **浏览器内跑黄金用例**
 # → **浏览器内导出牌谱并回放** → **同一道闸门再走一整场** → **那道 key 闸门的反向自证**
 # → **回显 key 的端点跑一手，牌谱里仍然没有它**
 # → **URL 分享的载荷往返得回去** → **那道载荷闸门的反向自证**
 # → **配桌那三项规则开关真的传到了引擎** → **四 LLM 同桌那一屏** → **思考气泡里的字来自那一手的决策记录**。
 #
-# **前六道各是一条命令，后十二趟合成一条**（票 56）：它们从前各起一个 node 进程、一个 vite
+# **前六道各是一条命令，后十三趟合成一条**（票 56）：它们从前各起一个 node 进程、一个 vite
 # 服务器与一个 Chrome，现在跑在同一条跑道上（`web/scripts/verify-browser.mjs`：一个 Chrome
-# 进程 + 一台 preview + 一台 dev server，十二趟各开自己的 page/context）。**一趟没少、
+# 进程 + 一台 preview + 一台 dev server，十三趟各开自己的 page/context）。**一趟没少、
 # 一条断言没拆**——每趟调的就是 `verify-*.mjs` 里那个函数，单跑（`pnpm run verify:board` 等）
-# 与合并跑跑的是同一段代码。十二趟各自的来历写在 `verify-browser.mjs` 的那张表里。
+# 与合并跑跑的是同一段代码。十三趟各自的来历写在 `verify-browser.mjs` 的那张表里。
 #
-# **那十二趟各开哪个地址**（票 71）：只有第七道与第八道开 `/`（它俩量的就是首页），
+# **那十三趟各开哪个地址**（票 71）：只有第七道与第八道开 `/`（它俩量的就是首页），
 # 其余十趟全开 `?table=1`——首页从此**自动播** Demo Paifu，而要点、要读牌桌的闸门
 # 靠的是「默认暂停」那一页（`Playback.initial`）。
 #
@@ -77,7 +77,9 @@
 # 必须**一字不差是端点回的那句**（端点 → 决策记录 → 气泡这条链路的唯一证据）、bot 席上
 # 一个气泡都没有、气泡与四家的三排牌**矩形不相交**（「不许挡住牌与河」读的是真坐标）、
 # 点开之后九样都在且牌桌摆出**那一手落定那一刻的快照**、收起来逐字回到现在（只读），
-# 最后换成那个交不出来的端点：气泡变「兜底」态，原因与牌桌上那句、`data-fallback` 同源。set -euo pipefail
+# 最后换成那个交不出来的端点：气泡变「兜底」态，原因与牌桌上那句、`data-fallback` 同源。
+
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
@@ -88,10 +90,10 @@ fi
 
 # 无头验收要一个 Chrome/Chromium。跑批机器上有 /usr/bin/google-chrome-stable；
 # 别处用 JANPO_CHROME 指过去，或 `pnpm dlx playwright install chromium`。
-# 实在没有浏览器的环境（例：最小容器）可以 JANPO_NO_BROWSER=1 跳过**后十二趟**（它们合成一条
+# 实在没有浏览器的环境（例：最小容器）可以 JANPO_NO_BROWSER=1 跳过**后十三趟**（它们合成一条
 # 命令了，逐趟列在 `web/scripts/verify-browser.mjs` 的那张表里），前六道（biome / tsc /
 # node --test / 语义不变量 / fable / vite build）照跑——
-# 但那样浏览器里那十二趟验收一趟都没被验，别拿它当绿。
+# 但那样浏览器里那十三趟验收一趟都没被验，别拿它当绿。
 NO_BROWSER="${JANPO_NO_BROWSER:-0}"
 
 echo "== pnpm install =="
@@ -132,12 +134,12 @@ echo "== vite build =="
 if [[ "$NO_BROWSER" == "1" ]]; then
   echo "== 浏览器里那十三趟（曳光弹对拍 / 首页回放 / 牌桌八项 / 黄金用例 / 牌谱导出两趟 / 两道 key 闸门 / 分享载荷两趟 / 配桌三项开关 / 四 LLM 同桌 / 思考气泡）：按 JANPO_NO_BROWSER=1 跳过 =="
 else
-  # 十二趟一条命令（票 56）：一个 Chrome + 一台 preview + 一台 dev server，十二趟各开自己的
+  # 十二趟一条命令（票 56）：一个 Chrome + 一台 preview + 一台 dev server，十三趟各开自己的
   # page/context。**每趟仍然单独跑得起来**——它红的时候会把单跑那一条命令抄给你
   # （`node scripts/verify-board.mjs` 之类），调试时照抄就只重跑那一趟。
   # 反向自证那一趟（拌了 key 的导出物必须当场红，且红得就是因为那把 key）也在里面，
   # 两种失法各报各的话，与从前那段 shell 逐字相同。
-  echo "== 浏览器里那十二趟（共用一个浏览器进程与一台服务器）=="
+  echo "== 浏览器里那十三趟（共用一个浏览器进程与一台服务器）=="
   (cd web && node scripts/verify-browser.mjs)
 fi
 

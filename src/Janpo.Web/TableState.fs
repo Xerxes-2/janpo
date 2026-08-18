@@ -1050,10 +1050,13 @@ module TableState =
         | ViewpointPicked _
         | RecordOpened _
         | DangerToggled
-        | LlmSeatPicked _
-        | BotPicked _
+        | SeatBound _
+        | SeatEdited _
+        | ProfileOpened _
+        | ProfileAdded
+        | ProfileDeleted _
+        | ProfileEdited _
         | RulePicked _
-        | LlmEdited _
         | Exported -> false
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =

@@ -111,7 +111,9 @@ module ThinkingBubbleTests =
     let ``Live 那一桌不说那句话：模型随时可能开口`` () =
         // 「这份牌谱不含推理」是回放才成立的话。Live 那一侧四家都是 bot 时，
         // 说话的是 Agent 那一行（「四家都是均匀随机的选手」）。
-        let live = TablePage.initial RulesetDraft.initial None LlmSeat.initial |> fst
+        let live =
+            TablePage.initial RulesetDraft.initial (SeatingPlan.initial Ruleset.yonma)
+            |> fst
 
         Assert.False(TablePage.recordless live)
 
@@ -208,8 +210,22 @@ module ThinkingBubbleTests =
     // ---- 在想（Agent 层那一份，票 74 只换取值器的实现） ----
 
     /// 座位 0 交给模型的一桌（开局第一手就轮到它：亲摸完牌等着打）。
+    ///
+    /// 票 73 之后「哪一席交给模型」不再是 `Seat option` + 一份配置，而是**档案库 + 座位绑定**：
+    /// 库里摆一份档案，座位 0 引用它。
     let private llmTable () : TableModel =
-        TablePage.initial RulesetDraft.initial (Some Seat.first) LlmSeat.initial |> fst
+        let profile =
+            { ModelProfile.initial with
+                ApiKey = "sk-测试用的假 key"
+            }
+
+        let seating =
+            { SeatingPlan.initial Ruleset.yonma with
+                Profiles = [ profile ]
+            }
+            |> SeatingPlan.bind Seat.first (SeatChoice.Profile profile.Name)
+
+        TablePage.initial RulesetDraft.initial seating |> fst
 
     let private liveOf (model: TableModel) : LiveTable =
         match TablePage.live model with

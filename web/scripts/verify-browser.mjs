@@ -1,6 +1,6 @@
-// 浏览器里那**十二趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十三趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十二趟各开自己的 page / context。
+// 十三趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
 //   2 首页就是一局回放：牌桌在动、没有配桌控件、上帝视角、时间轴拖得动（票 71/75）
@@ -78,7 +78,7 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十二趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十三趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -212,7 +212,7 @@ try {
 }
 
 console.log("");
-console.log("十二趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十三趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

@@ -26,7 +26,14 @@ import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
+
+/** 库里那份档案的叫法（本机的私人叫法，绝不进牌谱）。 */
+const BUBBLE_PROFILE = "气泡闸门的档案";
+
+/** 四个座位。 */
+const Seats = [0, 1, 2, 3];
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -61,7 +68,7 @@ async function startEndpoint(origin, extra) {
 
 /**
  * 等页面安静下来。**超时不扔异常而是返回 false**：这一道闸门的契约是交一份失败清单
- * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把十二趟一起搞挂
+ * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把十三趟一起搞挂
  * ——`verify-home` 早就写下过这一课。
  */
 async function settles(page, predicate, argument, timeout) {
@@ -220,21 +227,22 @@ export async function verifyBubbles(lane, options = {}) {
     const page = await context.newPage();
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
 
-    // 座位配置只从 localStorage 来（`Store.readSeatConfig`）：一席自定义端点，**不带 key**
-    // （本地端点本来就不校验，而这道闸门一把真 key 都不该碰得着）。
-    await page.addInitScript(
-      ([seat, baseUrl]) => {
-        localStorage.setItem("janpo.llm.seat", String(seat));
-        localStorage.setItem("janpo.llm.provider", "custom-openai");
-        localStorage.setItem("janpo.llm.model", "fake-model");
-        localStorage.setItem("janpo.llm.base_url", baseUrl);
-        localStorage.setItem("janpo.llm.api_key", "");
-        localStorage.setItem("janpo.llm.timeout_ms", "10000");
-        localStorage.setItem("janpo.llm.thinking", "off");
-        localStorage.setItem("janpo.llm.tier", "bare");
-      },
-      [seat, good.baseUrl],
-    );
+    // 坐法只从 localStorage 来（票 73 之后是**档案库 + 座位绑定**）：库里一份自定义端点的档案，
+    // **不带 key**（本地端点本来就不校验，而这道闸门一把真 key 都不该碰得着），那一席引用它。
+    await plantSeating(page, {
+      profiles: [
+        {
+          name: BUBBLE_PROFILE,
+          provider: "custom-openai",
+          model: "fake-model",
+          base_url: good.baseUrl,
+          timeout_ms: "10000",
+        },
+      ],
+      seats: Seats.map((index) =>
+        index === seat ? { choice: profileChoice(BUBBLE_PROFILE) } : {},
+      ),
+    });
 
     console.log(`页面 ${pageOrigin}　模型坐席 ${seat}`);
     console.log(`端点甲（正常答话）${good.baseUrl}：reason = 「${SAID}」`);
@@ -379,7 +387,9 @@ export async function verifyBubbles(lane, options = {}) {
     }
 
     // ---- ④ 兜底那一态：换个端点，下一手交不出来 ----
-    await page.getByTestId("table-llm-base-url").fill(bad.baseUrl);
+    // 换端点：票 73 之后端点住在**档案**里，得先把那份档案摊开再改它的 base_url。
+    await page.getByTestId("table-profile-0").click();
+    await page.getByTestId("table-profile-base-url").fill(bad.baseUrl);
     await playPause(page, "播放");
     const troubledUp = await settles(
       page,
