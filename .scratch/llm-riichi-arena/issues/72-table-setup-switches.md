@@ -10,6 +10,19 @@
 
 **Status:** ready-for-agent
 
+## 上一波留给你的既成事实（票 70/71/77 已并入 `main`）
+
+- 页面拆成了五个文件：`TableState.fs`（Model/Msg/MVU）、`TablePanel.fs`（控件与面板）、
+  `TableBoard.fs`（牌桌与结算）、`AgentLine.fs`、`TablePage.fs`（58 行转出外壳）。
+  **你的活在前两个**；加公开入口要 `TableState` 定义 + `TablePage` 转出 **两处都加**。
+- **`Ruleset` 已经是 `TableModel` 的顶层字段**（`{ Ruleset; Source; Playback; Viewpoint; ShowDanger }`），
+  不在 `Source` 联合里——你要做的就是把它从写死的 `Ruleset.yonma` 变成配桌拨得动的一份值。
+- Live 侧的控件挂在 **`TablePanel.hostControls`**（回放侧是 `replayControls`，**那是票 75 的地盘**）。
+- 开桌入口：`TablePage.initial llmAt config`（`?table=1`）与 `TablePage.home ()`（`/`）；
+  地址解析在 `Route.fs`。`rosterOf : TableModel -> Roster option`（回放没有配桌）。
+- 闸门现在**十趟**；要点牌桌的那几道已经全开 `?table=1`（真源在 `serve.mjs` 的 `hostPage(origin)`）。
+  新增一道闸门要同时改 `verify-browser.mjs` 的名单与 `ci-web.sh` 的趟数措辞。
+
 ## 要什么行为
 
 - [ ] `?table=1` 上拨得动三项：**对局长度**（东风战 / 半庄战）、**赤宝牌**（有 / 无）、**食断**（有 / 无）
