@@ -56,7 +56,16 @@ pnpm run typecheck # tsc --noEmit：只管 Agent 层与它的用例（Fable 的�
 pnpm run test      # Agent 层的确定性用例（node --test，回放录制的响应，**不调真实 API**）
 pnpm run format    # Biome 写回格式
 pnpm run render-digest  # 改了 prompt 渲染器后重算渲染器摘要（渲染版本号的后一截）
+pnpm run bench:decision # 手跑（**不在 CI 里**）：浏览器形态下建一次决策包要多久，固定种子、交错多轮
 ```
+
+**`pnpm run fable` 那条命令末尾的 `--typedArrays false` 不是可有可无的**（票 84）：
+默认 Fable 把 F# 的 `int[]` 编成 `Int32Array`，而 V8 上新建一个 34 长 `Int32Array`
+要 612 ns，新建一个同样长度的普通数组只要 50 ns（12×）。引擎的形态判定一个决策包要新建
+约 107 个这种数组，去掉它们之后建一次决策包从 1086 µs 掉到 911 µs（**1.19×**，
+代价是普通数组的下标读慢一点，已经算在这个数里了）。数与量法见
+`.scratch/llm-riichi-arena/run/reports/84-typed-array-cliff.md`，量具是上面那条 `bench:decision`。
+改这条命令之前先跑一遍它。
 
 ### 开发向内容的开关：`?dev=1`
 

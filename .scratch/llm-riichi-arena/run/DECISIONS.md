@@ -5483,3 +5483,34 @@ Fable 5.13.0 确实把 `int array` 编成 `Int32Array`——主人 grep 出四�
 ③ 安全网是 `verify-golden`（浏览器内引擎与 dotnet 逐字段逐行对拍）——开关会连 `fable-library` 的
 `Random.js` 一起改，**牌山的可复现性压在那道闸门上**。全局可变缓存仍然禁止（研究文档方向 4 已否：
 属性测试 `Parallelism = 8` 会真的坏掉）。
+
+## 84 — 分配悬崖：开关采纳，scratch 推广不做（数在 `run/reports/84-typed-array-cliff.md`）
+
+**(A) `--typedArrays false` 采纳。** `web/package.json` 的 `fable` 与 `dev` 两条命令各加一句
+（`dev` 要加在 `--run` 之前）。建一次决策包 **1114.6 → 914.5 µs（−18.0%）**、脚手架那一段
+**863.9 → 701.8 µs（−18.8%）**，远超票面 10% 的闸门；这个数**已经把 21% 的下标读惩罚算进去了**
+（量的是端到端建包时间，不是分配那一项）。**引擎 `.fs` 零改动**——开关只改 7 个生成文件 18 行。
+
+**(B) 把 `ShantenScratch` 推广到剩下六处：不做。** 票面引的「772 次分配/决策」是**票 55 之前**的数；
+探针实测现状是 **106.85 个 34 长数组/决策**（`Scaffold.calculate` 那条路只剩 5.85 个），
+与报告 55 §2.1 逐位吻合。开关生效后这 106.85 个值 **5.34 µs = 建包总成本的 0.58%**
+（.NET：1.43 µs = 0.51% 时间、17.1 KB = 7.0% 字节），**落在噪声带里**。
+更要紧的是分布：票面点名的 `Danger`/`AgariHand`/`MentsuBreakdown`/`Yaku` 四处合计 **0.85 个/决策**
+（后三处 0.00，只在有人和牌时走）；而 62% 的剩余量出自 `HandShape.create`(38.12) 与
+`AgariShape.classify`(28.21)，**它们一次都不在 `Scaffold.calculate` 里**，全部来自
+`Observation.ofState` 重放中的 `PlayerState.isTenpai/isAgari/canRon/waits` 与 `RiichiState`——
+要复用缓冲就得把它穿过 `PlayerState`，**报告 55 §5.5 已经判过那条纯度边界不值得跨**（当时依据 8%，现在 0.58%）。
+
+**票面前提的一处更正（请人裁要不要回填研究文档）**：票面说开关会连 `fable-library` 的 `Random.js`
+一起改，**不成立**——`fable-library` 是随产物拷过去的预编译 JS，两份产物的 `fable_modules/` 除
+`project_cracked.json` 外**逐字节相同**，引擎自己的 `Rng.js` 也逐字节相同。
+因此**牌山可复现性的真正背书是 `verify-tracer` + `verify-export --to-end` + `verify-share`**
+（三道都要求同种子跑出逐条相同的事件流），`verify-golden` 背书的是形态判定的逐字段数值。
+连带过时的还有 `docs/research/engine-perf-caller-and-browser.md` §2.1 的 772（现为 106.85）——
+研究文档是那一刻的记录，我**没有改它**。
+
+**量具**：新增 `web/scripts/bench-decision.mjs`（**不进 CI**，`pnpm run bench:decision` 手跑）。
+它量的是建决策包那条路（种子 1–12 固定语料 4326 个决策点，预热 + 多轮**交错** + digest 自校）；
+**同时把 bot 对局作为反面对照一起量了**：同一分母下 51.0 vs 1114.6 µs/决策，开关对它只有 1.15×——
+票面那句「拿 `verify-export --to-end` 会量出一个漂亮但无关的数」现在有数坐实。
+开关的理由写进了 `docs/development.md`（`package.json` 挂不住注释，而那条命令绝不能被人顺手删掉）。
