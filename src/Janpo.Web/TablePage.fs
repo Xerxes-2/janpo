@@ -72,6 +72,24 @@ module TablePage =
     /// 回放的时间轴（票 75）；Live 时是 None。实现与理由见 `TableState.timeline`。
     let timeline (model: TableModel) : Timeline option = TableState.timeline model
 
+    /// 这一桌坐着真人的是哪一席（票 87）。实现与理由见 `TableState.humanSeat`。
+    let humanSeat (model: TableModel) : Seat option = TableState.humanSeat model
+
+    /// 此刻视角锁在哪一席上（票 87）。实现与理由见 `TableState.lockedSeat`。
+    let lockedSeat (model: TableModel) : Seat option = TableState.lockedSeat model
+
+    /// 这一屏真正在用的那份投影（票 87）。实现与理由见 `TableState.viewpoint`。
+    let viewpoint (model: TableModel) : Viewpoint = TableState.viewpoint model
+
+    /// 曳光弹那一块给不给开（票 87 堵 22-A）。实现与理由见 `TableState.devSurfaceAllowed`。
+    let devSurfaceAllowed (model: TableModel) : bool = TableState.devSurfaceAllowed model
+
+    /// 轮到真人出牌了吗（票 87）。实现与理由见 `TableState.humanTurn`。
+    let humanTurn (model: TableModel) : DecisionPackage option = TableState.humanTurn model
+
+    /// 替真人自动过掉的那几次（票 87）。实现与理由见 `TableState.autoPasses`。
+    let autoPasses (model: TableModel) : AutoPass list = TableState.autoPasses model
+
     /// 这一席的推理此刻看不看得见（票 81）。实现与理由见 `TableState.reveals`。
     ///
     /// **气泡与 Agent 那条状态线读的就是它**：转出来是为了用例能直接钉这条规则本身，
@@ -174,10 +192,29 @@ module TablePage =
             ]
         ]
 
+    /// 曳光弹那一块（票 35）：**地址带 `?dev=1`、而且这一桌允许**时才挂在牌桌下面。
+    ///
+    /// **两个判据各管各的**：地址那一半在 `Route`（页面侧认地址只有那一处），
+    /// “这一桌允不允许”那一半在 `TableState.devSurfaceAllowed`（纯的，dotnet 侧铉得住）。
+    ///
+    /// **它从 `Main.Shell` 搬到了这里**（票 87）：要看牌桌的 model 才答得出“桌边坐没坐人”，
+    /// 而 model 就在这一层（`useElmish`）。搬到 `Shell` 去读 localStorage 是**第二份判据**，
+    /// 而且人在面板上刚把自己摆上座位时 `Shell` 根本不重画——那正是 22-A 要堵的那一条缝。
+    /// **用 fragment 而不是包一层 div**：fragment 不生成 DOM 节点，
+    /// 于是 `div.shell` 下那几个孩子与从前逐个相同（`verify-tracer` 那一趟一条断言不必改）。
+    let private devSurface (model: TableModel) : ReactElement list = [
+        if Route.devSurfaceRequested () && TableState.devSurfaceAllowed model then
+            Html.hr [ prop.key "dev-rule" ]
+            App.TracerPage()
+    ]
+
     [<ReactComponent>]
     let Page () =
         let model, dispatch = React.useElmish (init, update, [||])
 
-        match TableState.live model with
-        | Some live -> hostPage model live dispatch
-        | None -> homePage model dispatch
+        let page =
+            match TableState.live model with
+            | Some live -> hostPage model live dispatch
+            | None -> homePage model dispatch
+
+        React.Fragment(page :: devSurface model)

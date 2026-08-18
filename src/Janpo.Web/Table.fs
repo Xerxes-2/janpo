@@ -74,6 +74,13 @@ type Demand =
     /// 要问外面（LLM 座位）：这是那一手的决策包与座位配置。
     /// 拿回来的 id 用 `DecisionPackage.tryAction` 换成动作，换不出来就 `Fallback.action`。
     | Asked of package: DecisionPackage * config: LlmSeat
+    /// 要问**坐在这台浏览器前的那个人**（票 87）：同样只给得出一份决策包。
+    ///
+    /// **它与 `Asked` 只差在“问谁”**：一个发一趟跨网请求、一个把包摆在页面上等一次点击，
+    /// 拿回来的同样是一个 **id**（`DecisionPackage.tryAction`）——
+    /// 真人因此与模型坐同一条路：**他构造不出一个非法动作**。
+    /// 没有 `config`：真人不需要 provider、key 与超时（时限是票 89）。
+    | Human of package: DecisionPackage
 
 /// 牌桌的构造与推进。**没有驱动循环**：一次调用推进一手，循环是 Elmish 的 update
 /// （ADR-0005 选 B 的理由之一——MVU 的 update 与引擎的 `step` 同构）。
@@ -181,14 +188,19 @@ module Table =
             let bot (kind: Bot) =
                 Bot.player kind table.Players table.State choice |> Demand.Ready
 
+            // 包里就是这一手的合法动作集，因此 `forSeat` 必然给得出一份；
+            // 万一给不出（座位越界这类不该发生的事）就退回均匀随机选手，牌桌照样推得动。
+            let packaged (demand: DecisionPackage -> Demand) =
+                match DecisionPackage.forSeat choice.Seat table.State with
+                | Some package -> demand package
+                | None -> bot Bot.Uniform
+
             match Roster.playerAt choice.Seat roster with
             | SeatPlayer.Bot kind -> bot kind
-            | SeatPlayer.Llm config ->
-                // 包里就是这一手的合法动作集，因此 `forSeat` 必然给得出一份；
-                // 万一给不出（座位越界这类不该发生的事）就退回均匀随机选手，牌桌照样推得动。
-                match DecisionPackage.forSeat choice.Seat table.State with
-                | Some package -> Demand.Asked(package, config)
-                | None -> bot Bot.Uniform)
+            | SeatPlayer.Llm config -> packaged (fun package -> Demand.Asked(package, config))
+            // 真人坐席消费的就是同一份投影（术语表的 `Observation Projection`）：
+            // 隐藏信息的保护因此在**结构上**成立，不靠渲染层的纪律。
+            | SeatPlayer.Human -> packaged Demand.Human)
 
     /// 问待答头一家要一个动作（`decideFor` 的头一家特例，纯 bot 那条路还在走它）。
     let decide (roster: Roster) (table: Table) : Demand option =
@@ -256,7 +268,9 @@ module Table =
     let advance (roster: Roster) (table: Table) : Table =
         match decide roster table with
         | None
-        | Some(Demand.Asked _) -> table
+        | Some(Demand.Asked _)
+        // 真人那一手同样推不动（票 87）：它要等一次点击，而那条路在 Elmish 的 update 里。
+        | Some(Demand.Human _) -> table
         | Some(Demand.Ready(action, players)) -> apply action { table with Players = players }
 
     /// 开下一局。这一局还没终、或局数序列已经走完，都原样返回。

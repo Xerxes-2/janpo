@@ -621,6 +621,26 @@ input[type="range"] {
   margin-left: 0.6rem;
 }
 
+/* 点得出去的那几张（票 87）：轮到真人打牌时，他手里凡在合法动作集里的那几张
+   各是一枚 `<button class="tile playable">`。**靠颜色而不靠动画**：靖青描边 = 可点，
+   悬停时再蒙一层靖青淺底——整页只有纸·墨·朱·靖四个色相（票 80），这里不新开一个。 */
+.tile.playable {
+  cursor: pointer;
+  border-color: var(--indigo);
+}
+
+.tile.playable:hover {
+  background-color: var(--indigo-wash);
+}
+
+/* **赤牌那圈朱红压过可点那圈靖青**（票 87）：这一张是不是赤牌是**牌面的事实**，
+   而点不点得动只是此刻的状态；两者撞在同一根轴（牌框颜色）上时，不能让后者把前者
+   吃掉——票 80 把那圈朱红当成「隔一张桌子也分得开」的记号，verify-board 也在量它。
+   赤牌那一张仍旧点得动（`cursor` 与悬停底色还在说话），只是不拿牌框说。 */
+.tile.aka.playable {
+  border-color: var(--vermilion);
+}
+
 /* 牌背：他家的暗牌，用上游的 `Back.svg` 整张铺满。
    「背」字与牌面字一样藏着（`.tile` 的 color: transparent），但**牌本身必须看得见**：
    边框是实色（不吃 currentcolor，票 32），背景图不许是 none——两样闸门都读。
@@ -920,6 +940,12 @@ input[type="range"] {
 .agent.error {
   opacity: 1;
   font-weight: 600;
+}
+
+/* 真人坐席那一行（票 87）：坐在桌边的人先看它，因此比 Agent 那两行清楚一点。
+   只改不透明度与字重：它与 Agent 那两行是同一类东西，不另开一块面板。 */
+.agent.human-line {
+  opacity: 1;
 }
 
 /* 窄视口（票 44）：三列的真牌桌在约 40rem 以下会把每一列挤到放不下半排河，

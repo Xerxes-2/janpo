@@ -103,7 +103,8 @@ module SeatingPlanTests =
         let configOf (index: int) =
             match SeatingPlan.playerAt (seat index) plan with
             | SeatPlayer.Llm config -> config
-            | SeatPlayer.Bot _ -> failwith $"座位 {index} 该是模型"
+            | SeatPlayer.Bot _
+            | SeatPlayer.Human -> failwith $"座位 {index} 该是模型"
 
         Assert.Equal("你打得很凶。", (configOf 0).Persona)
         Assert.Equal("你打得很稳。", (configOf 1).Persona)

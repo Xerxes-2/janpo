@@ -365,32 +365,61 @@ module TablePanel =
     ///
     /// **它属于「操作这一桌」**（票 83）：视角与危险度改的是牌桌的呈现，拨一下当场就要看见
     /// 牌桌变样，因此跟着牌桌走；种子与「重开」改的是下一桌怎么开，已经挤到 `rulesRow` 上去了。
+    /// **真人在座时它只剩一枚**（票 87）：上帝视角与别席视角的按钮**不在 DOM 里**，
+    /// 而不是灰掉——票 81 把视角定成了一道信息闸门，而 `disabled` 只是 UI 层的礼貌
+    /// （一行 DevTools 就平了）。真正拦住它的是 `TableState.viewpoint`：那边连值都给不出来。
+    ///
+    /// **自家那一枚留着**：一排按钮整排消失会让人以为页面坏了，而它同时是「你在这儿」的标记。
+    /// **终局后它们都回来**（判据与气泡同一条：`TableState.lockedSeat`）：复盘本来就该看得见四家。
     let private viewpoints (model: TableModel) (dispatch: TableMsg -> unit) =
+        let locked = TableState.lockedSeat model
+        let viewpoint = TableState.viewpoint model
+
+        let offered =
+            match locked with
+            | Some seat -> [ seat ]
+            | None -> Seat.all model.Ruleset
+
         let seats =
-            Seat.all model.Ruleset
+            offered
             |> List.map (fun seat ->
                 picker
                     $"table-view-{Seat.index seat}"
-                    (model.Viewpoint = Viewpoint.Seated seat)
+                    (viewpoint = Viewpoint.Seated seat)
                     $"座位 {Seat.index seat}"
                     (ViewpointPicked(Viewpoint.Seated seat))
                     dispatch)
+
+        let god = [
+            if Option.isNone locked then
+                picker "table-view-god" (viewpoint = Viewpoint.God) "上帝视角" (ViewpointPicked Viewpoint.God) dispatch
+        ]
+
+        // 锁着的时候要说一句为什么（票 87）：“那几枚按钮本来就没有”与“页面坏了”
+        // 在屏幕上长得一模一样（同票 81 那句「另 N 席被这个视角挡着」的理由）。
+        let note = [
+            match locked with
+            | None -> ()
+            | Some seat ->
+                Html.span [
+                    prop.key "view-locked"
+                    prop.className "rendering pending"
+                    prop.testId "table-view-locked"
+                    prop.custom ("data-view-locked", Seat.index seat)
+                    prop.text $"视角锁在座位 {Seat.index seat}（你自己）：桌边坐着真人，上帝视角与别席视角在这一页上不存在——终局后它们回来。"
+                ]
+        ]
 
         Html.div [
             prop.className "controls"
             prop.children (
                 [ Html.span [ prop.key "view-label"; prop.className "label"; prop.text "视角" ] ]
                 @ seats
-                @ [
-                    picker
-                        "table-view-god"
-                        (model.Viewpoint = Viewpoint.God)
-                        "上帝视角"
-                        (ViewpointPicked Viewpoint.God)
-                        dispatch
-                    // 危险度（票 25）：围观者想看就拨开，**默认关**。
-                    picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch
-                ]
+                @ god
+                // 危险度（票 25）：围观者想看就拨开，**默认关**。
+                // 它只摆得出**观测者自家**那一手（`TableBoard.dangerSeats`），因此锁着也不泄。
+                @ [ picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch ]
+                @ note
             )
         ]
 
@@ -521,6 +550,17 @@ module TablePanel =
                     (SeatBound(seat, SeatChoice.Bot kind))
                     dispatch)
 
+        // 「我自己」（票 87）：**第三种选手，与另外两种并排**——引擎与编排层不区分它与 AI
+        // （spec 的 story 28），页面上就不该把它摆成另一个开关。
+        // 拨上它的那一下同时把原来那一席腾空（`SeatingPlan.bind`：本地只坐得下一席）。
+        let human =
+            picker
+                $"table-seat-{index}-human"
+                (binding.Choice = SeatChoice.Human)
+                SeatingPlan.humanToDisplay
+                (SeatBound(seat, SeatChoice.Human))
+                dispatch
+
         let profiles =
             live.Seating.Profiles
             |> List.mapi (fun each profile ->
@@ -608,6 +648,7 @@ module TablePanel =
             prop.children (
                 (Html.span [ prop.key "seat-label"; prop.className "label"; prop.text $"座位 {index}" ]
                  :: bots)
+                @ [ human ]
                 @ profiles
                 @ [
                     // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。

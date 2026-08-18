@@ -51,6 +51,36 @@ module TableBoard =
 
     let private face (key: int) (extra: string) (pai: Tile) = paiSpan key extra [] pai
 
+    /// 一张**点得出去**的牌（票 87）：轮到真人打牌时，他手里凡在**合法动作集**里的那几张
+    /// 各是一枚按钮。**这一层一条规则都不判**（spec 的 UI 决策：合法性驱动 UI）——
+    /// `id` 与 `label` 都是引擎给的（`HumanSeat.dahai` 现问那一份决策包），
+    /// 于是立直之后只剩摸切、食替不许打回去这些事，在页面上是「那张牌点不动」的自然后果。
+    ///
+    /// **它是 `button` 而不是加了 onClick 的 `span`**：键盘走得到、读屏念得出、`:focus-visible`
+    /// 那圈靛青自然就有——「点得动」不该只对拿鼠标的人成立。
+    /// `data-pai` 与普通那张逐字相同（闸门原来那几条一条不必改），另加一个 `data-dahai-id`。
+    let private playableFace
+        (dispatch: TableMsg -> unit)
+        (key: int)
+        (extra: string)
+        (id: int)
+        (label: string)
+        (pai: Tile)
+        =
+        let akadora = if Tile.isAkadora pai then " aka" else ""
+
+        Html.button [
+            prop.key key
+            prop.className $"tile playable{extra}{akadora}"
+            prop.custom ("data-pai", Tile.toMjai pai)
+            // 点它就是提交这一条。**闸门读它、页面也只用它**：手切与摸切是两条不同的动作，
+            // 而「这一张对应哪一条」只有引擎答得出（`Action.Dahai` 的 `tsumogiri`）。
+            prop.custom ("data-dahai-id", id)
+            prop.title $"点它就打出去：{label}"
+            prop.onClick (fun _ -> dispatch (HumanPlayed id))
+            prop.text (Tile.toDisplay pai)
+        ]
+
     /// 一张扣着的牌。**它没有 `data-pai`**——投影里压根没有那张牌，渲染层无从写起。
     let private back (key: int) =
         Html.span [ prop.key key; prop.className "tile back"; prop.text "背" ]
@@ -62,15 +92,28 @@ module TableBoard =
 
     /// 暗牌摆成「手里的 + 刚摸进的那张单独摆在右边」。刚摸进那张**本来就在手牌里**
     /// （`RevealedSeat.Hand` 含它），这里只是把它拎出来摆开——摸切打的就是它。
-    let private handTiles (hand: HandView) =
+    ///
+    /// **摸切与手切在这里分峔**（票 87）：拎出来那张点下去是摸切（`tsumogiri = true`），
+    /// 手里那几张是手切。它们本来就是两个不同的动作（河上的手切信息是公开信息），
+    /// 而牌桌本来就把刚摸那张摆开了——**两样东西不必各做一份 UI**。
+    ///
+    /// `play` 给不出 id 的那几张就是普通牌（不轮到他、或者那一条不合法）。
+    let private handTiles (play: Tile -> bool -> (int * string) option) (dispatch: TableMsg -> unit) (hand: HandView) =
+        let one (key: int) (extra: string) (tsumogiri: bool) (pai: Tile) =
+            match play pai tsumogiri with
+            | Some(id, label) -> playableFace dispatch key extra id label pai
+            | None -> face key extra pai
+
         match hand with
         | HandView.Concealed count -> [ for index in 1..count -> back index ]
         | HandView.Revealed(tiles, drawn) ->
             match drawn |> Option.bind (fun pai -> tiles |> List.tryFindIndex ((=) pai)) with
-            | None -> faces "" tiles
+            | None -> tiles |> List.mapi (fun index pai -> one index "" false pai)
             | Some index ->
                 let held = List.take index tiles @ List.skip (index + 1) tiles
-                faces "" held @ [ face (List.length held) " drawn" (List.item index tiles) ]
+
+                (held |> List.mapi (fun key pai -> one key "" false pai))
+                @ [ one (List.length held) " drawn" true (List.item index tiles) ]
 
     /// 河。**手切与摸切画得不一样**（`tsumogiri` 那一位是公开信息），
     /// 摸切那几张画成虚线加淡色，`data-tsumogiri` 上也写着，无头验收读得到。
@@ -244,7 +287,13 @@ module TableBoard =
     /// `data-seat-position` 是方位给机器看的那一半，**样式读的也是它**：
     /// 属性写着下家却画在左边这种事因此不存在（闸门仍然两样都核：
     /// 属性对不对、以及画出来的坐标对不对）。
-    let private seatPanel (seating: Seating) (bubble: ReactElement list) (view: SeatView) =
+    let private seatPanel
+        (seating: Seating)
+        (bubble: ReactElement list)
+        (play: Tile -> bool -> (int * string) option)
+        (dispatch: TableMsg -> unit)
+        (view: SeatView)
+        =
         let index = Seat.index view.Seat
         let position = Board.position seating.Ruleset seating.Anchor view.Seat
 
@@ -356,7 +405,7 @@ module TableBoard =
                             prop.custom ("data-hand-hidden", hidden)
                         ]
                         $"手牌 {handCount}"
-                        (handTiles view.Hand)
+                        (handTiles play dispatch view.Hand)
                     tileRow
                         $"seat-{index}-kawa"
                         "kawa"
@@ -704,7 +753,10 @@ module TableBoard =
     // ---- 视图：整页 ----
 
     let internal tableBody (model: TableModel) (dispatch: TableMsg -> unit) (table: Table) =
-        match Board.ofTable model.Viewpoint table with
+        // **读的是 `TableState.viewpoint` 而不是 `model.Viewpoint`**（票 87）：
+        // 真人在座、对局还没打完时，这一屏锁死他自家那一席——于是他家的暗牌
+        // **在拿到的数据里就不存在**（`MaskedSeat` 里没有手牌字段），而不是渲染时不画。
+        match Board.ofTable (TableState.viewpoint model) table with
         | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
         | Some board ->
             // 兜底代打的那一手要看得出来（票 23）：不许静默替换。
@@ -773,6 +825,9 @@ module TableBoard =
                             prop.text latest
                         ]
                     ]
+                    // 真人坐席那一行（票 87）：**排在最前面**——坐在桌边的人最先要知道的就是
+                    // “轮不轮到我”与“平台刚才替我过了什么”。没有真人时它一行都不画。
+                    @ HumanLine.at model
                     @ agent
                     @ AgentLine.usageLine table
                     // 一条决策记录都没有的牌谱：**说一句为什么没有气泡**（票 76）。
@@ -789,11 +844,25 @@ module TableBoard =
                                 // 气泡的取值器**按座位取**（票 76）：这里只取一次，四家各问一遍。
                                 let bubbleAt = TableState.bubbles model table
 
+                                // 真人那一席此刻能点哪几张（票 87）：**只问那一份决策包**，
+                                // 其余三家恒是「一张都点不动」——能点的那几张与“轮到谁”是同一件事，
+                                // 因此不存在“不轮到你却点得动”这种状态。
+                                let humanTurn = TableState.humanTurn model
+
+                                let playAt (seat: Seat) : Tile -> bool -> (int * string) option =
+                                    match humanTurn with
+                                    | Some package when HumanSeat.seat package = seat ->
+                                        fun pai tsumogiri -> HumanSeat.dahai pai tsumogiri package
+                                    | Some _
+                                    | None -> fun _ _ -> None
+
                                 [
                                     for view in board.Seats ->
                                         seatPanel
                                             seating
                                             (ThinkingBubble.at dispatch view.Seat (bubbleAt view.Seat))
+                                            (playAt view.Seat)
+                                            dispatch
                                             view
                                 ]
                                 @ [ tableCenter (Option.isSome settled) board ]

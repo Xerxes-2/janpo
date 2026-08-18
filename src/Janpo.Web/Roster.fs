@@ -19,9 +19,9 @@ type Bot =
 /// 给定观测与合法动作集，返回一个动作。差别只在「返回得同步还是要等」——
 /// 而那件事在 `Table.decide` 那道缝上分岔，引擎一无所知。
 ///
-/// M1 只有两种。Mortal 与真人坐席是 M3 的 case，加在这里。
+/// M1 只有两种，票 87 加上真人坐席。Mortal 是票 91–92 的 case，加在这里。
 ///
-/// **它与 `SeatChoice` 是两层**（票 73）：页面上人选的是「均匀随机 / 有主见 / 某份档案」
+/// **它与 `SeatChoice` 是两层**（票 73）：页面上人选的是「均匀随机 / 有主见 / 我自己 / 某份档案」
 /// （`SeatChoice`，按名字引用档案），推导到这一层时档案已经展开成一份 `LlmSeat`。
 [<RequireQualifiedAccess>]
 type SeatPlayer =
@@ -29,6 +29,12 @@ type SeatPlayer =
     | Bot of kind: Bot
     /// LLM 适配器：决策包发给 Agent 层，动作由后来的一条 Msg 带回来。
     | Llm of config: LlmSeat
+    /// **本地真人**（CONTEXT.md 的 `Human Seat`，票 87）：决策包摆到页面上，
+    /// 动作由他点一下手牌带回来（`TableMsg.HumanPlayed`）。
+    ///
+    /// **它不带任何配置**：真人没有 provider、没有 key、没有超时（时限是票 89）；
+    /// 脚手架档位（新手辅助轮，术语表说它复用同一类型）也是票 89 的事。
+    | Human
 
 /// 自带 bot 的实现与两种渲染。
 [<RequireQualifiedAccess>]
@@ -100,6 +106,14 @@ module Roster =
         Seat.tryItem seat roster.Seats
         |> Option.defaultValue (SeatPlayer.Bot Bot.Uniform)
 
+    /// 真人坐席在牌谱里那个名字（票 87）。**只有这一份**，奇权在它身上：
+    ///
+    /// - **与模型席分得开**：模型席恒带一道斜杠（`provider/model`），它没有；
+    ///   bot 叫 `random` / `opinionated`，也不撞。复盘（票 90）与分享都要读它。
+    /// - **里面没有任何私人信息**：不写昵称、不写档案名、更不写 key——
+    ///   牌谱是可分享物（ADR-0002），而真人自己那一行就是最容易渗出去的那一行。
+    let humanName: string = "human"
+
     /// 一个选手在牌谱里的名字。**只有这一份**：页面上那一行摘要（`SeatingPlan.names`）
     /// 读的也是它，两份写法只会漂。
     ///
@@ -109,6 +123,7 @@ module Roster =
         match player with
         | SeatPlayer.Bot kind -> Bot.toWire kind
         | SeatPlayer.Llm config -> $"{config.Provider}/{config.Model}"
+        | SeatPlayer.Human -> humanName
 
     /// 各家的名字，按座位升序——mjai `start_game` 的 `names`，也就是牌谱第一条事件里的那一列。
     ///
@@ -124,4 +139,5 @@ module Roster =
         |> List.choose (fun (seat, player) ->
             match player with
             | SeatPlayer.Llm config -> Some(seat, config)
-            | SeatPlayer.Bot _ -> None)
+            | SeatPlayer.Bot _
+            | SeatPlayer.Human -> None)

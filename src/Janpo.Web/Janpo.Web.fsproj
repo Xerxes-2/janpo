@@ -20,6 +20,9 @@
   <ItemGroup>
     <Compile Include="Agent.fs" />
     <Compile Include="Roster.fs" />
+    <!-- 真人坐席（票 87）：把一份决策包拆成“能点哪几张 / 「过」是哪一条”。
+         排在 `TableState.fs` 前面（`LiveTable` 带着 `AutoPass`），不依赖页面侧任何东西。 -->
+    <Compile Include="HumanSeat.fs" />
     <!-- 模型档案库与四席绑定（票 73）：排在 `Roster.fs` 后面（要 `Bot` / `SeatPlayer`）、
          `Store.fs` 前面（它落 localStorage）。 -->
     <Compile Include="SeatingPlan.fs" />
@@ -47,6 +50,9 @@
          改牌桌与结算的进 `TableBoard`。 -->
     <Compile Include="TableState.fs" />
     <Compile Include="AgentLine.fs" />
+    <!-- 真人坐席那一行（票 87）：轮不轮到你、替你自动过了什么。与 `AgentLine` 同一个形状：
+         只画一行字，判据在 `TableState` 那几个取值器里。 -->
+    <Compile Include="HumanLine.fs" />
     <!-- 思考气泡与它点开之后那一屏（票 76）：只画，判据在 `TableState` 那个取值器里。
          排在 `TableBoard` 前面——牌桌把气泡挂在座位面板上。 -->
     <Compile Include="ThinkingBubble.fs" />

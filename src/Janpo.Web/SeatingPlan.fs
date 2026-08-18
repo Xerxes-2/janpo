@@ -43,7 +43,7 @@ type ProfileField =
     | TimeoutMs
     | Thinking
 
-/// 一个座位交给谁（票 73）：自带 bot 的两档，或者某份档案。
+/// 一个座位交给谁（票 73，票 87 加上真人）：自带 bot 的两档、本地真人，或者某份档案。
 ///
 /// **档案按名字引用**：名字是人在面板上认的东西，删掉那份档案时引用它的座位
 /// 由 `SeatingPlan.removeProfile` 明确退回 bot（并让页面把这件事说出来），
@@ -54,6 +54,14 @@ type SeatChoice =
     | Bot of kind: Bot
     /// 引用一份模型档案。
     | Profile of name: string
+    /// **我自己**（票 87）：坐在这台浏览器前的那个人。
+    ///
+    /// **它不引用任何东西**：真人没有档案（没有 provider、没有 key）；
+    /// 座位级那三项（脚手架 / 人格 / 模板）对它今天也不生效——
+    /// 新手辅助轮（术语表说 `ScaffoldTier` 在真人这一侧复用同一类型）是票 89 的事。
+    ///
+    /// **一桌只坐得下一席**（`SeatingPlan.soloHuman`）：本地就一个人一副眼睛。
+    | Human
 
 /// 座位级那三项里在面板上编辑的部分。**它们不在档案里**（术语表的分工：
 /// 档案答「怎么问」，这三样答「给多少信息 / 什么风格 / 哪套措辞」）。
@@ -250,16 +258,20 @@ module SeatChoice =
     let private profilePrefix = "profile:"
 
     /// localStorage 里的写法。自带 bot 那两档直接借 `Bot.toWire`
-    /// （`random` / `opinionated`，与牌谱里那个名字同一份真源）。
+    /// （`random` / `opinionated`，与牌谱里那个名字同一份真源）；
+    /// 真人那一档借 `Roster.humanName`（同一理由：牌谱里写的就是它）。
     let toWire (choice: SeatChoice) : string =
         match choice with
         | SeatChoice.Bot kind -> Bot.toWire kind
         | SeatChoice.Profile name -> profilePrefix + name
+        | SeatChoice.Human -> Roster.humanName
 
     /// wire 名回到绑定。认不出来的是 None——配置从 localStorage 读，什么都可能。
     let ofWire (wire: string) : SeatChoice option =
         if wire.StartsWith profilePrefix then
             Some(SeatChoice.Profile(wire.Substring profilePrefix.Length))
+        elif wire = Roster.humanName then
+            Some SeatChoice.Human
         else
             Bot.all
             |> List.tryFind (fun kind -> Bot.toWire kind = wire)
@@ -339,7 +351,32 @@ module SeatingPlan =
         Seats = bindings ruleset
     }
 
-    /// 把绑定的条数对齐到这个规则集的座位数：少了补默认、多了截掉。
+    /// 这一席上的真人站起来（退回均匀随机）；不是真人席就原样。
+    let private vacated (binding: SeatBinding) : SeatBinding =
+        if binding.Choice = SeatChoice.Human then
+            {
+                binding with
+                    Choice = SeatBinding.initial.Choice
+            }
+        else
+            binding
+
+    /// **真人只坐得下一席**（票 87）：头一席算数，余下那几席站起来。
+    ///
+    /// 本地就一个人一副眼睛：第二席真人没有人操作，那一桌会停在那儿等一个永远不来的动作；
+    /// 而且「视角锁死自家那一席」这句话当场就没了主语（锁哪一席？）。
+    ///
+    /// **它只管 `fit`（从 localStorage 读回来的那一份）**：那里什么都可能，
+    /// 而“留头一席”至少是确定的。人在面板上拨那一下走的是 `bind`（那里**刚拨的那一席赢**）。
+    let private soloHuman (seats: SeatBinding list) : SeatBinding list =
+        let seated =
+            seats |> List.tryFindIndex (fun binding -> binding.Choice = SeatChoice.Human)
+
+        seats
+        |> List.mapi (fun index binding -> if Some index = seated then binding else vacated binding)
+
+    /// 把绑定的条数对齐到这个规则集的座位数：少了补默认、多了截掉，
+    /// 并把多出来的真人席掰回 bot（`soloHuman`，票 87）。
     /// **从 localStorage 读回来的那一份要过这道**（三麻改四麻、手改过存储都会长歪）。
     let fit (ruleset: Ruleset) (seating: SeatingPlan) : SeatingPlan = {
         seating with
@@ -347,6 +384,7 @@ module SeatingPlan =
                 Seat.all ruleset
                 |> List.mapi (fun index _ ->
                     List.tryItem index seating.Seats |> Option.defaultValue SeatBinding.initial)
+                |> soloHuman
     }
 
     // ---- 查表 ----
@@ -371,6 +409,7 @@ module SeatingPlan =
     let private playerOf (seating: SeatingPlan) (binding: SeatBinding) : SeatPlayer =
         match binding.Choice with
         | SeatChoice.Bot kind -> SeatPlayer.Bot kind
+        | SeatChoice.Human -> SeatPlayer.Human
         | SeatChoice.Profile name ->
             match tryProfile name seating with
             | Some profile -> SeatPlayer.Llm(SeatBinding.config profile binding)
@@ -397,7 +436,20 @@ module SeatingPlan =
         |> List.choose (fun (seat, binding) ->
             match playerOf seating binding with
             | SeatPlayer.Llm _ -> Some seat
-            | SeatPlayer.Bot _ -> None)
+            | SeatPlayer.Bot _
+            | SeatPlayer.Human -> None)
+
+    /// 真人坐着的那几席（票 87）。**形状仍是一个表**（同 `llmSeats`），
+    /// 而 `soloHuman` 保证它至多一项——不写成 `Seat option` 是为了
+    /// “这一条不变量由谁执行”看得见（判据 2）：执行它的是 `soloHuman`，不是这个类型。
+    let humanSeats (seating: SeatingPlan) : Seat list =
+        seating.Seats
+        |> Seat.indexed
+        |> List.choose (fun (seat, binding) ->
+            match playerOf seating binding with
+            | SeatPlayer.Human -> Some seat
+            | SeatPlayer.Bot _
+            | SeatPlayer.Llm _ -> None)
 
     /// 引用了这份档案的那几席。删档案时要靠它把话说清楚。
     let references (name: string) (seating: SeatingPlan) : Seat list =
@@ -409,6 +461,11 @@ module SeatingPlan =
             | _ -> None)
 
     // ---- 渲染层出口（ADR-0001） ----
+
+    /// 真人坐席给人看的那一半（票 87）。**只有这一份**：面板上那枚按钮、
+    /// 牌桌上的名牌、状态线上那句话读的都是它。
+    /// **不写昵称**：平台不知道你叫什么，也不该问（牌谱里那一列恒是 `human`）。
+    let humanToDisplay: string = "我自己"
 
     /// 牌桌上每家名牌上那一句「这一席是谁在打」（票 82），按座位升序。
     ///
@@ -423,6 +480,7 @@ module SeatingPlan =
         |> List.map (fun binding ->
             match binding.Choice with
             | SeatChoice.Bot kind -> Bot.toDisplay kind
+            | SeatChoice.Human -> humanToDisplay
             | SeatChoice.Profile name ->
                 match tryProfile name seating with
                 | Some profile -> $"{profile.Name}・{ScaffoldTier.toDisplay binding.Tier}"
@@ -439,6 +497,7 @@ module SeatingPlan =
             |> List.map (fun binding ->
                 match binding.Choice with
                 | SeatChoice.Bot kind -> Bot.toDisplay kind
+                | SeatChoice.Human -> humanToDisplay
                 | SeatChoice.Profile name -> name)
 
         match List.distinct kinds with
@@ -454,8 +513,20 @@ module SeatingPlan =
     }
 
     /// 把一席交给谁。
+    ///
+    /// **坐上第二席真人时，原来那一席当场退回均匀随机**（票 87：本地就一个人）。
+    /// **刚拨的那一席赢**：人刚把自己摆到座位 3，结果坐到了座位 0——那才叫话都不说。
     let bind (seat: Seat) (choice: SeatChoice) (seating: SeatingPlan) : SeatingPlan =
-        seating |> withBinding seat (fun binding -> { binding with Choice = choice })
+        let vacant =
+            match choice with
+            | SeatChoice.Human -> {
+                seating with
+                    Seats = seating.Seats |> List.map vacated
+              }
+            | SeatChoice.Bot _
+            | SeatChoice.Profile _ -> seating
+
+        vacant |> withBinding seat (fun binding -> { binding with Choice = choice })
 
     /// 改一席的脚手架档位 / 人格 / 模板。
     let editSeat (seat: Seat) (which: SeatField) (value: string) (seating: SeatingPlan) : SeatingPlan =

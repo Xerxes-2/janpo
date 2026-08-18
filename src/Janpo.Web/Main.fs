@@ -11,22 +11,18 @@ open Feliz
 /// 牌桌自己的种子输入框另有一个 testId（`table-seed`），两边不打架。
 ///
 /// 页脚（票 37）在**开关之外**：它是给访客的那条回仓库的路，任何视图下都该在，
-/// 因此排在最后一行而不是跟着 `Route.devSurfaceRequested ()` 走。
+/// 因此排在最后一行而不是跟着那个开关走。
 ///
 /// **开关的判据搬去了 `Route`**（票 71）：页面侧认地址的地方只该有一处——
-/// `?dev=1`、`?table=1` 与 hash 三者正交，三份解析写在三处只会各自漂。行为一字未改。
+/// `?dev=1`、`?table=1` 与 hash 三者正交，三份解析写在三处只会各自漂。
+///
+/// **曳光弹那一块本身搬进了 `TablePage.Page`**（票 87 堵 22-A）：真人坐在桌边时它不给开，
+/// 而「桌边坐没坐人」只有牌桌的 model 答得出（`TableState.devSurfaceAllowed`），
+/// model 又只活在那一层的 `useElmish` 里。这一层因此**不再认 `?dev=1`**——
+/// 它是个纯外壳。渲染出来的 DOM 逐个节点与从前相同（`Page` 交出去的是 fragment）。
 [<ReactComponent>]
 let Shell () =
-    Html.div [
-        prop.className "shell"
-        prop.children [
-            TablePage.Page()
-            if Route.devSurfaceRequested () then
-                Html.hr []
-                App.TracerPage()
-            Footer.Bar()
-        ]
-    ]
+    Html.div [ prop.className "shell"; prop.children [ TablePage.Page(); Footer.Bar() ] ]
 
 /// 浏览器入口。**F# 只暴露这一个函数给 JS**（`mount`），JS 侧一行 import 就够：
 ///

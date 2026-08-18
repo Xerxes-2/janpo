@@ -181,6 +181,12 @@ type LiveTable = {
     /// 在飞的那几次问话（票 74：响应阶段里待答的几席**一起问**，一席一份）。
     /// **还有在飞的就不续定时器**（否则牌桌会空转），但不再因为一席在飞就不问第二席。
     Awaiting: Awaiting list
+    /// 这一桌至此刻**替真人自动过掉**的那几次响应，**新的在前**（票 87）。
+    ///
+    /// **这一票鸣牌一律自动过**（吃碰杠立直荣和是票 88），而**过掉了什么必须说出来**
+    /// ——否则人会以为这个平台漏了鸣牌。跨局累计（同 `Table.fallbacks`），
+    /// 只在重开一桌时清空：它数的是“这一桌你错过了几次”。
+    AutoPassed: AutoPass list
     /// 问话的票号，每问一次 +1（全局递增，四席共用一本账）。
     Ticket: int
     /// Agent 层的状态线，**每席一项**（按座位升序，票 74）。
@@ -539,6 +545,12 @@ type TableMsg =
     /// 那一次问话又等过了一秒（票 74）。**它只让页面上「已等 N 秒」往前走**，
     /// 牌桌一根汗毛都不动；那一票已经落定/作废时它静默地停。
     | Waited of ticket: int
+    /// **真人点了一下**（票 87）：他选的是这一包里第 `id` 条动作。
+    ///
+    /// **跨界回来的同样只有一个 id**（与 `Answered` 那条逆向入口逐字相同）：
+    /// 页面构造不出一个 `Action`，id 不在这一包里就没有事情发生
+    /// ——于是“真人不可能犯规”（spec 的 story 30）在**结构上**成立。
+    | HumanPlayed of id: int
 
 /// 牌桌页面的状态与 MVU 三件套（票 70 从 `TablePage.fs` 拆出来的第一块）。
 ///
@@ -662,12 +674,46 @@ module TableState =
 
     // ---- Live ----
 
-    /// 续一记定时器——**除非还有在飞的回执**。等着的时候定时器只会把牌桌空转一遍；
-    /// 那一手由 `Answered` 接着开动。**「还有在飞的就不续」只管定时器**：
-    /// 该问的席照问（票 74，见 `step`）。
+    /// **轮到真人出牌了吗**（票 87）：那一席此刻的决策包；不轮到他时是 None。
+    ///
+    /// **现问这一刻的局面，不在 model 上存第二份**（判据 9）：存一份的话，
+    /// 页面刚打开那一瞬（他就是亲、牌已经摸到手上）那一格还是空的，
+    /// 页面会说「轮到别人」——而那是句假话。现问就不会有这种“存了但还没填”的中间态。
+    ///
+    /// **两道前置都很便宜，贵的那一步只在真轮到他时才走**：
+    /// 先看引擎待答的头一家是不是他，再看那一堆动作里有没有「过」
+    /// （有 = 响应阶段，这一票一律自动过，不该停下来等他），
+    /// 两道都过了才去搭那份决策包（`DecisionPackage.forSeat` 要一次从头 fold）。
+    let private handOf (live: LiveTable) : DecisionPackage option =
+        let pass (choice: LegalActions) =
+            choice.Actions
+            |> List.exists (fun action ->
+                match action with
+                | Action.None _ -> true
+                | _ -> false)
+
+        match SeatingPlan.humanSeats live.Seating |> List.tryHead, live.Table with
+        | Some seat, Ok table ->
+            Table.pending table
+            |> Option.filter (fun choice -> choice.Seat = seat && not (pass choice))
+            |> Option.bind (fun _ -> DecisionPackage.forSeat seat table.State)
+        | Some _, Error _
+        | None, _ -> None
+
+    /// 这一桌此刻在等人（票 74 的回执、票 87 的那一下点击）。
+    ///
+    /// **两种等待在这一处合成一条判据**：定时器不续、牌桌不再往下推。
+    /// 不合在一处的话，「等真人」会漏掉其中一处而让牌桌在他头上空转。
+    let private waiting (live: LiveTable) : bool =
+        not (List.isEmpty live.Awaiting) || Option.isSome (handOf live)
+
+    /// 续一记定时器——**除非还有在飞的回执（或者正等真人点那一下）**。
+    /// 等着的时候定时器只会把牌桌空转一遍；
+    /// 那一手由 `Answered`（模型）或 `HumanPlayed`（真人）接着开动。
+    /// **「还有在飞的就不续」只管定时器**：该问的席照问（票 74，见 `step`）。
     let private tick (model: TableModel) (playback: Playback) : Cmd<TableMsg> =
         match live model with
-        | Some live when not (List.isEmpty live.Awaiting) -> Cmd.none
+        | Some live when waiting live -> Cmd.none
         | Some _
         | None -> schedule playback
 
@@ -717,7 +763,8 @@ module TableState =
         |> Option.bind (fun roster ->
             match Roster.playerAt seat roster with
             | SeatPlayer.Llm config -> Some config
-            | SeatPlayer.Bot _ -> None)
+            | SeatPlayer.Bot _
+            | SeatPlayer.Human -> None)
 
     /// 名牌上那一句「这一席是谁在打」（票 82），按座位升序；没话可说的那几席是空表。
     ///
@@ -895,6 +942,32 @@ module TableState =
     /// 排在头一家的 bot 席也在这里落（`Demand.Ready`）：它「当场就答得出」，
     /// 但**落**同样要守这个顺序。**`Awaiting` 空了就停**——余下的待答席（若有）
     /// 由下一记定时器接着问，一步的粒度因此与从前相同。
+    /// 轮到真人那一席了（票 87）。**两条路，判据就是这一包里有没有「过」**
+    /// （`HumanSeat.passAction`：响应阶段恒有它）：
+    ///
+    /// - **响应阶段一律自动过**（票面），并把过掉了什么记下来——**页面要说出来**；
+    /// - **该他出牌就停下来等他点**（不限时，时限是票 89）。
+    ///
+    /// **票 88 改的就是这一处**：把上面那一支从「替他提交过」换成「把 `unspoken`
+    /// 那几条摆成按钮、跟下面那一支合并」——它要的两样东西（包与 label）这里都已经在手上。
+    ///
+    /// **“停下来等他”不写进状态**：那一支原样返回即可，`handOf` 现问这一刻的局面
+    /// 就知道轮到他了（于是 `waiting` / `step` 都停住）。
+    let private handed (package: DecisionPackage) (table: Table) (live: LiveTable) : LiveTable =
+        match HumanSeat.passAction package with
+        | Some action -> {
+            live with
+                Table = Ok(Table.apply action table)
+                AutoPassed =
+                    {
+                        Turn = table.Turns
+                        Seat = HumanSeat.seat package
+                        Skipped = HumanSeat.unspoken package
+                    }
+                    :: live.AutoPassed
+          }
+        | None -> live
+
     let rec private drain (roster: Roster) (live: LiveTable) : LiveTable =
         if List.isEmpty live.Awaiting then
             live
@@ -927,6 +1000,15 @@ module TableState =
                                 live with
                                     Table = Ok(Table.apply action { table with Players = players })
                             }
+                        // 头一家是真人（票 87）：自动过掉了就接着排，该他出牌就停在这里等那一下点击
+                        // （`handed` 那一支原样返回，于是下面这一句停在原地）。
+                        | Some(Demand.Human package) ->
+                            let next = handed package table live
+
+                            if Option.isSome (handOf next) then
+                                next
+                            else
+                                drain roster next
                         // 头一家是还没被问出去的模型席：停下，`step` 会把它问出去。
                         | Some(Demand.Asked _)
                         | None -> live
@@ -942,6 +1024,9 @@ module TableState =
     let private step (ruleset: Ruleset) (live: LiveTable) : LiveTable * Cmd<TableMsg> =
         match live.Table with
         | Error _ -> live, Cmd.none
+        // **真人在想的时候整桌等着**（票 87，不限时）：定时器不续（`tick`）、这一步也不推。
+        // 他该出牌那一手只有他一家待答，因此这里不会顺手把别席拦下。
+        | Ok _ when Option.isSome (handOf live) -> live, Cmd.none
         | Ok table ->
             let roster = rosterFor ruleset live
             let flying = live.Awaiting |> List.map Awaiting.seat
@@ -985,11 +1070,13 @@ module TableState =
                             }
                             :: waitCmd ticket
                             :: cmds
+                        // bot 席与真人席都不在这一趟里落（那一下得守引擎的顺序）：交给下面那一段。
                         | Some(Demand.Ready _)
+                        | Some(Demand.Human _)
                         | None -> live, cmds)
 
             if List.isEmpty asked.Awaiting then
-                // 四家都是 bot：与从前一样一步落一手（不许一步把整轮乃至整局跑完）。
+                // 没有在飞的问话：与从前一样一步落一手（不许一步把整轮乃至整局跑完）。
                 match Table.decide roster table with
                 | Some(Demand.Ready(action, players)) ->
                     {
@@ -997,6 +1084,9 @@ module TableState =
                             Table = Ok(Table.apply action { table with Players = players })
                     },
                     Cmd.none
+                // 头一家是真人（票 87）：自动过掉一次响应也算这一步落的一手，
+                // 该他出牌就把包摆到页面上停住。
+                | Some(Demand.Human package) -> handed package table asked, Cmd.none
                 // 走不到（待答的模型席在上面那趟已经问出去了）；这一局已终也落在这里。
                 | Some(Demand.Asked _)
                 | None -> asked, Cmd.none
@@ -1005,11 +1095,13 @@ module TableState =
 
     /// 落完一手之后：接着播还是停下来。
     ///
-    /// **等回执的那段不续定时器**（但仍然是 `Playing`）：定时器只会把牌桌空转一遍，
-    /// 真正把它接着开动的是那条 `Answered`。一局终了也停下来：结算面板正摆在那里。
+    /// **等回执（或等真人点那一下）的那段不续定时器**（但仍然是 `Playing`）：
+    /// 定时器只会把牌桌空转一遍，真正把它接着开动的是 `Answered` / `HumanPlayed`。
+    /// **真人因此与模型席完全同级**：他出完手，这一桌照旧按播放状态往下走（票 87）。
+    /// 一局终了也停下来：结算面板正摆在那里。
     let private resume (cmd: Cmd<TableMsg>) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match live model with
-        | Some live when not (List.isEmpty live.Awaiting) -> model, cmd
+        | Some live when waiting live -> model, cmd
         | _ when canAdvance model -> model, Cmd.batch [ cmd; schedule model.Playback ]
         | _ ->
             {
@@ -1235,20 +1327,87 @@ module TableState =
 
     // ---- 思考气泡（票 76） ----
 
+    /// 这一桌坐着真人的是哪一席（票 87）；没人坐、或者这是回放时是 None。
+    ///
+    /// **至多一席**，而那条不变量的执行者是 `SeatingPlan.soloHuman`（判据 2），不是这里的 `tryHead`。
+    ///
+    /// 读 `live.Seating` 而不是 `effective live`：定型（`Rendering`）定的是人格与模板，
+    /// “谁坐哪里”不在定型里（同 `nameplates`）。
+    let humanSeat (model: TableModel) : Seat option =
+        live model
+        |> Option.bind (fun live -> SeatingPlan.humanSeats live.Seating |> List.tryHead)
+
     /// 这一桌**配置上**有没有真人坐席（ADR-0003 的 consequence：可见性判据挂在
     /// **对局配置与终局状态**上，不挂在「用户是谁」上——围观者不是权限级别，只是视角）。
     ///
-    /// **恒 false，而且这是写在代码里的一个值而不是注释里的旁白**（判据 4）：
-    /// 座位今天只有自带 bot 与模型两种（`SeatPlayer` 就两个 case），**真人坐席是 M3**。
-    /// 因此术语表那句「有真人参与时终局前隐藏」（`Thinking Bubble` 词条）**今天谁也到不了**；
-    /// M3 把真人加进 `Roster` 时改的就是这一个函数，取值器与视图一行都不必动。
-    let private humanSeated (_: TableModel) : bool = false
+    /// **票 76 埋下它时恒 false，票 87 让它说真话**：从此术语表那句
+    /// 「有真人参与时终局前隐藏」（`Thinking Bubble` 词条）真的有人执行了。
+    /// **取值器（`bubbles`）与视图一行都没改**——票 76 那句预言坑坑满谷。
+    let private humanSeated (model: TableModel) : bool = humanSeat model |> Option.isSome
 
     /// 气泡此刻解不解锁。有真人在场时**终局前一律不出**，复盘时解锁（spec 的 story 31）：
     /// 两个引数就是那两样判据——**对局配置**（有没有真人）与**终局状态**（这一场打完了没）。
     /// 视角不在其列：切到哪个座位看都不改变它（用例里钉着这一条）。
+    ///
+    /// **规则本身票 87 一个字没改**（票面明令）：变的只是 `humanSeated` 从恒 false 变成了真的。
     let private unlocked (model: TableModel) (table: Table) : bool =
         not (humanSeated model) || Table.result table |> Option.isSome
+
+    /// 此刻页面**锁在哪一席**上（票 87）；没锁时是 None。
+    ///
+    /// **判据就是 `unlocked` 的反面**，这里直接读它：气泡与视角锁的本来就是同一件事
+    /// ——“桌边坐着一个人，而这一场还没打完”。各写一份就是两处判据，
+    /// 而两处判据迟早会漂到“气泡藏了、上帝视角还开着”那一步。
+    let private lockedTo (model: TableModel) (table: Table) : Seat option =
+        if unlocked model table then None else humanSeat model
+
+    /// 此刻页面锁在哪一席上（票 87）；没锁时是 None。**公开的**：
+    /// 视角那一排（`TablePanel.viewpoints`）、曳光弹那一块（`devSurfaceAllowed`）
+    /// 与页面逻辑的用例读的都是它。
+    let lockedSeat (model: TableModel) : Seat option =
+        match shown model with
+        | Shown.Board table -> lockedTo model table
+        // 还在拉 / 开不了局：根本没有牌桌，也就没有可泄露的东西。
+        | Shown.Loading
+        | Shown.Fault _ -> None
+
+    /// 这一屏此刻真正在用的那份投影（票 87）。
+    ///
+    /// **对局中有真人在座时锁死他自家那一席**：上帝视角与别席视角在这一页上
+    /// **连值都给不出来**——按钮不在 DOM 里是一道（`TablePanel.viewpoints`），
+    /// 这里是另一道：就算有人发一条 `ViewpointPicked God` 进来，牌桌也不会换投影。
+    /// **两道锁而不是一道礼貌**：票 81 把视角定成了信息闸门，而闸门不能只靠“页面上没画那枚按钮”。
+    ///
+    /// **终局后它自己松开**（`lockedTo` 读的就是 `unlocked`）：复盘本来就该看得见四家。
+    ///
+    /// **公开的，而且这一页上只有它**：牌桌（`Board.ofTable`）、视角那一排与 `reveals`
+    /// 读的都是它，而不是 `model.Viewpoint`——后者只是“人上一次拨到哪儿”。
+    let viewpoint (model: TableModel) : Viewpoint =
+        match lockedSeat model with
+        | Some seat -> Viewpoint.Seated seat
+        | None -> model.Viewpoint
+
+    /// 曳光弹那一块（`?dev=1`，票 35）此刻给不给开（票 87 堵 22-A）。
+    ///
+    /// **真人在座、对局还没打完时一律不给**：那一块把原始 mjai 事件印在**同一张文档**里，
+    /// 而 `start_kyoku` 带着四家配牌；它的种子输入框又是任填的——把牌桌那个种子敲进去
+    /// 就是一条绕过投影的旁路。挂账 22-A 从 M1 记到现在，**受害者今天才出现**。
+    ///
+    /// **没有真人时照旧开得了**（阴性对照），终局后也回来：判据与视角锁同一条。
+    ///
+    /// **它不问地址里带没带 `?dev=1`**（那是 `Route.devSurfaceRequested`）：
+    /// 这里只答“这一桌允不允许”，因此它是纯的、dotnet 侧的用例铉得住。
+    let devSurfaceAllowed (model: TableModel) : bool = lockedSeat model |> Option.isNone
+
+    /// 轮到真人出牌了吗（票 87）：那一席此刻的决策包；不轮到他时是 None。
+    ///
+    /// **公开的，而且只有这一份**：牌桌（哪几张牌点得动）、真人那一行、
+    /// 驱动循环（`waiting` / `step`）与用例读的是同一个 `handOf`。
+    let humanTurn (model: TableModel) : DecisionPackage option = live model |> Option.bind handOf
+
+    /// 这一桌至此刻替真人自动过掉的那几次（新的在前，票 87）；没有真人时是空表。
+    let autoPasses (model: TableModel) : AutoPass list =
+        live model |> Option.map (fun live -> live.AutoPassed) |> Option.defaultValue []
 
     /// **视角是一道信息闸门**（票 81）：坐在座位 N 上只看得见**那一席**在想什么，
     /// 上帝视角四家全开——与手牌同一条规则（`Board`：坐座视角消费那一席的 `Observation`）。
@@ -1265,7 +1424,9 @@ module TableState =
     /// **公开的，而且只有这一份**：气泡（`bubbles`）与 Agent 那条状态线（`AgentLine`）读的是
     /// 同一个函数。两处各判一遍就是两处判据，而这一票治的正是「状态线漏了气泡治好的那件事」。
     let reveals (model: TableModel) (seat: Seat) : bool =
-        match model.Viewpoint with
+        // **读的是 `viewpoint model` 而不是 `model.Viewpoint`**（票 87）：后者只是“人上一次拨到哪儿”，
+        // 真人在座时它根本不是这一屏在用的那份投影。**规则本身一个字没改。**
+        match viewpoint model with
         | Viewpoint.God -> true
         | Viewpoint.Seated viewer -> viewer = seat
 
@@ -1489,6 +1650,8 @@ module TableState =
                     // 还没问过话：四席的人格与模板都还改得动（票 46）。
                     Pinned = seating.Seats |> List.map (fun _ -> None)
                     Awaiting = []
+                    // 还没替真人过过什么（票 87）。「轮不轮到他」没有存储：现问局面（`handOf`）。
+                    AutoPassed = []
                     Ticket = 0
                     Agent = seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
                     // 还没点过「复制分享链接」（票 78）。
@@ -1584,6 +1747,7 @@ module TableState =
         | SharedLoaded _
         | ImportLoaded _
         | Answered _ -> true
+        | HumanPlayed _ -> true
         | SeedEdited _
         | SpeedPicked _
         | Ticked _
@@ -1639,6 +1803,8 @@ module TableState =
                                     // 重开一桌就是回到第一局：四席的人格与模板一起松开（票 46/73）。
                                     Pinned = loosened live
                                     Awaiting = []
+                                    // 「替你过了几次」是旧那桌的事（票 87）。
+                                    AutoPassed = []
                                     Agent = idled live
                                     // 旧桌的分享回执也撤下来：那句话说的是已经不存在的一桌（票 78）。
                                     Shared = None
@@ -1728,6 +1894,7 @@ module TableState =
                         // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
                         Pinned = loosened live
                         Awaiting = []
+                        // 「替你过了几次」跨局累计（同 `Table.fallbacks`），因此开下一局时不清。
                         // 在飞的问话作废（票号从此对不上），别让「在想」挂成孤儿；
                         // 说过话 / 兜底那两态**粘着不掉**（那是上一局末手的事实，人还想看）。
                         Agent =
@@ -1838,6 +2005,35 @@ module TableState =
                             Source = Source.Live(drain (rosterFor model.Ruleset noted) noted)
                     }
                     |> resume Cmd.none
+        // 真人点了一张牌（票 87）。**与 `Answered` 同一条路**：id 换回动作、落进引擎、
+        // 然后 `resume` 按播放状态接着走——引擎与编排层不区分真人与 AI（spec 的 story 28）。
+        //
+        // **真人那一手不留决策记录**（走的是 `Table.apply` 而不是 `applyRecorded`）：
+        // 他没有可审计的推理，与 bot 席同级——牌谱格式因此一个字段都不必加（票面边界）。
+        | HumanPlayed id ->
+            match model.Source with
+            // 回放里没有人要出手（动作全在牌谱里）：没有事情发生。
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                match handOf live, live.Table with
+                | Some package, Ok table ->
+                    match DecisionPackage.tryAction id package with
+                    // 点了一条不在这一包里的（页面上根本点不到，只可能是过期的一下）：
+                    // **没有事情发生**——绝不在这里放宽合法性（真人不可能犯规）。
+                    | None -> model, Cmd.none
+                    | Some action ->
+                        let played = {
+                            live with
+                                Table = Ok(Table.apply action table)
+                        }
+
+                        {
+                            model with
+                                Source = Source.Live(drain (rosterFor model.Ruleset played) played)
+                        }
+                        |> resume Cmd.none
+                // 不轮到他（或者牌桌开不起来）：同上，没有事情发生。
+                | _, _ -> model, Cmd.none
         | Waited ticket ->
             model
             |> onLive (fun _ live ->
