@@ -234,7 +234,7 @@ module HomePageTests =
                 TableMsg.ProfileOpened 0
                 TableMsg.ProfileDeleted 0
                 TableMsg.ProfileEdited(ProfileField.Model, "deepseek-v4")
-                TableMsg.Answered(1, staleAnswer)
+                TableMsg.Answered(Seat.first, 1, staleAnswer)
             ]
 
         for message in messages do

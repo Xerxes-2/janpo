@@ -29,29 +29,45 @@ module ThinkingBubble =
             | Some turn -> $"点开看第 {turn} 手的全文与当时的局面"
             | None -> "正在等这一席回话"
 
-        Html.button [
-            prop.key "bubble"
-            prop.className $"bubble {wire}"
-            prop.testId $"seat-{Seat.index seat}-bubble"
-            prop.custom ("data-bubble", wire)
-            // 那一手的手序：闸门拿它与牌谱里那一条记录对得上（人读的是气泡里的字）。
-            prop.custom ("data-bubble-turn", turn |> Option.map string |> Option.defaultValue "")
-            prop.disabled (Option.isNone turn)
-            prop.title hint
-            prop.onClick (fun _ -> turn |> Option.iter (fun turn -> dispatch (RecordOpened(Some turn))))
-            prop.children [
-                Html.span [
-                    prop.key "who"
-                    prop.className "bubble-who"
-                    prop.text (Bubble.toLabel state)
-                ]
-                Html.span [
-                    prop.key "said"
-                    prop.className "bubble-said"
-                    prop.text (Bubble.toDisplay state)
+        // 「在想」那一态的已等秒数与上限（票 74；72-3 裁决明写的代价）：
+        // 人读的是气泡里那句「已等 N 秒 / 上限 M 秒」，闸门读的是这两个 `data-*`。
+        let waiting =
+            match state with
+            | Bubble.Thinking(waited, limit) -> [
+                prop.custom ("data-waited", string waited)
+                prop.custom ("data-wait-limit", string limit)
+              ]
+            | Bubble.Spoke _
+            | Bubble.Troubled _ -> []
+
+        Html.button (
+            [
+                prop.key "bubble"
+                prop.className $"bubble {wire}"
+                prop.testId $"seat-{Seat.index seat}-bubble"
+                prop.custom ("data-bubble", wire)
+                // 那一手的手序：闸门拿它与牌谱里那一条记录对得上（人读的是气泡里的字）。
+                prop.custom ("data-bubble-turn", turn |> Option.map string |> Option.defaultValue "")
+                prop.disabled (Option.isNone turn)
+                prop.title hint
+                prop.onClick (fun _ -> turn |> Option.iter (fun turn -> dispatch (RecordOpened(Some turn))))
+            ]
+            @ waiting
+            @ [
+                prop.children [
+                    Html.span [
+                        prop.key "who"
+                        prop.className "bubble-who"
+                        prop.text (Bubble.toLabel state)
+                    ]
+                    Html.span [
+                        prop.key "said"
+                        prop.className "bubble-said"
+                        prop.text (Bubble.toDisplay state)
+                    ]
                 ]
             ]
-        ]
+        )
 
     /// 这一席此刻的气泡，没有就是一行都不画（bot 席、分享链接那种棋谱）。
     let internal at (dispatch: TableMsg -> unit) (seat: Seat) (state: Bubble option) : ReactElement list =

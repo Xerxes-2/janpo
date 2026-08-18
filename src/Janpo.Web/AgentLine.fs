@@ -24,30 +24,66 @@ module AgentLine =
         | Some _ -> "true"
         | None -> "false"
 
-    /// Agent 层此刻在干什么，以及这一桌兜底代打了几手。
+    /// Agent 层此刻在干什么，以及这一桌兜底代打了几手。票 74 之后**按座位各一份**：
+    /// 状态线把多席都列出来——三家同时在想时，人要看得出是三家、各等了多久。
     ///
     /// **断电演习看的就是这一行**：key 配坏了的时候对局照样打得完，但这里会一直红着
-    /// 说模型怎么了。`data-agent` 给无头验收读。
+    /// 说模型怎么了。`data-agent` 给无头验收读：troubled 压过 asking 压过 spoke——
+    /// 「有一席在兜底」比「有一席在想」要紧，与从前单席时的读法兼容。
     ///
     /// 没有模型坐席时那一句要说清楚**是哪一种自带 bot**（票 42 之后就不只一种了）：
     /// 杆子拨到「有主见」时牌桌上会出立直与供托，而行里还写着「四家都是随机选手」就是句错话。
     /// 措辞只有一份真源（`SeatingPlan.botsToDisplay`，它又只读 `Bot.toDisplay`，与面板上那些控件同字）。
-    /// 票 73 之后四席各管各的，因此“四家都是 bot”与“坐着几席模型”都从 `SeatingPlan` 推。
     let internal agentLine (live: LiveTable) (table: Table) =
-        let state, text =
-            match live.Agent with
-            | AgentStatus.Idle when List.isEmpty (SeatingPlan.llmSeats live.Seating) ->
-                "idle", SeatingPlan.botsToDisplay live.Seating
-            | AgentStatus.Idle -> "idle", "模型座位已就位，还没轮到它"
-            | AgentStatus.Asking seat -> "asking", $"正在等座位 {Seat.index seat} 的模型回话……"
-            | AgentStatus.Spoke(seat, reason, latency) ->
-                let said =
-                    match reason with
-                    | Some reason -> $"：{reason}"
-                    | None -> ""
+        // 在飞的那几席：一句合说（同一轮里它们是一起被问出去的，秒数取最久的那一席）。
+        let asking =
+            match live.Awaiting with
+            | [] -> None
+            | flying ->
+                let seats =
+                    flying |> List.map (Awaiting.seat >> Seat.index >> string) |> String.concat "、"
 
-                "spoke", $"座位 {Seat.index seat} 的模型选完了（{latency} ms）{said}"
-            | AgentStatus.Troubled(seat, reason) -> "troubled", $"座位 {Seat.index seat} 兜底代打：{reason}"
+                let waited = flying |> List.map (fun each -> each.WaitedSeconds) |> List.max
+                let limit = flying |> List.map Awaiting.limitSeconds |> List.max
+                Some $"正在等座位 {seats} 的模型回话（已等 {waited} 秒 / 上限 {limit} 秒）……"
+
+        // 说过话 / 兜底那几席：一席一句（票 74：状态按座位各一份，这一行把它们都列出来）。
+        let latest =
+            live.Agent
+            |> List.mapi (fun index status ->
+                match status with
+                | AgentStatus.Idle
+                | AgentStatus.Asking -> None
+                | AgentStatus.Spoke(reason, latency) ->
+                    let said =
+                        match reason with
+                        | Some reason -> $"：{reason}"
+                        | None -> ""
+
+                    Some $"座位 {index} 的模型选完了（{latency} ms）{said}"
+                | AgentStatus.Troubled reason -> Some $"座位 {index} 兜底代打：{reason}")
+            |> List.choose id
+
+        let troubled =
+            live.Agent
+            |> List.exists (fun status ->
+                match status with
+                | AgentStatus.Troubled _ -> true
+                | AgentStatus.Idle
+                | AgentStatus.Asking
+                | AgentStatus.Spoke _ -> false)
+
+        let state, text =
+            match Option.toList asking @ latest with
+            | [] when List.isEmpty (SeatingPlan.llmSeats live.Seating) -> "idle", SeatingPlan.botsToDisplay live.Seating
+            | [] -> "idle", "模型座位已就位，还没轮到它"
+            | said ->
+                let state =
+                    if troubled then "troubled"
+                    elif Option.isSome asking then "asking"
+                    else "spoke"
+
+                state, String.concat "；" said
 
         let fallbacks = Table.fallbacks table
 
@@ -62,6 +98,15 @@ module AgentLine =
             // 这一条给闸门看——逗号隔开的四个名字，与牌谱里那一列 `names` 同一份真源。
             prop.custom ("data-seats", SeatingPlan.names live.Seating |> String.concat ",")
             prop.custom ("data-fallbacks", string fallbacks)
+            // 在飞的那几席的座位号（逗号串，没有就是空串）。**诊断用**：闸门数并发靠的是
+            // 「thinking 态的气泡有几个」（verify-bubbles 的 MutationObserver），这一条只是
+            // 让人肉查页面时不必逐席翻气泡。
+            prop.custom (
+                "data-asking-seats",
+                live.Awaiting
+                |> List.map (Awaiting.seat >> Seat.index >> string)
+                |> String.concat ","
+            )
             prop.text (text + tally)
         ]
 

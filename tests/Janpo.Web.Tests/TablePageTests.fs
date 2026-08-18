@@ -1,6 +1,8 @@
 namespace Janpo.Web.Tests
 
 open Xunit
+open Thoth.Json.Core
+open Thoth.Json.Newtonsoft
 open Janpo
 open Janpo.Web
 
@@ -52,8 +54,19 @@ module TablePageTests =
 
     let private awaitingOf (model: TableModel) : Awaiting =
         match (liveOf model).Awaiting with
-        | Some awaiting -> awaiting
-        | None -> failwith "这一手应当在等 Agent 层的回执"
+        | [ awaiting ] -> awaiting
+        | [] -> failwith "这一手应当在等 Agent 层的回执"
+        | many -> failwith $"这几条用例只该有一份在飞的问话，却有 {List.length many} 份"
+
+    /// 把一条回执带上它该带的座位与票号（票 74：四席各判各的）。
+    let private answeredWith (awaiting: Awaiting) (answer: AgentAnswer) : TableMsg =
+        Answered(Awaiting.seat awaiting, awaiting.Ticket, answer)
+
+    /// 这一席此刻的状态（`LiveTable.Agent` 按座位一项，票 74）。
+    let private agentAt (seat: Seat) (model: TableModel) : AgentStatus =
+        match Seat.tryItem seat (liveOf model).Agent with
+        | Some status -> status
+        | None -> failwith $"座位 {Seat.index seat} 该有一格状态"
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 
@@ -116,7 +129,7 @@ module TablePageTests =
     let private playKyoku (answer: AgentAnswer) (model: TableModel) : TableModel =
         let rec loop (left: int) (model: TableModel) =
             match (liveOf model).Awaiting with
-            | Some awaiting when left > 0 -> loop (left - 1) (model |> step (Answered(awaiting.Ticket, answer)))
+            | awaiting :: _ when left > 0 -> loop (left - 1) (model |> step (answeredWith awaiting answer))
             | _ when left <= 0 -> failwith "这一局在预算内没打完"
             | _ ->
                 match Table.pending (tableOf model) with
@@ -129,9 +142,9 @@ module TablePageTests =
     let private askOnce (answer: AgentAnswer) (model: TableModel) : TableModel =
         let rec loop (left: int) (model: TableModel) =
             match (liveOf model).Awaiting with
-            | Some awaiting -> model |> step (Answered(awaiting.Ticket, answer))
-            | None when left <= 0 -> failwith "这一段里模型应当被问到一次"
-            | None -> loop (left - 1) (model |> step Advanced)
+            | awaiting :: _ -> model |> step (answeredWith awaiting answer)
+            | [] when left <= 0 -> failwith "这一段里模型应当被问到一次"
+            | [] -> loop (left - 1) (model |> step Advanced)
 
         loop 200 model
 
@@ -144,11 +157,11 @@ module TablePageTests =
         let llm = llmTable () |> step Advanced
 
         Assert.True((tableOf random).Latest |> Option.isSome)
-        Assert.True(Option.isNone (liveOf random).Awaiting)
+        Assert.True(List.isEmpty (liveOf random).Awaiting)
 
         // LLM 那一桌：这一手还没落，牌桌停在原地等回执。
         Assert.True((tableOf llm).Latest |> Option.isNone)
-        Assert.Equal(AgentStatus.Asking Seat.first, (liveOf llm).Agent)
+        Assert.Equal(AgentStatus.Asking, agentAt Seat.first llm)
         Assert.Equal(Seat.first, DecisionPackage.seat (awaitingOf llm).Package)
 
     [<Fact>]
@@ -167,15 +180,15 @@ module TablePageTests =
         let awaiting = awaitingOf asked
         let expected = DecisionPackage.tryAction 1 awaiting.Package
 
-        let played = asked |> step (Answered(awaiting.Ticket, chose 1))
+        let played = asked |> step (answeredWith awaiting (chose 1))
         let table = tableOf played
 
         Assert.Equal(expected, table.Latest |> Option.map (fun turn -> turn.Action))
         // 自己决出来的一手不带兜底记号。
         Assert.Equal(None, table.Latest |> Option.bind (fun turn -> turn.Fallback))
         Assert.Equal(0, Table.fallbacks table)
-        Assert.True(Option.isNone (liveOf played).Awaiting)
-        Assert.Equal(AgentStatus.Spoke(Seat.first, Some "就它了", 640), (liveOf played).Agent)
+        Assert.True(List.isEmpty (liveOf played).Awaiting)
+        Assert.Equal(AgentStatus.Spoke(Some "就它了", 640), agentAt Seat.first played)
 
     [<Fact>]
     let ``交不出来就兜底代打，而且牌桌上看得出来`` () =
@@ -183,13 +196,13 @@ module TablePageTests =
         let awaiting = awaitingOf asked
         let expected = Fallback.action ScaffoldTier.Bare awaiting.Package
 
-        let played = asked |> step (Answered(awaiting.Ticket, refused))
+        let played = asked |> step (answeredWith awaiting refused)
         let table = tableOf played
 
         Assert.Equal(Some expected, table.Latest |> Option.map (fun turn -> turn.Action))
         Assert.Equal(refused.Failure, table.Latest |> Option.bind (fun turn -> turn.Fallback))
         Assert.Equal(1, Table.fallbacks table)
-        Assert.Equal(AgentStatus.Troubled(Seat.first, "模型超时（重试 2 次仍无结果）"), (liveOf played).Agent)
+        Assert.Equal(AgentStatus.Troubled "模型超时（重试 2 次仍无结果）", agentAt Seat.first played)
 
     [<Fact>]
     let ``兜底按座位自己那一档代打`` () =
@@ -211,14 +224,14 @@ module TablePageTests =
         let awaiting = awaitingOf asked
         Assert.Equal(ScaffoldTier.Assisted, awaiting.Config.Tier)
 
-        let played = asked |> step (Answered(awaiting.Ticket, refused))
+        let played = asked |> step (answeredWith awaiting refused)
         let action = (tableOf played).Latest |> Option.map (fun turn -> turn.Action)
 
         Assert.Equal(Some(Fallback.action ScaffoldTier.Assisted awaiting.Package), action)
 
         let bare = start ScaffoldTier.Bare
         let bareAwaiting = awaitingOf bare
-        let barePlayed = bare |> step (Answered(bareAwaiting.Ticket, refused))
+        let barePlayed = bare |> step (answeredWith bareAwaiting refused)
 
         Assert.NotEqual(action, (tableOf barePlayed).Latest |> Option.map (fun turn -> turn.Action))
 
@@ -229,7 +242,7 @@ module TablePageTests =
         let expected = Fallback.action ScaffoldTier.Bare awaiting.Package
 
         // Agent 层自己校过一道 id，这条是「两边看法分了岔」时的兜底。
-        let played = asked |> step (Answered(awaiting.Ticket, chose 9999))
+        let played = asked |> step (answeredWith awaiting (chose 9999))
         let table = tableOf played
 
         Assert.Equal(Some expected, table.Latest |> Option.map (fun turn -> turn.Action))
@@ -241,10 +254,27 @@ module TablePageTests =
     [<Fact>]
     let ``票号对不上的回执一律丢掉`` () =
         let asked = llmTable () |> step Advanced
-        let stale = asked |> step (Answered((awaitingOf asked).Ticket + 1, chose 0))
+        let awaiting = awaitingOf asked
+
+        let stale =
+            asked |> step (Answered(Awaiting.seat awaiting, awaiting.Ticket + 1, chose 0))
 
         Assert.True((tableOf stale).Latest |> Option.isNone)
-        Assert.True(Option.isSome (liveOf stale).Awaiting)
+        Assert.False(List.isEmpty (liveOf stale).Awaiting)
+
+    [<Fact>]
+    let ``座位对不上的回执同样丢掉：票号是那一票的也不行`` () =
+        // 票 74：等待与票号**按座位**。回执错位（座位与票号各来自一份问话）不许落进牌桌。
+        let asked = llmTable () |> step Advanced
+        let awaiting = awaitingOf asked
+
+        let crossed =
+            asked
+            |> step (Answered(Seat.shimocha Ruleset.yonma Seat.first, awaiting.Ticket, chose 0))
+
+        Assert.True((tableOf crossed).Latest |> Option.isNone)
+        Assert.False(List.isEmpty (liveOf crossed).Awaiting)
+        Assert.Empty((tableOf crossed).Decisions)
 
     [<Fact>]
     let ``重开一桌之后，旧回执落不进新牌桌`` () =
@@ -252,10 +282,10 @@ module TablePageTests =
         let awaiting = awaitingOf asked
         let restarted = asked |> step Restarted
 
-        Assert.True(Option.isNone (liveOf restarted).Awaiting)
-        Assert.Equal(AgentStatus.Idle, (liveOf restarted).Agent)
+        Assert.True(List.isEmpty (liveOf restarted).Awaiting)
+        Assert.All((liveOf restarted).Agent, fun status -> Assert.Equal(AgentStatus.Idle, status))
 
-        let late = restarted |> step (Answered(awaiting.Ticket, chose 0))
+        let late = restarted |> step (answeredWith awaiting (chose 0))
         Assert.True((tableOf late).Latest |> Option.isNone)
 
     // ---- 断电演习 ----
@@ -272,9 +302,9 @@ module TablePageTests =
         // 座位 0 的每一手都是兜底代打的，因此这个数必然大于 0。
         Assert.True(Table.fallbacks table > 0, "断电演习里必然有兜底代打的手")
 
-        match (liveOf ended).Agent with
-        | AgentStatus.Troubled(seat, _) -> Assert.Equal(Seat.first, seat)
-        | other -> failwith $"全程兜底之后状态该是 Troubled，却是 {other}"
+        match agentAt Seat.first ended with
+        | AgentStatus.Troubled _ -> ()
+        | other -> failwith $"全程兜底之后座位 0 的状态该是 Troubled，却是 {other}"
 
     // ---- 配置 ----
 
@@ -312,9 +342,7 @@ module TablePageTests =
 
         // 下一手也一样：一局之内每一手都是同一份前缀。
         let nextHand =
-            edited
-            |> step (Answered((awaitingOf edited).Ticket, refused))
-            |> askOnce refused
+            edited |> step (answeredWith (awaitingOf edited) refused) |> askOnce refused
 
         Assert.Equal("", (llmConfigOf nextHand).Persona)
 
@@ -399,9 +427,9 @@ module TablePageTests =
         Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf toggled).State)
         Assert.Equal((liveOf asked).Ticket, (liveOf toggled).Ticket)
 
-        Assert.Equal(
-            (liveOf asked).Awaiting |> Option.map (fun awaiting -> awaiting.Ticket),
-            (liveOf toggled).Awaiting |> Option.map (fun awaiting -> awaiting.Ticket)
+        Assert.Equal<int list>(
+            (liveOf asked).Awaiting |> List.map (fun awaiting -> awaiting.Ticket),
+            (liveOf toggled).Awaiting |> List.map (fun awaiting -> awaiting.Ticket)
         )
 
     // ---- 自带 bot 的选择（票 42） ----
@@ -497,9 +525,8 @@ module TablePageTests =
     let private playKyokuBy (answerFor: Seat -> AgentAnswer) (model: TableModel) : TableModel =
         let rec loop (left: int) (model: TableModel) =
             match (liveOf model).Awaiting with
-            | Some awaiting when left > 0 ->
-                let seat = DecisionPackage.seat awaiting.Package
-                loop (left - 1) (model |> step (Answered(awaiting.Ticket, answerFor seat)))
+            | awaiting :: _ when left > 0 ->
+                loop (left - 1) (model |> step (answeredWith awaiting (answerFor (Awaiting.seat awaiting))))
             | _ when left <= 0 -> failwith "这一局在预算内没打完"
             | _ ->
                 match Table.pending (tableOf model) with
@@ -532,26 +559,192 @@ module TablePageTests =
             | Some config -> Assert.Equal(profile.ApiKey, config.ApiKey)
             | None -> failwith $"座位 {Seat.index seat} 该是模型"
 
-    [<Fact>]
-    let ``四家都是模型时仍旧一次只问一席：并发是票 74`` () =
-        // 这一票不许改「一次一份」那个形态：`Awaiting` 恒是一条，回执落定之后才问下一家。
-        let asked = fourLlm () |> step Advanced
-        let first = awaitingOf asked
+    /// 推到「几席同时在飞」的那一刻就停（票 74：响应阶段一次把所有待答席问出去）。
+    /// 预算内没遇到就 fail——**没执行到的断言等于没有断言**（判据 3）。
+    let private askedMany (model: TableModel) : TableModel =
+        let rec loop (left: int) (model: TableModel) =
+            if left <= 0 then
+                failwith "这一段里该出现一次同时问多席的响应阶段"
+            else
+                match (liveOf model).Awaiting with
+                | _ :: _ :: _ -> model
+                | [ awaiting ] -> loop (left - 1) (model |> step (answeredWith awaiting (chose 0)))
+                | [] ->
+                    match Table.pending (tableOf model) with
+                    | Some _ -> loop (left - 1) (model |> step Advanced)
+                    | None when Option.isSome (Table.result (tableOf model)) -> failwith "整场打完了也没遇到同时问多席的响应阶段"
+                    | None -> loop (left - 1) (model |> step KyokuAdvanced)
 
-        // 再单步也不会多出第二个在飞的请求。
+        loop 1600 model
+
+    [<Fact>]
+    let ``响应阶段一次把所有待答席问出去：几席一起在飞，各有各的座位与票号`` () =
+        let asked = askedMany (fourLlm ())
+        let flying = (liveOf asked).Awaiting
+
+        // 真的几席同时在飞，而且在飞的正是引擎此刻等答复的那几席、顺序也一致。
+        Assert.True(List.length flying >= 2, $"该有至少两席在飞，实际 {List.length flying} 席")
+
+        Assert.Equal<Seat list>(
+            Table.pendings (tableOf asked) |> List.map (fun choice -> choice.Seat),
+            flying |> List.map Awaiting.seat
+        )
+
+        // 各有各的票号（互不相同），各问各的座位（决策包的座位互不相同）。
+        Assert.Equal(List.length flying, flying |> List.map (fun each -> each.Ticket) |> List.distinct |> List.length)
+        Assert.Equal(List.length flying, flying |> List.map Awaiting.seat |> List.distinct |> List.length)
+
+        // 在飞那几席的状态线都是「在想」（票 74：状态按座位各一份）。
+        for each in flying do
+            Assert.Equal(AgentStatus.Asking, agentAt (Awaiting.seat each) asked)
+
+        // 再单步也不会多出在飞的请求：同一席在飞时绝不问第二次（票 23 那条判据不变）。
         let again = asked |> step Advanced
-        Assert.Equal(first.Ticket, (awaitingOf again).Ticket)
         Assert.Equal((liveOf asked).Ticket, (liveOf again).Ticket)
 
-        // 答完这一手才轮到下一家（这一局里四家都被问到过）。
-        let played = fourLlm () |> playKyokuBy (fun _ -> chose 0)
+        Assert.Equal<int list>(
+            flying |> List.map (fun each -> each.Ticket),
+            (liveOf again).Awaiting |> List.map (fun each -> each.Ticket)
+        )
 
-        let asked =
-            (tableOf played).Decisions
-            |> List.map (fun record -> record.Seat)
-            |> List.distinct
+    [<Fact>]
+    let ``打牌阶段照旧只有一家在飞：并发只属于响应阶段`` () =
+        // 四家都是模型：开局第一手是亲的打牌阶段，问出去的仍然只有一席。
+        let asked = fourLlm () |> step Advanced
 
-        Assert.Equal<Seat list>(Seat.all Ruleset.yonma, List.sortBy Seat.index asked)
+        Assert.Equal(1, List.length (liveOf asked).Awaiting)
+        Assert.Equal(Seat.first, Awaiting.seat (awaitingOf asked))
+
+    [<Fact>]
+    let ``回执错位：座位与票号各来自一份在飞的问话，一律丢掉`` () =
+        // 票 74 的「按座位」：多席在飞时，甲席的座位配上乙席的票号不许落进任何一席。
+        let asked = askedMany (fourLlm ())
+
+        match (liveOf asked).Awaiting with
+        | first :: second :: _ ->
+            let crossed = asked |> step (Answered(Awaiting.seat first, second.Ticket, chose 0))
+
+            Assert.Equal<int list>(
+                (liveOf asked).Awaiting |> List.map (fun each -> each.Ticket),
+                (liveOf crossed).Awaiting |> List.map (fun each -> each.Ticket)
+            )
+
+            Assert.Equal(List.length (tableOf asked).Decisions, List.length (tableOf crossed).Decisions)
+            Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf crossed).State)
+
+            // 错位的回执连「先记下」都不许（不然它会顶着乙席的票号替乙席答话）。
+            Assert.All((liveOf crossed).Awaiting, fun each -> Assert.True(Option.isNone each.Answer))
+        | few -> failwith $"该有至少两席在飞，实际 {List.length few} 席"
+
+    /// 把**一整场**打完，回执按 `reverse` 指定的到达顺序回来：false = 头一家先回
+    /// （等价于串行），true = 末一家先回（并发最坏的错位到达）。
+    /// 返回**同时在飞的最大席数**当执行证据。
+    let private playGameArrival (reverse: bool) (model: TableModel) : TableModel * int =
+        let rec loop (left: int) (most: int) (model: TableModel) =
+            if left <= 0 then
+                failwith "这一场在预算内没打完"
+            else
+                match (liveOf model).Awaiting with
+                | [] ->
+                    match Table.pending (tableOf model) with
+                    | Some _ -> loop (left - 1) most (model |> step Advanced)
+                    | None when Option.isSome (Table.result (tableOf model)) -> model, most
+                    | None -> loop (left - 1) most (model |> step KyokuAdvanced)
+                | entries ->
+                    let most = max most (List.length entries)
+
+                    // 还没答的那几份，按点名的到达顺序逐个回：后到的先回时，先回的那几份
+                    // 要在 `Awaiting` 里等头一家（引擎收齐才裁决，落子沿引擎的顺序走）。
+                    match
+                        entries
+                        |> List.filter (fun each -> Option.isNone each.Answer)
+                        |> (if reverse then List.rev else id)
+                    with
+                    | [] -> failwith "在飞的都答过了却没落下去：drain 卡住了"
+                    | next :: _ -> loop (left - 1) most (model |> step (answeredWith next (chose 0)))
+
+        loop 6000 0 model
+
+    [<Fact>]
+    let ``回执到达的先后不改结果：倒序到达打出的牌谱与正序逐字相同`` () =
+        // 票 74 的闸门「并发只改问的时机，不改结果」在 dotnet 侧的形态：同一桌四席模型，
+        // 回执正序到达（= 串行的落子时序）与倒序到达（并发最坏的错位）各打完一整场，
+        // **整份牌谱逐字相同**——终局点数与顺位相同只是它的推论。
+        let paifuOf (model: TableModel) : string =
+            Table.paifu (rosterOf model) (tableOf model)
+            |> Paifu.encoder
+            |> Encode.toString 0
+
+        let canonical, mostCanonical = fourLlm () |> playGameArrival false
+        let reversed, mostReversed = fourLlm () |> playGameArrival true
+
+        // 两趟都真的走到过「几席同时在飞」（不然这条断言在空转，判据 3）。
+        Assert.True(mostCanonical >= 2, $"正序那一趟该遇到过多席在飞，实际最多 {mostCanonical} 席")
+        Assert.True(mostReversed >= 2, $"倒序那一趟该遇到过多席在飞，实际最多 {mostReversed} 席")
+
+        Assert.True(Option.isSome (Table.result (tableOf canonical)), "这一场该打到了终局精算")
+        Assert.Equal(paifuOf canonical, paifuOf reversed)
+        Assert.Equal<int list>(GameState.scores (tableOf canonical).State, GameState.scores (tableOf reversed).State)
+
+    [<Fact>]
+    let ``一席交不出来不拖累别席：它走兜底，其余席的答复照收`` () =
+        let asked = askedMany (fourLlm ())
+        let flying = (liveOf asked).Awaiting
+        let broken = List.head flying
+        let brokenSeat = Awaiting.seat broken
+
+        // 坏的那一席先回「交不出来」，其余席倒着回（故意错位到达）。
+        let settled =
+            (asked |> step (answeredWith broken refused), List.tail flying |> List.rev)
+            ||> List.fold (fun model each -> model |> step (answeredWith each (chose 0)))
+
+        // 这一轮收齐了：在飞清空，牌桌照走（没有 Fault、没有卡死）。
+        Assert.True(List.isEmpty (liveOf settled).Awaiting)
+        Assert.True(Option.isNone (tableOf settled).Fault)
+
+        // 坏的那一席兜了这一手，别席一手都没被拖累。
+        let records =
+            (tableOf settled).Decisions |> List.skip (List.length (tableOf asked).Decisions)
+
+        for each in flying do
+            let seat = Awaiting.seat each
+
+            let mine =
+                records |> List.filter (fun record -> record.Seat = seat) |> List.tryExactlyOne
+
+            match mine with
+            | None -> failwith $"座位 {Seat.index seat} 这一轮该正好留下一条记录"
+            | Some record -> Assert.Equal((if seat = brokenSeat then refused.Failure else None), record.Fallback)
+
+        Assert.Equal(AgentStatus.Troubled "模型超时（重试 2 次仍无结果）", agentAt brokenSeat settled)
+
+    [<Fact>]
+    let ``「在想」按席各记各的秒数：Waited 一秒一跳，回执到了就停`` () =
+        let asked = askedMany (fourLlm ())
+
+        match (liveOf asked).Awaiting with
+        | first :: second :: _ ->
+            // 头一席的钟走了两秒，第二席纹丝不动。
+            let waited = asked |> step (Waited first.Ticket) |> step (Waited first.Ticket)
+
+            let bubbleAt (seat: Seat) (model: TableModel) =
+                TablePage.bubbles model (tableOf model) seat
+
+            Assert.Equal(Some(Bubble.Thinking(2, first.Config.TimeoutMs / 1000)), bubbleAt (Awaiting.seat first) waited)
+
+            Assert.Equal(
+                Some(Bubble.Thinking(0, second.Config.TimeoutMs / 1000)),
+                bubbleAt (Awaiting.seat second) waited
+            )
+
+            // 已经作废的票号：钟静默地停（不加秒、不出错）。
+            let stale = waited |> step (Waited(first.Ticket + 999))
+
+            Assert.Equal<int list>(
+                (liveOf waited).Awaiting |> List.map (fun each -> each.WaitedSeconds),
+                (liveOf stale).Awaiting |> List.map (fun each -> each.WaitedSeconds)
+            )
+        | few -> failwith $"该有至少两席在飞，实际 {List.length few} 席"
 
     [<Fact>]
     let ``人格一局内不变按座位各自成立：定住一席不定住别席`` () =

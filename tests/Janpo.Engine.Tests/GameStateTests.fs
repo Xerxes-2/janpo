@@ -1,6 +1,8 @@
 namespace Janpo.Engine.Tests
 
 open Xunit
+open Thoth.Json.Core
+open Thoth.Json.Newtonsoft
 open Janpo
 open Janpo.Engine.Tests.GameStateFixtures
 
@@ -280,3 +282,70 @@ module GameStateTests =
             Assert.Equal("座位 1 声称手切 3索，但手里只有刚摸进的那一张", IllegalAction.toDisplay (TsumogiriMismatch(seat 1, tile, false)))
 
         Assert.Equal("这一局已经结束了，不再接受任何动作", IllegalAction.toDisplay KyokuAlreadyEnded)
+
+    // ---- 响应阶段的地基（票 74）：别家的答复不改我的合法动作集 ----
+
+    /// 一个座位此刻的「答复视角」：合法动作集原样，加上它的决策包编成的 JSON。
+    /// **包也一起钉住**：票 74 要「同时建好几份决策包、答复到了再逐个落」，
+    /// 那些包是在别家还没答的时候建的——别家答完之后它得原封不动仍然成立。
+    let private responderView (state: GameState) (choice: LegalActions) : Seat * Action list * string =
+        let package =
+            match DecisionPackage.forSeat choice.Seat state with
+            | Some package -> Encode.toString 0 (DecisionPackage.encoder package)
+            | None -> failwith $"座位 {Seat.index choice.Seat} 在等答复，它的决策包应当建得出来"
+
+        choice.Seat, choice.Actions, package
+
+    /// 这一轮响应里各家会交的答复：有宣言就交头一条宣言（荣和 / 碰 / 吃 / 杠都在前面，
+    /// `Action.None` 恒排在末尾），只有「过」可交就交「过」——**故意让宣言也进场**，
+    /// 只拿「过」当答复的话，「宣言收进 `Declared` 之后别家的集合也不变」这半句就没人执行。
+    let private declaredOrPass (choice: LegalActions) : Action = List.head choice.Actions
+
+    [<Fact>]
+    let ``响应阶段逐个落别家的答复：某席的动作 id 集与决策包恒不变`` () =
+        // 扫一批种子，凡是走到「响应阶段同时等多家」的局面就把地基断言跑一遍。
+        // **执行次数自己数**（判据 3）：一次都没执行到的断言等于没有断言。
+        let probe (state: GameState) (choices: LegalActions list) : int =
+            // 两种顺序都走：引擎给的顺序（下家优先）与它的倒序——「逐个落」的安全性
+            // 不该依赖谁先答（并发时回执的到达顺序不归任何人管）。
+            for order in [ choices; List.rev choices ] do
+                let rec landEach (state: GameState) (pending: LegalActions list) =
+                    match pending with
+                    | [] -> ()
+                    | actor :: rest ->
+                        let before = rest |> List.map (responderView state)
+
+                        match GameState.step state (declaredOrPass actor) with
+                        | Error illegal -> failwith $"这一家答自己的合法动作，不该被拒：{IllegalAction.toDisplay illegal}"
+                        | Ok(next, _) ->
+                            let after = rest |> List.map (responderView next)
+                            Assert.Equal<(Seat * Action list * string) list>(before, after)
+                            landEach next rest
+
+                landEach state order
+
+            2
+
+        let rec walk (probed: int) (rng: Rng) (state: GameState) : int =
+            match GameState.legalActions state with
+            | [] -> probed
+            | choices ->
+                let probed =
+                    if List.length choices >= 2 then
+                        probed + probe state choices
+                    else
+                        probed
+
+                let action, advanced = Kyoku.randomPlayer rng state (List.head choices)
+
+                match GameState.step state action with
+                | Error illegal -> failwith $"随机选手交的动作不该被拒：{IllegalAction.toDisplay illegal}"
+                | Ok(next, _) -> walk probed advanced next
+
+        let probed =
+            [ 0..39 ]
+            |> List.sumBy (fun seed ->
+                let state, rng = start seed
+                walk 0 rng state)
+
+        Assert.True(probed >= 10, $"这批种子里该扫到至少 10 个多家待答的响应阶段，实际 {probed} 个（断言在空转）")

@@ -103,8 +103,9 @@ module PaifuExportTests =
                 failwith "这一场在预算内没打完"
             else
                 match (liveOf model).Awaiting with
-                | Some awaiting -> loop (left - 1) (model |> step (Answered(awaiting.Ticket, answer)))
-                | None ->
+                | awaiting :: _ ->
+                    loop (left - 1) (model |> step (Answered(Awaiting.seat awaiting, awaiting.Ticket, answer)))
+                | [] ->
                     let table = tableOf model
 
                     if Option.isSome (Table.result table) then
@@ -180,9 +181,11 @@ module PaifuExportTests =
                 checked'
             else
                 match (liveOf model).Awaiting with
-                | None -> loop (left - 1) checked' (model |> step Advanced)
-                | Some awaiting ->
-                    let played = model |> step (Answered(awaiting.Ticket, spoke))
+                | [] -> loop (left - 1) checked' (model |> step Advanced)
+                | awaiting :: _ ->
+                    let played =
+                        model |> step (Answered(Awaiting.seat awaiting, awaiting.Ticket, spoke))
+
                     let table = tableOf played
                     let record = List.last table.Decisions
 
@@ -202,10 +205,12 @@ module PaifuExportTests =
 
         let awaiting =
             match (liveOf asked).Awaiting with
-            | Some awaiting -> awaiting
-            | None -> failwith "座位 1 这一手应当在等回执"
+            | awaiting :: _ -> awaiting
+            | [] -> failwith "座位 1 这一手应当在等回执"
 
-        let played = asked |> step (Answered(awaiting.Ticket, refused))
+        let played =
+            asked |> step (Answered(Awaiting.seat awaiting, awaiting.Ticket, refused))
+
         let table = tableOf played
         let record = List.last table.Decisions
 
@@ -267,8 +272,9 @@ module PaifuExportTests =
                 model
             else
                 match (liveOf model).Awaiting with
-                | Some awaiting -> advance (left - 1) (model |> step (Answered(awaiting.Ticket, spoke)))
-                | None -> advance (left - 1) (model |> step Advanced)
+                | awaiting :: _ ->
+                    advance (left - 1) (model |> step (Answered(Awaiting.seat awaiting, awaiting.Ticket, spoke)))
+                | [] -> advance (left - 1) (model |> step Advanced)
 
         let midway = llmTable () |> advance 40
         let paifu = paifuOf midway |> roundTrip

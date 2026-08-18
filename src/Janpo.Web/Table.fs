@@ -145,14 +145,21 @@ module Table =
         |> Option.map SeatStream.events
         |> Option.defaultValue []
 
-    /// 现在等哪一家、它能提交什么；这一局已终或出过错则为 None。
+    /// 现在等着答复的**每一家**、各自能提交什么；这一局已终或出过错则为空。
     ///
-    /// **响应阶段同时等多家时给的是第一家**——`Kyoku.run` 也是这么问的：每收一家答复就
-    /// 少一家，收齐之后引擎自己按优先级裁决，因此「先被问到」不等于「优先」。
-    let pending (table: Table) : LegalActions option =
+    /// **响应阶段可能同时有好几家**（票 74 把它们一次全问出去）；摸牌后恒只有一家。
+    /// 引擎收齐才按优先级裁决，因此这里的顺序只是「问的顺序」，不是裁决顺序。
+    let pendings (table: Table) : LegalActions list =
         match table.Fault with
-        | Some _ -> None
-        | None -> GameState.legalActions table.State |> List.tryHead
+        | Some _ -> []
+        | None -> GameState.legalActions table.State
+
+    /// 现在等着答复的**头一家**；这一局已终或出过错则为 None。
+    ///
+    /// 它是「还推不推得动」的判据与**落子顺序的锚**：回放重建响应阶段的提交时
+    /// 就是按「每次取头一家」重建的（`Replay.stepResponse`），因此并发问话之后的**落子**
+    /// 也得沿它的顺序走（`TableState.drain`），手序号才与回放逐帧对得上。
+    let pending (table: Table) : LegalActions option = pendings table |> List.tryHead
 
     /// 这一局终了了吗。
     let isKyokuEnded (table: Table) : bool = GameState.isEnded table.State
@@ -162,12 +169,14 @@ module Table =
 
     // ---- 推进 ----
 
-    /// 问该出手的那家要一个动作。**按座位分派**（票 23）：bot 座位当场就给得出，
-    /// LLM 座位只给得出一份决策包——动作要发一趟请求、由后来的一条 Msg 带回来。
+    /// 问**点名的那一家**要一个动作；它此刻不在待答之列时是 None。**按座位分派**（票 23）：
+    /// bot 座位当场就给得出，LLM 座位只给得出一份决策包——动作要发一趟请求、
+    /// 由后来的一条 Msg 带回来。响应阶段同时等多家时，票 74 对每一家各调一次。
     ///
     /// 异步就分岔在这里，**而不在 `apply`**：落子那一半与决策者是谁无关。
-    let decide (roster: Roster) (table: Table) : Demand option =
-        pending table
+    let decideFor (seat: Seat) (roster: Roster) (table: Table) : Demand option =
+        pendings table
+        |> List.tryFind (fun choice -> choice.Seat = seat)
         |> Option.map (fun choice ->
             let bot (kind: Bot) =
                 Bot.player kind table.Players table.State choice |> Demand.Ready
@@ -180,6 +189,10 @@ module Table =
                 match DecisionPackage.forSeat choice.Seat table.State with
                 | Some package -> Demand.Asked(package, config)
                 | None -> bot Bot.Uniform)
+
+    /// 问待答头一家要一个动作（`decideFor` 的头一家特例，纯 bot 那条路还在走它）。
+    let decide (roster: Roster) (table: Table) : Demand option =
+        pending table |> Option.bind (fun choice -> decideFor choice.Seat roster table)
 
     /// 把一个动作落进引擎。**决策者是谁与这一半无关**——`record` 只是审计数据：
     /// 它里的兜底原因记在 `Latest` 上给牌桌看，引擎那边一分待遇都不变。

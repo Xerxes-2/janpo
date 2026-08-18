@@ -183,7 +183,11 @@ module ThinkingBubbleTests =
 
         Assert.Equal<string list>(
             [ "thinking"; "spoke"; "troubled" ],
-            [ Bubble.Thinking; Bubble.Spoke spoke; Bubble.Troubled(troubled, "端点连不上") ]
+            [
+                Bubble.Thinking(0, 240)
+                Bubble.Spoke spoke
+                Bubble.Troubled(troubled, "端点连不上")
+            ]
             |> List.map Bubble.toWire
         )
 
@@ -234,8 +238,9 @@ module ThinkingBubbleTests =
 
     let private awaitingOf (model: TableModel) : Awaiting =
         match (liveOf model).Awaiting with
-        | Some awaiting -> awaiting
-        | None -> failwith "这一手应当在等 Agent 层的回执"
+        | [ awaiting ] -> awaiting
+        | [] -> failwith "这一手应当在等 Agent 层的回执"
+        | many -> failwith $"这几条用例只该有一份在飞的问话，却有 {List.length many} 份"
 
     /// 模型好好答话。
     let private chose: AgentAnswer =
@@ -266,9 +271,9 @@ module ThinkingBubbleTests =
     let private askedOnce (model: TableModel) : TableModel =
         let rec loop (left: int) (model: TableModel) =
             match (liveOf model).Awaiting with
-            | Some _ -> model
-            | None when left <= 0 -> failwith "这一段里模型应当被问到一次"
-            | None -> loop (left - 1) (model |> step Advanced)
+            | _ :: _ -> model
+            | [] when left <= 0 -> failwith "这一段里模型应当被问到一次"
+            | [] -> loop (left - 1) (model |> step Advanced)
 
         loop 200 model
 
@@ -277,7 +282,8 @@ module ThinkingBubbleTests =
         let asked = llmTable () |> askedOnce
 
         Assert.Equal(Seat.first, DecisionPackage.seat (awaitingOf asked).Package)
-        Assert.Equal(Some Bubble.Thinking, bubbleAt 0 asked)
+        // 带着已等秒数与上限（票 74）：刚问出去是 0 秒，上限 = 档案超时 240000 ms → 240 秒。
+        Assert.Equal(Some(Bubble.Thinking(0, 240)), bubbleAt 0 asked)
 
         // 其余三席是自带 bot：**一条记录都没有，因此一个气泡都没有**。
         for index in 1..3 do
@@ -286,14 +292,17 @@ module ThinkingBubbleTests =
     [<Fact>]
     let ``在想压过上一条记录：这一席上一手说过话也一样`` () =
         let spoke = llmTable () |> askedOnce
-        let answered = spoke |> step (Answered((awaitingOf spoke).Ticket, chose))
+
+        let answered =
+            spoke
+            |> step (Answered(Awaiting.seat (awaitingOf spoke), (awaitingOf spoke).Ticket, chose))
 
         match bubbleAt 0 answered with
         | Some(Bubble.Spoke record) -> Assert.Equal(Some "先数向听……", record.Thinking)
         | other -> failwith $"答过话之后该是「说了什么」，却是 {other}"
 
         // 再问一次：旧的理由已经不是它此刻在想的事了。
-        Assert.Equal(Some Bubble.Thinking, bubbleAt 0 (answered |> askedOnce))
+        Assert.Equal(Some(Bubble.Thinking(0, 240)), bubbleAt 0 (answered |> askedOnce))
 
     // ---- 回放：沿游标取那一手 ----
 
@@ -431,7 +440,11 @@ module ThinkingBubbleTests =
                 model
             else
                 let asked = model |> askedOnce
-                play (left - 1) (asked |> step (Answered((awaitingOf asked).Ticket, chose)))
+
+                play
+                    (left - 1)
+                    (asked
+                     |> step (Answered(Awaiting.seat (awaitingOf asked), (awaitingOf asked).Ticket, chose)))
 
         let played = llmTable () |> play 3
         let live = shownTable played

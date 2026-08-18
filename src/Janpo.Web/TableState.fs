@@ -11,13 +11,34 @@ open Janpo
 /// 重开一桌之后旧回执才回来是常事（一次请求动辄几秒），而它的 id 是按另一份
 /// 决策包编的号——拿它去 `tryAction` 会拿到一个语义完全不同的动作。
 type Awaiting = {
-    /// 这一次问话的票号。回执带的票号对不上就丢掉。
+    /// 这一次问话的票号（全局递增，因此也是跨席唯一的）。回执带的**座位与票号**要与
+    /// 同一份 `Awaiting` 对上，对不上就丢掉（票 74：四席各判各的）。
     Ticket: int
-    /// 问的那一手的决策包。id 往回换动作（`tryAction`）与兜底（`Fallback.action`）都要它。
+    /// 问的那一手的决策包。id 往回换动作（`tryAction`）与兜底（`Fallback.action`）都要它；
+    /// **问的是哪一席也写在它身上**（`DecisionPackage.seat`），不另存一份。
     Package: DecisionPackage
-    /// 那个座位的配置（兜底策略按它的档位走）。
+    /// 那个座位的配置（兜底策略按它的档位走；「在想」那一态的上限秒数也读它）。
     Config: LlmSeat
+    /// 已经回来的、还没轮到落的那份回执（票 74）。落子要沿引擎问答的正序走
+    /// （`drain`，理由见 `Table.pending`），因此先回来的回执可能要在这里等前席一会儿；
+    /// **引擎收齐才裁决，这一等不改墙钟**（整轮的墙钟恒是最慢那一席）。
+    Answer: AgentAnswer option
+    /// 这一次问话已经等了几秒（`Waited` 每秒 +1，回执到了就停）。页面上「在想」那一态
+    /// 显示的就是它：72-3 把超时放到了 240 秒加重试，一席卡住会拖住整手，
+    /// 人要看得出还要等多久（72-3 裁决里明写的代价）。
+    WaitedSeconds: int
 }
+
+/// 在飞那几份问话的拆解。
+[<RequireQualifiedAccess>]
+module Awaiting =
+
+    /// 这一次问话问的是哪一席（就写在决策包上，不另存一份）。
+    let seat (awaiting: Awaiting) : Seat = DecisionPackage.seat awaiting.Package
+
+    /// 「在想」那一态显示的上限（秒）：单次请求的超时。重试会让总等待更长，
+    /// 但那是另一次计时的事——这里报的是「最迟什么时候会有下一条消息」那个数。
+    let limitSeconds (awaiting: Awaiting) : int = awaiting.Config.TimeoutMs / 1000
 
 /// 这一局定型的那两格：**人格与 prompt 模板**（CONTEXT.md 的 `Persona` / `PromptTemplate`）。
 ///
@@ -63,18 +84,22 @@ module Rendering =
             Template = rendering.Template
     }
 
-/// Agent 层此刻处在哪一步。**页面上要看得见**：断电演习（故意配一把坏 key）时
-/// 对局照样打得完，但不能静惄惄地打——人得知道模型早就不说话了。
+/// 一席的 Agent 层此刻处在哪一步（票 74 起**按座位各一份**，`LiveTable.Agent` 是每席一项）。
+/// **页面上要看得见**：断电演习（故意配一把坏 key）时对局照样打得完，
+/// 但不能静惄惄地打——人得知道模型早就不说话了。
+///
+/// **case 里不再带座位**：哪一席由它在列表里的位置说了算（与 `Pinned` 同一个做法），
+/// 再带一份就多一份会对不上的东西（第 1 项写着「座位 2」这种状态不该表示得出来）。
 [<RequireQualifiedAccess>]
 type AgentStatus =
-    /// 没有 LLM 座位，或者还没轮到它。
+    /// 这一席不是模型，或者还没轮到它。
     | Idle
-    /// 正在等这个座位的回执。
-    | Asking of seat: Seat
+    /// 正在等这一席的回执（已等秒数与上限在 `Awaiting` 那份上，不存第二份）。
+    | Asking
     /// 上一次模型自己选出了动作。
-    | Spoke of seat: Seat * reason: string option * latencyMs: int
+    | Spoke of reason: string option * latencyMs: int
     /// 上一次是兜底代打的。**粘着不掉**，直到模型又能好好说话为止。
-    | Troubled of seat: Seat * reason: string
+    | Troubled of reason: string
 
 /// **Live**：主持人自己开的那一桌（`?table=1`）——种子、配桌与 Agent 层全在这里。
 ///
@@ -112,12 +137,13 @@ type LiveTable = {
     /// 定住之后面板照收编辑（`SeatingPlan` 会变），但发出去的仍是这一份——页面上那行
     /// 「下一局生效」说的就是它俩不一致（`renderingPending`）。
     Pinned: Rendering option list
-    /// 在等回执吗。**等着的时候不续定时器**，否则牌桌会空转。
-    Awaiting: Awaiting option
-    /// 问话的票号，每问一次 +1。
+    /// 在飞的那几次问话（票 74：响应阶段里待答的几席**一起问**，一席一份）。
+    /// **还有在飞的就不续定时器**（否则牌桌会空转），但不再因为一席在飞就不问第二席。
+    Awaiting: Awaiting list
+    /// 问话的票号，每问一次 +1（全局递增，四席共用一本账）。
     Ticket: int
-    /// Agent 层的状态线。
-    Agent: AgentStatus
+    /// Agent 层的状态线，**每席一项**（按座位升序，票 74）。
+    Agent: AgentStatus list
 }
 
 /// **回放**（CONTEXT.md 的 `Replay`）：一份牌谱 fold 出来的逐帧牌桌，加「播到第几帧」。
@@ -196,7 +222,9 @@ type Timeline = {
 [<RequireQualifiedAccess>]
 type Bubble =
     /// 正在等这一席的回执。**只有 Live 有**：回放里没有在飞的问话。
-    | Thinking
+    /// 带着**已等秒数与上限秒数**（票 74；72-3 裁决明写的代价）：240 秒超时加重试，
+    /// 一席卡住会拖住整手，人要看得出还要等多久，而不是干等一个不动的气泡。
+    | Thinking of waitedSeconds: int * limitSeconds: int
     /// 上一次它自己说了什么（thinking 优先，没有思考预算时退回那一句理由）。
     | Spoke of record: DecisionRecord
     /// 上一次是兜底代打的，附原因。**粘着不掉**：那条记录就在那儿，直到它又能好好说话
@@ -210,7 +238,7 @@ module Bubble =
     /// 这个气泡背后的那条决策记录；「在想」那一态还没有记录（**它因此点不开**）。
     let record (bubble: Bubble) : DecisionRecord option =
         match bubble with
-        | Bubble.Thinking -> None
+        | Bubble.Thinking _ -> None
         | Bubble.Spoke record -> Some record
         | Bubble.Troubled(record, _) -> Some record
 
@@ -218,14 +246,14 @@ module Bubble =
     /// 闸门读的是它——两头对不上就是错。
     let toWire (bubble: Bubble) : string =
         match bubble with
-        | Bubble.Thinking -> "thinking"
+        | Bubble.Thinking _ -> "thinking"
         | Bubble.Spoke _ -> "spoke"
         | Bubble.Troubled _ -> "troubled"
 
     /// 气泡头上那两个字：这一席此刻是在想、说了话，还是被代打了。
     let toLabel (bubble: Bubble) : string =
         match bubble with
-        | Bubble.Thinking -> "在想"
+        | Bubble.Thinking _ -> "在想"
         | Bubble.Spoke _ -> "说"
         | Bubble.Troubled _ -> "兜底"
 
@@ -239,7 +267,7 @@ module Bubble =
     /// 同一个来源：`DecisionRecord.Fallback`）。它的 thinking 与理由仍在全文面板里。
     let toDisplay (bubble: Bubble) : string =
         match bubble with
-        | Bubble.Thinking -> "正在等它回话……"
+        | Bubble.Thinking(waited, limit) -> $"正在等它回话……已等 {waited} 秒 / 上限 {limit} 秒"
         | Bubble.Troubled(_, reason) -> reason
         | Bubble.Spoke record ->
             record.Thinking
@@ -342,11 +370,15 @@ type TableMsg =
     /// 首页那份 Demo Paifu 拉回来了（票 71）。**它不会不来**：拉不动也是一个值
     /// （`Error` 带着一句中文原因）——首页因此永不白屏。
     | DemoLoaded of paifu: Result<Paifu, string>
-    /// Agent 层的回执回来了。`ticket` 不是在等的那一张就丢掉（见 `Awaiting`）。
+    /// Agent 层的回执回来了。**座位与票号**要与在飞的一份 `Awaiting` 对上，
+    /// 对不上（重开过一桌、开过下一局、或回执错位）就丢掉——四席各判各的（票 74）。
     ///
     /// **它不会不来**：超时与 provider 报错在 Agent 层都是值，最后也会变成一条回执
     /// （`Failure` 带着原因）——对局因此永不卡死。
-    | Answered of ticket: int * answer: AgentAnswer
+    | Answered of seat: Seat * ticket: int * answer: AgentAnswer
+    /// 那一次问话又等过了一秒（票 74）。**它只让页面上「已等 N 秒」往前走**，
+    /// 牌桌一根汗毛都不动；那一票已经落定/作废时它静默地停。
+    | Waited of ticket: int
 
 /// 牌桌页面的状态与 MVU 三件套（票 70 从 `TablePage.fs` 拆出来的第一块）。
 ///
@@ -458,11 +490,13 @@ module TableState =
 
     // ---- Live ----
 
-    /// 续一记定时器——**除非正在等回执**。等着的时候定时器只会把牌桌空转一遍；
-    /// 那一手由 `Answered` 接着开动。
+    /// 续一记定时器——**除非还有在飞的回执**。等着的时候定时器只会把牌桌空转一遍；
+    /// 那一手由 `Answered` 接着开动。**「还有在飞的就不续」只管定时器**：
+    /// 该问的席照问（票 74，见 `step`）。
     let private tick (model: TableModel) (playback: Playback) : Cmd<TableMsg> =
-        match live model |> Option.bind (fun live -> live.Awaiting) with
-        | Some _ -> Cmd.none
+        match live model with
+        | Some live when not (List.isEmpty live.Awaiting) -> Cmd.none
+        | Some _
         | None -> schedule playback
 
     /// 这一刻真正发得出去的那份坐法（票 46 的定型，票 73 改成按座位各自成立）：
@@ -482,6 +516,10 @@ module TableState =
     /// 写死 `[ None; None; None; None ]` 会在三麻上多出一席。
     let private loosened (live: LiveTable) : Rendering option list =
         live.Seating.Seats |> List.map (fun _ -> None)
+
+    /// 四席的状态线一起归零（重开一桌）。**长度跟着座位数走**，与 `loosened` 同一个理由。
+    let private idled (live: LiveTable) : AgentStatus list =
+        live.Seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
 
     /// 这一桌的配桌：四席各自绑定的那个选手（票 73）。
     /// **推导出来而不存下来**：坐法只有 `SeatingPlan` 这一份，不会与第二份对不上。
@@ -556,67 +594,20 @@ module TableState =
     /// 发一次问话。**不用 `Cmd.OfPromise`**：它整段包在 `#if FABLE_COMPILER` 里，
     /// 而这个文件要在 dotnet 上编得过（页面逻辑的用例跑在那边）。
     /// 效果体只在浏览器里执行，dotnet 侧只把它编出来、不跑。
-    let private askCmd (ticket: int) (request: AgentRequest) : Cmd<TableMsg> =
+    ///
+    /// 回执带上**座位与票号**（票 74）：四席同时在飞时各对各的账，错位的丢。
+    let private askCmd (seat: Seat) (ticket: int) (request: AgentRequest) : Cmd<TableMsg> =
         Cmd.ofEffect (fun dispatch ->
-            let answered (answer: AgentAnswer) = dispatch (Answered(ticket, answer))
+            let answered (answer: AgentAnswer) =
+                dispatch (Answered(seat, ticket, answer))
+
             (Agent.ask request).``then`` answered |> ignore)
 
-    /// 推进一手。**这就是驱动循环的一步**：问该出手那家要一个动作。
-    /// 随机座位当场落子；LLM 座位发一个请求出去，这一手到 `Answered` 才落子。
-    let private step (ruleset: Ruleset) (live: LiveTable) : LiveTable * Cmd<TableMsg> =
-        match live.Awaiting, live.Table with
-        // 上一次问话还没回来：不再问第二次（同一手会有两个请求在飞，而只有一个算数）。
-        | Some _, _ -> live, Cmd.none
-        | None, Error _ -> live, Cmd.none
-        | None, Ok table ->
-            match Table.decide (rosterFor ruleset live) table with
-            | None -> live, Cmd.none
-            | Some(Demand.Ready(action, players)) ->
-                {
-                    live with
-                        Table = Ok(Table.apply action { table with Players = players })
-                },
-                Cmd.none
-            | Some(Demand.Asked(package, config)) ->
-                let ticket = live.Ticket + 1
-                let asked = DecisionPackage.seat package
-
-                {
-                    live with
-                        Ticket = ticket
-                        // 这一席这一局的头一次问话把它的人格与模板定住（票 46；票 73 改成一席一份）：
-                        // 之后再改只落到面板，本局这一席发出去的字节不再变。
-                        // **只定住被问的那一席**：别家本局可能还没开过口，那几席的两格仍改得动。
-                        // 盖回去的就是 `config` 里那两格（它本来就是定型后的那一份），因此重盖幂等。
-                        Pinned = live.Pinned |> Seat.mapAt asked (fun _ -> Some(Rendering.ofSeat config))
-                        Awaiting =
-                            Some {
-                                Ticket = ticket
-                                Package = package
-                                Config = config
-                            }
-                        Agent = AgentStatus.Asking asked
-                },
-                askCmd ticket {
-                    Package = package
-                    Seat = config
-                    RetryLimit = Agent.retryLimit
-                }
-
-    /// 落完一手之后：接着播还是停下来。
-    ///
-    /// **等回执的那段不续定时器**（但仍然是 `Playing`）：定时器只会把牌桌空转一遍，
-    /// 真正把它接着开动的是那条 `Answered`。一局终了也停下来：结算面板正摆在那里。
-    let private resume (cmd: Cmd<TableMsg>) (model: TableModel) : TableModel * Cmd<TableMsg> =
-        match live model |> Option.bind (fun live -> live.Awaiting) with
-        | Some _ -> model, cmd
-        | None when canAdvance model -> model, Cmd.batch [ cmd; schedule model.Playback ]
-        | None ->
-            {
-                model with
-                    Playback = Playback.pause model.Playback
-            },
-            cmd
+    /// 「已等一秒」的钟（票 74）：一秒后发一条 `Waited`，那一票还在飞就再续一记。
+    /// **一票一条链**：回执落定（或整桌重开）之后 `Waited` 找不到那一票，链就自己断了，
+    /// 不会像 `setInterval` 那样越积越多。
+    let private waitCmd (ticket: int) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch -> JS.setTimeout (fun () -> dispatch (Waited ticket)) 1000 |> ignore)
 
     /// 回执 → 落子，并留下这一手的决策记录。**兜底就在这里**：id 换不回动作
     /// （模型没给、给的越界、超时、provider 报错）就由 `Fallback.action` 代打。
@@ -675,8 +666,141 @@ module TableState =
         let played = Table.applyRecorded record prompting action table
 
         match fallback with
-        | None -> played, AgentStatus.Spoke(seat, answer.Reason, answer.LatencyMs)
-        | Some reason -> played, AgentStatus.Troubled(seat, reason)
+        | None -> played, AgentStatus.Spoke(answer.Reason, answer.LatencyMs)
+        | Some reason -> played, AgentStatus.Troubled reason
+
+    /// 已经答上来的回执，按引擎问答的正序落下去（票 74）。
+    ///
+    /// **落子顺序是引擎待答的头一家，不是回执到达的先后**：回放重建响应阶段就是按
+    /// 「每次取头一家」重建的（`Table.pending` 那段注释），到达顺序落子会让决策记录的
+    /// 手序号与回放逐帧对不上——而到达顺序不归任何人管。先回来的回执在 `Awaiting`
+    /// 里等一会儿；**引擎收齐才裁决，这一等不改整轮的墙钟**（恒是最慢那一席）。
+    ///
+    /// 排在头一家的 bot 席也在这里落（`Demand.Ready`）：它「当场就答得出」，
+    /// 但**落**同样要守这个顺序。**`Awaiting` 空了就停**——余下的待答席（若有）
+    /// 由下一记定时器接着问，一步的粒度因此与从前相同。
+    let rec private drain (roster: Roster) (live: LiveTable) : LiveTable =
+        if List.isEmpty live.Awaiting then
+            live
+        else
+            match live.Table with
+            | Error _ -> live
+            | Ok table ->
+                match Table.pending table with
+                // 走不到：在飞的都是这一轮的待答席，收齐之前引擎不会翻篇。真走到就停下。
+                | None -> live
+                | Some choice ->
+                    match live.Awaiting |> List.tryFind (fun each -> Awaiting.seat each = choice.Seat) with
+                    | Some entry ->
+                        match entry.Answer with
+                        // 头一家的回执还在飞：停在这里等它（后面各家的回执在各自的 `Answer` 里躺着）。
+                        | None -> live
+                        | Some answer ->
+                            let played, status = settle entry answer table
+
+                            drain roster {
+                                live with
+                                    Table = Ok played
+                                    Awaiting = live.Awaiting |> List.filter (fun each -> each.Ticket <> entry.Ticket)
+                                    Agent = live.Agent |> Seat.mapAt choice.Seat (fun _ -> status)
+                            }
+                    | None ->
+                        match Table.decideFor choice.Seat roster table with
+                        | Some(Demand.Ready(action, players)) ->
+                            drain roster {
+                                live with
+                                    Table = Ok(Table.apply action { table with Players = players })
+                            }
+                        // 头一家是还没被问出去的模型席：停下，`step` 会把它问出去。
+                        | Some(Demand.Asked _)
+                        | None -> live
+
+    /// 推进一手。**这就是驱动循环的一步**：把此刻**所有**待答而还没在飞的席问出去（票 74）。
+    ///
+    /// 摸牌后只有一家，与从前无异；**响应阶段可能同时有好几家**——模型席各发一趟请求，
+    /// bot 席的答复按引擎的顺序落（`drain`）。**不再因为一席在飞就不问第二席**，
+    /// 但同一席在飞时绝不问第二次（票 23 那条用例仍然钉着）。
+    ///
+    /// 决策包全部取自这一刻的局面：响应阶段里某席的合法动作集与决策包**不因别席先答而变**
+    /// （`GameStateTests` 那条地基断言钉着），因此这些包在别席的答复落定之后仍然换得回动作。
+    let private step (ruleset: Ruleset) (live: LiveTable) : LiveTable * Cmd<TableMsg> =
+        match live.Table with
+        | Error _ -> live, Cmd.none
+        | Ok table ->
+            let roster = rosterFor ruleset live
+            let flying = live.Awaiting |> List.map Awaiting.seat
+
+            let asked, cmds =
+                ((live, []), Table.pendings table)
+                ||> List.fold (fun (live, cmds) choice ->
+                    if List.contains choice.Seat flying then
+                        live, cmds
+                    else
+                        match Table.decideFor choice.Seat roster table with
+                        | Some(Demand.Asked(package, config)) ->
+                            let ticket = live.Ticket + 1
+                            let seat = choice.Seat
+
+                            {
+                                live with
+                                    Ticket = ticket
+                                    // 这一席这一局的头一次问话把它的人格与模板定住（票 46；票 73 改成一席一份）：
+                                    // 之后再改只落到面板，本局这一席发出去的字节不再变。
+                                    // **只定住被问的那一席**：别家本局可能还没开过口，那几席的两格仍改得动。
+                                    // 盖回去的就是 `config` 里那两格（它本来就是定型后的那一份），因此重盖幂等。
+                                    Pinned = live.Pinned |> Seat.mapAt seat (fun _ -> Some(Rendering.ofSeat config))
+                                    Awaiting =
+                                        live.Awaiting
+                                        @ [
+                                            {
+                                                Ticket = ticket
+                                                Package = package
+                                                Config = config
+                                                Answer = None
+                                                WaitedSeconds = 0
+                                            }
+                                        ]
+                                    Agent = live.Agent |> Seat.mapAt seat (fun _ -> AgentStatus.Asking)
+                            },
+                            askCmd seat ticket {
+                                Package = package
+                                Seat = config
+                                RetryLimit = Agent.retryLimit
+                            }
+                            :: waitCmd ticket
+                            :: cmds
+                        | Some(Demand.Ready _)
+                        | None -> live, cmds)
+
+            if List.isEmpty asked.Awaiting then
+                // 四家都是 bot：与从前一样一步落一手（不许一步把整轮乃至整局跑完）。
+                match Table.decide roster table with
+                | Some(Demand.Ready(action, players)) ->
+                    {
+                        asked with
+                            Table = Ok(Table.apply action { table with Players = players })
+                    },
+                    Cmd.none
+                // 走不到（待答的模型席在上面那趟已经问出去了）；这一局已终也落在这里。
+                | Some(Demand.Asked _)
+                | None -> asked, Cmd.none
+            else
+                drain roster asked, Cmd.batch cmds
+
+    /// 落完一手之后：接着播还是停下来。
+    ///
+    /// **等回执的那段不续定时器**（但仍然是 `Playing`）：定时器只会把牌桌空转一遍，
+    /// 真正把它接着开动的是那条 `Answered`。一局终了也停下来：结算面板正摆在那里。
+    let private resume (cmd: Cmd<TableMsg>) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        match live model with
+        | Some live when not (List.isEmpty live.Awaiting) -> model, cmd
+        | _ when canAdvance model -> model, Cmd.batch [ cmd; schedule model.Playback ]
+        | _ ->
+            {
+                model with
+                    Playback = Playback.pause model.Playback
+            },
+            cmd
 
     // ---- 回放（票 71） ----
 
@@ -831,8 +955,8 @@ module TableState =
         not (humanSeated model) || Table.result table |> Option.isSome
 
     /// 这一桌每一席此刻的气泡（票 76）。**交出去的是一个取值器**（`Seat -> Bubble option`）：
-    /// 「在想」那一态今天挂的是 Agent 层**单席**的那一份（`AgentStatus.Asking`），
-    /// 票 74 把它换成按座位一份时**只换这个函数的实现**，视图与用例一行都不必动。
+    /// 「在想」那一态按座位各取各的（票 74）：在飞的那几份 `Awaiting` 一席一份，
+    /// 已等秒数与上限（72-3 裁决明写的代价）就从那一份上读，不存第二份。
     ///
     /// **数据源只有一处**：「说了什么」与「兜底代打」读的都是这一帧的 `Table.Decisions`
     /// （回放那一侧已经按手序切好，票 71 的 `recordedBy`）——气泡不存第二份。
@@ -840,29 +964,26 @@ module TableState =
     ///
     /// 一条记录都没有的那几席（bot 席、或分享链接那种棋谱）**恒是 None**：不出气泡。
     let bubbles (model: TableModel) (table: Table) : Seat -> Bubble option =
-        // 在等哪一席的回执。票 74 换成按座位一份后，换掉的就是这一段与下面那一句比较。
-        let asking =
+        // 这一席的问话还在飞吗（回来了还没轮到落也算：这一手还没落定，它仍在「想」那一态里）。
+        let asking (seat: Seat) : Bubble option =
             live model
-            |> Option.bind (fun live ->
-                match live.Agent with
-                | AgentStatus.Asking seat -> Some seat
-                | AgentStatus.Idle
-                | AgentStatus.Spoke _
-                | AgentStatus.Troubled _ -> None)
+            |> Option.bind (fun live -> live.Awaiting |> List.tryFind (fun each -> Awaiting.seat each = seat))
+            |> Option.map (fun each -> Bubble.Thinking(each.WaitedSeconds, Awaiting.limitSeconds each))
 
         fun seat ->
             if not (unlocked model table) then
                 None
-            elif asking = Some seat then
-                // 「在想」压过上一条记录：正在等回执那一刻，旧的理由已经不是它此刻在想的事。
-                Some Bubble.Thinking
             else
-                table.Decisions
-                |> List.tryFindBack (fun record -> record.Seat = seat)
-                |> Option.map (fun record ->
-                    match record.Fallback with
-                    | Some reason -> Bubble.Troubled(record, reason)
-                    | None -> Bubble.Spoke record)
+                // 「在想」压过上一条记录：正在等回执那一刻，旧的理由已经不是它此刻在想的事。
+                match asking seat with
+                | Some thinking -> Some thinking
+                | None ->
+                    table.Decisions
+                    |> List.tryFindBack (fun record -> record.Seat = seat)
+                    |> Option.map (fun record ->
+                        match record.Fallback with
+                        | Some reason -> Bubble.Troubled(record, reason)
+                        | None -> Bubble.Spoke record)
 
     /// 这份牌谱一条决策记录都没有吗（票 76）。**判据落在整份牌谱上而不是这一帧上**：
     /// 带推理的牌谱第 0 帧同样一条记录都没有，拿帧当判据的话那句话会在开局闪一下。
@@ -981,9 +1102,9 @@ module TableState =
                     Notice = None
                     // 还没问过话：四席的人格与模板都还改得动（票 46）。
                     Pinned = seating.Seats |> List.map (fun _ -> None)
-                    Awaiting = None
+                    Awaiting = []
                     Ticket = 0
-                    Agent = AgentStatus.Idle
+                    Agent = seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
                 }
             // **默认暂停**（`Playback.initial`）：`?table=1` 是最安静的一页，
             // 要点、要读牌桌的那几道无头闸门全靠这一条。
@@ -1047,6 +1168,7 @@ module TableState =
         | SeedEdited _
         | SpeedPicked _
         | Ticked _
+        | Waited _
         | ViewpointPicked _
         | RecordOpened _
         | DangerToggled
@@ -1086,7 +1208,7 @@ module TableState =
                 // 半场换规则会让同一份牌谱前后按两套规则算，而回放只读得到牌谱里那一份。
                 let ruleset = RulesetDraft.ruleset live.Rules
 
-                // 在飞的那一次问话作废：它的 id 是按旧那桌的决策包编的号。
+                // 在飞的那几次问话作废：它们的 id 是按旧那桌的决策包编的号。
                 {
                     model with
                         Ruleset = ruleset
@@ -1096,8 +1218,8 @@ module TableState =
                                     Table = openTable (rosterFor ruleset live) live.SeedText
                                     // 重开一桌就是回到第一局：四席的人格与模板一起松开（票 46/73）。
                                     Pinned = loosened live
-                                    Awaiting = None
-                                    Agent = AgentStatus.Idle
+                                    Awaiting = []
+                                    Agent = idled live
                             }
                         Playback = Playback.pause model.Playback
                 },
@@ -1160,7 +1282,15 @@ module TableState =
                         Table = Result.map Table.nextKyoku live.Table
                         // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
                         Pinned = loosened live
-                        Awaiting = None
+                        Awaiting = []
+                        // 在飞的问话作废（票号从此对不上），别让「在想」挂成孤儿；
+                        // 说过话 / 兜底那两态**粘着不掉**（那是上一局末手的事实，人还想看）。
+                        Agent =
+                            live.Agent
+                            |> List.map (fun status ->
+                                match status with
+                                | AgentStatus.Asking -> AgentStatus.Idle
+                                | other -> other)
                 },
                 Cmd.none)
         // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（票 73 之前那两条消息同理）。
@@ -1172,7 +1302,8 @@ module TableState =
                 {
                     live with
                         Seating = seating
-                        Agent = AgentStatus.Idle
+                        // 只把换了人的这一席归零：别席的状态是别席的事实（票 74 按座位各一份）。
+                        Agent = live.Agent |> Seat.mapAt seat (fun _ -> AgentStatus.Idle)
                         Notice = None
                 },
                 save (fun () -> Store.writeSeating seating))
@@ -1232,24 +1363,55 @@ module TableState =
             |> onLive (fun _ live ->
                 let rules = RulesetDraft.pick rule live.Rules
                 { live with Rules = rules }, save (fun () -> Store.writeRules rules))
-        | Answered(ticket, answer) ->
+        | Answered(seat, ticket, answer) ->
             match model.Source with
             | Source.Replay _ -> model, Cmd.none
             | Source.Live live ->
-                match live.Awaiting, live.Table with
-                | Some awaiting, Ok table when awaiting.Ticket = ticket ->
-                    let played, status = settle awaiting answer table
+                let expected =
+                    live.Awaiting
+                    |> List.exists (fun each -> each.Ticket = ticket && Awaiting.seat each = seat)
+
+                if not expected then
+                    // 过期或错位的回执（重开过一桌、开过下一局、座位与票号对不上）：丢掉。
+                    // **四席各判各的**（票 74）：座位与票号要与同一份 `Awaiting` 对上。
+                    model, Cmd.none
+                else
+                    // 先把回执记在那一票上，再按引擎的顺序落（`drain` 的注释说了为什么不按到达顺序）。
+                    let noted = {
+                        live with
+                            Awaiting =
+                                live.Awaiting
+                                |> List.map (fun each ->
+                                    if each.Ticket = ticket then
+                                        { each with Answer = Some answer }
+                                    else
+                                        each)
+                    }
 
                     {
                         model with
-                            Source =
-                                Source.Live {
-                                    live with
-                                        Table = Ok played
-                                        Awaiting = None
-                                        Agent = status
-                                }
+                            Source = Source.Live(drain (rosterFor model.Ruleset noted) noted)
                     }
                     |> resume Cmd.none
-                // 过期的回执（重开过一桌、开过下一局，或者票号对不上）：丢掉。
-                | _ -> model, Cmd.none
+        | Waited ticket ->
+            model
+            |> onLive (fun _ live ->
+                match live.Awaiting |> List.tryFind (fun each -> each.Ticket = ticket) with
+                // 那一票已经落定 / 作废，或回执已经到了：钟就停在这里，链自己断。
+                | None
+                | Some { Answer = Some _ } -> live, Cmd.none
+                | Some _ ->
+                    {
+                        live with
+                            Awaiting =
+                                live.Awaiting
+                                |> List.map (fun each ->
+                                    if each.Ticket = ticket then
+                                        {
+                                            each with
+                                                WaitedSeconds = each.WaitedSeconds + 1
+                                        }
+                                    else
+                                        each)
+                    },
+                    waitCmd ticket)

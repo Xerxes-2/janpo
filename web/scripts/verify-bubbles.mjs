@@ -1,24 +1,30 @@
-// **思考气泡**那道闸门（票 76）：CONTEXT.md 的 `Thinking Bubble` —— 展示某个 `DecisionRecord`
-// 的 UI 部件。dotnet 那一侧（`ThinkingBubbleTests`）钉的是取值器与全文面板的判据，
+// **思考气泡 + 同时问多席**那道闸门（票 76 立、票 74 扩成四席）：CONTEXT.md 的 `Thinking Bubble`
+// —— 展示某个 `DecisionRecord` 的 UI 部件。dotnet 那一侧（`ThinkingBubbleTests` /
+// `TablePageTests`）钉的是取值器、按座位的等待与回执错位的判据，
 // **这一道钉的是页面上真看得见的那几件事**：
 //
-//   ① 气泡里的字**来自那一手的决策记录**：端点回的那句 `reason` 一字不差地出现在气泡里，
-//      而 `data-bubble-turn` 与牌桌上那一手对得上（**换个端点、换句话，气泡跟着变**，见 ④）；
-//   ② **bot 席上没有气泡**：只有模型那一席有（今天一桌只坐得下一席模型，票 74 才四席）；
-//   ③ **气泡挡不住牌与河**：气泡的矩形与四家的三排牌、牌桌中央**一律不相交**
-//      —— 它是座位面板里的一行、不做绝对定位，这一条就是那句话的执行体（票 44 的八项因此不受影响）；
-//   ④ **兜底那一态**：把 baseUrl 换到一个只会回越界 id 的端点，下一手的气泡变成「兜底」，
-//      写的原因与牌桌上那句「上一手：……（兜底：……）」、`data-fallback` **同源**；
-//   ⑤ **点得开**：全文面板给出 thinking / 理由 / prompt 尾部 / 动作 id 集 / 最终落定的动作 /
-//      延迟 / 问了几次 / Usage / 渲染版本，牌桌跟着摆出**那一手落定那一刻的快照**，
-//      收起来之后逐字回到现在（**只读**：这一桌一手都没退回去）。
+// 第一程（四席各配一个假端点，票 76 交代的形态）：
+//   ① **四个气泡都在，各说各的**：四个端点各回一句只可能从它那儿来的话，四席的气泡
+//      各自写着**自己那个端点**的话、不串线（端点 → 决策记录 → 气泡按座位各走各的）；
+//   ② **气泡挡不住牌与河**：矩形一律不相交（读的是 `getBoundingClientRect`，不是承诺）；
+//   ③ **点得开**：全文面板九样、快照、收起来逐字回到现在（与票 76 逐字同一套断言）；
+//   ④ **一席坏了不拖累别席**：把座位 0 的端点换成只回越界 id 的，它变「兜底」态，
+//      而其余三席照样一手一手往前说（气泡上的手序还在涨、没有一席跟着变红）。
 //
-// **全程本机**：页面是本地 dev server，两个端点是本地假端点（`fake-endpoint.mjs`），
+// 第二程（并发的墙钟，票 74 的硬证据）：三席共用一个**固定延迟**的假端点、座位 3 仍是 bot，
+//   种子 48（第一局早早就有一轮多席响应，dotnet 侧探针挑的）。MutationObserver 记下
+//   「几个『在想』气泡同时在场」的变迁：
+//   ⑤ 真出现过 **≥2 席同时在想**（串行形态下这一幕根本不存在）；
+//   ⑥ 那一轮的墙钟**接近一份延迟而不是几份**（两个数抄进报告）；
+//   ⑦ 「在想」的气泡带着**已等秒数与上限**（`data-waited` / `data-wait-limit`，72-3 的代价）；
+//   ⑧ bot 那一席（座位 3）从头到尾一个气泡都没有。
+//
+// **全程本机**：页面是本地 dev server，端点全是本地假端点（`fake-endpoint.mjs`），
 // **一个字节都不出网**，因此它进 CI。它也是 `verify-browser.mjs` 里的一趟。
 //
 //   cd web && pnpm run fable && node scripts/verify-bubbles.mjs
 //
-// 选项：--seat N（默认 0，庄家，第一手就轮到它）、--budget ms、--shoot <目录>（截图给报告用）。
+// 选项：--budget ms、--delay ms（第二程端点睡多久，默认 700）、--shoot <目录>（截图给报告用）。
 
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
@@ -29,19 +35,26 @@ import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
 
-/** 库里那份档案的叫法（本机的私人叫法，绝不进牌谱）。 */
-const BUBBLE_PROFILE = "气泡闸门的档案";
-
 /** 四个座位。 */
 const Seats = [0, 1, 2, 3];
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * 两个端点各自回的那句 `reason`。**只可能从端点那儿来**：页面里没有任何一处写着它们，
- * 因此它出现在气泡里就证明了那条链路（端点 → 决策记录 → 气泡）真的通着。
+ * 四个端点各自回的那句 `reason`。**只可能从各自的端点那儿来**：页面里没有任何一处写着它们，
+ * 因此「座位 N 的气泡里是第 N 句」就证明了那条链路（端点 → 决策记录 → 气泡）**按座位各走各的**
+ * ——串了线（甲席的回执落进乙席）这里当场看得见。
  */
-const SAID = "假端点甲说：这一手照它的算法只能这么打";
+const SAID = Seats.map(
+  (seat) => `假端点${"甲乙丙丁"[seat]}说：座位 ${seat} 这一手照它的算法只能这么打`,
+);
+
+/**
+ * 两程共用的种子：dotnet 侧探针挑的——**第一局第 2 手就有一轮多席响应**
+ * （四席全模型、或三席模型 + 座位 3 bot，两种坐法都成立）。
+ * 第一程也要它：「回执不串线」这条断言得在真出现过多席同问的一局上验，不然它在空转（判据 3）。
+ */
+const CONCURRENT_SEED = 48;
 
 /** 借内核要一个空闲端口（跑批是并行的，写死端口迟早撞上另一个工作区）。 */
 function freePort() {
@@ -209,102 +222,160 @@ async function detailOf(page) {
   });
 }
 
-/** 思考气泡那一道。返回的是失败清单（空 = 绿）。 */
-export async function verifyBubbles(lane, options = {}) {
-  const { seat = 0, budgetMs = 120000, shoot = null } = options;
+/** 第一程：四席各配一个假端点。返回失败清单（空 = 绿）。 */
+async function fourSeatsLane(lane, pageOrigin, options) {
+  const { budgetMs, shoot, missing, problems } = options;
 
-  // dev server 而不是 preview：与 verify-redaction 同一个理由（省掉一次 vite build）。
-  const pageOrigin = await lane.devUrl();
-  const good = await startEndpoint(pageOrigin, ["--reason", SAID]);
+  const endpoints = [];
+  for (const seat of Seats) {
+    endpoints.push(await startEndpoint(pageOrigin, ["--reason", SAID[seat]]));
+  }
   // 越界的 id：Agent 层校完重试两次，最后交不出来 → 兜底代打（票 23 的那条路）。
   const bad = await startEndpoint(pageOrigin, ["--action-id", "9999"]);
 
   const context = await lane.newContext();
-  const problems = [];
-  const missing = [];
 
   try {
     const page = await context.newPage();
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
 
-    // 坐法只从 localStorage 来（票 73 之后是**档案库 + 座位绑定**）：库里一份自定义端点的档案，
-    // **不带 key**（本地端点本来就不校验，而这道闸门一把真 key 都不该碰得着），那一席引用它。
+    // 坐法只从 localStorage 来（票 73 之后是**档案库 + 座位绑定**）：四份自定义端点的档案，
+    // **不带 key**（本地端点本来就不校验，而这道闸门一把真 key 都不该碰得着），四席各引各的。
     await plantSeating(page, {
-      profiles: [
-        {
-          name: BUBBLE_PROFILE,
-          provider: "custom-openai",
-          model: "fake-model",
-          base_url: good.baseUrl,
-          timeout_ms: "10000",
-        },
-      ],
-      seats: Seats.map((index) =>
-        index === seat ? { choice: profileChoice(BUBBLE_PROFILE) } : {},
-      ),
+      profiles: Seats.map((seat) => ({
+        name: `气泡闸门的档案（座位 ${seat}）`,
+        provider: "custom-openai",
+        model: `fake-model-${seat}`,
+        base_url: endpoints[seat].baseUrl,
+        timeout_ms: "10000",
+      })),
+      seats: Seats.map((seat) => ({ choice: profileChoice(`气泡闸门的档案（座位 ${seat}）`) })),
     });
 
-    console.log(`页面 ${pageOrigin}　模型坐席 ${seat}`);
-    console.log(`端点甲（正常答话）${good.baseUrl}：reason = 「${SAID}」`);
-    console.log(`端点乙（越界 id）　${bad.baseUrl}：action_id = 9999 → 兜底`);
+    console.log(`页面 ${pageOrigin}　四席各配一个端点：`);
+    for (const seat of Seats) {
+      console.log(`  座位 ${seat} ← ${endpoints[seat].baseUrl}：reason = 「${SAID[seat]}」`);
+    }
+    console.log(`端点（越界 id）${bad.baseUrl}：action_id = 9999 → 兜底`);
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
 
-    // ---- ① 说了什么 ----
+    // 换成探针挑好的种子（第一局第 2 手就有一轮多席同问），重开一桌。
+    await page.getByTestId("table-seed").fill(String(CONCURRENT_SEED));
+    await page.getByTestId("table-restart").click();
+
+    // **全程盯着**「有没有哪一席的气泡写过别席端点的话」：串线只发生在多席同问的那一轮里，
+    // 而那一轮几十毫秒就落幕——只在暂停后抽查最新一条是抓不住它的（红-W2 的第一版就没抓住）。
+    // 顺带数「最多几席同时在想」：它是「这一程真出现过多席同问」的执行证据（判据 3）。
+    await page.evaluate((said) => {
+      window.__crossed = [];
+      window.__mostThinking = 0;
+      const snap = () => {
+        window.__mostThinking = Math.max(
+          window.__mostThinking,
+          document.querySelectorAll('[data-bubble="thinking"]').length,
+        );
+        for (let seat = 0; seat < 4; seat += 1) {
+          const text =
+            document.querySelector(`[data-testid="seat-${seat}-bubble"]`)?.textContent ?? "";
+          for (let other = 0; other < 4; other += 1) {
+            if (other !== seat && text.includes(said[other])) {
+              const node = document.querySelector(`[data-testid="seat-${seat}-bubble"]`);
+              window.__crossed.push(
+                `座位 ${seat} 的气泡写过座位 ${other} 端点的话：「${text}」` +
+                  `（t=${Math.round(performance.now())} state=${node?.dataset.bubble} turn=${node?.dataset.bubbleTurn} ` +
+                  `detail=${document.querySelector('[data-testid="table-bubble-detail"]') !== null} ` +
+                  `latest=${document.querySelector('[data-testid="table-latest"]')?.textContent}）`,
+              );
+            }
+          }
+        }
+      };
+      new MutationObserver(snap).observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+      });
+      snap();
+    }, SAID);
+
+    // ---- ① 四个气泡都在，各说各的 ----
     await page.getByTestId("table-speed-8×").click();
     await playPause(page, "播放");
-    const spokeUp = await settles(
+    const allSpoke = await settles(
       page,
-      (seat) =>
-        document.querySelector(`[data-testid="seat-${seat}-bubble"]`)?.dataset.bubble === "spoke",
-      seat,
+      () =>
+        [0, 1, 2, 3].every(
+          (seat) =>
+            document.querySelector(`[data-testid="seat-${seat}-bubble"]`)?.dataset.bubble ===
+            "spoke",
+        ),
+      null,
       budgetMs,
     );
-    // 让它再走几手（同一席会说好几次，气泡上该是**最新**那一条）。
-    await page.waitForTimeout(1500);
     await playPause(page, "暂停");
+    // 停下来之后把在飞的回执等落地（暂停只停定时器，不停已经问出去的话）。
     await settles(
       page,
-      () => document.querySelector('[data-testid="table-play"]')?.textContent?.trim() === "播放",
+      () => document.querySelectorAll('[data-bubble="thinking"]').length === 0,
       null,
       budgetMs,
     );
 
-    const spoke = await bubbleAt(page, seat);
-    console.log("");
-    console.log(`座位 ${seat} 的气泡（${spoke?.state}）：${spoke?.text}`);
-
-    if (!spokeUp || spoke === null) {
-      // **这一趟到此为止**：底下每一条都要先有一个气泡（判据 3：一条执行不到的断言等于没有）。
+    if (!allSpoke) {
+      // **这一趟到此为止**：底下每一条都要先有四个气泡（判据 3：执行不到的断言等于没有）。
       const said = (await page.getByTestId("table-agent").textContent()).trim();
       return failure("思考气泡这一道没过：", [
-        `模型那一席（座位 ${seat}）上一直没有出气泡，底下那几条因此一条都没验到`,
+        "四席都交给了模型，却没等到四席各自的「说了什么」气泡",
         `页面上 Agent 那一行说的是：${said}`,
       ]);
     }
-    if (!spoke.text.includes(SAID)) {
-      missing.push(`气泡里的字不是那一手记录里的那句：看到的是「${spoke.text}」`);
-    }
-    if (!/^\d+$/.test(spoke.turn ?? "")) {
-      missing.push(`气泡上没写它是第几手（data-bubble-turn=「${spoke.turn}」）`);
-    }
-    if (spoke.disabled) missing.push("说过话的气泡该点得开，它却是灰的");
 
-    // ---- ② bot 席上没有气泡 ----
-    for (const other of [0, 1, 2, 3].filter((index) => index !== seat)) {
-      const bubble = await bubbleAt(page, other);
-      if (bubble !== null) {
-        missing.push(`座位 ${other} 是自带 bot，不该有气泡（看到的是「${bubble.text}」）`);
+    console.log("");
+    for (const seat of Seats) {
+      const spoke = await bubbleAt(page, seat);
+      console.log(`座位 ${seat} 的气泡（${spoke?.state}）：${spoke?.text}`);
+
+      if (spoke === null) {
+        missing.push(`座位 ${seat} 的气泡在暂停后不见了`);
+        continue;
       }
+      if (!spoke.text.includes(SAID[seat])) {
+        missing.push(`座位 ${seat} 的气泡里不是它自己端点回的那句：看到的是「${spoke.text}」`);
+      }
+      for (const other of Seats.filter((each) => each !== seat)) {
+        if (spoke.text.includes(SAID[other])) {
+          missing.push(`座位 ${seat} 的气泡里写着座位 ${other} 那个端点的话：回执串线了`);
+        }
+      }
+      if (!/^\d+$/.test(spoke.turn ?? "")) {
+        missing.push(`座位 ${seat} 的气泡上没写它是第几手（data-bubble-turn=「${spoke.turn}」）`);
+      }
+      if (spoke.disabled) missing.push(`座位 ${seat} 说过话的气泡该点得开，它却是灰的`);
     }
 
-    // ---- ③ 挡不住牌与河 ----
+    const watched = await page.evaluate(() => ({
+      crossed: window.__crossed,
+      mostThinking: window.__mostThinking,
+    }));
+
+    console.log(`这一程最多 ${watched.mostThinking} 席同时在想`);
+
+    if (watched.mostThinking < 2) {
+      missing.push(
+        `这一程从没出现过 ≥2 席同时在想（最多 ${watched.mostThinking} 席）：「回执不串线」那条断言在空转`,
+      );
+    }
+    for (const each of [...new Set(watched.crossed)].slice(0, 4)) missing.push(each);
+
+    // ---- ② 挡不住牌与河 ----
     const covered = await overlaps(page);
     for (const each of covered) missing.push(each);
 
-    // ---- ⑤ 点得开：全文面板 + 那一手的局面快照 ----
+    // ---- ③ 点得开：全文面板 + 那一手的局面快照（与票 76 同一套断言，点座位 0 的） ----
+    const spoke = await bubbleAt(page, 0);
     const beforeOpen = await boardDigest(page);
     const liveKawa = await kawaTotal(page);
-    await page.getByTestId(`seat-${seat}-bubble`).click();
+    await page.getByTestId("seat-0-bubble").click();
     await settles(
       page,
       () => document.querySelector('[data-testid="table-bubble-detail"]') !== null,
@@ -315,7 +386,7 @@ export async function verifyBubbles(lane, options = {}) {
     const snapshotKawa = await kawaTotal(page);
 
     console.log("");
-    console.log(`点开之后：${detail?.head}`);
+    console.log(`点开座位 0 之后：${detail?.head}`);
     console.log(`  最终落定：${detail?.applied}`);
     console.log(`  一句话理由：${detail?.reason}`);
     console.log(`  动作 id 集：${detail?.actions}`);
@@ -329,8 +400,8 @@ export async function verifyBubbles(lane, options = {}) {
       if (detail.turn !== spoke?.turn) {
         missing.push(`摊开的是第 ${detail.turn} 手，气泡上写的却是第 ${spoke?.turn} 手`);
       }
-      if (String(detail.seat) !== String(seat)) {
-        missing.push(`摊开的那一手写着座位 ${detail.seat}，该是座位 ${seat}`);
+      if (String(detail.seat) !== "0") {
+        missing.push(`摊开的那一手写着座位 ${detail.seat}，该是座位 0`);
       }
       // 九样：一样都不许是空的（缺哪一样在这里各报各的话）。
       const fields = [
@@ -346,7 +417,7 @@ export async function verifyBubbles(lane, options = {}) {
       for (const [name, value] of fields) {
         if (value === null || value === "") missing.push(`全文面板里「${name}」那一格是空的`);
       }
-      if (!(detail.reason ?? "").includes(SAID)) {
+      if (!(detail.reason ?? "").includes(SAID[0])) {
         missing.push(`全文面板里的理由不是端点回的那句：「${detail.reason}」`);
       }
       if (!(detail.prompt ?? "").includes("【现在】")) {
@@ -386,49 +457,69 @@ export async function verifyBubbles(lane, options = {}) {
       );
     }
 
-    // ---- ④ 兜底那一态：换个端点，下一手交不出来 ----
-    // 换端点：票 73 之后端点住在**档案**里，得先把那份档案摊开再改它的 base_url。
+    // ---- ④ 一席坏了不拖累别席：座位 0 换到交不出来的端点，其余三席照说 ----
+    const beforeTurns = [];
+    for (const seat of [1, 2, 3]) {
+      beforeTurns[seat] = Number.parseInt((await bubbleAt(page, seat))?.turn ?? "-1", 10);
+    }
+    // 换端点：票 73 之后端点住在**档案**里，得先把座位 0 那份档案摊开再改它的 base_url。
     await page.getByTestId("table-profile-0").click();
     await page.getByTestId("table-profile-base-url").fill(bad.baseUrl);
     await playPause(page, "播放");
     const troubledUp = await settles(
       page,
-      (seat) =>
-        document.querySelector(`[data-testid="seat-${seat}-bubble"]`)?.dataset.bubble ===
-        "troubled",
-      seat,
+      () => document.querySelector('[data-testid="seat-0-bubble"]')?.dataset.bubble === "troubled",
+      null,
+      budgetMs,
+    );
+    // 别席的答复照收：等到其余三席里有人把手序往前推过 beforeTurns 再停。
+    const othersMoved = await settles(
+      page,
+      (before) =>
+        [1, 2, 3].some((seat) => {
+          const turn = Number.parseInt(
+            document
+              .querySelector(`[data-testid="seat-${seat}-bubble"]`)
+              ?.getAttribute("data-bubble-turn") ?? "-1",
+            10,
+          );
+          return turn > before[seat];
+        }),
+      beforeTurns,
       budgetMs,
     );
     await playPause(page, "暂停");
+    await settles(
+      page,
+      () => document.querySelectorAll('[data-bubble="thinking"]').length === 0,
+      null,
+      budgetMs,
+    );
     if (!troubledUp) {
       missing.push(
-        `换成那个交不出来的端点之后，座位 ${seat} 的气泡一直没变成「兜底」态（等了 ${budgetMs} ms）`,
+        `换成那个交不出来的端点之后，座位 0 的气泡一直没变成「兜底」态（等了 ${budgetMs} ms）`,
       );
     }
+    if (!othersMoved) {
+      missing.push("座位 0 兜底之后，其余三席的气泡再没往前走过一手：一席坏了拖住了别席");
+    }
 
-    const troubled = await bubbleAt(page, seat);
+    const troubled = await bubbleAt(page, 0);
     const latest = (await page.getByTestId("table-latest").textContent()).trim();
-    const fallenBack = await page.getByTestId("table-latest").getAttribute("data-fallback");
 
     console.log("");
-    console.log(`换成端点乙之后，座位 ${seat} 的气泡（${troubled?.state}）：${troubled?.text}`);
+    console.log(`换成越界端点之后，座位 0 的气泡（${troubled?.state}）：${troubled?.text}`);
     console.log(`牌桌上那句：${latest}`);
 
     if (troubled === null || troubled.state !== "troubled") {
-      missing.push(`换了个交不出来的端点，气泡却还是「${troubled?.state}」态`);
-    } else {
-      if (troubled.text.includes(SAID)) {
-        missing.push("兜底那一手的气泡上还写着上一次的理由：它没跟着那一手的记录换");
-      }
-      // 与牌桌上那句「上一手：……（兜底：……）」同源：两边读的是同一条记录的同一格。
-      if (!latest.includes("兜底") || fallenBack !== "true") {
-        missing.push(
-          `气泡说这一手是兜底的，牌桌上那句却没说（data-fallback=${fallenBack}）：「${latest}」`,
-        );
-      }
-      const why = troubled.text.replace(/^兜底/, "").trim();
-      if (why === "" || !latest.includes(why)) {
-        missing.push(`气泡上的兜底原因与牌桌上那句对不上：气泡「${why}」／牌桌「${latest}」`);
+      missing.push(`换了个交不出来的端点，座位 0 的气泡却还是「${troubled?.state}」态`);
+    } else if (troubled.text.includes(SAID[0])) {
+      missing.push("兜底那一手的气泡上还写着上一次的理由：它没跟着那一手的记录换");
+    }
+    for (const seat of [1, 2, 3]) {
+      const bubble = await bubbleAt(page, seat);
+      if (bubble?.state === "troubled") {
+        missing.push(`座位 0 的端点坏了，座位 ${seat} 却也变成了「兜底」态：拖累别席了`);
       }
     }
 
@@ -441,17 +532,184 @@ export async function verifyBubbles(lane, options = {}) {
     }
   } finally {
     await context.close();
-    good.endpoint.kill();
+    for (const each of endpoints) each.endpoint.kill();
     bad.endpoint.kill();
   }
+  return null;
+}
+
+/** 第二程：固定延迟下的并发墙钟。返回失败清单（空 = 绿）。 */
+async function wallClockLane(lane, pageOrigin, options) {
+  const { budgetMs, delayMs, missing, problems } = options;
+
+  const slow = await startEndpoint(pageOrigin, ["--delay", String(delayMs)]);
+  const context = await lane.newContext();
+
+  try {
+    const page = await context.newPage();
+    page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
+
+    // 三席共用那个延迟端点（一份档案坐三席），座位 3 仍是自带 bot：
+    // ⑧ 的「bot 席上没有气泡」要在同一局真语料上一起验。
+    await plantSeating(page, {
+      profiles: [
+        {
+          name: "延迟端点的档案",
+          provider: "custom-openai",
+          model: "slow-model",
+          base_url: slow.baseUrl,
+          timeout_ms: "240000",
+        },
+      ],
+      seats: Seats.map((seat) => (seat === 3 ? {} : { choice: profileChoice("延迟端点的档案") })),
+    });
+
+    console.log("");
+    console.log(
+      `第二程：座位 0/1/2 ← ${slow.baseUrl}（每问一次先睡 ${delayMs} ms），座位 3 是 bot`,
+    );
+    await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+
+    // 换成探针挑好的种子（第一局第 2 手就有一轮多席响应），重开一桌。
+    await page.getByTestId("table-seed").fill(String(CONCURRENT_SEED));
+    await page.getByTestId("table-restart").click();
+
+    // 记「几个『在想』气泡同时在场」的每次变迁；顺带盯 bot 席与 data-waited。
+    await page.evaluate(() => {
+      window.__thinkLog = [];
+      window.__botBubbled = false;
+      window.__waitAttrs = null;
+      const snap = () => {
+        const thinking = document.querySelectorAll('[data-bubble="thinking"]');
+        if (document.querySelector('[data-testid="seat-3-bubble"]')) window.__botBubbled = true;
+        if (window.__waitAttrs === null && thinking.length > 0) {
+          const first = thinking[0];
+          window.__waitAttrs = {
+            waited: first.getAttribute("data-waited"),
+            limit: first.getAttribute("data-wait-limit"),
+          };
+        }
+        const log = window.__thinkLog;
+        const last = log[log.length - 1];
+        if (!last || last.count !== thinking.length) {
+          log.push({ t: performance.now(), count: thinking.length });
+        }
+      };
+      new MutationObserver(snap).observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+      });
+      snap();
+    });
+
+    await page.getByTestId("table-speed-8×").click();
+    await playPause(page, "播放");
+
+    // 等到一轮「≥2 席同时在想」完整落幕（升到 ≥2，之后回到 0）。
+    const sawRound = await settles(
+      page,
+      () => {
+        const log = window.__thinkLog;
+        const rise = log.findIndex((each) => each.count >= 2);
+        return rise >= 0 && log.slice(rise).some((each) => each.count === 0);
+      },
+      null,
+      budgetMs,
+    );
+    await playPause(page, "暂停");
+    await settles(
+      page,
+      () => document.querySelectorAll('[data-bubble="thinking"]').length === 0,
+      null,
+      budgetMs,
+    );
+
+    const record = await page.evaluate(() => ({
+      log: window.__thinkLog,
+      botBubbled: window.__botBubbled,
+      waitAttrs: window.__waitAttrs,
+    }));
+
+    if (!sawRound) {
+      missing.push(
+        `等了 ${budgetMs} ms 也没见到「≥2 席同时在想」的一轮：并发没发生（观测到的变迁：${JSON.stringify(record.log.slice(0, 20))}）`,
+      );
+      return null;
+    }
+
+    // ---- ⑤⑥ 那一轮的墙钟 ----
+    const rise = record.log.findIndex((each) => each.count >= 2);
+    const settle = record.log.findIndex((each, index) => index > rise && each.count === 0);
+    const window_ = record.log.slice(rise, settle + 1);
+    const most = Math.max(...window_.map((each) => each.count));
+    const wallMs = Math.round(record.log[settle].t - record.log[rise].t);
+
+    console.log("");
+    console.log(
+      `同时在想的那一轮：${most} 席一起在飞，墙钟 ${wallMs} ms（端点延迟 ${delayMs} ms/份；` +
+        `串行要 ${most} 份 ≈ ${most * delayMs} ms）`,
+    );
+
+    if (most < 2) missing.push(`该有 ≥2 席同时在想，实际最多 ${most} 席`);
+    if (wallMs >= delayMs * 2) {
+      missing.push(
+        `同时在想的那一轮墙钟 ${wallMs} ms ≥ 两份延迟（${delayMs * 2} ms）：问话没有真的并发`,
+      );
+    }
+    if (wallMs < delayMs * 0.4) {
+      missing.push(
+        `同时在想的那一轮墙钟只有 ${wallMs} ms（延迟 ${delayMs} ms）：端点的延迟根本没发生，这一条量了个空`,
+      );
+    }
+
+    // ---- ⑦ 「在想」带着已等秒数与上限 ----
+    if (record.waitAttrs === null) {
+      missing.push("整程没抓到过一个「在想」气泡：data-waited 那两条断言没执行到");
+    } else {
+      if (!/^\d+$/.test(record.waitAttrs.waited ?? "")) {
+        missing.push(`「在想」的气泡上没有已等秒数（data-waited=「${record.waitAttrs.waited}」）`);
+      }
+      if (record.waitAttrs.limit !== "240") {
+        missing.push(
+          `「在想」的气泡上限该是档案超时 240 秒，实际 data-wait-limit=「${record.waitAttrs.limit}」`,
+        );
+      }
+    }
+
+    // ---- ⑧ bot 席上没有气泡 ----
+    if (record.botBubbled) {
+      missing.push("座位 3 是自带 bot，整程却出过气泡");
+    }
+  } finally {
+    await context.close();
+    slow.endpoint.kill();
+  }
+  return null;
+}
+
+/** 思考气泡 + 并发那一道。返回的是失败清单（空 = 绿）。 */
+export async function verifyBubbles(lane, options = {}) {
+  const { budgetMs = 120000, delayMs = 700, shoot = null } = options;
+
+  // dev server 而不是 preview：与 verify-redaction 同一个理由（省掉一次 vite build）。
+  const pageOrigin = await lane.devUrl();
+  const problems = [];
+  const missing = [];
+
+  const early = await fourSeatsLane(lane, pageOrigin, { budgetMs, shoot, missing, problems });
+  if (early !== null) return early;
+
+  const early2 = await wallClockLane(lane, pageOrigin, { budgetMs, delayMs, missing, problems });
+  if (early2 !== null) return early2;
 
   if (problems.length > 0) return failure("页面报了错：", problems);
   if (missing.length > 0) return failure("思考气泡这一道没过：", missing);
 
   console.log("");
-  console.log("气泡里的字来自那一手的决策记录、bot 席上没有气泡、气泡挡不住牌与河 ✓");
-  console.log("点得开：全文面板九样都在，牌桌跟着摆出那一手的快照，收起来逐字回到现在 ✓");
-  console.log("兜底那一手：气泡是「兜底」态，原因与牌桌上那句同源 ✓");
+  console.log("四席四个气泡各说各的、挡不住牌与河、点得开且收起来逐字回到现在 ✓");
+  console.log("一席换成交不出来的端点：它走兜底，其余三席照样往前说 ✓");
+  console.log("固定延迟下几席同时在想：墙钟接近一份延迟而不是几份；在想的气泡带着已等秒数与上限 ✓");
   return [];
 }
 
@@ -464,8 +722,8 @@ if (isEntry(import.meta.url)) {
 
   await runStandalone((lane) =>
     verifyBubbles(lane, {
-      seat: Number.parseInt(flag("--seat", "0"), 10),
       budgetMs: Number.parseInt(flag("--budget", "120000"), 10),
+      delayMs: Number.parseInt(flag("--delay", "700"), 10),
       shoot: flag("--shoot", null),
     }),
   );

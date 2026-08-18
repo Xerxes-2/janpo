@@ -11,7 +11,8 @@
 //   node scripts/fake-endpoint.mjs --fail 429             # **固定回一个失败状态**（票 47）
 //
 // 选项：--port N（默认 4199）、--action-id N（默认 0）、--reason <一句话>、--cors <origin|*>、
-//       --https、--quiet、--echo-key、--fail <status>。
+//       --https、--quiet、--echo-key、--fail <status>、--delay <ms>（票 74：正常答话前
+//       固定睡这么久——「真的并发了」的唯一硬证据就是四席同问时墙钟接近一份延迟而不是几份）。
 // **CORS 默认关**：本地端点默认就不放行浏览器，这份默认值本身就是要验的那个坑。
 
 import { execFileSync } from "node:child_process";
@@ -59,6 +60,13 @@ const echoKey = argv.includes("--echo-key");
  * 正文是它的正题；这一个只关心**状态码**，正文照各家真回的措辞写。
  */
 const failStatus = Number.parseInt(flag("--fail", "0"), 10);
+
+/**
+ * **正常答话前固定睡这么久**（票 74）：并发那道闸门要量「同一个响应阶段几席一起在飞时，
+ * 墙钟是一份延迟还是几份」，而本机假端点不带延迟时答得太快，量不出串行与并发的差别。
+ * 只延迟成功那条路：失败路径（--fail / --echo-key）要验的是别的事。
+ */
+const delayMs = Number.parseInt(flag("--delay", "0"), 10);
 
 /** 点名那几档的 OpenAI 风格正文。没点名的走一句通用的。 */
 const FAIL_BODIES = {
@@ -207,14 +215,18 @@ const handler = (request, response) => {
 
   request.resume();
   request.on("end", () => {
-    cors(response, request);
-    response.writeHead(200, {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache",
-      connection: "keep-alive",
-    });
-    for (const chunk of chunks()) response.write(`data: ${JSON.stringify(chunk)}\n\n`);
-    response.end("data: [DONE]\n\n");
+    const respond = () => {
+      cors(response, request);
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      for (const chunk of chunks()) response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      response.end("data: [DONE]\n\n");
+    };
+    if (delayMs > 0) setTimeout(respond, delayMs);
+    else respond();
   });
 };
 
@@ -225,6 +237,6 @@ server.listen(port, () => {
     ? "固定回 401 并把收到的 key 原样抄进报错"
     : failStatus > 0
       ? `固定回 ${failStatus}`
-      : `固定选 action_id=${actionId}`;
+      : `固定选 action_id=${actionId}${delayMs > 0 ? `（先睡 ${delayMs} ms）` : ""}`;
   console.log(`假端点在 ${scheme}://127.0.0.1:${port}/v1（CORS：${origin ?? "不放行"}），${what}`);
 });
