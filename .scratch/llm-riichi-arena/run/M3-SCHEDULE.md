@@ -38,6 +38,22 @@
 | W3 | **89**（辅助与时限）∥ **90**（复盘骨架） | 都碰真人那一侧，若撞车就串行 |
 | W4 | **93**（强 AI 进复盘） | 收口 |
 
+## W1 派工前的地盘裁定（调度器写，2026-08-19）
+
+起草时说过一条判据：**并行两票只要都改同一个类型的构造形状，集成必红**（M2 三次撞车全是这个形状）。
+所以 W1 的边界点名到**目录、文件与构造点**，不是「别碰对方的模块」：
+
+| # | 裁定 | 理由 |
+|---|---|---|
+| S-1 | **91 不许用 `?dev=1` 那一侧**，探路件放仓库根的独立目录 `probe/akagi-wasm/`（自带 `index.html` + 自己起静态服务器） | 票面写「例如 `?dev=1`」，但 `Tracer.fs` 与 dev 面正是 **87 要堵 22-A 的地方**。两票同时改 dev 面必撞 |
+| S-2 | **91 不许改 `flake.nix` / `scripts/ci.sh` / `web/**`**；宿主机已有 `cargo 1.97.1` + `rustc 1.97.1`，直接用 | 那两个是全仓公共设施（起草时点名的风险 3）。工具链要不要进 flake **只出建议**，落地是票 92 的事 |
+| S-3 | **`scripts/ci.sh` 本波归 87 独占** | 只有 87 要往闸门列表里加一行（新的真人闸门）。91、95 一个字都不许动它 |
+| S-4 | **95 的地盘是 `web/src/agent/**` + `web/tests/agent/**` + `verify-invariants.mjs` / `print-prompt.mjs`**；ADR-0005 已定 prompt 在 TS 侧渲染，所以它**不改** `src/Janpo.Web/Agent.fs` 的类型形状 | 87 整票都在 `src/Janpo.Web/**`。两票的唯一潜在接触点就是这个文件 |
+| S-5 | **87 与 91 都不许新增对 `render_version` 值的断言** | 95 正在把它顶上去（`web/src/agent/render-version.ts`）。新断言会在集成那一刻变成假红 |
+| S-6 | 87 独占 `SeatChoice` / `SeatBinding` 的构造点（`SeatingPlan.fs:52`、`Store.fs`、`TablePanel.fs` 那三处 `SeatChoice.Bot/Profile`） | 加「我自己」这一支要动 DU 的全部 match；本波无人与它共享这个类型 |
+
+三票都往 `DECISIONS.md` 末尾追加，集成时照旧走 `resolve-append-conflicts.py`。
+
 ## 起草时就点名的三处撞车风险
 
 1. **94 与 95 都碰 `web/src/agent/**`** —— 已排进不同波次。
