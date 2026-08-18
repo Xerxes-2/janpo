@@ -11,11 +11,12 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出十个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// **这一层还转出十三个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` /
 /// `init` / `update` / `rosterOf` / `seatConfigOf` / `renderingPending` / `rulesPending` / `live` /
-/// `shown` / `canAdvance` / `timeline`。转出来之后**这个程序集的公开面只多了这几个名字**：那四块里
-/// 跨文件用的助手一律 `internal`，出不了 `Janpo.Web`。
+/// `shown` / `canAdvance` / `timeline` / `bubbles` / `detail` / `recordless`。转出来之后
+/// **这个程序集的公开面只多了这几个名字**：那几块里跨文件用的助手一律 `internal`，
+/// 出不了 `Janpo.Web`。
 ///
 /// **这一页现在有两个布局**（票 71）：`/` 是首页的 Demo 回放（自动播，没有配桌与模型面板），
 /// `?table=1` 是主持人自己开的一桌（今天那一页一字不少）。**牌桌与结算的渲染只有一份**
@@ -61,6 +62,15 @@ module TablePage =
     /// 回放的时间轴（票 75）；Live 时是 None。实现与理由见 `TableState.timeline`。
     let timeline (model: TableModel) : Timeline option = TableState.timeline model
 
+    /// 这一桌每一席此刻的思考气泡（票 76）。实现与理由见 `TableState.bubbles`。
+    let bubbles (model: TableModel) (table: Table) : Seat -> Bubble option = TableState.bubbles model table
+
+    /// 全文面板此刻摊开的那一手（票 76）。实现与理由见 `TableState.detail`。
+    let detail (model: TableModel) : BubbleDetail option = TableState.detail model
+
+    /// 这份牌谱一条决策记录都没有吗（票 76）。实现与理由见 `TableState.recordless`。
+    let recordless (model: TableModel) : bool = TableState.recordless model
+
     // ---- 视图 ----
 
     /// 牌桌那一格。**两种来源共用这一份**（票 71）：Live 画正在打的那一桌，
@@ -68,7 +78,7 @@ module TablePage =
     ///
     /// 三种状态各有各的说法：还在拉、出了事、以及真有一桌。**白屏不在其列**——
     /// 首页拉不到资产时人得看见一句原因。
-    let private board (model: TableModel) =
+    let private board (model: TableModel) (dispatch: TableMsg -> unit) =
         match TableState.shown model with
         | Shown.Loading ->
             Html.p [
@@ -77,7 +87,7 @@ module TablePage =
                 prop.text "正在取那一局录下来的对局……"
             ]
         | Shown.Fault reason -> Html.p [ prop.className "error"; prop.testId "table-error"; prop.text reason ]
-        | Shown.Board table -> TableBoard.tableBody model table
+        | Shown.Board table -> TableBoard.tableBody model dispatch table
 
     /// 首页（`/`）：**访客的第一眼是一桌牌在走**（spec 的 story 1，ADR-0003 由 Demo Paifu 兑现）。
     ///
@@ -105,7 +115,7 @@ module TablePage =
                 ]
                 TablePanel.controls model dispatch
                 TablePanel.viewpoints model dispatch
-                board model
+                board model dispatch
             ]
         ]
 
@@ -129,7 +139,7 @@ module TablePage =
                 TablePanel.setup model live dispatch
                 TablePanel.viewpoints model dispatch
                 TablePanel.llmPanel model live dispatch
-                board model
+                board model dispatch
             ]
         ]
 

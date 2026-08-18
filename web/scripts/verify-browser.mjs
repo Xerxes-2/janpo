@@ -14,6 +14,7 @@
 //  10 **反向自证**：抹不干净的载荷必须让第 9 趟那条断言当场红（票 77）
 //  11 配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变（票 72）
 //  12 四 LLM 同桌：一份档案坐两席（人格各不同）、坏 key 那一席只兜自己的底、老配置迁得过来（票 73）
+//  13 思考气泡：气泡里的字来自那一手的记录、bot 席没有、挡不住牌、点得开、兜底那一态（票 76）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
 // 其余十趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
@@ -29,6 +30,7 @@
 
 import { failure, openLane, printFailures } from "./browser-lane.mjs";
 import { verifyBoard } from "./verify-board.mjs";
+import { verifyBubbles } from "./verify-bubbles.mjs";
 import { verifyExport } from "./verify-export.mjs";
 import { verifyGolden } from "./verify-golden.mjs";
 import { verifyHome } from "./verify-home.mjs";
@@ -179,6 +181,17 @@ const gates = [
     name: "四 LLM 同桌：一份档案坐两席（人格各不同）、断电演习只塌那一席、老配置迁得过来",
     how: "node scripts/verify-seats.mjs",
     run: (lane) => verifySeats(lane),
+  },
+  // 票 76：思考气泡。**两个本机假端点**（一个好好答话、一个只回越界 id）真跑几手，
+  // 于是三态里的两态都在真语料上走得到：气泡里的字必须一字不差是端点回的那句
+  // （端点 → 决策记录 → 气泡这条链路的唯一证据）、bot 席上一个气泡都没有、
+  // 气泡与四家的三排牌**矩形不相交**（「不许挡住牌与河」读的是真坐标，不是承诺）、
+  // 点开之后九样都在且牌桌摆出那一手的快照、收起来逐字回到现在（只读），
+  // 最后换成那个交不出来的端点：气泡变「兜底」态，原因与 `data-fallback` 同源。
+  {
+    name: "思考气泡：字来自那一手的记录、bot 席没有、挡不住牌、点得开、兜底那一态",
+    how: "node scripts/verify-bubbles.mjs",
+    run: (lane) => verifyBubbles(lane),
   },
 ];
 

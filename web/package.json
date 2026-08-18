@@ -19,6 +19,7 @@
     "verify:llm": "node scripts/verify-llm-seat.mjs",
     "verify": "node scripts/verify-tracer.mjs",
     "verify:browser": "node scripts/verify-browser.mjs",
+    "verify:bubbles": "node scripts/verify-bubbles.mjs",
     "verify:golden": "node scripts/verify-golden.mjs",
     "verify:home": "node scripts/verify-home.mjs",
     "verify:invariants": "node scripts/verify-invariants.mjs",

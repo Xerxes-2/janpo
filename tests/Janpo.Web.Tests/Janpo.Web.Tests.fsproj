@@ -21,6 +21,8 @@
     <Compile Include="ReplayTableTests.fs" />
     <!-- 回放的时间轴（票 75）：游标动得对不对（拖、步进、跳局、两头与幂等）。 -->
     <Compile Include="ReplayTimelineTests.fs" />
+    <!-- 思考气泡（票 76）：三态、按座位取的取值器、全文面板与那一手的局面快照。 -->
+    <Compile Include="ThinkingBubbleTests.fs" />
     <Compile Include="AgentTests.fs" />
     <!-- 模型档案库 + 四席绑定（票 73）：两个维度的分工、删档案的善后、老配置的迁移。 -->
     <Compile Include="SeatingPlanTests.fs" />

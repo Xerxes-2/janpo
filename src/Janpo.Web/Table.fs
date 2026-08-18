@@ -324,8 +324,15 @@ module Table =
         let recordedBy (turns: int) : DecisionRecord list =
             paifu.Decisions |> List.filter (fun record -> record.Turn < turns)
 
+        // 那一手的决策记录（问过模型的那几手才有）。**拿它而不是 `apply`**（票 76）：
+        // `Turn.Fallback` 是牌桌上那句「上一手：……（兜底：……）」与 `data-fallback` 的来源，
+        // 回放里丢掉它等于把「兜底不许静默替换」（票 23）在回放那一侧静默地破掉——
+        // 气泡说兜底、牌桌却一声不响。记录本身仍由下面那一行按手序切（不重复收）。
+        let recordAt (turns: int) : DecisionRecord option =
+            paifu.Decisions |> List.tryFind (fun record -> record.Turn = turns)
+
         let played (table: Table) (action: Action) : Table =
-            let next = apply action table
+            let next = played (recordAt table.Turns) action table
 
             {
                 next with

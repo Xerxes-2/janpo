@@ -47,6 +47,9 @@
          改牌桌与结算的进 `TableBoard`。 -->
     <Compile Include="TableState.fs" />
     <Compile Include="AgentLine.fs" />
+    <!-- 思考气泡与它点开之后那一屏（票 76）：只画，判据在 `TableState` 那个取值器里。
+         排在 `TableBoard` 前面——牌桌把气泡挂在座位面板上。 -->
+    <Compile Include="ThinkingBubble.fs" />
     <Compile Include="TableBoard.fs" />
     <Compile Include="TablePanel.fs" />
     <Compile Include="TablePage.fs" />

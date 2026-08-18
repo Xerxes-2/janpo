@@ -598,12 +598,89 @@ h1 {
   text-align: right;
 }
 
-/* 决策记录的原文按行断开：thinking 是整段文字，挤成一行读不下来（票 75；气泡是票 76）。 */
-.replay-record {
+/* 思考气泡（票 76）。**它是座位面板里的一行，不做绝对定位**——「气泡不许挡住牌与河」
+   因此是结构上的事实而不是纪律：它与三排牌各占各的行，压不到任何一张牌上
+   （闸门另核两者的矩形不相交，`web/scripts/verify-bubbles.mjs`）。
+
+   三态一眼分得开靠三样：头上那两个字（在想 / 说 / 兜底）、画法（虚线 / 实线 / 红），
+   与 `data-bubble`（机器读的那一半）。thinking 是整段文字，因此**钉住高度、溢出剪掉**
+   ——全文在点开那一屏里，气泡本身不许把牌桌撑变形。 */
+.bubble {
+  display: block;
+  width: 100%;
+  /* 上下两家占满整行（手牌 14 张要地方），气泡跟着拉到 40rem 宽就没人会当它是一句话了。
+     左右两家本来就窄，这一条对它们无效。 */
+  max-width: 30rem;
+  max-height: 4.2rem;
+  overflow: hidden;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 上下两家的三排牌是居中摆的（`.tiles`），气泡跟着居中才在同一条中轴上。 */
+.seat[data-seat-position="self"] .bubble,
+.seat[data-seat-position="toimen"] .bubble {
+  align-self: center;
+}
+
+/* 在想：还没有记录，点不开（`prop.disabled`），因此也不摆手型。 */
+.bubble[data-bubble="thinking"] {
+  border-style: dashed;
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* 兜底代打：与页面上其余「出事了」同一个红（`.error` / `.agent.error`）。 */
+.bubble[data-bubble="troubled"] {
+  border-left-color: #c0392b;
+  color: #c0392b;
+}
+
+.bubble-who {
+  margin-right: 0.4rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.bubble-said {
+  font-size: 0.8rem;
+  line-height: 1.45;
   white-space: pre-wrap;
-  border-left: 2px solid var(--line);
-  padding-left: 0.75rem;
-  margin: 0.5rem 0;
-  font-size: 0.9rem;
-  opacity: 0.85;
+}
+
+/* 点开之后那一屏（story 5）：thinking 与 prompt 尾部都是整段文字，按行断开；
+   太长的那两格自己滚，别把整页顶下去。 */
+.bubble-detail .bubble-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin: 0.35rem 0;
+}
+
+.bubble-detail .bubble-text {
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.bubble-head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.bubble-head button {
+  padding: 0.2rem 0.9rem;
+  font: inherit;
+  cursor: pointer;
 }

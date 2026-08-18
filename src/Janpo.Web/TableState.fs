@@ -184,6 +184,81 @@ type Timeline = {
     Record: DecisionRecord option
 }
 
+/// 一席此刻的思考气泡（票 76；CONTEXT.md 的 `Thinking Bubble`）。
+///
+/// **它是「展示某个 DecisionRecord 的 UI 部件」，不是数据**（术语表原话）：两个 case 直接
+/// 抱着那条记录本身，气泡这一侧一个字段都不复制——数据源只有 `Table.Decisions` /
+/// `Paifu.Decisions` 一处。
+///
+/// **三态刻意是三个 case，而不是一个带 option 的记录**（判据 12：拒绝理由各有各的 case）：
+/// 「在想」根本没有记录可读，「兜底」必然有一句原因。混成一个记录的话，视图里每一处都得
+/// 重判一遍「这一格有没有值」——那正是三态看不出区别的开头。
+[<RequireQualifiedAccess>]
+type Bubble =
+    /// 正在等这一席的回执。**只有 Live 有**：回放里没有在飞的问话。
+    | Thinking
+    /// 上一次它自己说了什么（thinking 优先，没有思考预算时退回那一句理由）。
+    | Spoke of record: DecisionRecord
+    /// 上一次是兜底代打的，附原因。**粘着不掉**：那条记录就在那儿，直到它又能好好说话
+    /// ——下一条记录不带 `Fallback` 时这一席自己就退回 `Spoke`。
+    | Troubled of record: DecisionRecord * reason: string
+
+/// 气泡的三个出口：背后那条记录、给机器看的那一半、以及气泡上写的那句话。
+[<RequireQualifiedAccess>]
+module Bubble =
+
+    /// 这个气泡背后的那条决策记录；「在想」那一态还没有记录（**它因此点不开**）。
+    let record (bubble: Bubble) : DecisionRecord option =
+        match bubble with
+        | Bubble.Thinking -> None
+        | Bubble.Spoke record -> Some record
+        | Bubble.Troubled(record, _) -> Some record
+
+    /// 三态给机器看的那一半（`data-bubble`）。人看的是下面那句话与画法（虚线 / 实线 / 红），
+    /// 闸门读的是它——两头对不上就是错。
+    let toWire (bubble: Bubble) : string =
+        match bubble with
+        | Bubble.Thinking -> "thinking"
+        | Bubble.Spoke _ -> "spoke"
+        | Bubble.Troubled _ -> "troubled"
+
+    /// 气泡头上那两个字：这一席此刻是在想、说了话，还是被代打了。
+    let toLabel (bubble: Bubble) : string =
+        match bubble with
+        | Bubble.Thinking -> "在想"
+        | Bubble.Spoke _ -> "说"
+        | Bubble.Troubled _ -> "兜底"
+
+    /// 气泡上写的那句话。
+    ///
+    /// **thinking 优先，没有思考预算时退回那一句理由**（票 76 原话）：关掉思考预算的模型
+    /// 只给得出 `reason`，而开着的那几家 `thinking` 才是它真在想的东西。
+    /// 两样都没有时也要说一句——空气泡与「没有气泡」在页面上分不出来。
+    ///
+    /// 兜底那一态写的是**原因**（与牌桌上那句「上一手：……（兜底：……）」、`data-fallback`
+    /// 同一个来源：`DecisionRecord.Fallback`）。它的 thinking 与理由仍在全文面板里。
+    let toDisplay (bubble: Bubble) : string =
+        match bubble with
+        | Bubble.Thinking -> "正在等它回话……"
+        | Bubble.Troubled(_, reason) -> reason
+        | Bubble.Spoke record ->
+            record.Thinking
+            |> Option.orElse record.Reason
+            |> Option.defaultValue "（这一手没留下理由与思考原文）"
+
+/// 气泡点开之后那一屏（票 76 的全文面板，spec 的 story 5）：那一手的**决策记录**与
+/// **当时的局面快照**。
+///
+/// **两格都从同一帧上读出来**：`Record` 就是这一帧刚落定那一手的那条（`recordOf`，与时间轴
+/// 上那一格同一处推导），`Snapshot` 就是那一帧本身。**记录不存第二份**。
+///
+/// 「最终落定的动作」也在这里：牌谱里存的是**包内 id**（26-3：意图不上牌谱），
+/// 而这一帧的 `Latest` 就是那一手真落进引擎的动作。
+type BubbleDetail = {
+    Record: DecisionRecord
+    Snapshot: Table
+}
+
 /// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**，因此牌桌与结算的渲染只有一份。
 [<RequireQualifiedAccess>]
 type Shown =
@@ -209,6 +284,12 @@ type TableModel = {
     /// 牌桌上要不要把危险度排序显示出来（票 25）。**默认关**：
     /// 它是围观者想看的东西，不是牌桌本来就该摆着的。
     ShowDanger: bool
+    /// 气泡点开的是哪一手（票 76 的全文面板）：**存的是那一手落定之后的那一帧**，
+    /// 不是那条记录——记录就挂在这一帧的 `Decisions` 末条上（`recordOf`），存第二份只会漂。
+    ///
+    /// 摊开的那一刻牌桌上摆的就是它（`shown`）：story 5 的「局面快照」不是另画一张牌桌，
+    /// 而是把同一份渲染指到那一帧上。`None` = 没点开任何一手。
+    Opened: Table option
 }
 
 /// 牌桌上能发生的事。**一步一 Msg**：`Advanced` 与 `Ticked` 各推进一手，
@@ -231,6 +312,11 @@ type TableMsg =
     /// 回放的时间轴拖到了第几帧（票 75）。逐事件步进与跳局边界发的也是它
     /// ——**游标怂一条路**，而不是每种走法各一条消息。越界的帧号夹回 [0, 末帧]。
     | CursorMoved of frame: int
+    /// 点开 / 收起某一手的全文面板（票 76）。`turn` 是那一手的手序（`Table.Turns` 那个号，
+    /// CONTEXT.md 的 Turn）；`None` = 收起来。
+    ///
+    /// **回放里它顺带把游标挪到那一帧**：轴只有票 75 那一根，不给全文面板另开一条时间轴。
+    | RecordOpened of turn: int option
     /// 开 / 关牌桌上的危险度排序（票 25）。
     | DangerToggled
     /// 这一局看完了，开下一局。
@@ -331,10 +417,9 @@ module TableState =
             let next, cmd = change model.Ruleset live
             { model with Source = Source.Live next }, cmd
 
-    /// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**（票 71）：
-    /// 回放取的是第 `cursor` 帧，Live 取的是正在打的那一桌，往下的渲染只有一份。
-    let shown (model: TableModel) : Shown =
-        match model.Source with
+    /// 牌从哪来那一层此刻该画什么（票 71）：回放取第 `cursor` 帧，Live 取正在打的那一桌。
+    let private board (source: Source) : Shown =
+        match source with
         | Source.Live live ->
             match live.Table with
             | Ok table -> Shown.Board table
@@ -346,6 +431,16 @@ module TableState =
             | Some table -> Shown.Board table
             // 走不到：帧号只由 `replayTick` 与「从头再放」动，两处都夹在 [0, 末帧] 之间。
             | None -> Shown.Fault $"回放的第 {cursor} 帧不在这份牌谱里（共 {List.length frames} 帧）"
+
+    /// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**（票 71），往下的渲染只有一份。
+    ///
+    /// **气泡点开的那一手压过牌从哪来**（票 76 的 story 5）：摊开全文面板时牌桌上摆的就是
+    /// **那一手落定那一刻的快照**。回放里两者本来就是同一帧（`RecordOpened` 顺带挪了游标）；
+    /// Live 里它是导成牌谱重 fold 出来的那一帧，**而 `live.Table` 一手都没退回去**（只读）。
+    let shown (model: TableModel) : Shown =
+        match model.Opened with
+        | Some snapshot -> Shown.Board snapshot
+        | None -> board model.Source
 
     /// 还推得动吗。Live 是「这一局没终、也没出错」，回放是「还有没播到的帧」。
     /// 播放与单步那两个按钮灰不灰读的就是它。
@@ -718,6 +813,138 @@ module TableState =
                 Playback = Playback.pause model.Playback
         }
 
+    // ---- 思考气泡（票 76） ----
+
+    /// 这一桌**配置上**有没有真人坐席（ADR-0003 的 consequence：可见性判据挂在
+    /// **对局配置与终局状态**上，不挂在「用户是谁」上——围观者不是权限级别，只是视角）。
+    ///
+    /// **恒 false，而且这是写在代码里的一个值而不是注释里的旁白**（判据 4）：
+    /// 座位今天只有自带 bot 与模型两种（`SeatPlayer` 就两个 case），**真人坐席是 M3**。
+    /// 因此术语表那句「有真人参与时终局前隐藏」（`Thinking Bubble` 词条）**今天谁也到不了**；
+    /// M3 把真人加进 `Roster` 时改的就是这一个函数，取值器与视图一行都不必动。
+    let private humanSeated (_: TableModel) : bool = false
+
+    /// 气泡此刻解不解锁。有真人在场时**终局前一律不出**，复盘时解锁（spec 的 story 31）：
+    /// 两个引数就是那两样判据——**对局配置**（有没有真人）与**终局状态**（这一场打完了没）。
+    /// 视角不在其列：切到哪个座位看都不改变它（用例里钉着这一条）。
+    let private unlocked (model: TableModel) (table: Table) : bool =
+        not (humanSeated model) || Table.result table |> Option.isSome
+
+    /// 这一桌每一席此刻的气泡（票 76）。**交出去的是一个取值器**（`Seat -> Bubble option`）：
+    /// 「在想」那一态今天挂的是 Agent 层**单席**的那一份（`AgentStatus.Asking`），
+    /// 票 74 把它换成按座位一份时**只换这个函数的实现**，视图与用例一行都不必动。
+    ///
+    /// **数据源只有一处**：「说了什么」与「兜底代打」读的都是这一帧的 `Table.Decisions`
+    /// （回放那一侧已经按手序切好，票 71 的 `recordedBy`）——气泡不存第二份。
+    /// **不读 `AgentStatus.Spoke` 里那句理由**：那只是同一条记录的另一份拄件，而且它只有最新一手。
+    ///
+    /// 一条记录都没有的那几席（bot 席、或分享链接那种棋谱）**恒是 None**：不出气泡。
+    let bubbles (model: TableModel) (table: Table) : Seat -> Bubble option =
+        // 在等哪一席的回执。票 74 换成按座位一份后，换掉的就是这一段与下面那一句比较。
+        let asking =
+            live model
+            |> Option.bind (fun live ->
+                match live.Agent with
+                | AgentStatus.Asking seat -> Some seat
+                | AgentStatus.Idle
+                | AgentStatus.Spoke _
+                | AgentStatus.Troubled _ -> None)
+
+        fun seat ->
+            if not (unlocked model table) then
+                None
+            elif asking = Some seat then
+                // 「在想」压过上一条记录：正在等回执那一刻，旧的理由已经不是它此刻在想的事。
+                Some Bubble.Thinking
+            else
+                table.Decisions
+                |> List.tryFindBack (fun record -> record.Seat = seat)
+                |> Option.map (fun record ->
+                    match record.Fallback with
+                    | Some reason -> Bubble.Troubled(record, reason)
+                    | None -> Bubble.Spoke record)
+
+    /// 这份牌谱一条决策记录都没有吗（票 76）。**判据落在整份牌谱上而不是这一帧上**：
+    /// 带推理的牌谱第 0 帧同样一条记录都没有，拿帧当判据的话那句话会在开局闪一下。
+    ///
+    /// **Live 那一侧恒为 false**：那一桌还在打，模型随时可能开口，而「四家都是自带选手」
+    /// 这件事 Agent 那一行已经在说了（`AgentLine`）。
+    let recordless (model: TableModel) : bool =
+        match model.Source with
+        | Source.Live _
+        | Source.Replay ReplayTable.Loading
+        | Source.Replay(ReplayTable.Failed _) -> false
+        | Source.Replay(ReplayTable.Ready(frames, _)) ->
+            // 末帧看得见整份牌谱的记录（`recordedBy` 切的是「手序 < 这一帧手数」）。
+            frames
+            |> List.tryLast
+            |> Option.map (fun frame -> List.isEmpty frame.Decisions)
+            |> Option.defaultValue false
+
+    /// 第 `turn` 手**落定之后**那一帧的帧号（票 76）。
+    ///
+    /// 判据两条缺一不可：手数正好是 `turn + 1`，**且它真落定了一手**（`Latest` 不是 None）
+    /// ——下一局的开局帧手数沿用着上一局（票 75 的红-7 就是这一条）。
+    let private frameOfTurn (turn: int) (frames: Table list) : int option =
+        frames
+        |> List.tryFindIndex (fun frame -> frame.Turns = turn + 1 && Option.isSome frame.Latest)
+
+    /// Live 那一桌的逐帧牌桌：**导成牌谱再 fold 一遍**（`Table.paifu` → `Table.replay`，
+    /// 与「导出牌谱」走的是同一条路）。
+    ///
+    /// **Live 侧不常驻一份帧数组**（票面明令）：点一下算一次。实测一次 fold，256 帧 46–74 ms、
+    /// 741 帧约 200 ms（报告 75/76）——而帧数常驻着就得每落一手重算一遍。
+    let private liveFrames (model: TableModel) : Table list =
+        match live model, rosterOf model with
+        | Some { Table = Ok table }, Some roster ->
+            match Table.paifu roster table |> Table.replay with
+            | Ok frames -> frames
+            // 自己刚导出的牌谱回放不动：走不到（导出那一条路每次 CI 都在跑）。
+            // 真走到了就当没有快照，面板不摊开（不白屏、也不假装有）。
+            | Error _ -> []
+        | _, _ -> []
+
+    /// 点开第 `turn` 手（票 76）。
+    ///
+    /// **回放里它顺带把游标挪到那一帧**：轴只有票 75 那一根，全文面板不另开一条时间轴；
+    /// 于是牌桌自己就是那一手的快照，两边只有一份渲染。
+    /// **Live 里只摆快照**（`shown`），`live.Table` 一字不动——只读，不影响推进。
+    ///
+    /// **一点就暂停**：与「一拖就暂停」同一条判据——牌桌上摆着一张快照时定时器推得再快，
+    /// 人也看不见。再按「播放」就把面板收了（`moves`）。
+    let private openAt (turn: int) (model: TableModel) : TableModel =
+        let opened (frames: Table list) (frame: int) = {
+            model with
+                Source =
+                    match model.Source with
+                    | Source.Replay(ReplayTable.Ready _) -> Source.Replay(ReplayTable.Ready(frames, frame))
+                    // Live 那一侧没有游标：牌桌那一桌原样留着。
+                    | source -> source
+                Opened = List.tryItem frame frames
+                Playback = Playback.pause model.Playback
+        }
+
+        let frames =
+            match model.Source with
+            | Source.Replay(ReplayTable.Ready(frames, _)) -> frames
+            | Source.Replay _
+            | Source.Live _ -> liveFrames model
+
+        match frameOfTurn turn frames with
+        // 那一手不在这份牌谱里（重开过一桌、或者根本导不出牌谱）：没有事情发生。
+        | None -> model
+        | Some frame -> opened frames frame
+
+    /// 全文面板此刻摊开的那一手（票 76）；没点开时是 None。
+    ///
+    /// **公开的**：视图与页面逻辑的用例读同一处推导（同 `timeline` / `canAdvance`）。
+    /// 记录从那一帧上现读（`recordOf`）：快照与记录因此不可能对不上。
+    let detail (model: TableModel) : BubbleDetail option =
+        model.Opened
+        |> Option.bind (fun snapshot ->
+            recordOf snapshot
+            |> Option.map (fun record -> { Record = record; Snapshot = snapshot }))
+
     /// 去拉那份 Demo 牌谱。**副作用一律由 Cmd 发**（同 `askCmd`）：
     /// 效果体只在浏览器里执行，dotnet 侧只把它编出来、不跑。
     let private demoCmd: Cmd<TableMsg> =
@@ -764,6 +991,8 @@ module TableState =
             Viewpoint = Viewpoint.Seated Seat.first
             // 危险度默认关（票 25）。
             ShowDanger = false
+            // 还没点开任何一手的全文面板（票 76）。
+            Opened = None
         },
         Cmd.none
 
@@ -783,6 +1012,7 @@ module TableState =
             // **Live 那一页不动**（`initial` 仍是坐到座位 0）：那一页牌还在打。
             Viewpoint = Viewpoint.God
             ShowDanger = false
+            Opened = None
         },
         demoCmd
 
@@ -797,7 +1027,42 @@ module TableState =
             let rules = Store.readRules ()
             initial rules (Store.readSeating (RulesetDraft.ruleset rules))
 
+    /// 这条消息会不会把牌桌挪一挪（票 76）。**全文面板摊开时牌桌上摆的是那一手的快照**，
+    /// 因此凡是挪动牌桌的消息都先把它收起来——否则牌局在走而画面冻着，人会以为卡住了。
+    ///
+    /// **`PlayToggled` 也算**：一点开就暂停（`openAt`），而重新按播放就是「接着看牌」。
+    /// 于是面板摊着的时候不可能有被接受的 `Ticked`，那一条因此不必列在这里
+    /// （列了反而会让一记**过期**的定时器把面板关掉）。
+    ///
+    /// **逐 case 穷举而不用 `| _ ->`**：加了新消息时编译器会把这里指出来。
+    let private moves (message: TableMsg) : bool =
+        match message with
+        | Advanced
+        | PlayToggled
+        | Restarted
+        | CursorMoved _
+        | KyokuAdvanced
+        | DemoLoaded _
+        | Answered _ -> true
+        | SeedEdited _
+        | SpeedPicked _
+        | Ticked _
+        | ViewpointPicked _
+        | RecordOpened _
+        | DangerToggled
+        | LlmSeatPicked _
+        | BotPicked _
+        | RulePicked _
+        | LlmEdited _
+        | Exported -> false
+
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        let model =
+            if moves message then
+                { model with Opened = None }
+            else
+                model
+
         match message with
         | SeedEdited seed -> model |> onLive (fun _ live -> { live with SeedText = seed }, Cmd.none)
         | Restarted ->
@@ -867,6 +1132,9 @@ module TableState =
             | Source.Replay _
             | Source.Live _ -> model, Cmd.none
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
+        // 收起那一句上面已经做完了（`moves` 不管它，而 `model.Opened` 在这里重新置）。
+        | RecordOpened None -> { model with Opened = None }, Cmd.none
+        | RecordOpened(Some turn) -> openAt turn model, Cmd.none
         | DangerToggled ->
             {
                 model with

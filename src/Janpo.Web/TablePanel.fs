@@ -156,34 +156,6 @@ module TablePanel =
             )
         ]
 
-    /// 刚落定那一手的决策记录（票 75）：**原文印出来就行**，好看的四家气泡是票 76。
-    ///
-    /// 没有记录的那几手（bot 自己决的、以及开局那一帧）**一行都不画**：
-    /// 印一个空壳比不印更难读。现在首页那份 Demo 是 bot 牌谱（一条记录都没有），
-    /// 因此这一段在它上面永远不会出现（判据 4：语料到不了的情形要显式写出来）——
-    /// 阳性对照在 `ReplayTimelineTests` 里拌了一条记录进去；票 79 换上真资产后它才在页上开口。
-    let private recordRow (record: DecisionRecord) =
-        // 兜底原因摆在最前面：那一手不是模型自己决的，读它的思考前得先知道这件事（票 23）。
-        let said =
-            [
-                record.Fallback |> Option.map (fun reason -> $"兜底：{reason}")
-                record.Reason
-                record.Thinking
-            ]
-            |> List.choose id
-            |> String.concat "\n"
-
-        let body = if said = "" then "（这一手没留下理由与思考原文）" else said
-
-        Html.p [
-            prop.key "record"
-            prop.className "replay-record"
-            prop.testId "table-replay-record"
-            prop.custom ("data-record-turn", record.Turn)
-            prop.custom ("data-record-seat", Seat.index record.Seat)
-            prop.text $"第 {record.Turn} 手・座位 {Seat.index record.Seat}：{body}"
-        ]
-
     /// 首页回放的控制条（票 71）与它的时间轴（票 75）：
     /// 播 / 暂停、「从头再放」与倍速一排，步进与滑块一排，局边界一排。
     ///
@@ -209,9 +181,10 @@ module TablePanel =
         let rails =
             match TableState.timeline model with
             | None -> []
-            | Some timeline ->
-                [ timelineRow timeline dispatch; kyokuRow timeline dispatch ]
-                @ (timeline.Record |> Option.toList |> List.map recordRow)
+            // 票 75 那段「把刚落定那一手的记录原文印出来」的应急形态（`table-replay-record`）
+            // **已经换成牌桌上的思考气泡**（票 76）：记录本来就该贴在说那句话的那一席旁边，
+            // 而不是堆在控制条下面。`Timeline.Record` 还在（票 75 的用例钉着它）。
+            | Some timeline -> [ timelineRow timeline dispatch; kyokuRow timeline dispatch ]
 
         Html.div [ prop.className "replay-controls"; prop.children (playRow :: rails) ]
 

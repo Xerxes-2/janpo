@@ -240,7 +240,7 @@ module TableBoard =
     /// `data-seat-position` 是方位给机器看的那一半，**样式读的也是它**：
     /// 属性写着下家却画在左边这种事因此不存在（闸门仍然两样都核：
     /// 属性对不对、以及画出来的坐标对不对）。
-    let private seatPanel (seating: Seating) (view: SeatView) =
+    let private seatPanel (seating: Seating) (bubble: ReactElement list) (view: SeatView) =
         let index = Seat.index view.Seat
         let position = Board.position seating.Ruleset seating.Anchor view.Seat
 
@@ -285,61 +285,67 @@ module TableBoard =
             prop.custom ("data-seat", index)
             prop.custom ("data-seat-position", Position.toWire position)
             prop.custom ("data-riichi", riichiWire view.Riichi)
-            prop.children [
-                Html.div [
-                    prop.className "seat-head"
-                    prop.children (
-                        [
-                            Html.span [
-                                prop.key "name"
-                                prop.className "seat-name"
-                                prop.text $"座位 {index}・{Kaze.toDisplay view.Jikaze}家"
+            prop.children (
+                [
+                    Html.div [
+                        prop.className "seat-head"
+                        prop.children (
+                            [
+                                Html.span [
+                                    prop.key "name"
+                                    prop.className "seat-name"
+                                    prop.text $"座位 {index}・{Kaze.toDisplay view.Jikaze}家"
+                                ]
                             ]
-                        ]
-                        @ positionLabel
-                        @ [
-                            Html.span [
-                                prop.key "score"
-                                prop.className "seat-score"
-                                prop.testId $"seat-{index}-score"
-                                prop.custom ("data-score", view.Score)
-                                prop.text (string view.Score)
+                            @ positionLabel
+                            @ [
+                                Html.span [
+                                    prop.key "score"
+                                    prop.className "seat-score"
+                                    prop.testId $"seat-{index}-score"
+                                    prop.custom ("data-score", view.Score)
+                                    prop.text (string view.Score)
+                                ]
+                                Html.span [
+                                    prop.key "junme"
+                                    prop.className "seat-junme"
+                                    prop.testId $"seat-{index}-junme"
+                                    prop.custom ("data-junme", view.Junme)
+                                    prop.text $"第 {view.Junme} 巡"
+                                ]
                             ]
-                            Html.span [
-                                prop.key "junme"
-                                prop.className "seat-junme"
-                                prop.testId $"seat-{index}-junme"
-                                prop.custom ("data-junme", view.Junme)
-                                prop.text $"第 {view.Junme} 巡"
-                            ]
-                        ]
-                        @ marks
-                    )
-                ]
-                tileRow
-                    $"seat-{index}-naki"
-                    "naki-row"
-                    [ prop.custom ("data-naki-count", List.length view.Naki) ]
-                    "副露"
-                    (view.Naki |> List.mapi (nakiGroup seating.Ruleset view.Seat))
-                tileRow
-                    $"seat-{index}-hand"
-                    "hand"
-                    [
-                        prop.custom ("data-hand-count", handCount)
-                        // 他家的手牌是扣着的——**这不是渲染纪律而是投影的形状**（`HandView.Concealed`
-                        // 里根本没有牌面）。写出来是让闸门能拿它与“画出来几张牌背”对得上。
-                        prop.custom ("data-hand-hidden", hidden)
+                            @ marks
+                        )
                     ]
-                    $"手牌 {handCount}"
-                    (handTiles view.Hand)
-                tileRow
-                    $"seat-{index}-kawa"
-                    "kawa"
-                    [ prop.custom ("data-kawa-count", List.length view.Kawa) ]
-                    $"河 {List.length view.Kawa}"
-                    (kawaTiles view.Kawa)
-            ]
+                    tileRow
+                        $"seat-{index}-naki"
+                        "naki-row"
+                        [ prop.custom ("data-naki-count", List.length view.Naki) ]
+                        "副露"
+                        (view.Naki |> List.mapi (nakiGroup seating.Ruleset view.Seat))
+                    tileRow
+                        $"seat-{index}-hand"
+                        "hand"
+                        [
+                            prop.custom ("data-hand-count", handCount)
+                            // 他家的手牌是扣着的——**这不是渲染纪律而是投影的形状**（`HandView.Concealed`
+                            // 里根本没有牌面）。写出来是让闸门能拿它与“画出来几张牌背”对得上。
+                            prop.custom ("data-hand-hidden", hidden)
+                        ]
+                        $"手牌 {handCount}"
+                        (handTiles view.Hand)
+                    tileRow
+                        $"seat-{index}-kawa"
+                        "kawa"
+                        [ prop.custom ("data-kawa-count", List.length view.Kawa) ]
+                        $"河 {List.length view.Kawa}"
+                        (kawaTiles view.Kawa)
+                ]
+                // 思考气泡（票 76）摆在三排牌的**外侧**：DOM 里它在最后，而四个方位的
+                // 纵向翻转（`data-seat-position`）会把它翻到朝桌心那一侧——与三排牌同一套规则，
+                // 因此不引入第二份方位（报告 44 §9.6 留的那个锚点）。
+                @ bubble
+            )
         ]
 
     // ---- 视图：场况与结算 ----
@@ -373,11 +379,11 @@ module TableBoard =
         ]
 
     /// 牌桌中央（票 44）：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间，
-    /// 四家围着它坐。里宝牌只有上帝视角有。
+    /// 四家围着它坐。里宝牌只有上帝视角有，**而且要等这一局结算**（`settled`，见下）。
     ///
     /// **方位的参照系写在这里**（M1 传下来的第六条：相对方位必须显式声明参照系）：
     /// 牌桌上写着「下家」的那家到底是谁的下家，读者不必自己猜。
-    let private tableCenter (board: BoardView) =
+    let private tableCenter (settled: bool) (board: BoardView) =
         // 立直棒是「供托 N 根」那个数字的实物画法，一根都没时**整个字段不画**（同下面的里宝牌）：
         // 否则只剩一枚「立直棒」标签后面空着，看着像掉了东西（票 32 扫同类隐形时收的）。
         let bou =
@@ -402,9 +408,14 @@ module TableBoard =
                     ]
                 ]
 
-        // 里宝牌只有上帝视角有（坐着看时投影里就是空表）。
+        // 里宝牌只有上帝视角有（坐着看时投影里就是空表），**而且未结算时一律不摆**（票 76）。
+        //
+        // 里宝牌只在有人立直和了的那一刻翻开、才算番；开局就摆在桌心的话，
+        // 「宝牌指示牌」下面紧跟一行「里宝牌指示牌」会让人以为这一局有两个宝牌在生效
+        // ——**问题不是剧透而是误导**（裁决「71-8 的余波」）。结算那一屏照旧摆：
+        // 那一刻它真的翻开了，而结算面板上的「里宝牌 N 番」正需要它摆在旁边对。
         let ura =
-            if List.isEmpty board.UraMarkers then
+            if List.isEmpty board.UraMarkers || not settled then
                 []
             else
                 [ tileField "table-uradora" "里宝牌指示牌" board.UraMarkers ]
@@ -666,7 +677,7 @@ module TableBoard =
 
     // ---- 视图：整页 ----
 
-    let internal tableBody (model: TableModel) (table: Table) =
+    let internal tableBody (model: TableModel) (dispatch: TableMsg -> unit) (table: Table) =
         match Board.ofTable model.Viewpoint table with
         | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
         | Some board ->
@@ -696,7 +707,11 @@ module TableBoard =
                         prop.text message
                     ])
 
-            let settlement = Board.settlement table |> Option.toList |> List.map settlementPanel
+            // 这一局结算了吗。**里宝牌摆不摆读的就是它**（票 76）：结算面板摆着的那一屏
+            // 才是里宝牌真翻开的那一刻。
+            let settled = Board.settlement table
+
+            let settlement = settled |> Option.toList |> List.map settlementPanel
 
             let result = Board.final table |> Option.toList |> List.map resultPanel
 
@@ -730,6 +745,8 @@ module TableBoard =
                     ]
                     @ agent
                     @ AgentLine.usageLine table
+                    // 一条决策记录都没有的牌谱：**说一句为什么没有气泡**（票 76）。
+                    @ ThinkingBubble.note model
                     @ [
                         // 真牌桌（票 44）：四家围着中央坐。**DOM 仍然按座位升序**（`seat-N` 那几个
                         // 钩子与既有闸门因此稳定），画到哪个方位由 `data-seat-position` 定——
@@ -739,11 +756,23 @@ module TableBoard =
                             prop.className "seats-board"
                             prop.testId "table-seats"
                             prop.children (
-                                [ for view in board.Seats -> seatPanel seating view ] @ [ tableCenter board ]
+                                // 气泡的取值器**按座位取**（票 76）：这里只取一次，四家各问一遍。
+                                let bubbleAt = TableState.bubbles model table
+
+                                [
+                                    for view in board.Seats ->
+                                        seatPanel
+                                            seating
+                                            (ThinkingBubble.at dispatch view.Seat (bubbleAt view.Seat))
+                                            view
+                                ]
+                                @ [ tableCenter (Option.isSome settled) board ]
                             )
                         ]
                     ]
                     @ fault
+                    // 气泡点开的那一手（票 76）：紧挨着牌桌——上面那张牌桌就是它说的那一刻。
+                    @ ThinkingBubble.detail model dispatch
                     @ danger
                     @ settlement
                     @ result

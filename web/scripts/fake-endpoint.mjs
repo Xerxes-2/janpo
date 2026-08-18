@@ -10,8 +10,8 @@
 //   node scripts/fake-endpoint.mjs --cors '*' --echo-key  # **回一条把 key 原样抄回来的 401**（票 36）
 //   node scripts/fake-endpoint.mjs --fail 429             # **固定回一个失败状态**（票 47）
 //
-// 选项：--port N（默认 4199）、--action-id N（默认 0）、--cors <origin|*>、--https、--quiet、
-//       --echo-key、--fail <status>。
+// 选项：--port N（默认 4199）、--action-id N（默认 0）、--reason <一句话>、--cors <origin|*>、
+//       --https、--quiet、--echo-key、--fail <status>。
 // **CORS 默认关**：本地端点默认就不放行浏览器，这份默认值本身就是要验的那个坑。
 
 import { execFileSync } from "node:child_process";
@@ -29,6 +29,13 @@ const flag = (name, fallback) => {
 
 const port = Number.parseInt(flag("--port", "4199"), 10);
 const actionId = flag("--action-id", "0");
+
+/**
+ * `choose_action` 里那句 `reason`（票 76）。**可换是有用的**：思考气泡那道闸门要证
+ * 「气泡里的字来自那一手的决策记录」，而证据就是这句只可能从端点那儿来的话
+ * 一字不差地出现在页面上。
+ */
+const reason = flag("--reason", "假端点固定选第一条，只为验通道");
 const origin = flag("--cors", null);
 const https = argv.includes("--https");
 const quiet = argv.includes("--quiet");
@@ -117,10 +124,7 @@ function chunks() {
     type: "function",
     function: {
       name: "choose_action",
-      arguments: JSON.stringify({
-        action_id: String(actionId),
-        reason: "假端点固定选第一条，只为验通道",
-      }),
+      arguments: JSON.stringify({ action_id: String(actionId), reason }),
     },
   };
   const base = {
