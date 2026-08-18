@@ -31,9 +31,18 @@ module HomePageTests =
         | Error message -> failwith $"首页那份 Demo 牌谱读不动（{assetPath}）：{message}"
 
     /// 体积上限。**首页要 `fetch` 它**，因此它是首屏的一部分。
-    /// 票 79 会换成带 thinking 的真对局（实测约 10 KB/手），那一版仍得挤进这个数；
-    /// 挤不进就该先剪 thinking，而不是默默把首页拖慢。
-    let private sizeBudget = 512 * 1024
+    ///
+    /// **票 79 把它从 512 KB 提到 1.25 MiB**，因为资产换成了真的四席 LLM 对局：
+    /// 牌谱里多出来的是 **464 条决策记录**（每条带 prompt 尾部与那一句理由），
+    /// 而那正是首页要卖的东西。量过的代价（报告 79 §4，票 75 的量法，新旧两份同一台机器同一个探针）：
+    /// 21,485 → 1,122,337 字（UTF-8 1.77 MB）、过线 gzip 2.4 KB → **148 KB**、
+    /// 首屏 154 → **218 ms**、留住一份帧多占的堆 2.5 → **7.9 MB**。
+    /// 上限定在实测值上方 **17%**：它挂得住下一份资产
+    /// ——再胖就该先重新量一遍首屏（或剪 thinking），而不是默默把这个数往上推。
+    ///
+    /// **它数的是 UTF-16 字数不是字节**（`String.Length`）：汉字占一个字、三个字节，
+    /// 两个数在真资产上差 1.6 倍。真要改成数字节得连这句注释一起改。
+    let private sizeBudget = 1310720
 
     let private eventKinds (paifu: Paifu) : Event list = paifu.Events
 

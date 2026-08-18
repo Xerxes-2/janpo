@@ -12,8 +12,9 @@ open Janpo.Web
 /// 帧在载入那一刻一次 fold 好（`Table.replay`，票 71 的既成事实），因此这里钉的
 /// 不是「fold 对不对」（那在 `ReplayTableTests`），而是**游标动得对不对**：
 ///
-/// 1. 拖到某一处 = 直接 fold 同一前缀（**第三个锚点**：`Replay.game` 另起一次 fold，
-///    重建的是另一座牌山，与页面那条 `Replay.trace` → `Table.apply` 的路不是同一条）；
+/// 1. 拖到某一处 = 同一前缀算出来的局面。**手牌走第四条路**（`handsFromEvents`：
+///    只对事件流做加减法，不碰牌山），**可摸区走牌数守恒律**，
+///    河 / 副露 / 点数 / 供托仍与 `Replay.game` 的另一次 fold 对拍；
 /// 2. 幂等：同一个游标来回到达两次，渲染读的每一样逐字段相同；
 /// 3. 两头：拖回 0 是开局那一瞬，拖到末尾是票 71 今天那一屏（含结算与终局精算）；
 /// 4. 局边界与逐事件步进落在该落的帧上；
@@ -78,6 +79,59 @@ module ReplayTimelineTests =
 
         seats, GameState.kyotaku state, Wall.remaining (GameState.wall state)
 
+    // ---- 第四条路：只按事件流做加减法（不碰牌山，与被测实现一行不共享） ----
+
+    /// 从手里拿掉一张（结构相等的头一张）。**只拿一张**：手里的是牌不是集合。
+    let private without (tile: Tile) (hand: Tile list) : Tile list =
+        match hand |> List.tryFindIndex (fun each -> each = tile) with
+        | Some index -> List.removeAt index hand
+        | None -> failwith $"事件流要从手里拿掉 {Tile.toDisplay tile}，可手里没有它"
+
+    /// 四家的暗牌，**只由事件流的加减法算出来**：起手 + 摸 − 打 − 副露吃掉的。
+    ///
+    /// **为什么不能拿 `Replay.game` 截断的流当锚点**（票 79 真跑时撞出来的，报告 §5）：
+    /// 它会从**推断出来的那座牌山**替下一家摸一张**牌谱里根本没有的牌**——
+    /// 截断点正好落在某家该摸牌的相位上时，那一张是凭空造的（旧 bot 语料的切点撞不上，
+    /// 真语料五个切点撞上两个）。这一段**不需要牌山，因此造不出假牌**，
+    /// 而且与 `Replay` / `Table` 一行代码都不共享（判据 18：两边对不上时引入第三个锚点）。
+    let private handsFromEvents (events: Event list) : Tile list list =
+        let apply (hands: Tile list list) (event: Event) : Tile list list =
+            let change (actor: Seat) (f: Tile list -> Tile list) =
+                hands
+                |> List.mapi (fun index hand -> if index = Seat.index actor then f hand else hand)
+
+            let drop (actor: Seat) (consumed: Tile list) =
+                change actor (fun hand -> consumed |> List.fold (fun rest tile -> without tile rest) hand)
+
+            match event with
+            | StartKyoku start -> start.Tehais
+            | Tsumo(actor, pai) -> change actor (fun hand -> pai :: hand)
+            | Dahai(actor, pai, _) -> change actor (without pai)
+            | Chi(actor, _, _, consumed)
+            | Pon(actor, _, _, consumed)
+            | Minkan(actor, _, _, consumed) -> drop actor consumed
+            | Ankan(actor, consumed) -> drop actor consumed
+            // 加杠：拿上去的只有 `pai` 一张，`consumed` 那三张在前面那条 `pon` 里已经出手了。
+            | Kakan(actor, pai, _) -> change actor (without pai)
+            | _ -> hands
+
+        events |> List.fold apply (List.replicate 4 [])
+
+    /// 牌数守恒：一副四麻 136 张 = 四家暗牌 + 四家河 + 副露里**自家亦出的那几张** + 王牌 14 + 可摸区。
+    /// 杠会把可摸区的最后一张补进王牌，**王牌恒为 14**，所以带杠的局也成立。
+    /// 它**不依赖任何第二实现**，比「与另一次 fold 比大小」更硬。
+    ///
+    /// **为什么只数 `Naki.consumed`，不数 `Naki.tiles`**：引擎明写「被鸣走的那张仍留在河里」
+    /// （`PlayerState.Kawa` 的注释：振听看的是自己打过什么）——数 `tiles` 会把那张数两遍。
+    /// 加杠那一支恰好相消：它的 `Taken` 是从**自家手里**加上去的那张（漏数 1），
+    /// 而 `Consumed` 那三张里含着当初碰来的河牌（多数 1）。
+    let private tilesOnTable (seats: Visible list) : int =
+        seats
+        |> List.sumBy (fun seat ->
+            List.length seat.Hand
+            + List.length seat.Kawa
+            + (seat.Naki |> List.sumBy (Naki.consumed >> List.length)))
+
     /// 把这份牌谱的事件流截到第 `count` 条，**另起一次 fold**，给出那一刻的局面与它对应的游标。
     ///
     /// **它与页面那一侧不是同一条路**：页面拿的是 `Replay.trace` 交出来的动作序列、由
@@ -112,15 +166,51 @@ module ReplayTimelineTests =
         let cuts = [ total / 8; total / 4; total / 2; total * 3 / 4; total - 1 ]
 
         for cut in cuts do
-            let seats, kyotaku, remaining, cursor = refold cut
+            let seats, kyotaku, _, cursor = refold cut
             let dragged = loaded () |> step (CursorMoved cursor)
             let table = shownTable dragged
             let atCursor, atCursorKyotaku, atCursorRemaining = visible table.State
 
             Assert.Equal(cursor, (timelineOf dragged).Cursor)
-            Assert.Equal<Visible list>(seats, atCursor)
+
+            // 手牌：**第四条路**（事件流加减法）。
+            //
+            // 帧那一侧可能比截断点**多摸一张**：摸牌不是 `Action`（引擎在没人能鸣时自动摸），
+            // 因此「多没多摸」由规则定、看事件类型看不出来——票 79 真跑时两个切点各占一种。
+            // 所以这里把两种可能都写成**精确**判据：要么停在截断点，要么多摸了事件流里**真的**那一张。
+            // 旧锚点（`Replay.game` 吃截断流）之所以要换掉，正因为它多摸的那张是从
+            // **推断出来的牌山**里取的假牌（报告 79 §5）——它连「在不在这两种可能里」都不成立。
+            let atCut = handsFromEvents (List.truncate cut demo.Events)
+
+            let withNextDraw =
+                // 从截断点往后跳过不动手牌的那几条（翻宝牌 / 立直宣言与成立），取紧接着的那一次自摸。
+                let rec nextDraw (index: int) =
+                    match List.tryItem index demo.Events with
+                    | Some(Tsumo _ as drawn) -> Some drawn
+                    | Some(Dora _ | Riichi _ | RiichiAccepted _) -> nextDraw (index + 1)
+                    | _ -> None
+
+                nextDraw cut
+                |> Option.map (fun drawn -> handsFromEvents (List.truncate cut demo.Events @ [ drawn ]))
+
+            let sorted (hands: Tile list list) = hands |> List.map Tile.sort
+            let got = atCursor |> List.map (fun seat -> Tile.sort seat.Hand)
+
+            Assert.True(
+                got = sorted atCut || Some got = Option.map sorted withNextDraw,
+                $"cut={cut} cursor={cursor}：帧上的手牌既不是截断点那一刻，也不是「多摸了真的那一张」之后"
+            )
+
+            // 河 / 副露 / 点数 / 供托：截断 fold 那一侧仍然算得准（凭空摸的那一张只脏了手牌与可摸区）。
+            Assert.Equal<(Tile list * Naki list * int) list>(
+                seats |> List.map (fun seat -> seat.Kawa, seat.Naki, seat.Score),
+                atCursor |> List.map (fun seat -> seat.Kawa, seat.Naki, seat.Score)
+            )
+
             Assert.Equal(kyotaku, atCursorKyotaku)
-            Assert.Equal(remaining, atCursorRemaining)
+
+            // 可摸区：守恒律（不拿第二实现当参照物）。
+            Assert.Equal(136 - 14 - tilesOnTable atCursor, atCursorRemaining)
 
     // ---- 幂等 ----
 
@@ -279,8 +369,10 @@ module ReplayTimelineTests =
 
     [<Fact>]
     let ``游标动时刚落定那一手的决策记录跟着变`` () =
-        // Demo 是 bot 牌谱（一条记录都没有），因此这一条自带阳性对照：先拌一条进去。
-        Assert.Empty demo.Decisions
+        // 首页那份 Demo 从票 79 起自带几百条记录，而这一条要的是「只有一条、它挂在哪一帧上」，
+        // 因此下面把整份记录换成那一条。**这一句是那一步的阳性对照**：资产本身要是空的，
+        // 换不换都一样，下面那几条就证不了「游标动时记录跟着变」。
+        Assert.NotEmpty demo.Decisions
 
         let record: DecisionRecord =
             {

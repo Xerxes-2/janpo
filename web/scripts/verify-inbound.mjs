@@ -366,6 +366,21 @@ export async function verifyInbound(lane) {
       } else {
         console.log("导出的文件重新导入：末帧与主持人那一桌逐项一致 ✓");
       }
+
+      // 导进来的这份是 bot 棋谱（一条决策记录都没有）：气泡得全没了、那句指路话得回来。
+      // **这是 4b 的阳性对照**：票 79 把首页资产换成带记录的真对局之后，首页一打开就已经
+      // 没有那句话了——少了这一段，4b 那条「导完不该还挂着那句话」从此永远为真（判据 3）。
+      const strippedBubbles = await home.locator('[data-testid$="-bubble"]').count();
+      if (strippedBubbles !== 0) {
+        problems.push(
+          `导入的那份是 bot 棋谱，页面上却还有 ${strippedBubbles} 个思考气泡（上一份的没清掉？）`,
+        );
+      }
+      if ((await home.getByTestId("table-no-bubbles").count()) === 0) {
+        problems.push(
+          "导入一份没有决策记录的牌谱之后，页面上没说为什么没有气泡（table-no-bubbles）",
+        );
+      }
     }
 
     // 4b. 带决策记录的那份：气泡有话——与分享链接的关键差别，两种来源各验一次。

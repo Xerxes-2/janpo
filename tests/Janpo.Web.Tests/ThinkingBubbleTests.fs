@@ -94,8 +94,11 @@ module ThinkingBubbleTests =
 
     [<Fact>]
     let ``牌谱里一条决策记录都没有：四席一个气泡都不出，而且页面上说得出为什么`` () =
-        // Demo 是 bot 牌谱（一条记录都没有）——这既是这一条的语料，也是下面每一条的阳性对照的底。
-        Assert.Empty demo.Decisions
+        // 首页那份 Demo 从票 79 起是**真的四席对局**，自带几百条决策记录；
+        // 这一条要的是「一条记录都没有」的那一份，因此它把记录换成空的（`loadedWith []`）。
+        // **这一句是那一步的阳性对照**：资产本身要是空的，`loadedWith []` 就什么都没换，
+        // 下面整段也就证不了「没记录就不出气泡」。
+        Assert.NotEmpty demo.Decisions
 
         let model = loadedWith [] |> step (CursorMoved 60)
 
