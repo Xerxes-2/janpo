@@ -219,6 +219,53 @@ module PaifuTests =
         Assert.Equal(Some None, record |> Option.map (fun record -> record.Fallback))
         Assert.Equal(Some None, record |> Option.map (fun record -> record.Reason))
 
+    // ---- 只带棋谱的那一份（票 77） ----
+
+    [<Fact>]
+    let ``抹掉审计数据之后，规则集与事件流一字不少`` () =
+        let original = paifu ()
+        let kifu = Paifu.stripAudit original
+
+        Assert.Equal(original.Version, kifu.Version)
+        Assert.Equal(original.Ruleset, kifu.Ruleset)
+        Assert.Equal<Event list>(original.Events, kifu.Events)
+        // 走的是决策记录与 prompt 前置这两段，一条不留（不是「抹掉里面几个字段」）。
+        Assert.Empty(kifu.Decisions)
+        Assert.Equal(Prompting.empty, kifu.Prompting)
+        // 它比 `stripThinking` 走得更远：那一层只省思考，记录本身还在。
+        Assert.NotEmpty((Paifu.stripThinking original).Decisions)
+
+    [<Fact>]
+    let ``只带棋谱的牌谱由同一个解码器读回来，wire 上没有审计那三样`` () =
+        let kifu = paifu () |> Paifu.stripAudit
+        let text = json kifu
+
+        // 三样审计数据在 wire 上一个字都不剩：思考、prompt 的尾部、工具定义的形状。
+        Assert.DoesNotContain("thinking", text)
+        Assert.DoesNotContain("prompt_tail", text)
+        Assert.DoesNotContain("【现在】", text)
+        Assert.DoesNotContain("choose_action", text)
+        Assert.Contains("\"decisions\":[]", text)
+        // **同一个解码器**（ADR-0002）：省掉的那几段本来就允许缺省。
+        Assert.Equal(kifu, decode text)
+
+    [<Fact>]
+    let ``只带棋谱的牌谱回放出同一场对局：事件流逐条相同，终局点数与顺位相同`` () =
+        let original = paifu ()
+        let round = original |> Paifu.stripAudit |> json |> decode
+
+        let replay (paifu: Paifu) =
+            match Replay.ofPaifu paifu with
+            | Ok replayed -> replayed
+            | Error error -> failwith $"这一份应当回放得动，却得到「{ReplayError.toDisplay error}」"
+
+        let before = replay original
+        let after = replay round
+
+        Assert.Equal<Event list>(Replayed.events before, Replayed.events after)
+        Assert.Equal(Replayed.result before, Replayed.result after)
+        Assert.True((Replayed.result after |> Option.isSome), "这一场打完了，终局精算应当算得出来")
+
     // ---- 版本号 ----
 
     [<Fact>]

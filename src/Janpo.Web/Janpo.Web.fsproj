@@ -28,6 +28,7 @@
     <Compile Include="Tracer.fs" />
     <Compile Include="Golden.fs" />
     <Compile Include="PaifuCheck.fs" />
+    <Compile Include="Share.fs" />
     <Compile Include="App.fs" />
     <!-- 牌桌页（票 70 把 1647 行的 `TablePage.fs` 拆成五个）。**这五行的先后就是编译顺序**，
          F# 只往前看，所以按依赖排：状态与 MVU（`TableState`）→ Agent 层那两行状态（`AgentLine`）

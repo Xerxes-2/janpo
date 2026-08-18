@@ -164,8 +164,8 @@ type DecisionRecord =
         Output: string
         /// 模型给的一句话理由（`choose_action` 的 `reason` 实参）。交不出来时是 None。
         Reason: string option
-        /// 扩展思考的全文。**这是可省略的那一段**：JSON 导出全量带着，URL 分享（M2）
-        /// 把它抹掉（`Paifu.stripThinking`）——体积大头就是它。
+        /// 扩展思考的全文。**这是可省略的那一段**：JSON 导出全量带着，而 URL 分享
+        /// 连整条记录都不带（`Paifu.stripAudit`，票 77：只带棋谱）——体积大头就是它。
         /// 两条路径共用同一个解码器，因此它在 wire 上可缺省，而不是另立一个牌谱类型。
         Thinking: string option
         /// 一共问了几次（首问 + 重试）。
@@ -199,8 +199,8 @@ type DecisionRecord =
 /// **没有局面快照**——局面是对事件流做 fold 得出来的（`Replay`），不是存下来的；
 /// **也没有每手一整份 prompt**——prompt 同样是那条事件流的派生物（票 31）。
 ///
-/// URL 分享（M2）与 JSON 导入导出走的是同一个类型、同一个编码器、同一个解码器：
-/// 前者只是先做一次 `Paifu.stripThinking`。
+/// URL 分享与 JSON 导入导出走的是同一个类型、同一个编码器、同一个解码器：
+/// 前者只是先做一次 `Paifu.stripAudit`（票 77）。
 type Paifu =
     {
         /// 格式版本号。加**可缺省**的字段不涨版本（旧文件照样读得动）；
@@ -285,11 +285,35 @@ module Paifu =
 
     // ---- 变换 ----
 
-    /// 抹掉全部 thinking。**URL 分享（M2）走这一条**：体积大头是思考全文，
-    /// 省掉它就够短了，而牌谱仍然是同一个类型、同一个编码器、同一个解码器（ADR-0002）。
+    /// 抹掉全部 thinking，其余审计数据照旧（裁决 26-7）。
+    ///
+    /// **URL 分享已经不走这一条了**（票 77 改走更远的 `stripAudit`）：它现在没有生产调用方，
+    /// 只有用例在钉它的行为——删不删得人裁（票 77 的报告里挂了一条待审）。
+    /// 它与 `stripAudit` 是同一族的两档：都是**值上的一次变换**，
+    /// 牌谱仍然是同一个类型、同一个编码器、同一个解码器（ADR-0002）。
     let stripThinking (paifu: Paifu) : Paifu =
         { paifu with
             Decisions = paifu.Decisions |> List.map (fun record -> { record with Thinking = None })
+        }
+
+    /// 抹掉全部**审计数据**，只留下规则集与事件流。**URL 分享（票 77）走这一条**。
+    ///
+    /// **URL 里那一段是棋谱，不是审计数据**：决策记录（`Decisions`）与 prompt 前置
+    /// （`Prompting`）**整段不上 URL**，而不是只省 thinking（`stripThinking`）。
+    /// 理由是长度，主人当场裁的（票 77）。两个实测数（浏览器里真压的，全文在
+    /// `reports/77-share-payload-codec.md`）：一整场半庄只带棋谱是 **7,720 字符**的载荷；
+    /// 而票 26 那份真导出件（才 45 条事件、七条带 thinking 的记录）全量 78,205 字符，
+    /// 其中棋谱只占 3,305——**96% 是审计数据**，而那才跑了不到一局。
+    /// 路径没丢：首页 Demo 与 JSON 导入导出仍是全量，
+    /// **气泡有话可说的那条路走的是文件，不是地址栏**。
+    ///
+    /// **它是值上的一次变换，不是第二个编码器**（裁决 26-7）：牌谱仍是同一个类型、
+    /// 同一个编码器、同一个解码器（ADR-0002）——`decisions` 写成空表、`prompting` 写成空的，
+    /// 那两处本来就允许缺省，格式版本号因此一动不动。
+    let stripAudit (paifu: Paifu) : Paifu =
+        { paifu with
+            Decisions = []
+            Prompting = Prompting.empty
         }
 
     /// 某一手的决策记录；那一手没有记录（随机选手，或者压根没走到）则为 None。
@@ -405,7 +429,7 @@ module Paifu =
                     |> Option.defaultValue []
             })
 
-    /// 牌谱的 wire 形态。**导出与分享是同一个编码器**（分享那条先 `stripThinking`）。
+    /// 牌谱的 wire 形态。**导出与分享是同一个编码器**（URL 分享那条先 `stripAudit`）。
     ///
     /// v1 的牌谱写不出 `prompting`：那一版根本没有这一段，而 v1 只能从读里来，读出来就是空的。
     let encoder: Encoder<Paifu> =

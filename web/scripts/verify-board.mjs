@@ -18,7 +18,7 @@
 // 全绿的闸门等于没有闸门（票 34 立的规矩）。
 //
 // 跑法：`cd web && pnpm run build && node scripts/verify-board.mjs`
-// 它也是 `verify-browser.mjs` 里的一道（七道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（九道共用一个浏览器与一台服务器）。
 
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";

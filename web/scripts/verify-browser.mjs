@@ -1,6 +1,6 @@
-// 浏览器里那**七趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**九趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 七趟各开自己的 page / context。
+// 九趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带默认视图与副露来源，票 19/35/37/38）
 //   2 牌桌上人看得见的八项 + 副露的位置就是来源（票 44/51）
@@ -9,6 +9,8 @@
 //   5 牌谱导出打完一整场（票 39）
 //   6 **反向自证**：拌了 key 的导出物必须让第 4 趟那条断言当场红（票 34）
 //   7 回显 key 的自建网关：报错原文进牌谱前必须已打码（票 36）
+//   8 URL 分享的载荷：真往返 + 逐位置腐蚀 + 审计三样一个都不上路（票 77）
+//   9 **反向自证**：抹不干净的载荷必须让第 8 趟那条断言当场红（票 77）
 //
 // **一趟都没少、一条断言都没拆**：每一趟调的就是 `verify-*.mjs` 里那个同名函数，
 // 单跑（`pnpm run verify:board` 等）与合并跑跑的是**同一段代码**，只是跑道不同。
@@ -22,6 +24,7 @@ import { verifyBoard } from "./verify-board.mjs";
 import { verifyExport } from "./verify-export.mjs";
 import { verifyGolden } from "./verify-golden.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
+import { verifyShare } from "./verify-share.mjs";
 import { verifyTracer } from "./verify-tracer.mjs";
 
 /**
@@ -43,7 +46,26 @@ async function poisonProof(lane) {
   return [];
 }
 
-/** 七趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/**
+ * 分享载荷那一道的反向自证（票 77）：`--poison` 拿**上路前**那份牌谱当解出来的那份
+ * ——等于「`Paifu.stripAudit` 没抹干净」，于是「载荷里没有审计那三样」必须当场红，
+ * **且必须是因为那三样**。与上面那一道同一种写法：两种失法各报各的话。
+ */
+async function strippedProof(lane) {
+  const failures = await verifyShare(lane, { poison: true, withSweep: false });
+  const lines = failures.flatMap((each) => each.lines);
+  const caught = lines.find((line) => line.includes("载荷里出现了"));
+
+  if (failures.length === 0)
+    return failure("反向自证没过：没抹干净的载荷竟然过了闸门——那三条断言等于没有。", []);
+  if (caught === undefined)
+    return failure("反向自证没过：闸门是红了，但不是因为审计那三样（红的原因见下）。", lines);
+
+  console.log(`没抹干净的载荷被闸门当场逮住：${caught}`);
+  return [];
+}
+
+/** 九趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验默认视图：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -98,6 +120,22 @@ const gates = [
     how: "node scripts/verify-redaction.mjs",
     run: (lane) => verifyRedaction(lane),
   },
+  // 票 77：URL 分享的那一段载荷。语料由引擎现打（东风战与半庄各一整场），**不碰页面**
+  // ——地址栏与按钮是票 78 的。三件事一趟做完：真往返（编→解→`Paifu.decoder`→`Replay`，
+  // 事件流逐条相同、终局点数与顺位相同）、逐位置改坏一个字符（每次要么读不动、要么逐字相同，
+  // **绝不许解出另一份牌谱**）、以及载荷里没有 thinking / prompt 尾部 / 那把假 key。
+  {
+    name: "URL 分享的载荷：往返、逐位置腐蚀、审计三样一个都不上路",
+    how: "node scripts/verify-share.mjs",
+    run: (lane) => verifyShare(lane),
+  },
+  // 票 77 的反向自证：把「载荷里没有审计那三样」按红一次。理由与第 6 趟逐字相同——
+  // 「代码里有那三行断言」与「那三行断言真的拦得住东西」是两件事。
+  {
+    name: "反向自证：抹不干净的载荷必须让那道闸门变红",
+    how: "node scripts/verify-share.mjs --poison（它单跑时**该**以 1 退出）",
+    run: strippedProof,
+  },
 ];
 
 const lane = await openLane();
@@ -117,7 +155,7 @@ try {
 }
 
 console.log("");
-console.log("七趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("九趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

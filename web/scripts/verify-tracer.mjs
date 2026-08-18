@@ -7,7 +7,7 @@
 // 只有这个开关能把它摆回牌桌下面（判据在 `src/Janpo.Web/Main.fs`）。
 //
 // 跑法：`cd web && pnpm run build && pnpm run verify [-- --seed 1177]`
-// 它也是 `verify-browser.mjs` 里的一道（七道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（九道共用一个浏览器与一台服务器）。
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { execFileSync } from "node:child_process";
