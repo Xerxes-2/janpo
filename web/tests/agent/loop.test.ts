@@ -210,7 +210,7 @@ test("Assisted 档：危险度排序也进了问出去的那份 prompt（票 25�
   assert.equal(response.action_id, 0);
   assert.equal(response.failure, null);
   assert.match(prompts[0], /危险度排序（有威胁的家：对家有副露）/);
-  assert.match(prompts[0], /第1位 id=0（手切4万）：现物 —— 对家现物/);
+  assert.match(prompts[0], /第1位 id=0（打 4m）：现物 —— 对家现物/);
   // 模型真的拿它当了理由（录下来的原话里引了「对家现物」）。
   assert.match(response.reason ?? "", /现物/);
 });

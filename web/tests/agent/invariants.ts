@@ -50,6 +50,7 @@
  * | 手牌张数 3n+1 / 3n+2 | 一家 |
  * | 可选动作的牌来自手牌 | 一条可选动作 |
  * | 同一牌种最多 4 张 | 一份 prompt 里数到的一个牌种 |
+ * | 记法只有 mjai 一套 | 一个场风 / 一个自风 / 一条可选动作，加上每份 prompt 各一次全文扫描 |
  *
  * ## 它不管什么
  *
@@ -80,6 +81,7 @@ export const RULES = {
   tehaiCount: "手牌张数 3n+1 / 3n+2",
   actionTilesFromHand: "可选动作的牌来自手牌",
   fourOfAKind: "同一牌种最多 4 张",
+  mjaiOnly: "记法只有 mjai 一套",
 } as const;
 
 /** 一条不成立的话。三项缺一不可：**哪条不变量、哪一手、哪句话**。 */
@@ -118,28 +120,23 @@ function deaka(pai: string): string {
   return pai.endsWith("r") ? pai.slice(0, -1) : pai;
 }
 
-const SUIT_OF_DISPLAY: Record<string, string> = { 万: "m", 筒: "p", 索: "s" };
-const JIHAI_DISPLAY = ["东", "南", "西", "北", "白", "发", "中"];
+/**
+ * **中文牌名里的数牌那一半**：`3索`、`赤5筒`（`Tile.toDisplay` 写出来就是这个形状）。
+ *
+ * 字牌那一半（`东` `白` `中`）**不能拿它扫全文**：它们同时是常用汉字，人格里的
+ * 「中庸」与行文里的「其中」会当场假红。字牌由「每一处点名一张牌的地方都得是 mjai 记法」
+ * 那几条守（手牌 / 牌河 / 副露 / 宝牌指示牌 / 场风与自风 / 可选动作那几行）。
+ */
+const CHINESE_SUITED = /赤?[0-9一二三四五六七八九][万萬筒饼餅索]/;
 
 /**
- * 中文牌名 → mjai 记法（`赤5筒` → `5pr`、`中` → `7z`）。
- *
- * **这是第二份表，故意的**：动作的 label 由引擎渲染（`Tile.toDisplay`，ADR-0001 说中文牌名
- * 是 F# 渲染层的事），而这一层要检查「label 里那张牌在不在手牌里」，手牌那一行写的是 mjai 记法。
- * 闸门这一侧自己认一遍中文，两边就不会错成同一个样子——与 `prompt.test.ts` 里那个
- * 独立走一遍座位环的 `distance()` 同一个理由。**它只在测试与闸门里，不进产品代码**。
+ * **mjai 的动作 wire 名**：它们是数据层的词（事件流、牌谱、动作消息），
+ * 不该出现在写给模型看的话里。真会漏进来的地方有两处：措辞表查不到时把 wire 值原样
+ * 写出去（`wording.ts` 的 `lookup`），以及历史那一段遇上读不懂的事件
+ * （`history.ts` 的 `（读不懂的事件：X）`）。
  */
-function tileOfDisplay(display: string): string | null {
-  const akadora = display.startsWith("赤");
-  const body = akadora ? display.slice(1) : display;
-
-  const jihai = JIHAI_DISPLAY.indexOf(body);
-  if (jihai >= 0) return akadora ? null : `${jihai + 1}z`;
-
-  const parsed = /^([1-9])([万筒索])$/.exec(body);
-  if (parsed === null) return null;
-  return `${parsed[1]}${SUIT_OF_DISPLAY[parsed[2]]}${akadora ? "r" : ""}`;
-}
+const WIRE_WORDS =
+  /\b(dahai|tsumogiri|tsumo|pon|chi|ankan|daiminkan|kakan|reach|hora|ryukyoku|none)\b/;
 
 // ---- 解析回来 ----
 
@@ -165,6 +162,8 @@ interface ParsedSeat {
   who: string;
   isSelf: boolean;
   junme: number;
+  /** 自风（抬头里那一格）。**它指的就是一张字牌**，因此记法那一条要看它。 */
+  jikaze: string;
   /** 手里几张：自家数手牌那一行，他家读「手里 N 张」。 */
   tehaiCount: number;
   /** 自家的手牌（他家是空的——决策包里就没有）。 */
@@ -176,13 +175,24 @@ interface ParsedSeat {
   kawaLine: string;
 }
 
+/** 【可选动作】里的一行：id、那一行的 label、以及原文。 */
+export interface ParsedAction {
+  id: number;
+  label: string;
+  line: string;
+}
+
 interface Parsed {
   /** 【到目前为止你看到的】那一段，一条事件一行。 */
   history: string[];
   dora: string[];
   boardLine: string;
+  /** 场况那一节第一行（场风与局数）的原文。 */
+  bakazeLine: string;
+  /** 场风。**它指的也是一张字牌**。 */
+  bakaze: string;
   seats: ParsedSeat[];
-  actions: { id: number; label: string; line: string }[];
+  actions: ParsedAction[];
   /** 解析不动的地方。**它非空就是第 0 条违反**。 */
   problems: string[];
 }
@@ -257,6 +267,8 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
     history: [],
     dora: [],
     boardLine: "",
+    bakazeLine: "",
+    bakaze: "",
     seats: [],
     actions: [],
     problems,
@@ -267,8 +279,14 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
     if (parsed.history.length === 0) problems.push("历史那一段一行都没有");
   }
 
-  // 场况第二行：`宝牌指示牌：2s 8m　牌山剩余可摸 23 张。`（两项之间是全角空格）。
+  // 场况第一行：`场风 1z・第 1 局 0 本场，供托 0 根。`（票 95：场风也是 mjai 记法）。
+  // 第二行：`宝牌指示牌：2s 8m　牌山剩余可摸 23 张。`（两项之间是全角空格）。
   if (boardAt >= 0) {
+    parsed.bakazeLine = lines[boardAt + 1] ?? "";
+    const bakaze = /^场风 (\S+)・第 \d+ 局/.exec(parsed.bakazeLine);
+    if (bakaze === null) problems.push(`场况那一节读不出场风：「${parsed.bakazeLine}」`);
+    else parsed.bakaze = bakaze[1];
+
     parsed.boardLine = lines[boardAt + 2] ?? "";
     const dora = /^宝牌指示牌：([^　]*)　/.exec(parsed.boardLine);
     if (dora === null) problems.push(`场况那一节读不出宝牌指示牌：「${parsed.boardLine}」`);
@@ -283,8 +301,10 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
     const naki = /^副露：(.*)$/.exec(lines[handAt + 4] ?? "");
     const kawa = /^牌河：(.*)$/.exec(lines[handAt + 5] ?? "");
 
-    if (tehai === null || naki === null || kawa === null) {
-      problems.push(`自家那一节的形状不对：「${tehaiLine}」`);
+    const jikaze = /（自风 ([^）]+)）/.exec(headline);
+
+    if (tehai === null || naki === null || kawa === null || jikaze === null) {
+      problems.push(`自家那一节的形状不对：「${headline}」「${tehaiLine}」`);
     } else {
       const tiles = tehai[1] === "" ? [] : tehai[1].split(" ");
       parsed.seats.push({
@@ -292,6 +312,7 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
         who: "你",
         isSelf: true,
         junme: readNumber(headline, /第 (\d+) 巡/),
+        jikaze: jikaze[1],
         // 声明的那个张数与真列出来的那几张**分别记**：两者不等本身就是一条违反。
         tehaiCount: Number(tehai[2]),
         tehai: tiles,
@@ -311,10 +332,11 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
 
       const who = /^(.+?)（座位 \d+・/.exec(headline);
       const count = /手里 (\d+) 张/.exec(headline);
+      const jikaze = /^.+?（座位 \d+・自风 ([^）]+)）/.exec(headline);
       const naki = /^\s*副露：(.*)$/.exec(lines[index + 1] ?? "");
       const kawa = /^\s*牌河：(.*)$/.exec(lines[index + 2] ?? "");
 
-      if (who === null || count === null || naki === null || kawa === null) {
+      if (who === null || count === null || jikaze === null || naki === null || kawa === null) {
         problems.push(`他家那一节的形状不对：「${headline}」`);
         break;
       }
@@ -324,6 +346,7 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
         who: who[1],
         isSelf: false,
         junme: readNumber(headline, /第 (\d+) 巡/),
+        jikaze: jikaze[1],
         tehaiCount: Number(count[1]),
         tehai: [],
         naki: parseNaki(naki[1], template),
@@ -352,6 +375,8 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
 
 interface Check {
   where: string;
+  /** 渲出来那份 prompt 的原文。**记法那一条要扫全文**，别的几条读的是解析回来的结构。 */
+  prompt: string;
   parsed: Parsed;
   template: PromptTemplate;
   violations: Violation[];
@@ -730,33 +755,74 @@ function checkTehaiCount(check: Check): void {
   }
 }
 
-/** 一条动作的 label 里，**必须来自你手里**的那几张牌（中文牌名）。 */
-function tilesFromHand(label: string): string[] | null {
-  const called = /^(?:碰|吃|大明杠)(?:.+)（亮(.+)）$/.exec(label);
-  if (called !== null) return called[1].split(" ");
+/**
+ * 一条可选动作那一行拆开：**它是哪一种**、**它点名了哪几张牌**、**其中哪几张必须出自你手里**。
+ *
+ * 句式由渲染器定（`src/agent/action-label.ts`），五种副露的词从**模板现取**——换措辞不该
+ * 让闸门失灵（与 `parseNaki` 同一个方针）。拆不动返回 null：**闸门读不懂的动作等于没被检查**，
+ * 那本身就是一条违反。
+ */
+export interface ParsedLabel {
+  /** 种类的规范名，与 `label-crosscheck.ts` 那一侧取的是同一套值。 */
+  kind: string;
+  /** 这一行点名的每一张牌（摸切的 `*` 已经去掉）。**记法那一条看的就是它**。 */
+  named: string[];
+  /** 其中**必须出自你手牌**的那几张。 */
+  fromHand: string[];
+}
 
-  const ankan = /^暗杠（亮(.+)）$/.exec(label);
-  if (ankan !== null) return ankan[1].split(" ");
+export function parseActionLabel(label: string, template: PromptTemplate): ParsedLabel | null {
+  const kinds = nakiKinds(template);
+  const alternatives = [...kinds.keys()].map(escapeRegExp).join("|");
 
-  const single = /^(?:手切|摸切|自摸|加杠)(.+)$/.exec(label);
-  if (single !== null) return [single[1]];
+  // 碰 / 吃 / 大明杠：`碰 1z（亮出 1z 1z）`；暗杠没有鸣来的那张：`暗杠（亮出 5s 5s 5s 5s）`。
+  const shown = new RegExp(`^(${alternatives})(?: ([^（）\\s]+))?（亮出 ([^）]*)）$`).exec(label);
+  if (shown !== null) {
+    const consumed = shown[3] === "" ? [] : shown[3].split(" ");
+    const taken = shown[2] === undefined ? [] : [shown[2]];
+    // 亮出来的那几张出自手牌；鸣来的那张来自别人的河（点名了，但不出自你手里）。
+    return {
+      kind: kinds.get(shown[1]) ?? shown[1],
+      named: [...taken, ...consumed],
+      fromHand: consumed,
+    };
+  }
 
-  // 荣和的那张来自别人的河；立直宣言 / 过 / 九种九牌不点名任何一张牌。
-  if (/^荣和.+$/.test(label) || ["立直宣言", "过", "九种九牌"].includes(label)) return [];
+  // 加杠：底下那组碰已经在牌桌上，只写加上去的那张。
+  const bare = new RegExp(`^(${alternatives}) (\\S+)$`).exec(label);
+  if (bare !== null) {
+    return { kind: kinds.get(bare[1]) ?? bare[1], named: [bare[2]], fromHand: [bare[2]] };
+  }
 
-  return null;
+  // 打牌：摸切缀 `*`（与牌河、历史同一个记号）。
+  const dahai = /^打 (\S+?)(\*?)$/.exec(label);
+  if (dahai !== null) {
+    return { kind: dahai[2] === "*" ? "dahai*" : "dahai", named: [dahai[1]], fromHand: [dahai[1]] };
+  }
+
+  const tsumo = /^自摸 (\S+)$/.exec(label);
+  if (tsumo !== null) return { kind: "hora-tsumo", named: [tsumo[1]], fromHand: [tsumo[1]] };
+
+  // 荣和的那张来自别人的河：点名了它，但它不出自你的手牌。
+  const ron = /^荣和 (\S+)$/.exec(label);
+  if (ron !== null) return { kind: "hora-ron", named: [ron[1]], fromHand: [] };
+
+  const plain: Record<string, string> = { 立直宣言: "reach", 过: "none", 九种九牌: "ryukyoku" };
+  const kind = plain[label];
+  return kind === undefined ? null : { kind, named: [], fromHand: [] };
 }
 
 /**
- * 九、**可选动作的牌来自手牌**：动作 label 里那几张「你要出的牌」，
+ * 九、**可选动作的牌来自手牌**：动作那一行点名的「你要出的牌」，
  * 每一张都得在【你的手牌】那一节里，且**张数够**。
  *
  * 打出去的那张、吃碰杠要亮出来的那几张、加杠加上去的那张、自摸和了的那张，
- * 全都出自你的手牌；只有荣和的那张来自别人的河。**这一条是拿多重集比的**：
+ * 全都出自你的手牌；只有荣和的那张与鸣来的那张来自别人的河。**这一条是拿多重集比的**：
  * 暗杠要亮四张，手里就得真有四张。
  *
- * 动作的 label 是引擎渲的中文（`Action.toDisplay`），手牌那一行是 mjai 记法，
- * 中间隔着 `tileOfDisplay` 那份**第二份表**（见它的注释）。
+ * 票 95 之前动作那一行写的是中文牌名（引擎渲的 `Action.toDisplay`），这一条因此要隔着
+ * 一份中文↔mjai 的表来比；现在两侧都是 mjai，直接比。**那份表没被删掉，搬去当第三锚点了**
+ * （`label-crosscheck.ts`：渲出来那一行与引擎那份中文 label 逐条对拍）。
  */
 function checkActionTiles(check: Check): void {
   const self = check.parsed.seats.find((seat) => seat.isSelf);
@@ -764,37 +830,26 @@ function checkActionTiles(check: Check): void {
 
   for (const option of check.parsed.actions) {
     judge(check, RULES.actionTilesFromHand);
-    const wanted = tilesFromHand(option.label);
-    if (wanted === null) {
+    const parsed = parseActionLabel(option.label, check.template);
+    if (parsed === null) {
       report(
         check,
         RULES.actionTilesFromHand,
         option.line,
-        `这条动作的 label 认不出形状——闸门读不懂的动作等于没被检查`,
+        `这条动作那一行认不出形状——闸门读不懂的动作等于没被检查`,
       );
       continue;
     }
 
     const remaining = [...self.tehai];
-    for (const display of wanted) {
-      const pai = tileOfDisplay(display);
-      if (pai === null) {
-        report(
-          check,
-          RULES.actionTilesFromHand,
-          option.line,
-          `label 里的「${display}」不是一个牌名`,
-        );
-        continue;
-      }
-
+    for (const pai of parsed.fromHand) {
       const index = remaining.indexOf(pai);
       if (index < 0) {
         report(
           check,
           RULES.actionTilesFromHand,
           `${option.line}\n    手牌：${self.tehai.join(" ")}`,
-          `这条动作要出的「${display}」（${pai}）不在你的手牌里`,
+          `这条动作要出的「${pai}」不在你的手牌里`,
         );
         continue;
       }
@@ -852,6 +907,92 @@ function checkFourOfAKind(check: Check): void {
   }
 }
 
+/**
+ * 十一、**记法只有 mjai 一套**（票 95 还的那笔债）。
+ *
+ * 从 M1 挂到 M3 的那笔债是：同一份 prompt 里牌有两种写法——手牌 / 牌河 / 副露 / 宝牌指示牌 /
+ * 历史那几行是 mjai（`3s`），而可选动作那几行是引擎渲的中文牌名（`手切3索`），
+ * 场风与自风又是第三种（`东1局`、`北家`）。**模型要在几套记法之间翻译，而它翻错的时候
+ * 我们只看得到「它打错了」。**
+ *
+ * 这一条从三个方向守住「只有一套」：
+ *
+ * 1. **场风与自风**：它们指的就是手牌里那张字牌，必须写成 `1z`-`4z`；
+ * 2. **可选动作那几行点名的每一张牌**：必须是 mjai 记法（那一行现在由 TS 渲，
+ *    认不出动作时会退回引擎那份中文 label——**退回去是看得见的**，这一条当场红）；
+ * 3. **全文两遍扫描**：中文数牌名（`3索` / `赤5筒`）与 mjai 的动作 wire 名
+ *    （`dahai` / `pon` / …）一个都不许出现。后者真会漏进来：措辞表查不到时
+ *    `wording.ts` 的 `lookup` 把 wire 值原样写出去，历史那一段遇上读不懂的事件也一样。
+ *
+ * 手牌 / 牌河 / 副露 / 宝牌指示牌那四处的记法**早就各有一条在守**（第四、五、六、八条里
+ * 那几行 `TILE.test`），这一条不重复数它们。**字牌的中文名扫不了全文**：`中`、`东` 同时
+ * 是常用汉字（人格里的「中庸」），因此它们只在「点名一张牌的地方」被查——
+ * 而那些地方这里与上面那四条加起来是全的。
+ */
+function checkMjaiOnly(check: Check): void {
+  const parsed = check.parsed;
+
+  const kaze = (value: string, sentence: string, what: string) => {
+    judge(check, RULES.mjaiOnly);
+    if (value !== "" && !TILE.test(value)) {
+      report(
+        check,
+        RULES.mjaiOnly,
+        sentence,
+        `${what}写成了「${value}」：它指的就是手牌里那张字牌，该写 mjai 记法（\`1z\`-\`4z\`）`,
+      );
+    }
+  };
+
+  kaze(parsed.bakaze, parsed.bakazeLine, "场风");
+  for (const seat of parsed.seats) kaze(seat.jikaze, seat.headline, `${seat.who}的自风`);
+
+  for (const option of parsed.actions) {
+    judge(check, RULES.mjaiOnly);
+    const label = parseActionLabel(option.label, check.template);
+    // 拆不动是第九条的事（那一条会点名它），这里只判拆得动的那几张。
+    for (const pai of label?.named ?? []) {
+      if (!TILE.test(pai)) {
+        report(
+          check,
+          RULES.mjaiOnly,
+          option.line,
+          `这一行里的「${pai}」不是 mjai 记法：整份 prompt 只该有 \`3s\` / \`5mr\` 那一套`,
+        );
+      }
+    }
+  }
+
+  judge(check, RULES.mjaiOnly);
+  const chinese = CHINESE_SUITED.exec(check.prompt);
+  if (chinese !== null) {
+    report(
+      check,
+      RULES.mjaiOnly,
+      lineAround(check.prompt, chinese.index),
+      `prompt 里出现了中文牌名「${chinese[0]}」：中文只活在给人看的那一侧（ADR-0001）`,
+    );
+  }
+
+  judge(check, RULES.mjaiOnly);
+  const wire = WIRE_WORDS.exec(check.prompt);
+  if (wire !== null) {
+    report(
+      check,
+      RULES.mjaiOnly,
+      lineAround(check.prompt, wire.index),
+      `prompt 里出现了 mjai 的动作 wire 名「${wire[0]}」：那是数据层的词，不是写给模型看的话`,
+    );
+  }
+}
+
+/** 报错要抄出那句原话：把命中的位置扩到整行。 */
+function lineAround(prompt: string, index: number): string {
+  const start = prompt.lastIndexOf("\n", index) + 1;
+  const end = prompt.indexOf("\n", index);
+  return prompt.slice(start, end < 0 ? undefined : end);
+}
+
 // ---- 入口 ----
 
 export interface CheckOptions {
@@ -873,6 +1014,7 @@ export function promptAudit(prompt: string, options: CheckOptions): Audit {
   const parsed = parse(prompt, template);
   const check: Check = {
     where: options.where,
+    prompt,
     parsed,
     template,
     violations: [],
@@ -895,9 +1037,18 @@ export function promptAudit(prompt: string, options: CheckOptions): Audit {
     checkTehaiCount(check);
     checkActionTiles(check);
     checkFourOfAKind(check);
+    checkMjaiOnly(check);
   }
 
   return { violations: check.violations, judged: Object.fromEntries(check.judged) };
+}
+
+/** 【可选动作】那一节解析回来的那几行（`label-crosscheck.ts` 拿它与引擎那份 label 对拍）。 */
+export function parsedActions(
+  prompt: string,
+  template: PromptTemplate = DEFAULT_TEMPLATE,
+): ParsedAction[] {
+  return parse(prompt, template).actions;
 }
 
 /** 一份 prompt 里不成立的那几句话（只要这一半时用它）。 */

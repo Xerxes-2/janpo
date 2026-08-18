@@ -102,7 +102,7 @@ test("换模板：抬头与措辞表都换得动，没给的那几项沿用默�
   // 没给的那几项照旧：手牌那一节的抬头、规则说明、其余四张表。
   assert.match(sections.present, /【你的手牌】/);
   assert.equal(sections.preamble, DEFAULT_TEMPLATE.system);
-  assert.match(sections.present, /东1局/, "风的说法没给，沿用默认");
+  assert.match(sections.present, /场风 1z/, "风的说法没给，沿用默认");
 });
 
 test("人格那一格压过模板 JSON 里的人格：它离人更近", () => {
@@ -139,8 +139,8 @@ test("渲染版本号 = 模板 id + 内容哈希（+ 渲染器摘要），同样
     JSON.stringify({ id: "pinned", persona: "甲", system: "乙", labels: { history: "丙" } }),
   );
 
-  assert.equal(templateDigest(pinned), "f6eb3b4c");
-  assert.ok(renderVersion(pinned).startsWith("pinned@f6eb3b4c."));
+  assert.equal(templateDigest(pinned), "6c1500e5");
+  assert.ok(renderVersion(pinned).startsWith("pinned@6c1500e5."));
 });
 
 test("改任何一个字都换一个版本号——手填的数字漏得掉，算出来的漏不掉", () => {

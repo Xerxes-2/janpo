@@ -8,6 +8,7 @@
  *
  * 术语照 `CONTEXT.md`（Shimocha / Toimen / Kamicha、Pon / Chi / Ankan / Minkan / Kakan、
  * Riichi），牌一律 mjai 记法（ADR-0001：中文牌名不进 prompt）。
+ * **风也算牌**（票 95）：场风与自风默认写 `1z`-`4z`，与手牌里的字牌同一套记法。
  *
  * **票 31 把它降成了数据**：`DEFAULT_WORDING` 只是**默认的那一份**，模板可以整表替换
  * （`template.ts`）。渲染器不再直接读常量，一律经 `Words`——它由「哪一份措辞表」加
@@ -21,7 +22,13 @@
  * 换表就是换 prompt 的措辞，**不必改代码重编**：整表从座位配置里的模板 JSON 注入。
  */
 export interface Wording {
-  /** 风：mjai 的字牌记法 → 中文单字。场风与自风共用。 */
+  /**
+   * 风：`1z`-`4z` → 写进 prompt 的那几个字。场风与自风共用。
+   *
+   * **默认那一份是恒等的**（票 95）：场风与自风指的就是手牌里那张字牌，写成中文风名
+   * 等于让模型在「东1局」与手里的 `1z` 之间自己翻译一次，而役牌正压在这条翻译上。
+   * 表留着是因为它仍是模板的一个槽位——要一份给人读的中文模板，整表换掉即可。
+   */
   kaze: Record<string, string>;
   /** 立直状态（`Observation` 的三值字段）。 */
   riichi: Record<string, string>;
@@ -38,7 +45,7 @@ export interface Wording {
 
 /** 默认的那一份措辞表。**模板不指定时用它**（票 31：默认模板仍在代码里）。 */
 export const DEFAULT_WORDING: Wording = {
-  kaze: { "1z": "东", "2z": "南", "3z": "西", "4z": "北" },
+  kaze: { "1z": "1z", "2z": "2z", "3z": "3z", "4z": "4z" },
   riichi: { none: "无", declared: "已宣言", accepted: "已成立" },
   relative: { "1": "下家", "2": "对家", "3": "上家" },
   naki: {

@@ -50,20 +50,16 @@ function kawaOf(line: string): { indent: string; tiles: string[] } | null {
   return { indent: found[1], tiles: found[2].split(" ") };
 }
 
-const SUITS: [string, string][] = [
-  ["万", "m"],
-  ["筒", "p"],
-  ["索", "s"],
-];
-const JIHAI = ["东", "南", "西", "北", "白", "发", "中"];
+/** `Tile.toDisplay` 那一套中文牌名的花色字（**只给反向自证用**：它要把记法写回改之前的样子）。 */
+const SUIT_DISPLAY: Record<string, string> = { m: "万", p: "筒", s: "索" };
 
-/** 34 种牌的中文名与 mjai 记法。**只给反向自证用**：它要找一张「手里没有的牌」。 */
-const ALL_TILES: [string, string][] = [
-  ...SUITS.flatMap(([display, suit]) =>
-    Array.from({ length: 9 }, (_, index) => [`${index + 1}${display}`, `${index + 1}${suit}`]),
+/** 34 种牌的 mjai 记法。**只给反向自证用**：它要找一张「手里没有的牌」。 */
+const ALL_TILES: string[] = [
+  ...["m", "p", "s"].flatMap((suit) =>
+    Array.from({ length: 9 }, (_, index) => `${index + 1}${suit}`),
   ),
-  ...JIHAI.map((display, index) => [display, `${index + 1}z`]),
-] as [string, string][];
+  ...Array.from({ length: 7 }, (_, index) => `${index + 1}z`),
+];
 
 export const PROOFS: Proof[] = [
   {
@@ -160,9 +156,9 @@ export const PROOFS: Proof[] = [
       const hand = /^手牌：(.+)（\d+ 张）$/m.exec(prompt);
       if (hand === null) return null;
       const held = new Set(hand[1].split(" "));
-      const absent = ALL_TILES.find(([, pai]) => !held.has(pai));
+      const absent = ALL_TILES.find((pai) => !held.has(pai));
       if (absent === undefined) return null;
-      return replaceOnce(prompt, /^(- id=\d+：)(?:手切|摸切)\S+$/m, `$1手切${absent[0]}`);
+      return replaceOnce(prompt, /^(- id=\d+：)打 \S+$/m, `$1打 ${absent}`);
     },
   },
   {
@@ -175,5 +171,36 @@ export const PROOFS: Proof[] = [
         const first = kawa.tiles[0].replace("*", "");
         return `${kawa.indent}牌河：${kawa.tiles.map(() => first).join(" ")}`;
       }),
+  },
+  {
+    rule: RULES.mjaiOnly,
+    // **这就是改之前那一行的原样**：`Tile.toDisplay` 渲的中文牌名 + 手切 / 摸切两个词。
+    // 阴性对照因此不是手捏的，是「把这一票的改动在那一行上退回去」。
+    note: "把一条打牌动作写回票 95 之前的样子（中文牌名 + 手切 / 摸切）",
+    mutate: (prompt) => {
+      const found = /^- id=(\d+)：打 ([1-9])([mps])(r?)(\*?)$/m.exec(prompt);
+      if (found === null) return null;
+      const display = `${found[4] === "r" ? "赤" : ""}${found[2]}${SUIT_DISPLAY[found[3]]}`;
+      return prompt.replace(
+        found[0],
+        `- id=${found[1]}：${found[5] === "*" ? "摸切" : "手切"}${display}`,
+      );
+    },
+  },
+  {
+    rule: RULES.mjaiOnly,
+    // 措辞表查不到时 `wording.ts` 的 `lookup` 就是把 wire 值原样写出去，这一条演的是那种漏法。
+    note: "把历史里一组碰的种类词换成 mjai 的 wire 名（措辞表查不到时就是这个样子）",
+    mutate: (prompt) =>
+      replaceOnce(
+        prompt,
+        new RegExp(`(第\\d+巡) ${DEFAULT_TEMPLATE.wording.naki.pon} `),
+        "$1 pon ",
+      ),
+  },
+  {
+    rule: RULES.mjaiOnly,
+    note: "把场风写成中文风名（`1z` → 东）",
+    mutate: (prompt) => replaceOnce(prompt, /^场风 1z・/m, "场风 东・"),
   },
 ];

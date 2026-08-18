@@ -53,6 +53,7 @@ test("摘要覆盖的就是渲染器那几个文件：从 prompt.ts 沿值导入
   const files = rendererFiles();
 
   assert.deepEqual(files, [
+    "src/agent/action-label.ts",
     "src/agent/history.ts",
     "src/agent/prompt.ts",
     "src/agent/template.ts",

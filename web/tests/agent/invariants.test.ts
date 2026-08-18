@@ -229,5 +229,5 @@ test("默认模板的抬头与措辞没被这一票改动", () => {
   assert.equal(DEFAULT_TEMPLATE.labels.hand, "【你的手牌】");
   assert.equal(DEFAULT_TEMPLATE.labels.others, "【其他三家】");
   assert.deepEqual(DEFAULT_TEMPLATE.wording.relative, { "1": "下家", "2": "对家", "3": "上家" });
-  assert.equal(Object.keys(RULES).length, 11, "十一条不变量，改了要连同报告一起改");
+  assert.equal(Object.keys(RULES).length, 12, "十二条不变量，改了要连同报告一起改");
 });

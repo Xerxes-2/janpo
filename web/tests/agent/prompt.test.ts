@@ -6,6 +6,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { labelOf } from "../../src/agent/action-label.ts";
 import { promptSections, renderPrompt } from "../../src/agent/prompt.ts";
 import { DEFAULT_TEMPLATE, preambleOf } from "../../src/agent/template.ts";
 import type { DecisionPackage } from "../../src/agent/types.ts";
@@ -19,7 +20,8 @@ import {
   riichiPackage,
   sequencePackages,
 } from "./fixtures.ts";
-import { formatViolation } from "./invariants.ts";
+import { formatViolation, promptViolations } from "./invariants.ts";
+import { crosscheckLabels, LABEL_CROSSCHECK, LABEL_CROSSCHECK_PROOFS } from "./label-crosscheck.ts";
 import { crosscheckNaki, type NakiPair } from "./naki-crosscheck.ts";
 
 const bare = renderPrompt(dahaiPackage, "bare", null);
@@ -27,7 +29,7 @@ const bare = renderPrompt(dahaiPackage, "bare", null);
 test("局面该有的都在：场况、自家手牌、他家、合法动作", () => {
   const observation = dahaiPackage.observation;
 
-  assert.match(bare, /东1局 0 本场/);
+  assert.match(bare, /场风 1z・第 1 局 0 本场/);
   assert.match(bare, /宝牌指示牌：2s/);
   assert.match(bare, /牌山剩余可摸 66 张/);
 
@@ -35,9 +37,14 @@ test("局面该有的都在：场况、自家手牌、他家、合法动作", ()
     assert.ok(bare.includes(pai), `自家手牌里的 ${pai} 该出现在 prompt 里`);
   }
 
+  // 那一行由 TS 现渲（票 95：牌照 mjai），**不再照抄决策包里那份中文 label**——
+  // 它与引擎那份说的是不是同一件事，由 `label-crosscheck.ts` 逐条对拍。
   for (const option of dahaiPackage.actions) {
-    assert.ok(bare.includes(`id=${option.id}：${option.label}`), `动作 ${option.id} 该列出来`);
+    assert.ok(bare.includes(`id=${option.id}：`), `动作 ${option.id} 该列出来`);
   }
+  assert.match(bare, /- id=0：打 2m/);
+  // 摸切那一条缀 `*`，与牌河、历史同一个记号（这一手是响应，没摸牌，因此借另一份包）。
+  assert.match(renderPrompt(dangerPackage, "bare", null), /- id=\d+：打 \S+\*/);
 });
 
 test("副露与摸切标记：都是公开信息，都写出来", () => {
@@ -144,8 +151,8 @@ test("两档只差一节：局面、他家与可选动作逐字相同", () => {
 test("Assisted 档：向听数与逐张试打的进退向都写出来", () => {
   // 决策包（`janpo decide 2088 --steps 6`）：3 向听，手切 3 筒（id=3）退向。
   assert.match(assisted, /当前向听数：3 向听/);
-  assert.match(assisted, /id=0（手切2万）：打完 3 向听，进退向 0，有效牌 66 枚/);
-  assert.match(assisted, /id=3（手切3筒）：打完 4 向听，退向 \+1，有效牌 76 枚/);
+  assert.match(assisted, /id=0（打 2m）：打完 3 向听，进退向 0，有效牌 66 枚/);
+  assert.match(assisted, /id=3（打 3p）：打完 4 向听，退向 \+1，有效牌 76 枚/);
 
   // 有效牌是「牌种 + 剩余枚数」，牌照 mjai 记法（与手牌那一行同一种写法）。
   assert.match(assisted, /3m\(1\) 4m\(4\)/);
@@ -154,7 +161,7 @@ test("Assisted 档：向听数与逐张试打的进退向都写出来", () => {
 test("Assisted 档：每一条打牌动作都有它自己那一行", () => {
   for (const option of dahaiPackage.actions) {
     assert.ok(
-      assisted.includes(`- id=${option.id}（${option.label}）：打完 `),
+      assisted.includes(`- id=${option.id}（`) && assisted.includes(`）：打完 `),
       `动作 ${option.id} 该有一条试打`,
     );
   }
@@ -183,13 +190,13 @@ const danger = renderPrompt(dangerPackage, "assisted", null);
 test("Assisted 档：危险度排序逐张写出来，理由标签照术语表", () => {
   // 决策包（`janpo decide 99 --steps 6 --seat 3`）：对家有副露、河里有 4m。
   assert.match(danger, /危险度排序（有威胁的家：对家有副露）/);
-  assert.match(danger, /- 第1位 id=0（手切4万）：现物 —— 对家现物/);
-  assert.match(danger, /- 第2位 id=1（手切7万）：筋 —— 对家 4m 筋/);
-  assert.match(danger, /- 第3位 id=2（手切3筒）：无依据$/m);
-  assert.match(danger, /- 第11位 id=3（手切5筒）：无依据 —— 宝牌 7p 周边/);
+  assert.match(danger, /- 第1位 id=0（打 4m）：现物 —— 对家现物/);
+  assert.match(danger, /- 第2位 id=1（打 7m）：筋 —— 对家 4m 筋/);
+  assert.match(danger, /- 第3位 id=2（打 3p）：无依据$/m);
+  assert.match(danger, /- 第11位 id=3（打 5p）：无依据 —— 宝牌 7p 周边/);
 
-  // 赤 5 与正 5 是两条动作、一个牌种：两条各占一行，名次相同。
-  assert.match(danger, /- 第11位 id=4（手切赤5筒）：无依据 —— 宝牌 7p 周边/);
+  // 赤 5 与正 5 是两条动作、一个牌种：两条各占一行，名次相同（`5pr` 与 `5p` 分得开）。
+  assert.match(danger, /- 第11位 id=4（打 5pr）：无依据 —— 宝牌 7p 周边/);
 
   // **它是启发式不是概率**（票里明写）：说清楚这一点，且不写任何会被读成统计结论的数。
   assert.match(danger, /不是概率/);
@@ -368,4 +375,74 @@ test("危险度那一节的参照系是**观测者**：威胁名单按你自己�
     );
   }
   assert.match(danger, /有威胁的家：对家有副露/);
+});
+
+// ---- 动作那一行 ↔ 引擎那份中文 label（票 95 的对拍） ----
+//
+// 票 95 把可选动作那几行从「照抄决策包里的中文 label」改成「从 mjai 动作消息现渲」。
+// 改记法最怕的不是难看，是**把动作说错**：少一张亮牌、把碰写成吃、把赤 5 写成正 5
+// ——这几种错在纯文本里全都自洽，`invariants.ts` 那十二条一条也看不见。
+// 判据与批量语料那一趟共用一份（`label-crosscheck.ts`），拿**引擎自己渲的中文 label**
+// 当第三锚点：两侧是两份互相独立的实现，各自从同一个 `Action` 出发。
+
+const LABELS = CORPUS.map(({ name, decision }) =>
+  crosscheckLabels(decision, renderPrompt(decision, "bare", null), name),
+);
+
+test("每一条动作那一行都与引擎那份中文 label 说的是同一件事（全部固件）", () => {
+  const violations = LABELS.flatMap((each) => each.violations);
+  assert.deepEqual(violations.map(formatViolation), [], "渲出来那一行与引擎那份 label 对不上");
+
+  // 防空转：打牌、摸切、碰、吃、大明杠、过都真的被对拍到了。
+  const judged: Record<string, number> = {};
+  for (const each of LABELS) {
+    for (const [kind, count] of Object.entries(each.judged)) {
+      judged[kind] = (judged[kind] ?? 0) + count;
+    }
+  }
+  for (const kind of ["dahai", "dahai*", "pon", "chi", "daiminkan", "none"]) {
+    assert.ok((judged[kind] ?? 0) > 0, `固件语料里一条「${kind}」都没对拍到，这道闸门在空转`);
+  }
+});
+
+for (const proof of LABEL_CROSSCHECK_PROOFS) {
+  test(`反向自证「${LABEL_CROSSCHECK}」：${proof.note}`, () => {
+    const hit = CORPUS.map(({ name, decision }) => ({
+      name,
+      decision,
+      broken: proof.mutate(renderPrompt(decision, "bare", null)),
+    })).find((each) => each.broken !== null);
+
+    assert.ok(hit !== undefined, `固件语料里注不进这种错：${proof.note}`);
+
+    const caught = crosscheckLabels(hit.decision, hit.broken as string, hit.name).violations;
+    assert.ok(caught.length > 0, `${proof.note}之后这道对拍竟然还是绿的`);
+
+    // 后两条**纯文本那十二条按设计看不见**：换过的那张牌仍然是一张合法的牌、
+    // 碰与吃都在措辞表里。这道对拍存在的理由就是它们。
+    if (proof.textBlind) {
+      const alsoText = promptViolations(hit.broken as string, { where: hit.name });
+      assert.deepEqual(
+        alsoText.map((violation) => violation.rule),
+        [],
+        "这种错纯文本那十二条本来就看不见，看得见说明这个变异挑得不对",
+      );
+    }
+  });
+}
+
+test("同一包里两条动作那一行不许相同：模型要靠它认出自己选的是哪一条", () => {
+  // 引擎那边有同名的不变量（`Action.toDisplay` 的注释）：亮哪几张是选手的决策，
+  // 赤 5 与正 5 番数不同。换了记法之后这条性质得**重新证一遍**——`5m` 与 `5mr` 分得开，
+  // 手切与摸切靠 `*` 分得开。
+  for (const { name, decision } of CORPUS) {
+    const words = wordsFor(
+      DEFAULT_WORDING,
+      decision.observation.self.seat,
+      decision.observation.others,
+    );
+    const labels = decision.actions.map((option) => labelOf(option, words));
+
+    assert.equal(new Set(labels).size, labels.length, `${name} 里有两条动作写成了同一行`);
+  }
 });

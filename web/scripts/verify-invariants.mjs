@@ -6,8 +6,10 @@
 //   - `prefix.test.ts` 钉的是**字节单调**（这一手与上一手是不是同一串字节）；
 //   - 这一道钉的是**那句话本身成不成立**——票 40 的「吃 2p（来自对家）」两道都绿地漏了过去。
 //
-// 判据在 `tests/agent/invariants.ts`（十一条只读文本）与 `tests/agent/naki-crosscheck.ts`
-// （副露来源 ↔ 决策包里的绝对座位），**用例与这里共用同一份**，两处说法因此一致。
+// 判据在 `tests/agent/invariants.ts`（十二条只读文本）与两道对拍：
+// `tests/agent/naki-crosscheck.ts`（副露来源 ↔ 决策包里的绝对座位）与
+// `tests/agent/label-crosscheck.ts`（可选动作那一行 ↔ 引擎自己渲的中文 label，票 95）。
+// **用例与这里共用同一份**，两处说法因此一致。
 //
 // **两批语料是掺进来的，不是换掉的**（票 49）：有主见的选手立直多但**从不吃**，
 // 均匀随机有吃碰杠但几乎不立直（2000 颗种子只 15 场）。少哪一批都会让某几条断言空转。
@@ -29,6 +31,11 @@ import { fileURLToPath } from "node:url";
 import { renderPrompt } from "../src/agent/prompt.ts";
 import { PROOFS } from "../tests/agent/invariant-proofs.ts";
 import { formatViolation, promptAudit, promptCoverage, RULES } from "../tests/agent/invariants.ts";
+import {
+  crosscheckLabels,
+  LABEL_CROSSCHECK,
+  LABEL_CROSSCHECK_PROOFS,
+} from "../tests/agent/label-crosscheck.ts";
 import {
   CROSSCHECK_PROOFS,
   crosscheckNaki,
@@ -183,10 +190,14 @@ if (corpus.length === 0) throw new Error("一份 prompt 都没渲出来——语
 
 /** 逐批分开记：**哪一批喂饱了哪几条**是这一票要回答的问题。 */
 const tally = new Map(
-  corpora.map((each) => [each.name, { prompts: 0, coverage: {}, judged: {}, crosschecked: {} }]),
+  corpora.map((each) => [
+    each.name,
+    { prompts: 0, coverage: {}, judged: {}, crosschecked: {}, labelled: {} },
+  ]),
 );
 const violations = [];
 const mismatches = [];
+const mislabelled = [];
 
 for (const each of corpus) {
   const mine = tally.get(each.which);
@@ -200,12 +211,17 @@ for (const each of corpus) {
   const crosscheck = crosscheckNaki(each.decision, each.prompt, each.where);
   mismatches.push(...crosscheck.violations);
   add(mine.crosschecked, crosscheck.judged);
+
+  const labels = crosscheckLabels(each.decision, each.prompt, each.where);
+  mislabelled.push(...labels.violations);
+  add(mine.labelled, labels.judged);
 }
 
 const total = (pick) => corpora.reduce((into, each) => add(into, pick(tally.get(each.name))), {});
 const coverage = total((each) => each.coverage);
 const judged = total((each) => each.judged);
 const crosschecked = total((each) => each.crosschecked);
+const labelled = total((each) => each.labelled);
 
 const seeds = corpora.reduce((count, each) => count + each.seeds.length, 0);
 const hands = corpus.length / TIERS.length;
@@ -264,8 +280,15 @@ for (const key of Object.keys(crosschecked).sort()) {
   console.log(`  ${pad(key, 26)}${crosschecked[key]}`);
 }
 
-if (violations.length > 0 || mismatches.length > 0) {
-  const all = [...violations, ...mismatches];
+console.log(
+  `\n「${LABEL_CROSSCHECK}」对拍了 ${Object.values(labelled).reduce((sum, each) => sum + each, 0)} 条动作：`,
+);
+for (const kind of Object.keys(labelled).sort()) {
+  console.log(`  ${pad(kind, 26)}${labelled[kind]}`);
+}
+
+if (violations.length > 0 || mismatches.length > 0 || mislabelled.length > 0) {
+  const all = [...violations, ...mismatches, ...mislabelled];
   console.error(
     `\n在日麻规则下不成立、或与决策包对不上的话 ${all.length} 句（印前 ${parsed.show} 条）：\n`,
   );
@@ -273,7 +296,10 @@ if (violations.length > 0 || mismatches.length > 0) {
   process.exit(1);
 }
 
-console.log(`\n没有一句在日麻规则下不成立的话，也没有一组副露的来源与决策包对不上。`);
+console.log(
+  `\n没有一句在日麻规则下不成立的话，没有一组副露的来源与决策包对不上，` +
+    `也没有一条动作那一行与引擎那份 label 说岔了。`,
+);
 
 // **防空转一：执行次数为 0 的那几条，这一趟的「0 违反」不是证据**（票 49 的核心）。
 const idle = Object.values(RULES).filter((rule) => (judged[rule] ?? 0) === 0);
@@ -322,6 +348,19 @@ if (uncrossed.length > 0) {
   console.error(
     `「${NAKI_CROSSCHECK}」这一趟没走到：${uncrossed.join("、")}` +
       `——那几格的换算这一趟没被对拍过。`,
+  );
+  process.exit(1);
+}
+
+// **防空转四**：动作那一行的对拍要真的走到几种形态，少一种就是那一种没被对拍过。
+// 立直宣言 / 和了 / 九种九牌在这两批语料里不保证出现（`janpo decide --sequence`
+// 只走打牌那一路），因此这里只钉**每一批语料都到得了**的那几种。
+const LABEL_KINDS = ["dahai", "dahai*", "pon", "chi", "ankan", "daiminkan", "kakan", "none"];
+const unlabelled = LABEL_KINDS.filter((kind) => (labelled[kind] ?? 0) === 0);
+if (unlabelled.length > 0) {
+  console.error(
+    `「${LABEL_CROSSCHECK}」这一趟没走到：${unlabelled.join("、")}` +
+      `——那几种动作的那一行这一趟没被对拍过。`,
   );
   process.exit(1);
 }
@@ -400,6 +439,41 @@ for (const proof of CROSSCHECK_PROOFS) {
   );
 }
 
+for (const proof of LABEL_CROSSCHECK_PROOFS) {
+  const hit = corpus
+    .map((each) => ({ each, broken: proof.mutate(each.prompt) }))
+    .find((entry) => entry.broken !== null);
+
+  if (hit === undefined) {
+    console.error(`「${LABEL_CROSSCHECK}」没被证明咬得动：${proof.note}的局面语料里一个都没有。`);
+    process.exit(1);
+  }
+
+  const caught = crosscheckLabels(hit.each.decision, hit.broken, hit.each.where).violations;
+  if (caught.length === 0) {
+    console.error(`「${LABEL_CROSSCHECK}」没咬住：${proof.note}之后它该红，实际一条都没红。`);
+    process.exit(1);
+  }
+
+  const alsoText = promptAudit(hit.broken, { where: hit.each.where }).violations;
+  if (proof.textBlind && alsoText.length > 0) {
+    console.error(
+      `${proof.note}本该是纯文本那十二条看不见的那一种，实际它们红了：` +
+        `${[...new Set(alsoText.map((v) => v.rule))].join("、")}——这个变异挑得不对。`,
+    );
+    process.exit(1);
+  }
+  proved += 1;
+  console.log(`  ${formatViolation(caught[0])}`);
+  console.log(
+    `    （${proof.note}；同一处纯文本那十二条${
+      alsoText.length === 0
+        ? "**一条都没红**——只有这道对拍看得见"
+        : `顺带红了：${[...new Set(alsoText.map((v) => v.rule))].join("、")}`
+    }）`,
+  );
+}
+
 console.log(
-  `\n${Object.keys(RULES).length} 条不变量 + 1 道对拍、${proved} 个反向自证，每一条都当场证明咬得动。语义闸门通过。`,
+  `\n${Object.keys(RULES).length} 条不变量 + 2 道对拍、${proved} 个反向自证，每一条都当场证明咬得动。语义闸门通过。`,
 );

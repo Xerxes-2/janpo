@@ -21,9 +21,14 @@
  *
  * 载体是**单条不断增长的 user message**，不是多轮对话：不把模型自己的旧理由锚进上下文。
  *
- * 牌一律用 mjai 记法（`3m` / `7z` / `5mr`）：决策包里就是这个形态，而**中文牌名要查术语表，
- * 那是 F# 渲染层的事**（ADR-0001）——需要中文的地方由决策包携带已经渲染好的字符串，
- * 动作的 `label` 就是这么来的。
+ * **牌一律用 mjai 记法，一套到底**（`3m` / `7z` / `5mr`）：决策包里就是这个形态，
+ * 手牌、牌河、副露、宝牌指示牌、历史那几行、脚手架算好的那几个数都照它写。
+ * **场风与自风也写成 `1z`-`4z`**（票 95）：它们指的就是手牌里那张字牌，写两套等于让模型
+ * 每局自己翻译一次（役牌正压在这条翻译上）。
+ *
+ * **可选动作那几行同样现渲**（`action-label.ts`），不再照抄决策包里那份中文 `label`
+ * ——那份写的是中文牌名（`手切4万`），是这份 prompt 里最后一处第二套记法。
+ * 它仍旧给牌桌那一侧用（ADR-0001 的渲染层单向出口：中文只活在给人看的那一侧）。
  *
  * ## 措辞与人格是数据（票 31）
  *
@@ -35,6 +40,7 @@
  * 同一份牌谱里。`promptTail` 是存下去的那一段，`rebuild` 是把它与重算出来的前缀接回去的那一步。
  */
 
+import { labelOf } from "./action-label.ts";
 import { historyLines } from "./history.ts";
 import { DEFAULT_TEMPLATE, type PromptTemplate, preambleOf } from "./template.ts";
 import type { DecisionPackage, MaskedSeat, Naki, RevealedSeat, ScaffoldTier } from "./types.ts";
@@ -176,7 +182,8 @@ function marks(riichi: string, ippatsu: boolean, words: Words): string {
 function self(seat: RevealedSeat, words: Words): string {
   const furiten = seat.furiten.permanent ? "是（永久）" : seat.furiten.doujun ? "是（同巡）" : "否";
   return [
-    `你是座位 ${seat.seat}（${words.kaze(seat.jikaze)}家），第 ${seat.junme} 巡，${seat.score} 点。`,
+    // 自风写 mjai 记法（票 95）：它就是一张字牌，与下一行手牌里那几张同一套写法。
+    `你是座位 ${seat.seat}（自风 ${words.kaze(seat.jikaze)}），第 ${seat.junme} 巡，${seat.score} 点。`,
     `手牌：${seat.tehai.join(" ")}（${seat.tehai.length} 张）`,
     `刚摸进：${seat.tsumo ?? "无（这一手不是你摸牌）"}`,
     // 副露方就是观测者：两个参照系重合，这一行因此与票 40 之前逐字相同。
@@ -189,7 +196,7 @@ function self(seat: RevealedSeat, words: Words): string {
 /** 一家他家。**抬头相对观测者、副露那句「来自谁」相对它自己**（票 40）。 */
 function other(seat: MaskedSeat, words: Words, viewer: number): string {
   return [
-    `${words.who(seat.seat)}（座位 ${seat.seat}・${words.kaze(seat.jikaze)}家）：手里 ${seat.tehai_count} 张，第 ${seat.junme} 巡，${seat.score} 点，立直：${marks(seat.riichi, seat.ippatsu, words)}`,
+    `${words.who(seat.seat)}（座位 ${seat.seat}・自风 ${words.kaze(seat.jikaze)}）：手里 ${seat.tehai_count} 张，第 ${seat.junme} 巡，${seat.score} 点，立直：${marks(seat.riichi, seat.ippatsu, words)}`,
     `  副露：${naki(seat.naki, words, { owner: seat.seat, viewer })}`,
     `  牌河：${kawa(seat.kawa)}`,
   ].join("\n");
@@ -198,13 +205,17 @@ function other(seat: MaskedSeat, words: Words, viewer: number): string {
 function board(decision: DecisionPackage, words: Words): string {
   const observation = decision.observation;
   return [
-    `${words.kaze(observation.bakaze)}${observation.kyoku}局 ${observation.honba} 本场，供托 ${observation.kyotaku} 根。`,
+    // 场风写 mjai 记法，与局数中间隔一个 `・`：两个数字直接相邻（`1z1局`）读不动。
+    `场风 ${words.kaze(observation.bakaze)}・第 ${observation.kyoku} 局 ${observation.honba} 本场，供托 ${observation.kyotaku} 根。`,
     `宝牌指示牌：${observation.dora_markers.join(" ") || "无"}　牌山剩余可摸 ${observation.wall_remaining} 张。`,
   ].join("\n");
 }
 
-function options(decision: DecisionPackage): string {
-  return decision.actions.map((option) => `- id=${option.id}：${option.label}`).join("\n");
+/** 【可选动作】：一条一行，行首就是它的 id。**那一行现渲**（`action-label.ts`）。 */
+function options(decision: DecisionPackage, words: Words): string {
+  return decision.actions
+    .map((option) => `- id=${option.id}：${labelOf(option, words)}`)
+    .join("\n");
 }
 
 // ---- 脚手架（Assisted 档，票 24） ----
@@ -244,7 +255,7 @@ function dangerLine(view: DangerView, label: string, id: number): string {
  * 措辞照 `CONTEXT.md` 的 Danger / Genbutsu / Suji / Kabe：**它是启发式，不是概率**。
  * 这一层一个判据也不算，档位、名次与理由全是引擎算好递过来的。
  */
-function dangerLines(decision: DecisionPackage, view: ScaffoldView): string[] {
+function dangerLines(decision: DecisionPackage, view: ScaffoldView, words: Words): string[] {
   // 跟 `readScaffold` 同一个方针：读不出来就当没有，**不把这一手卡死**。
   const threats = Array.isArray(view.threats) ? view.threats : [];
   if (threats.length === 0) return [];
@@ -272,7 +283,9 @@ function dangerLines(decision: DecisionPackage, view: ScaffoldView): string[] {
 
   return [
     `危险度排序（有威胁的家：${who}）——现物 / 筋 / 壁 / 宝牌周边四条规则算出来的启发式，不是概率；排在前面的更安全，同级并列：`,
-    ...ranked.map((entry) => dangerLine(entry.danger, entry.option.label, entry.option.id)),
+    ...ranked.map((entry) =>
+      dangerLine(entry.danger, labelOf(entry.option, words), entry.option.id),
+    ),
   ];
 }
 
@@ -280,7 +293,11 @@ function dangerLines(decision: DecisionPackage, view: ScaffoldView): string[] {
  * Assisted 档多出来的那一节。措辞照 `CONTEXT.md`：**向听数 / 有效牌 / 进退向 / 退向（向听戻し）**，
  * 以及危险度那一批标签（**现物 / 筋 / 壁**，票 25）。
  */
-function scaffoldBlock(decision: DecisionPackage, template: PromptTemplate): string | null {
+function scaffoldBlock(
+  decision: DecisionPackage,
+  template: PromptTemplate,
+  words: Words,
+): string | null {
   const view = readScaffold(decision.scaffold);
   if (view === null) return null;
 
@@ -292,7 +309,7 @@ function scaffoldBlock(decision: DecisionPackage, template: PromptTemplate): str
 
   const trials = decision.actions.flatMap((option) => {
     const entry = byId.get(option.id);
-    return entry === undefined ? [] : [trial(entry, option.label, option.id)];
+    return entry === undefined ? [] : [trial(entry, labelOf(option, words), option.id)];
   });
 
   const head = [template.labels.scaffold, `当前向听数：${view.shanten.display}`];
@@ -307,7 +324,7 @@ function scaffoldBlock(decision: DecisionPackage, template: PromptTemplate): str
     ...head,
     "逐张试打（进退向 0 为不变，+1 为退向（向听戻し）；有效牌括号里是那张牌的剩余枚数）：",
     ...trials,
-    ...dangerLines(decision, view),
+    ...dangerLines(decision, view, words),
   ].join("\n");
 }
 
@@ -341,7 +358,7 @@ function presentSection(
     "",
     `${labels.others}\n${observation.others.map((seat) => other(seat, words, observation.self.seat)).join("\n")}`,
     "",
-    `${labels.actions}\n${options(decision)}`,
+    `${labels.actions}\n${options(decision, words)}`,
     ...(scaffold === null ? [] : ["", scaffold]),
     ...(note === null ? [] : ["", `${labels.retry}${note}\n${labels.retryTail}`]),
   ].join("\n");
@@ -398,7 +415,7 @@ export function promptSections(
     decision.observation.self.seat,
     decision.observation.others,
   );
-  const scaffold = (SCAFFOLDS[tier] ?? SCAFFOLDS.bare)(decision, template);
+  const scaffold = (SCAFFOLDS[tier] ?? SCAFFOLDS.bare)(decision, template, words);
 
   return {
     preamble: preambleOf(template),
@@ -416,7 +433,7 @@ export function promptSections(
  */
 const SCAFFOLDS: Record<
   ScaffoldTier,
-  (decision: DecisionPackage, template: PromptTemplate) => string | null
+  (decision: DecisionPackage, template: PromptTemplate, words: Words) => string | null
 > = {
   bare: () => null,
   assisted: scaffoldBlock,

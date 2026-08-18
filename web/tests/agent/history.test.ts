@@ -44,7 +44,7 @@ const startKyoku: MaskedEvent = {
 test("开局那一条：场况、庄家、宝牌指示牌、点数与**自家**配牌都在一行里", () => {
   const [line] = render(startKyoku);
 
-  assert.match(line, /东1局 0 本场/);
+  assert.match(line, /场风 1z・第 1 局 0 本场/);
   assert.match(line, /庄家是上家/);
   assert.match(line, /宝牌指示牌：2s/);
   assert.match(line, /你的配牌：2m 3m 5m 9m/);

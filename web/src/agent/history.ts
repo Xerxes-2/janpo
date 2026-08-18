@@ -73,7 +73,8 @@ function startKyoku(event: MaskedEvent, words: Words): string {
     .join("　");
 
   return [
-    `开局：${words.kaze(text(event, "bakaze"))}${num(event, "kyoku")}局 ${num(event, "honba")} 本场，`,
+    // 场风写 mjai 记法（票 95）：与【现在】那一节同一个写法，也与你配牌里那几张字牌同一套。
+    `开局：场风 ${words.kaze(text(event, "bakaze"))}・第 ${num(event, "kyoku")} 局 ${num(event, "honba")} 本场，`,
     `供托 ${num(event, "kyotaku")} 根，庄家是${words.who(num(event, "oya"))}，`,
     `宝牌指示牌：${text(event, "dora_marker")}，各家点数 ${scores}。`,
     `你的配牌：${tiles(event, "tehai").join(" ")}`,
