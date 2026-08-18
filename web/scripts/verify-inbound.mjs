@@ -30,6 +30,12 @@ import { stepTurns } from "./table-drive.mjs";
 const THINKING = "先数向听：这手牌 2 向听，切 9 万最不亏——INBOUND-THINKING-MARK";
 
 /**
+ * 同一条记录里那句**一句话理由**（票 81）。两个标记各管一头：
+ * **气泡里该是理由那一句，面板里才是 thinking 全文**——两头各断一次，两头对调了也红。
+ */
+const REASON = "9 万是孤张——INBOUND-REASON-MARK";
+
+/**
  * 拌进引擎现打那一场的决策记录（气泡的阳性对照）：`ShareCheck.sample` 打出来的是
  * bot 牌谱（0 条记录），不拌的话「导入的那一份气泡有话」什么都没证明。
  * 只认牌谱的字段名，不认牌局内容——`verify-share.mjs` 的同族写法。
@@ -41,11 +47,27 @@ const audit = {
   render_version: "janpo-default@08fcaec3.4b9e57c0",
   action_ids: [0, 1],
   output: '{"action_id":1}',
-  reason: "9 万是孤张",
+  reason: REASON,
   thinking: THINKING,
   attempts: 1,
   latency_ms: 1873,
   applied: 1,
+};
+
+/**
+ * 同一份牌谱里另一席的记录：**只有 thinking、没有 reason**（关着思考预算的模型给不出理由）。
+ * 它钉的是票 81 那条退路：**取头一段、三点号收尾、挂一枚「点开看全文」**。
+ * 上面那一条两样都有（走 reason 那一路），两条合起来两条支路在浏览器里各走一遍。
+ */
+const MUTE_HEAD = "先数向听：这手牌 1 向听——INBOUND-HEAD-MARK";
+
+const muteAudit = {
+  ...audit,
+  turn: 2,
+  seat: 2,
+  reason: null,
+  thinking: `${MUTE_HEAD}\n再看安全度：这一段在气泡里不允许出现——INBOUND-TAIL-MARK`,
+  applied: null,
 };
 
 /** 逐字符腐蚀用的字母表（与 verify-share 同一个）：换完仍在 base64url 字符集里。 */
@@ -386,13 +408,13 @@ export async function verifyInbound(lane) {
     // 4b. 带决策记录的那份：气泡有话——与分享链接的关键差别，两种来源各验一次。
     const recorded = await retryOnReload(() =>
       home.evaluate(
-        async ({ audit }) => {
+        async ({ audit, muteAudit }) => {
           const share = await import("./src/generated/Share.js");
           const doc = JSON.parse(share.ShareCheck_sample("tonpuusen", 2088));
-          doc.decisions = [audit];
+          doc.decisions = [audit, muteAudit];
           return JSON.stringify(doc);
         },
-        { audit },
+        { audit, muteAudit },
       ),
     );
 
@@ -420,11 +442,64 @@ export async function verifyInbound(lane) {
         const state = await bubble.getAttribute("data-bubble");
         const saidText = await bubble.textContent();
         if (state !== "spoke") problems.push(`座位 1 的气泡该是 spoke，却是 ${state}`);
-        if (!saidText.includes("INBOUND-THINKING-MARK")) {
-          problems.push(`气泡里不是那句 thinking：「${saidText.slice(0, 48)}…」`);
-        } else {
-          console.log("导入的那一份气泡有话：座位 1 的气泡里就是拌进去的那句 thinking ✓");
+
+        // **气泡里是那句理由，不是 thinking 全文**（票 81 把票 76 那条优先级翻了面）。
+        // 两句都核：只核前一句的话，「气泡里把 thinking 也一并塞进去了」同样能绿。
+        if (!saidText.includes("INBOUND-REASON-MARK")) {
+          problems.push(`气泡里不是那句一句话理由：「${saidText.slice(0, 48)}…」`);
         }
+        if (saidText.includes("INBOUND-THINKING-MARK")) {
+          problems.push(
+            `气泡里把 thinking 全文也塞进去了：「${saidText.slice(0, 48)}…」` +
+              "（票 81：气泡只放一句话，全文在点开那一屏）",
+          );
+        }
+
+        // **thinking 全文在点开那一屏里**：「导入没丢推理」这件事从此由它钉着。
+        await bubble.click();
+        const gotPanel = await settles(
+          home,
+          () => document.querySelector('[data-testid="table-bubble-detail"]') !== null,
+        );
+        const thinkingText = gotPanel
+          ? ((await home.getByTestId("bubble-thinking").textContent()) ?? "")
+          : "（面板没摊开）";
+        if (!thinkingText.includes("INBOUND-THINKING-MARK")) {
+          problems.push(
+            `点开之后面板里也没有那句 thinking 全文：「${thinkingText.slice(0, 48)}…」`,
+          );
+        } else {
+          console.log("导入的那一份气泡有话：气泡里是那句理由、thinking 全文在点开那一屏里 ✓");
+        }
+        if (gotPanel) await home.getByTestId("bubble-close").click();
+      }
+
+      // **只有 thinking 没有 reason 那一路**（票 81）：气泡里是**头一段**，
+      // 后面那一段不允许出现，而且得挂着那枚招子——否则人不知道后面还有。
+      //
+      // **得先重新拖到末帧**：上面点开那一下把游标挪到了第 1 手那一帧（票 76：轴只有一根），
+      // 而收起来并不跳回去——第 2 手那条记录在那一帧上本来就不存在。
+      if (!(await dragToEnd(home))) problems.push("收起全文面板之后时间轴又拖不到末帧了");
+      const mute = home.getByTestId("seat-2-bubble");
+      if ((await mute.count()) === 0) {
+        problems.push("只有 thinking 的那一条记录没有堆出气泡（座位 2）");
+      } else {
+        const muteText = (await mute.textContent()) ?? "";
+        if (!muteText.includes("INBOUND-HEAD-MARK")) {
+          problems.push(`只有 thinking 时气泡里不是它的头一段：「${muteText.slice(0, 48)}…」`);
+        }
+        if (muteText.includes("INBOUND-TAIL-MARK")) {
+          problems.push(
+            `只有 thinking 时气泡里把后面那几段也写上了：「${muteText.slice(0, 64)}…」`,
+          );
+        }
+        if (!muteText.includes("……")) {
+          problems.push(`只有 thinking 时气泡里取了头一段却没有三点号收尾：「${muteText}」`);
+        }
+        if ((await home.getByTestId("seat-2-bubble-more").count()) !== 1) {
+          problems.push("只有 thinking 时气泡上没挂「点开看全文」：后面那几段就这么无声无息地没了");
+        }
+        console.log(`只有 thinking 那一条：气泡里是「${muteText.trim()}」`);
       }
       if ((await home.getByTestId("table-no-bubbles").count()) !== 0) {
         problems.push("带记录的牌谱导进来了，页面上却还挂着「这一局没有思考气泡」");

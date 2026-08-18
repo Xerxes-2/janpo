@@ -10,14 +10,16 @@ open Janpo.Web
 /// 思考气泡（票 76；CONTEXT.md 的 `Thinking Bubble`）：**展示某个 `DecisionRecord` 的 UI 部件**。
 ///
 /// 这一层钉的是**取值器**（`TableState.bubbles : TableModel -> Table -> Seat -> Bubble option`）
-/// 与**全文面板**（`TableState.detail`）的判据，五件事：
+/// 与**全文面板**（`TableState.detail`）的判据，六件事：
 ///
 /// 1. 三态各是什么、一眼分不分得开（在想 / 说了什么 / 兜底代打）；
 /// 2. **数据源只有 `Table.Decisions` 一处**：改那条记录，气泡跟着变；
 /// 3. **按座位取**：bot 席没有气泡，四席都有记录时四个气泡都在；
 /// 4. Live 与回放**两边都要**：回放沿游标取那一手，Live 里点历史某一手走
 ///    「导成牌谱 → `Table.replay` → 取那一帧」（只读，`live.Table` 一手都不退回去）；
-/// 5. **可见性判据挂在对局配置与终局状态上**（ADR-0003 的 consequence），不挂在「谁在看」上。
+/// 5. **可见性是两根正交的轴，AND 关系**（票 81）：视角掩蔽（`reveals`）×
+///    挂在对局配置与终局状态上的那一根（ADR-0003 的 consequence）；
+/// 6. **气泡只放一句话**（票 81）：reason 优先、太长就截且截了会说，全文在面板里。
 ///
 /// 画出来长什么样（气泡挡不挡得住牌、三态看不看得出区别）在浏览器那一侧
 /// （`web/scripts/verify-bubbles.mjs`）——这里一行 Feliz 都不 open。
@@ -123,9 +125,18 @@ module ThinkingBubbleTests =
     // ---- 三态 ----
 
     [<Fact>]
-    let ``说了什么：thinking 优先，没有思考预算时退回那一句理由`` () =
+    let ``说了什么：reason 优先，只有 thinking 时取它的头一段并三点号收尾`` () =
+        // **与票 76 那一版相反**（那时是 thinking 优先）：主人在票 81 里重裁了一次
+        // ——气泡里只放**一句话**，thinking 全文是点开那块面板的活（CONTEXT.md 的 `Thinking Bubble`）。
+        // 真语料上旧那条优先级就是把一整段思考原文塞进一个气泡（79 §8 报的那条病）。
         let full = recorded 7 0
-        let noThinking = { full with Thinking = None }
+        let noReason = { full with Reason = None }
+
+        let multi =
+            { full with
+                Reason = None
+                Thinking = Some "先数向听：这一手是 2 向听。\n再看安全度：对家立直了，九筒是现物。\n所以打九筒。"
+            }
 
         let mute =
             { full with
@@ -133,22 +144,76 @@ module ThinkingBubbleTests =
                 Reason = None
             }
 
-        let saidAt (record: DecisionRecord) =
-            loadedWith [ record ]
-            |> atTurn record.Turn
-            |> bubbleAt 0
-            |> Option.map Bubble.toDisplay
+        let bubbleOf (record: DecisionRecord) =
+            loadedWith [ record ] |> atTurn record.Turn |> bubbleAt 0
 
-        Assert.Equal(Some "第 7 手的思考原文（座位 0）", saidAt full)
-        Assert.Equal(Some "第 7 手的一句话理由（座位 0）", saidAt noThinking)
+        let saidAt (record: DecisionRecord) =
+            bubbleOf record |> Option.map Bubble.toDisplay
+
+        // 两样都有时取 reason（**不是** thinking），而且没截过：短理由不挂那枚招子。
+        Assert.Equal(Some "第 7 手的一句话理由（座位 0）", saidAt full)
+        Assert.Equal(Some false, bubbleOf full |> Option.map Bubble.clipped)
+
+        // 只有 thinking：取**头一段**，后面还有——于是三点号收尾且挂招子。
+        Assert.Equal(Some "先数向听：这一手是 2 向听。……", saidAt multi)
+        Assert.Equal(Some true, bubbleOf multi |> Option.map Bubble.clipped)
+
+        // 只有 thinking 且它本来就只有一段：没东西被丢掉，**就不允许装作截过**。
+        Assert.Equal(Some "第 7 手的思考原文（座位 0）", saidAt noReason)
+        Assert.Equal(Some false, bubbleOf noReason |> Option.map Bubble.clipped)
+
         // 两样都没有时也要说一句：空气泡与「没有气泡」在页面上分不出来。
         Assert.Equal(Some "（这一手没留下理由与思考原文）", saidAt mute)
+
+    /// 真语料里**最长那句理由**（票 79 换上去的那份 Demo，464 条：中位 48 字、最长 260）。
+    ///
+    /// **拿真语料而不是手捣的长串**：这一票治的就是真语料把气泡撑爆的那条病（79 §8），
+    /// 用固件验等于自己定一个刚好超线的长度再去验它。
+    let private longestReason: string =
+        demo.Decisions
+        |> List.choose (fun record -> record.Reason)
+        |> List.sortByDescending String.length
+        |> List.head
+
+    [<Fact>]
+    let ``气泡只放一句话：真语料里的长理由截到上限并说一声，面板里仍是全文`` () =
+        // 防空转（判据 3）：语料里得真有一条长到截得动的理由，否则下面整段验的是别的事。
+        Assert.True(String.length longestReason > 100, $"真语料里最长那条理由只有 {String.length longestReason} 字")
+
+        let record =
+            { recorded 7 0 with
+                Reason = Some longestReason
+            }
+
+        let model = loadedWith [ record ] |> atTurn 7
+
+        match bubbleAt 0 model with
+        | None -> failwith "这一席该有一个气泡"
+        | Some bubble ->
+            let shown = Bubble.toDisplay bubble
+            // 截了，而且**截了会说**（气泡上那枚「点开看全文」读的就是 `clipped`）。
+            Assert.True(Bubble.clipped bubble, "真语料里最长那条理由在气泡里应当是截过的")
+            Assert.True(String.length shown < String.length longestReason, $"气泡里写的仍是全文（{String.length shown} 字）")
+            Assert.EndsWith("……", shown)
+            // 上限是一句话的量：真语料的中位是 48 字，一个气泡不该比两句话还长。
+            Assert.True(String.length shown <= 80, $"气泡里那句话 {String.length shown} 字，不再是一句话")
+            // 头上那一截字不允许被改写：截的是尾巴，不是重写一句。
+            Assert.StartsWith(longestReason.Substring(0, 20), shown)
+
+        // **面板里仍是全文**：气泡只是一个窗口，记录一字未动。
+        match TablePage.detail (model |> step (RecordOpened(Some 7))) with
+        | None -> failwith "第 7 手该摊得开"
+        | Some detail -> Assert.Equal(Some longestReason, detail.Record.Reason)
 
     [<Fact>]
     let ``气泡里的字来自那一手的决策记录：改一个字，气泡跟着变`` () =
         let record = recorded 7 0
 
-        let edited =
+        let edited = { record with Reason = Some "改过的一句话理由" }
+
+        // thinking 改了但 reason 没改：气泡上那句话不变（reason 优先），
+        // **而背后那条记录仍旧跟着变**——数据源只有 `Table.Decisions` 一处。
+        let rethought =
             { record with
                 Thinking = Some "改过的思考原文"
             }
@@ -159,6 +224,9 @@ module ThinkingBubbleTests =
         Assert.Equal(Some(Bubble.Spoke record), saidAt record)
         Assert.Equal(Some(Bubble.Spoke edited), saidAt edited)
         Assert.NotEqual(saidAt record |> Option.map Bubble.toDisplay, saidAt edited |> Option.map Bubble.toDisplay)
+
+        Assert.Equal(Some(Bubble.Spoke rethought), saidAt rethought)
+        Assert.Equal(saidAt record |> Option.map Bubble.toDisplay, saidAt rethought |> Option.map Bubble.toDisplay)
 
     [<Fact>]
     let ``兜底那一手：气泡是兜底态、写着原因，与 data-fallback 同源`` () =
@@ -282,13 +350,15 @@ module ThinkingBubbleTests =
 
     [<Fact>]
     let ``在想那一态是按座位取的：正在等谁的回执，谁头上就是它`` () =
-        let asked = llmTable () |> askedOnce
+        // **得先切到上帝视角**（票 81）：`?table=1` 默认坐在座位 0 上，不切的话
+        // 下面那句「其余三席一个气泡都没有」会因为视角掩蔽而恒真——那就是空转（判据 3）。
+        let asked = llmTable () |> askedOnce |> step (ViewpointPicked Viewpoint.God)
 
         Assert.Equal(Seat.first, DecisionPackage.seat (awaitingOf asked).Package)
         // 带着已等秒数与上限（票 74）：刚问出去是 0 秒，上限 = 档案超时 240000 ms → 240 秒。
         Assert.Equal(Some(Bubble.Thinking(0, 240)), bubbleAt 0 asked)
 
-        // 其余三席是自带 bot：**一条记录都没有，因此一个气泡都没有**。
+        // 其余三席是自带 bot：**一条记录都没有，因此一个气泡都没有**（上帝视角下也没有）。
         for index in 1..3 do
             Assert.Equal(None, bubbleAt index asked)
 
@@ -332,24 +402,78 @@ module ThinkingBubbleTests =
         for index in 0..3 do
             Assert.Equal(None, bubbleAt index head)
 
-    // ---- 可见性判据（ADR-0003 的 consequence） ----
+    // ---- 视角是一道信息闸门（票 81）× ADR-0003 那一根 ----
+
+    /// 四席各说过一手那一帧上，某个视角下四席的气泡。
+    let private bubblesUnder (viewpoint: Viewpoint) (model: TableModel) : Bubble option list =
+        let model = model |> step (ViewpointPicked viewpoint)
+        let table = shownTable model
+        [ for index in 0..3 -> TablePage.bubbles model table (seat index) ]
 
     [<Fact>]
-    let ``可见性判据不看谁在看：五个视角下四席的气泡逐个相同`` () =
-        // ADR-0003：「围观者」不是权限级别，只是视角；因此 UI 的可见性规则挂在
-        // **对局配置与终局状态**上。切视角改不动气泡这件事，就是那条 consequence 的执行体。
+    let ``视角是一道信息闸门：坐座位 N 只看得见自家，上帝视角四家全开`` () =
+        // 主人在票 81 里裁的那条：**与手牌同一条规则**。票 76 那一版反过来
+        // （五个视角下四席的气泡逐个相同），于是坐到座位 0 上也读得到另外三家在想什么。
         let model = loadedWith fourSeats |> atTurn 10
-        let table = shownTable model
 
-        let bubblesUnder (viewpoint: Viewpoint) =
-            let model = model |> step (ViewpointPicked viewpoint)
-            [ for index in 0..3 -> TablePage.bubbles model table (seat index) ]
-
-        let god = bubblesUnder Viewpoint.God
+        // 上帝视角：四家都在，**而且四句话互不相同**（阳性对照：不是全藏了，也不是四个同一句）。
+        let god = bubblesUnder Viewpoint.God model
         Assert.Equal(4, god |> List.sumBy (fun bubble -> if Option.isSome bubble then 1 else 0))
 
+        Assert.Equal(4, god |> List.choose (Option.map Bubble.toDisplay) |> List.distinct |> List.length)
+
+        // 坐座位 N：**只剩那一家**，而且剩下的那一个与上帝视角下它自己那一个逐字相同
+        // （否则「只剩一家」可以靠把四家都换成同一个空壳混过去）。
         for index in 0..3 do
-            Assert.Equal<Bubble option list>(god, bubblesUnder (Viewpoint.Seated(seat index)))
+            let seated = bubblesUnder (Viewpoint.Seated(seat index)) model
+            Assert.Equal(1, seated |> List.sumBy (fun bubble -> if Option.isSome bubble then 1 else 0))
+            Assert.Equal(List.item index god, List.item index seated)
+
+            for other in 0..3 do
+                if other <> index then
+                    Assert.Equal(None, List.item other seated)
+
+    [<Fact>]
+    let ``回放里终局也不放开：escape hatch 是上帝视角那一按，不是时间`` () =
+        // 回放本来就全是终局之后的事，“打完了就放开”等于让坐座视角在回放里形同虚设。
+        let model = loadedWith fourSeats |> step (CursorMoved 100000)
+
+        // 防空转：这一帧真的是终局之后（`unlocked` 那一根在这一帧上是开着的）。
+        Assert.True(Option.isSome (Table.result (shownTable model)), "末帧该是终局之后那一屏")
+
+        Assert.Equal(
+            4,
+            bubblesUnder Viewpoint.God model
+            |> List.sumBy (fun each -> if Option.isSome each then 1 else 0)
+        )
+
+        for index in 0..3 do
+            let seated = bubblesUnder (Viewpoint.Seated(seat index)) model
+            Assert.Equal(1, seated |> List.sumBy (fun each -> if Option.isSome each then 1 else 0))
+
+    [<Fact>]
+    let ``两根轴正交：视角那一根只读视角，ADR-0003 那一根只读对局配置与终局状态`` () =
+        // ADR-0003：「围观者」不是权限级别，只是视角——所以可见性不挂在「用户是谁」上。
+        // 票 81 加的这一根同样不挂在身份上：它只读 `model.Viewpoint`，而那一排按钮谁都按得了。
+        // **这一条钉的就是两根轴各自只读自己那一份输入**（合起来是 AND，在 `bubbles` 一处）。
+        let model = loadedWith fourSeats |> atTurn 10
+
+        // 视角那一根：不读牌桌、不读终局、不读有没有记录——只读视角。
+        for index in 0..3 do
+            let seated = model |> step (ViewpointPicked(Viewpoint.Seated(seat index)))
+
+            for other in 0..3 do
+                Assert.Equal((index = other), TablePage.reveals seated (seat other))
+
+            Assert.True(TablePage.reveals (model |> step (ViewpointPicked Viewpoint.God)) (seat index))
+
+        // ADR-0003 那一根：今天没有真人坐席（`SeatPlayer` 就两个 case，M3 才改），
+        // 因此它恒为“解锁”；它不该因为换了视角而变——上帝视角下四席全在就是它没被动过的证据。
+        Assert.Equal(
+            4,
+            bubblesUnder Viewpoint.God model
+            |> List.sumBy (fun each -> if Option.isSome each then 1 else 0)
+        )
 
     // ---- 全文面板（story 5） ----
 
@@ -359,6 +483,11 @@ module ThinkingBubbleTests =
         Assert.True(Option.isNone (TablePage.detail model), "没点开之前没有全文面板")
 
         let opened = model |> step (RecordOpened(Some 8))
+
+        // 第 8 手是座位 1 的：**坐到座位 0 上就摊不开**（票 81：面板同受视角那道闸门管，
+        // 否则气泡藏了而全文还摊得开，闸门就只是个摆设）。
+        Assert.True(Option.isNone (TablePage.detail (opened |> step (ViewpointPicked(Viewpoint.Seated(seat 0))))))
+        Assert.True(Option.isSome (TablePage.detail (opened |> step (ViewpointPicked(Viewpoint.Seated(seat 1))))))
 
         match TablePage.detail opened with
         | None -> failwith "点开第 8 手之后该有一份全文面板"

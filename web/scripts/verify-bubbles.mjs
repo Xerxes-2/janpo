@@ -9,7 +9,13 @@
 //   ② **气泡挡不住牌与河**：矩形一律不相交（读的是 `getBoundingClientRect`，不是承诺）；
 //   ③ **点得开**：全文面板九样、快照、收起来逐字回到现在（与票 76 逐字同一套断言）；
 //   ④ **一席坏了不拖累别席**：把座位 0 的端点换成只回越界 id 的，它变「兜底」态，
-//      而其余三席照样一手一手往前说（气泡上的手序还在涨、没有一席跟着变红）。
+//      而其余三席照样一手一手往前说（气泡上的手序还在涨、没有一席跟着变红）；
+//   ⑨ **视角是一道信息闸门**（票 81）：坐到座位 N 上，**DOM 上只剩那一席的气泡**，
+//      Agent 那条状态线也只提那一席（别席那句「座位 N 的模型选完了：……」连理由一起不在）；
+//      切回上帝四家都回来、四句话互不相同（**阳性对照**：不是全藏了，也不是四个同一句的空壳）。
+//
+// **两程都先切到上帝视角**（票 81 之后）：`?table=1` 默认坐在座位 0 上，
+// 而这一道量的全是「四席各自怎么样」——不切的话它量的是闸门自己。
 //
 // 第二程（并发的墙钟，票 74 的硬证据）：三席共用一个**固定延迟**的假端点、座位 3 仍是 bot，
 //   种子 48（第一局早早就有一轮多席响应，dotnet 侧探针挑的）。MutationObserver 记下
@@ -48,6 +54,23 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SAID = Seats.map(
   (seat) => `假端点${"甲乙丙丁"[seat]}说：座位 ${seat} 这一手照它的算法只能这么打`,
 );
+
+/**
+ * 座位 0 那一句**故意加长到超过气泡的上限**（票 81）：真语料里 13% 的理由比它还长
+ * （票 79 那份 Demo：中位 48 字、最长 260），而票 76 那版把它们无声地剪掉了。
+ *
+ * **挑座位 0** 是为了与 ③（点开那一屏）碰到一起：同一手上一眼就比得出
+ * **气泡里是截过的一句、面板里是完整那一句**。
+ * **长句以 `SAID[0]` 开头**：截到上限之后那一截标记还在，因此上面那几条
+ * 「座位 N 的气泡里是它自己端点回的那句」一条都不必放松。
+ */
+const LONG_SEAT = 0;
+const LONG_TAIL =
+  "；本来还想说一说这一手的安全度与巋目，可惜一个气泡里只放得下一句话，" +
+  "剩下的得点开全文面板才看得到，这一句就是专门拉长了来验那一枚招子的。";
+
+/** 四个端点真正回的那句（座位 1 那句带长尾巴）。 */
+const REASONS = Seats.map((seat) => (seat === LONG_SEAT ? SAID[seat] + LONG_TAIL : SAID[seat]));
 
 /**
  * 两程共用的种子：dotnet 侧探针挑的——**第一局第 2 手就有一轮多席响应**
@@ -228,7 +251,7 @@ async function fourSeatsLane(lane, pageOrigin, options) {
 
   const endpoints = [];
   for (const seat of Seats) {
-    endpoints.push(await startEndpoint(pageOrigin, ["--reason", SAID[seat]]));
+    endpoints.push(await startEndpoint(pageOrigin, ["--reason", REASONS[seat]]));
   }
   // 越界的 id：Agent 层校完重试两次，最后交不出来 → 兜底代打（票 23 的那条路）。
   const bad = await startEndpoint(pageOrigin, ["--action-id", "9999"]);
@@ -254,7 +277,9 @@ async function fourSeatsLane(lane, pageOrigin, options) {
 
     console.log(`页面 ${pageOrigin}　四席各配一个端点：`);
     for (const seat of Seats) {
-      console.log(`  座位 ${seat} ← ${endpoints[seat].baseUrl}：reason = 「${SAID[seat]}」`);
+      console.log(
+        `  座位 ${seat} ← ${endpoints[seat].baseUrl}：reason = 「${REASONS[seat]}」（${REASONS[seat].length} 字）`,
+      );
     }
     console.log(`端点（越界 id）${bad.baseUrl}：action_id = 9999 → 兜底`);
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
@@ -262,6 +287,8 @@ async function fourSeatsLane(lane, pageOrigin, options) {
     // 换成探针挑好的种子（第一局第 2 手就有一轮多席同问），重开一桌。
     await page.getByTestId("table-seed").fill(String(CONCURRENT_SEED));
     await page.getByTestId("table-restart").click();
+    // 上帝视角（票 81）：这一程量的是四席各自的气泡，而 `?table=1` 默认坐在座位 0 上。
+    await page.getByTestId("table-view-god").click();
 
     // **全程盯着**「有没有哪一席的气泡写过别席端点的话」：串线只发生在多席同问的那一轮里，
     // 而那一轮几十毫秒就落幕——只在暂停后抽查最新一条是抓不住它的（红-W2 的第一版就没抓住）。
@@ -367,6 +394,107 @@ async function fourSeatsLane(lane, pageOrigin, options) {
     }
     for (const each of [...new Set(watched.crossed)].slice(0, 4)) missing.push(each);
 
+    // ---- ⑩ 气泡只放一句话：长的截了并且**说一声**（票 81） ----
+    // 两头都核：长那一席要有那枚招子且字真的少了，**短那几席一枚都不许有**
+    // （后半句是阳性对照：招子恒显示的话，前半句什么都没证明）。
+    const longBubble = await bubbleAt(page, LONG_SEAT);
+    const longMore = await page.getByTestId(`seat-${LONG_SEAT}-bubble-more`).count();
+
+    console.log("");
+    console.log(
+      `座位 ${LONG_SEAT} 的理由共 ${REASONS[LONG_SEAT].length} 字，气泡里写了 ${longBubble?.text.length} 字` +
+        `（含「说」与招子），招子 ${longMore} 枚`,
+    );
+
+    if (longMore !== 1) {
+      missing.push(
+        `座位 ${LONG_SEAT} 的理由有 ${REASONS[LONG_SEAT].length} 字（远过气泡那一句话的量），` +
+          `气泡上却没有「点开看全文」那枚招子（[data-testid="seat-${LONG_SEAT}-bubble-more"] 有 ${longMore} 枚）：` +
+          "硬裁而不说正是票 81 要治的那条病（79 §8）",
+      );
+    }
+    if ((longBubble?.text.length ?? 0) >= REASONS[LONG_SEAT].length) {
+      missing.push(
+        `座位 ${LONG_SEAT} 的气泡里把 ${REASONS[LONG_SEAT].length} 字的理由整句都写上了：那不是一句话`,
+      );
+    }
+    if (!(longBubble?.text ?? "").includes("……")) {
+      missing.push(`座位 ${LONG_SEAT} 的气泡截了却没有三点号收尾：「${longBubble?.text}」`);
+    }
+    for (const seat of Seats.filter((each) => each !== LONG_SEAT)) {
+      const more = await page.getByTestId(`seat-${seat}-bubble-more`).count();
+      if (more !== 0) {
+        missing.push(
+          `座位 ${seat} 的理由只有 ${REASONS[seat].length} 字，整句都写得下，气泡上却挂着 ${more} 枚` +
+            "「点开看全文」：那枚招子说的是「这句话被截过」，恒显示就是句谎话",
+        );
+      }
+    }
+
+    // ---- ⑨ 视角是一道信息闸门（票 81） ----
+    // 四席刚好各说过一句只可能从它自己端点来的话（上面刚核过），因此这一段量得到真东西：
+    // 坐到座位 N 上，**别席的那句话在页面上应当一个字都找不到**——气泡里没有，
+    // Agent 那条状态线里也没有（票 74 那句「座位 N 的模型选完了：……」连理由一起漏的就是它）。
+    console.log("");
+    for (const seat of Seats) {
+      await page.getByTestId(`table-view-${seat}`).click();
+      const only = await page.locator('[data-testid$="-bubble"]').count();
+      const mine = await page.getByTestId(`seat-${seat}-bubble`).count();
+      const line = ((await page.getByTestId("table-agent").textContent()) ?? "").trim();
+      const hushed = await page.getByTestId("table-agent").getAttribute("data-hushed");
+
+      if (only !== 1 || mine !== 1) {
+        missing.push(
+          `坐到座位 ${seat} 上，页面上还有 ${only} 个气泡（自家的 ${mine} 个）：` +
+            "该只剩自家那一个（票 81：视角与手牌同一条规则）",
+        );
+      }
+      if (!line.includes(SAID[seat])) {
+        missing.push(`坐到座位 ${seat} 上，状态线里反而没了它自己那句：「${line}」`);
+      }
+      for (const other of Seats.filter((each) => each !== seat)) {
+        if (line.includes(SAID[other])) {
+          missing.push(
+            `坐到座位 ${seat} 上，状态线里还写着座位 ${other} 的理由：「${line}」` +
+              "（气泡拦住了而状态线漏了，那闸门就只是个摆设）",
+          );
+        }
+        if (line.includes(`座位 ${other} 的模型选完了`)) {
+          missing.push(`坐到座位 ${seat} 上，状态线里还列着座位 ${other}：「${line}」`);
+        }
+      }
+      if (hushed !== "3") {
+        missing.push(`坐到座位 ${seat} 上，状态线说被挡下的是 ${hushed} 席（该是 3 席）`);
+      }
+      console.log(`坐到座位 ${seat}：${only} 个气泡、状态线「${line}」`);
+    }
+
+    // 切回上帝：四家都回来，且**四句话互不相同**。后半句是阳性对照：
+    // 没有它，「四个写着同一句话的空壳」与「四家各说各的」在上面那几条下长得一模一样。
+    await page.getByTestId("table-view-god").click();
+    const backAtGod = await page.locator('[data-testid$="-bubble"]').count();
+    const godLine = ((await page.getByTestId("table-agent").textContent()) ?? "").trim();
+    const saidBySeat = [];
+    for (const seat of Seats)
+      saidBySeat.push((await bubbleAt(page, seat))?.text ?? `（座位 ${seat} 没有）`);
+
+    if (backAtGod !== 4) {
+      missing.push(
+        `切回上帝视角只有 ${backAtGod} 个气泡（该有 4 个）：上面那四轮「只剩一家」因此什么都没证明`,
+      );
+    }
+    if (new Set(saidBySeat).size !== Seats.length) {
+      missing.push(`上帝视角下四家的气泡里有重复的话：${JSON.stringify(saidBySeat)}`);
+    }
+    for (const seat of Seats) {
+      if (!godLine.includes(SAID[seat])) {
+        missing.push(
+          `上帝视角下状态线里没有座位 ${seat} 那句：「${godLine}」` +
+            "（那上面「坐座视角里没有别席的话」就是句空话）",
+        );
+      }
+    }
+
     // ---- ② 挡不住牌与河 ----
     const covered = await overlaps(page);
     for (const each of covered) missing.push(each);
@@ -419,6 +547,14 @@ async function fourSeatsLane(lane, pageOrigin, options) {
       }
       if (!(detail.reason ?? "").includes(SAID[0])) {
         missing.push(`全文面板里的理由不是端点回的那句：「${detail.reason}」`);
+      }
+      // **面板里是完整那一句**（票 81）：气泡里那句刚刚被截过（⑩），
+      // 而点开之后不允许再少一个字——否则「点开看全文」那枚招子是句空话。
+      if (detail.reason !== REASONS[LONG_SEAT]) {
+        missing.push(
+          `全文面板里的理由不是完整那一句（${(detail.reason ?? "").length} 字 vs 端点回的 ${REASONS[LONG_SEAT].length} 字）：` +
+            `「${detail.reason}」`,
+        );
       }
       if (!(detail.prompt ?? "").includes("【现在】")) {
         missing.push(
@@ -573,6 +709,9 @@ async function wallClockLane(lane, pageOrigin, options) {
     // 换成探针挑好的种子（第一局第 2 手就有一轮多席响应），重开一桌。
     await page.getByTestId("table-seed").fill(String(CONCURRENT_SEED));
     await page.getByTestId("table-restart").click();
+    // 上帝视角（票 81）：并发量的是「同时有几席在想」，坐座视角下最多只看得见一席；
+    // ⑧（bot 那一席一个气泡都没有）同样要在全开的视角下验，否则它恒真。
+    await page.getByTestId("table-view-god").click();
 
     // 记「几个『在想』气泡同时在场」的每次变迁；顺带盯 bot 席与 data-waited。
     await page.evaluate(() => {
@@ -709,6 +848,7 @@ export async function verifyBubbles(lane, options = {}) {
   console.log("");
   console.log("四席四个气泡各说各的、挡不住牌与河、点得开且收起来逐字回到现在 ✓");
   console.log("一席换成交不出来的端点：它走兜底，其余三席照样往前说 ✓");
+  console.log("视角是一道信息闸门：坐到座位 N 上只剩那一席的气泡与状态线，切回上帝四家各说各的 ✓");
   console.log("固定延迟下几席同时在想：墙钟接近一份延迟而不是几份；在想的气泡带着已等秒数与上限 ✓");
   return [];
 }

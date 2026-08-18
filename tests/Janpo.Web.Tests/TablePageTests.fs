@@ -725,7 +725,13 @@ module TablePageTests =
         match (liveOf asked).Awaiting with
         | first :: second :: _ ->
             // 头一席的钟走了两秒，第二席纹丝不动。
-            let waited = asked |> step (Waited first.Ticket) |> step (Waited first.Ticket)
+            // **先切上帝视角**（票 81）：这一条量的是「两席各记各的秒数」，而 `?table=1`
+            // 默认坐在座位 0 上——视角那道闸门会把其中一席整个拦掉，那就量不到它了。
+            let waited =
+                asked
+                |> step (Waited first.Ticket)
+                |> step (Waited first.Ticket)
+                |> step (ViewpointPicked Viewpoint.God)
 
             let bubbleAt (seat: Seat) (model: TableModel) =
                 TablePage.bubbles model (tableOf model) seat
@@ -736,6 +742,12 @@ module TablePageTests =
                 Some(Bubble.Thinking(0, second.Config.TimeoutMs / 1000)),
                 bubbleAt (Awaiting.seat second) waited
             )
+
+            // 而坐回头一席那个视角：只剩它自己那一个气泡（同一条规则，同一个取值器）。
+            let seated = waited |> step (ViewpointPicked(Viewpoint.Seated(Awaiting.seat first)))
+
+            Assert.True(Option.isSome (bubbleAt (Awaiting.seat first) seated))
+            Assert.Equal(None, bubbleAt (Awaiting.seat second) seated)
 
             // 已经作废的票号：钟静默地停（不加秒、不出错）。
             let stale = waited |> step (Waited(first.Ticket + 999))

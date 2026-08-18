@@ -174,6 +174,9 @@ async function runTable(plan) {
       `模式 ${mode}：页面 ${pageOrigin}　端点 ${baseUrl}　CORS ${plan.cors ? `放行 ${pageOrigin}` : "不放行"}`,
     );
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    // 上帝视角（票 81）：视角从此是一道信息闸门，而这一道默认把模型坐在座位 1（`--seat`）
+    // ——页面默认坐在座位 0 上，不切的话 `data-agent` 读到的是被掩蔽后的那一份。
+    await page.getByTestId("table-view-god").click();
 
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
     const readAttr = async (testId, name) => await page.getByTestId(testId).getAttribute(name);

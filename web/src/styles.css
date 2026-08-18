@@ -992,16 +992,17 @@ input[type="range"] {
 
    画法照批注（票 80 主人给的形态）：淡纸灰底、左手一道墨线——像页边上抄进去的一句话。
    三态一眼分得开：在想 = 虚线淡着、说了什么 = 墨线批注、兜底 = 朱红。
-   thinking 是整段文字，因此**钉住高度、溢出剪掉**——全文在点开那一屏里，
-   气泡本身不许把牌桌撑变形。 */
+
+   **没有 `max-height` 也没有 `overflow: hidden`了**（票 81）：票 76 那一版把 thinking 全文
+   硬裁到 4.2rem，真语料上当场把最后一行切成半截（报告 79 §8）。现在气泡里只放**一句话**，
+   长度在 `Bubble.toDisplay` 那一处就有界（上限 72 字）且**截了会说**（`.bubble-more`），
+   因此无需再拿一个无声的盒子去剪它。 */
 .bubble {
   display: block;
   width: 100%;
   /* 上下两家占满整行（手牌 14 张要地方），气泡跟着拉到 40rem 宽就没人会当它是一句话了。
      左右两家本来就窄，这一条对它们无效。 */
   max-width: 30rem;
-  max-height: 4.2rem;
-  overflow: hidden;
   padding: 0.2rem 0.45rem;
   border: 1px solid var(--line);
   border-left: 3px solid var(--ink-soft);
@@ -1046,6 +1047,17 @@ input[type="range"] {
   font-size: 0.8rem;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+/* 这句话被截过时那一枚招子（票 81）。它只在 `Bubble.clipped` 为真时入 DOM，
+   因此这里不必写任何「什么时候显示」的判据——判据只有一处，在 F# 里。
+   另起一行（`display: block`）：接在三点号后面会让人以为它是理由的一部分。 */
+.bubble-more {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  text-decoration: underline dotted;
 }
 
 /* 点开之后那一屏（story 5）：thinking 与 prompt 尾部都是整段文字，按行断开；

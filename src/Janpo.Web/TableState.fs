@@ -301,22 +301,61 @@ module Bubble =
         | Bubble.Spoke _ -> "说"
         | Bubble.Troubled _ -> "兜底"
 
-    /// 气泡上写的那句话。
+    /// 气泡上那句话最多几个字（票 81）。**这个数是从真语料上量的**：票 79 换上去那份 Demo
+    /// 的 464 条理由里，中位 48 字、p75 62、p90 77、最长 260——72 字让 **87%** 的理由整句放得下，
+    /// 余下那 13% 截断并挂一句「点开看全文」。
     ///
-    /// **thinking 优先，没有思考预算时退回那一句理由**（票 76 原话）：关掉思考预算的模型
-    /// 只给得出 `reason`，而开着的那几家 `thinking` 才是它真在想的东西。
-    /// 两样都没有时也要说一句——空气泡与「没有气泡」在页面上分不出来。
+    /// 它同时是**气泡不把牌桌撑变形**的判据：最窄那一席（左右两家）一行约 25 个汉字，
+    /// 72 字 ≈ 3 行，正好是票 76 那个 `max-height: 4.2rem` 的高度。于是 CSS 那条硬裁拿掉了
+    /// ——**长度在这里就有界，而且截了会说**（硬裁是无声的，79 §8 报的病就是它）。
+    [<Literal>]
+    let private sentenceLimit = 72
+
+    /// thinking 的头一段：第一个换行之前那一截。thinking 是没结构的整段文字，
+    /// 而气泡只放一句话——**取头一段**是「不重排模型的话、又只取一句」最省的一种取法。
+    let private firstParagraph (thinking: string) : string =
+        let trimmed = thinking.Trim()
+
+        match trimmed.IndexOf '\n' with
+        | -1 -> trimmed
+        | index -> trimmed.Substring(0, index).Trim()
+
+    /// 截到上限并以「……」收尾；没超上限就原样交出去。`more` 是「这句话后面还有被丢掉的东西」
+    /// （thinking 取了头一段那一路）。
+    ///
+    /// **一个函数同时给出「写什么」与「截没截」**：两者是同一次判断。分成两个函数各算一遍的话，
+    /// 气泡上那枚「点开看全文」与那三个点就成了两处判据，迟早会漂到一边有、另一边没。
+    let private said (bubble: Bubble) : string * bool =
+        let clip (more: bool) (text: string) : string * bool =
+            if String.length text <= sentenceLimit then
+                (if more then text + "……" else text), more
+            else
+                text.Substring(0, sentenceLimit) + "……", true
+
+        match bubble with
+        | Bubble.Thinking(waited, limit) -> $"正在等它回话……已等 {waited} 秒 / 上限 {limit} 秒", false
+        | Bubble.Troubled(_, reason) -> clip false reason
+        | Bubble.Spoke record ->
+            // **`reason` 优先，只有 thinking 没有 reason 时才退回它的头一段**（票 81 主人裁的）：
+            // 气泡放的是**一句话理由**，thinking 全文是点开那一屏的活（术语表的 `Thinking Bubble`）。
+            // 票 76 的优先级正好相反（thinking 优先），真语料上那就是一整段文字塞进一个气泡。
+            match record.Reason, record.Thinking with
+            | Some reason, _ -> clip false reason
+            | None, Some thinking ->
+                let head = firstParagraph thinking
+                clip (head <> thinking.Trim()) head
+            // 两样都没有时也要说一句——空气泡与「没有气泡」在页面上分不出来。
+            | None, None -> "（这一手没留下理由与思考原文）", false
+
+    /// 气泡上写的那句话（**一句话，不是 thinking 全文**：CONTEXT.md 的 `Thinking Bubble`）。
     ///
     /// 兜底那一态写的是**原因**（与牌桌上那句「上一手：……（兜底：……）」、`data-fallback`
     /// 同一个来源：`DecisionRecord.Fallback`）。它的 thinking 与理由仍在全文面板里。
-    let toDisplay (bubble: Bubble) : string =
-        match bubble with
-        | Bubble.Thinking(waited, limit) -> $"正在等它回话……已等 {waited} 秒 / 上限 {limit} 秒"
-        | Bubble.Troubled(_, reason) -> reason
-        | Bubble.Spoke record ->
-            record.Thinking
-            |> Option.orElse record.Reason
-            |> Option.defaultValue "（这一手没留下理由与思考原文）"
+    let toDisplay (bubble: Bubble) : string = said bubble |> fst
+
+    /// 这句话被截过吗——**截了就要在气泡上说一句**（票 81：溢出要有看得出来的提示）。
+    /// 全文在点开那一屏里（`BubbleDetail`），因此这只是「还有更多」的招子，不是另一份数据。
+    let clipped (bubble: Bubble) : bool = said bubble |> snd
 
 /// 气泡点开之后那一屏（票 76 的全文面板，spec 的 story 5）：那一手的**决策记录**与
 /// **当时的局面快照**。
@@ -1138,6 +1177,25 @@ module TableState =
     let private unlocked (model: TableModel) (table: Table) : bool =
         not (humanSeated model) || Table.result table |> Option.isSome
 
+    /// **视角是一道信息闸门**（票 81）：坐在座位 N 上只看得见**那一席**在想什么，
+    /// 上帝视角四家全开——与手牌同一条规则（`Board`：坐座视角消费那一席的 `Observation`）。
+    ///
+    /// 它与 `unlocked` 是**两根正交的轴，AND 关系**：`unlocked` 挂在对局配置与终局状态上
+    /// （ADR-0003，M3 真人坐席的地基），这一根挂在**此刻看的是哪份投影**上，两条都满足才显示。
+    ///
+    /// **回放里终局也不放开**：escape hatch 是上帝视角那一按，不是时间——
+    /// 否则「坐到座位 0 看这一场」在终局那一刻自己失效，而回放本来就全是终局之后的事。
+    ///
+    /// **它不是权限**（ADR-0003：「围观者」不是权限级别，只是视角）：谁都按得了那一下，
+    /// 因此判据仍旧不挂在「用户是谁」上——它挂在「你此刻选着用谁的眼睛看」上。
+    ///
+    /// **公开的，而且只有这一份**：气泡（`bubbles`）与 Agent 那条状态线（`AgentLine`）读的是
+    /// 同一个函数。两处各判一遍就是两处判据，而这一票治的正是「状态线漏了气泡治好的那件事」。
+    let reveals (model: TableModel) (seat: Seat) : bool =
+        match model.Viewpoint with
+        | Viewpoint.God -> true
+        | Viewpoint.Seated viewer -> viewer = seat
+
     /// 这一桌每一席此刻的气泡（票 76）。**交出去的是一个取值器**（`Seat -> Bubble option`）：
     /// 「在想」那一态按座位各取各的（票 74）：在飞的那几份 `Awaiting` 一席一份，
     /// 已等秒数与上限（72-3 裁决明写的代价）就从那一份上读，不存第二份。
@@ -1145,6 +1203,10 @@ module TableState =
     /// **数据源只有一处**：「说了什么」与「兜底代打」读的都是这一帧的 `Table.Decisions`
     /// （回放那一侧已经按手序切好，票 71 的 `recordedBy`）——气泡不存第二份。
     /// **不读 `AgentStatus.Spoke` 里那句理由**：那只是同一条记录的另一份拄件，而且它只有最新一手。
+    ///
+    /// **此刻看得见哪几席由 `reveals` 说了算**（票 81）：坐座视角只剩自家一家。
+    /// 看不见就是 `None`，于是**DOM 上根本没有那个气泡元素**（`ThinkingBubble.at`），
+    /// 不是拿 CSS 藏起来——与他家手牌同一种做法（投影里根本没那些牌）。
     ///
     /// 一条记录都没有的那几席（bot 席、或分享链接那种棋谱）**恒是 None**：不出气泡。
     let bubbles (model: TableModel) (table: Table) : Seat -> Bubble option =
@@ -1155,7 +1217,9 @@ module TableState =
             |> Option.map (fun each -> Bubble.Thinking(each.WaitedSeconds, Awaiting.limitSeconds each))
 
         fun seat ->
-            if not (unlocked model table) then
+            // **两根轴是 AND**：视角掩蔽（票 81）× `unlocked`（ADR-0003）。
+            // 只在这一处合起来：视图与 17 条用例读的都是这个取值器，在视图里再滤一遍就会长出第二处判据。
+            if not (reveals model seat) || not (unlocked model table) then
                 None
             else
                 // 「在想」压过上一条记录：正在等回执那一刻，旧的理由已经不是它此刻在想的事。
@@ -1244,11 +1308,16 @@ module TableState =
     ///
     /// **公开的**：视图与页面逻辑的用例读同一处推导（同 `timeline` / `canAdvance`）。
     /// 记录从那一帧上现读（`recordOf`）：快照与记录因此不可能对不上。
+    ///
+    /// **视角同样拦它**（票 81）：面板今天只从气泡点得开，而那一席的气泡在别席视角下根本不存在；
+    /// 但「今天点不到」不是一道闸门（切视角不会把摊开着的面板收起来）——于是这里再问一句
+    /// **同一个 `reveals`**。不是第二处判据：判据仍只有 `reveals` 那一份，这里只是多一个消费点。
     let detail (model: TableModel) : BubbleDetail option =
         model.Opened
         |> Option.bind (fun snapshot ->
             recordOf snapshot
             |> Option.map (fun record -> { Record = record; Snapshot = snapshot }))
+        |> Option.filter (fun detail -> reveals model detail.Record.Seat)
 
     /// 去拉那份 Demo 牌谱。**副作用一律由 Cmd 发**（同 `askCmd`）：
     /// 效果体只在浏览器里执行，dotnet 侧只把它编出来、不跑。

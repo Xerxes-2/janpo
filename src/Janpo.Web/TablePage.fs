@@ -11,10 +11,10 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出十六个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// **这一层还转出十七个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` / `home` /
 /// `shared` / `init` / `update` / `rosterOf` / `seatConfigOf` / `renderingPending` / `rulesPending` /
-/// `live` / `shown` / `canAdvance` / `timeline` / `bubbles` / `detail` / `recordless`。转出来之后
+/// `live` / `shown` / `canAdvance` / `timeline` / `reveals` / `bubbles` / `detail` / `recordless`。转出来之后
 /// **这个程序集的公开面只多了这几个名字**：那几块里跨文件用的助手一律 `internal`，
 /// 出不了 `Janpo.Web`。
 ///
@@ -67,6 +67,12 @@ module TablePage =
 
     /// 回放的时间轴（票 75）；Live 时是 None。实现与理由见 `TableState.timeline`。
     let timeline (model: TableModel) : Timeline option = TableState.timeline model
+
+    /// 这一席的推理此刻看不看得见（票 81）。实现与理由见 `TableState.reveals`。
+    ///
+    /// **气泡与 Agent 那条状态线读的就是它**：转出来是为了用例能直接钉这条规则本身，
+    /// 而不必逐个消费点各钉一遍。
+    let reveals (model: TableModel) (seat: Seat) : bool = TableState.reveals model seat
 
     /// 这一桌每一席此刻的思考气泡（票 76）。实现与理由见 `TableState.bubbles`。
     let bubbles (model: TableModel) (table: Table) : Seat -> Bubble option = TableState.bubbles model table

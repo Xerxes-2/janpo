@@ -12,9 +12,12 @@
 //   ⑥ **时间轴真的拖得动**（票 75）：在滑块上真点一下（不是设 value），牌桌跳到那一处；
 //      拖回 0 是开局那一瞬；「下一步 → 上一步」走一个来回之后 DOM 逐字相同（幂等）；
 //      点某一局的局号就落在那一局的开局帧；
-//   ⑦ **这份牌谱带着推理**（票 76 写下、票 79 翻面）：首页那一场现在是真的四席 LLM 对局，
-//      因此末帧上**四席各有一个气泡且里面真有话**，而那句「为什么没有思考气泡」**不许再在**
-//      ——「边打边讲理由」就是这一页的卖点，气泡没出来等于换资产白换。
+//   ⑦ **这份牌谱带着推理**（票 76 写下、票 79 翻面、票 81 按视角分开数）：首页那一场现在是
+//      真的四席 LLM 对局，因此**上帝视角下**末帧上四席各有一个气泡且里面真有话，
+//      而那句「为什么没有思考气泡」**不许再在**——「边打边讲理由」就是这一页的卖点，
+//      气泡没出来等于换资产白换。**而坐到座位 N 上只剩那一席**（票 81：视角是一道信息闸门，
+//      与手牌同一条规则），切回上帝四家又都回来；四句话互不相同是**阳性对照**
+//      （否则「四个同一句的空壳」也能让它绿）。
 //      （那句指路话本身没死：`verify-inbound` 里分享链接与导入无记录牌谱那两程仍旧要求它在，
 //      两头合起来才是完整的阳性对照）；
 //   ⑧ **未结算不摆里宝牌指示牌**（票 76 顺手那条，裁决「71-8 的余波」）：里宝牌只在有人
@@ -443,11 +446,15 @@ export async function verifyHome(lane) {
     // ⑦ 这份牌谱带着推理（票 79 把票 76 那一条翻了面）：四席各有一个气泡、里面真有话，
     // 而那句「为什么没有气泡」不许再在。**这一段量的是末帧**（上面刚拖到结算那一屏）：
     // 四家都开过口了，因此「四个」是死数而不是「至少一个」——少一席就是有一席的记录没落下来。
+    //
+    // **数之前先说清这是哪个视角**（票 81）：气泡从此按视角掩蔽，「四个」是上帝视角下的死数。
+    // 首页默认就是上帝视角（裁决 71-8，⑤ 刚核过），这里再按一下是为了不依赖 ⑥ 拖拽那一段的残留状态。
+    await page.getByTestId("table-view-god").click();
     const bubbles = await page.locator('[data-testid$="-bubble"]').count();
     const said = await page.getByTestId("table-no-bubbles").count();
     if (bubbles !== 4) {
       missing.push(
-        `首页那场四席都是模型，末帧上却只有 ${bubbles} 个思考气泡（该有 4 个）：` +
+        `首页那场四席都是模型，上帝视角下的末帧却只有 ${bubbles} 个思考气泡（该有 4 个）：` +
           "「边打边讲理由」是这一页的卖点，气泡没出来就是换资产白换了（票 79）",
       );
     }
@@ -458,17 +465,52 @@ export async function verifyHome(lane) {
     }
 
     // 气泡里真有话吗：空气泡与「没有气泡」在截图上分不开，而卡成「在想」的气泡在回放里压根儿不该有。
+    const saidBySeat = [];
     for (const seat of [0, 1, 2, 3]) {
       const bubble = page.getByTestId(`seat-${seat}-bubble`);
       if ((await bubble.count()) === 0) continue;
       const state = await bubble.getAttribute("data-bubble");
       const text = ((await bubble.textContent()) ?? "").replace("说", "").trim();
+      saidBySeat.push(text);
       if (state !== "spoke" && state !== "troubled") {
         missing.push(`座位 ${seat} 的气泡停在「${state}」态：回放里没有谁还在等回话`);
       }
       if (text.length < 8) {
         missing.push(`座位 ${seat} 的气泡里只有「${text}」：没话的气泡与没有气泡一个样`);
       }
+    }
+
+    // **阳性对照**：四句话互不相同。没有这一条的话，「四个写着同一句话的空壳」
+    // 与「四家各说各的」在上面那几条断言下长得一模一样（票 81）。
+    if (new Set(saidBySeat).size !== saidBySeat.length) {
+      missing.push(
+        `上帝视角下四家的气泡里有重复的话（${saidBySeat.length} 个气泡只有 ${new Set(saidBySeat).size} 句不同的话）：` +
+          "四家该各说各的",
+      );
+    }
+
+    // ⑦b 视角是一道信息闸门（票 81）：坐到座位 N 上，**DOM 上只剩那一席的气泡**
+    // （不是拿 CSS 藏起来：这里数的是元素个数）；切回上帝，四家必须都回来
+    // ——后半句是阳性对照：没有它，「气泡整个不画了」同样能让前半句变绿。
+    // **回放里终局也不放开**（现在就停在末帧）：escape hatch 是上帝视角那一按，不是时间。
+    for (const seat of [0, 1, 2, 3]) {
+      await page.getByTestId(`table-view-${seat}`).click();
+      const only = await page.locator('[data-testid$="-bubble"]').count();
+      const mine = await page.getByTestId(`seat-${seat}-bubble`).count();
+      if (only !== 1 || mine !== 1) {
+        missing.push(
+          `坐到座位 ${seat} 上，末帧上还有 ${only} 个思考气泡（自家的 ${mine} 个）：` +
+            "该只剩自家那一个——视角与手牌同一条规则，回放里终局也不放开（票 81）",
+        );
+      }
+    }
+
+    await page.getByTestId("table-view-god").click();
+    const backAtGod = await page.locator('[data-testid$="-bubble"]').count();
+    if (backAtGod !== 4) {
+      missing.push(
+        `切回上帝视角只有 ${backAtGod} 个气泡（该有 4 个）：上一条「坐座只剩一家」因此什么都没证明`,
+      );
     }
 
     // ③ 去 `?table=1` 的路：**真点过去**，落地那一页必须是主持人那一页。
@@ -530,8 +572,10 @@ export async function verifyHome(lane) {
       `时间轴拖得动 ✓（真点了 ${dragCount} 下：拖到 3/4 处、步进一个来回、拖回 0、跳第二局、拖到末帧）`,
     );
     console.log(
-      "这份牌谱带着推理 ✓（四席各一个气泡且里面真有话、那句指路话不在了；未结算不摆里宝牌、结算那一屏摆）",
+      "这份牌谱带着推理 ✓（上帝视角四席各一个气泡、里面真有话且四句互不相同、那句指路话不在了；" +
+        "未结算不摆里宝牌、结算那一屏摆）",
     );
+    console.log("视角是一道信息闸门 ✓（坐到四个座位上各只剩自家那一个气泡，切回上帝四家都回来）");
     console.log("「自己开一桌」点过去就是 ?table=1，且那一页默认暂停 ✓");
     console.log(
       `操作控件贴着牌桌 ✓（首页隔 ${homeOps.board.top - homeOps.ops.bottom} px、` +

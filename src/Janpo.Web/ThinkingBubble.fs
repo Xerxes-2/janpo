@@ -20,6 +20,11 @@ module ThinkingBubble =
     ///
     /// **「在想」那一态点不开**：它还没有记录（`Bubble.record` 是这件事的唯一判据），
     /// 点开一个空面板比点不开更难懂。
+    ///
+    /// **气泡只放一句话**（票 81）：这句话被截过时后面挂一枚「点开看全文」。
+    /// 票 76 那版是 CSS 硬裁（`max-height` + `overflow: hidden`），**无声无息**：
+    /// 真语料上的理由比固件长得多（中位 48 字），79 §8 报的「座位 1 的气泡最后一行被切掉」
+    /// 就是它。现在截的判据在 `Bubble.clipped` 一处，而且**截了会说**。
     let internal bubble (dispatch: TableMsg -> unit) (seat: Seat) (state: Bubble) =
         let turn = Bubble.record state |> Option.map (fun record -> record.Turn)
         let wire = Bubble.toWire state
@@ -40,6 +45,21 @@ module ThinkingBubble =
             | Bubble.Spoke _
             | Bubble.Troubled _ -> []
 
+        // 这句话后面还有东西时那一枚招子（`Bubble.clipped`）。**DOM 上有没有就是判据**：
+        // 闸门读的是元素在不在，而不是某一条 CSS 生效没有。
+        let more =
+            if Bubble.clipped state then
+                [
+                    Html.span [
+                        prop.key "more"
+                        prop.className "bubble-more"
+                        prop.testId $"seat-{Seat.index seat}-bubble-more"
+                        prop.text "点开看全文"
+                    ]
+                ]
+            else
+                []
+
         Html.button (
             [
                 prop.key "bubble"
@@ -54,18 +74,21 @@ module ThinkingBubble =
             ]
             @ waiting
             @ [
-                prop.children [
-                    Html.span [
-                        prop.key "who"
-                        prop.className "bubble-who"
-                        prop.text (Bubble.toLabel state)
+                prop.children (
+                    [
+                        Html.span [
+                            prop.key "who"
+                            prop.className "bubble-who"
+                            prop.text (Bubble.toLabel state)
+                        ]
+                        Html.span [
+                            prop.key "said"
+                            prop.className "bubble-said"
+                            prop.text (Bubble.toDisplay state)
+                        ]
                     ]
-                    Html.span [
-                        prop.key "said"
-                        prop.className "bubble-said"
-                        prop.text (Bubble.toDisplay state)
-                    ]
-                ]
+                    @ more
+                )
             ]
         )
 

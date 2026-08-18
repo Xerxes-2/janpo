@@ -728,10 +728,13 @@ module TableBoard =
 
             // Agent 层那一行只属于 Live（票 71）：回放里没有在飞的问话，
             // 而那一局的选手是当时坐那一桌的人。后一行（token 账单）两种来源共用。
+            //
+            // **视角那道闸门从这里传进去**（票 81）：与气泡读的是同一个 `TableState.reveals`，
+            // 视图这一层不再写第二份判据。
             let agent =
                 TableState.live model
                 |> Option.toList
-                |> List.map (fun live -> AgentLine.agentLine live table)
+                |> List.map (fun live -> AgentLine.agentLine (TableState.reveals model) live table)
 
             Html.div [
                 prop.testId "table-board"

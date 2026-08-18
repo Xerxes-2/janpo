@@ -437,7 +437,9 @@ _Avoid_: cost、花费、计费
 _Avoid_: 脱敏、加密、掩码；尤其别与**掩蔽**（MaskedEventStream）混为一谈——那条藏的是他家的牌，这条抹的是自己的密钥
 
 **Thinking Bubble（思考气泡）**：
-展示某个 DecisionRecord 的 thinking 的 UI 部件。有真人参与时终局前隐藏。不要用它指代数据本身。
+展示某个 DecisionRecord 的 UI 部件：**气泡里只放那一手的一句话理由**（reason 优先，
+只有 thinking 没有 reason 时取它的头一段并以三点号收尾），**thinking 全文在点开后的那块面板里**。
+有真人参与时终局前隐藏。不要用它指代数据本身。
 
 **Replay（回放）**：
 对 Paifu 事件流的前缀做 fold 得到 GameState。回放不是另一套代码路径，就是引擎本身。
