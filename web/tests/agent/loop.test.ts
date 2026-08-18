@@ -8,8 +8,9 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { AskResult } from "../../src/agent/ask.ts";
+import type { Ask, AskResult } from "../../src/agent/ask.ts";
 import { decideWith } from "../../src/agent/loop.ts";
+import { WHAT_IF_LIMIT } from "../../src/agent/what-if.ts";
 import {
   aborted,
   assistedAnswer,
@@ -28,6 +29,8 @@ import {
   seat,
   serverError,
   textOnly,
+  toolSearchSeat,
+  whatIfCall,
 } from "./fixtures.ts";
 
 test("合法输出：模型选的 id 原样回去，只问一次", async () => {
@@ -249,6 +252,143 @@ test("自定义端点：baseUrl 没填就不发请求，说的是端点不是模
   assert.equal(response.attempts, 0);
   assert.match(response.failure ?? "", /没有填 baseUrl/);
   assert.doesNotMatch(response.failure ?? "", /API key/, "这不是 key 的错");
+});
+
+// ---- ToolSearch 档：问 → 拿到答案 → 出牌（票 94） ----
+
+/** 这一手哪几条是打牌（工具的 enum 就是它们）。 */
+const discards = (decision: typeof dahaiPackage) =>
+  decision.actions
+    .filter((option) => (option.action as { type?: string }).type === "dahai")
+    .map((option) => String(option.id));
+
+/**
+ * 一个**看 `tools` 行事**的假模型：只要还给得到 what-if 就接着查，不给了就出牌。
+ *
+ * 它演的正是 constrained sampling 下的真模型：**工具不在 `tools` 里就调不出来**。
+ * “它就是不听话”那一种异常端点另有用例（下面那条「问满了还硬调」）。
+ */
+function insatiable(answer: AskResult): {
+  ask: Ask;
+  offered: string[][];
+  prompts: string[];
+} {
+  const offered: string[][] = [];
+  const prompts: string[] = [];
+
+  const ask: Ask = async (asked) => {
+    offered.push(asked.whatIfIds);
+    prompts.push(asked.prompt);
+    if (asked.whatIfIds.length === 0) return answer;
+    return whatIfCall(Number(asked.whatIfIds[0]));
+  };
+
+  return { ask, offered, prompts };
+}
+
+test("整条链路：发起工具调用 → 拿到答案 → 出牌", async () => {
+  const { ask, prompts, offered } = replay(whatIfCall(0), whatIfCall(3), legal);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: toolSearchSeat }));
+
+  // 三次请求：两次查 + 一次出牌。**查不吃重试额度**，因此 attempts 仍是 1。
+  assert.equal(prompts.length, 3);
+  assert.equal(response.attempts, 1);
+  assert.equal(response.action_id, 2);
+  assert.equal(response.failure, null);
+
+  // 第一问的那一份里一行查询都没有；之后每一份多一条。
+  assert.equal(prompts[0].includes("你查过"), false);
+  assert.match(prompts[1], /^你查过 1 次，还可以再查 3 次：$/m);
+  assert.match(prompts[2], /^你查过 2 次，还可以再查 2 次：$/m);
+
+  // **这一档的可观测性就是它**：牌谱存的那份尾部里看得见查了什么、查了几次。
+  assert.match(response.prompt_tail, /^你查过 2 次，还可以再查 2 次：$/m);
+  assert.match(response.prompt_tail, /^- id=0（打 2m）：打完 3 向听/m);
+  assert.match(response.prompt_tail, /^- id=3（打 3p）：打完 4 向听/m);
+
+  // 工具定义的形状里也看得见这一场摆了哪几个工具。
+  assert.match(response.tools, /"what_if"/);
+  // 前两轮真的把工具给了它，而 enum 里只有打牌那几条。
+  assert.deepEqual(offered[0], discards(dahaiPackage));
+  assert.deepEqual(offered[2], discards(dahaiPackage));
+});
+
+test("查的那几轮的账单也算进这一手：否则那一档的账看着与裸奔档一模一样", async () => {
+  const { ask } = replay(whatIfCall(0), whatIfCall(3), legal);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: toolSearchSeat }));
+
+  const once = legal.usage;
+  assert.notEqual(once, null);
+  assert.equal(response.usage?.input, (once?.input ?? 0) * 3);
+  assert.equal(response.usage?.output, (once?.output ?? 0) * 3);
+  assert.equal(response.usage?.cache_read, (once?.cacheRead ?? 0) * 3);
+  // 延迟同理：三个来回的墓钟全在里面（多轮往返的代价就是这个数）。
+  assert.equal(response.latency_ms, legal.latencyMs * 3);
+});
+
+test("零查询零重试的那一手，账单与从前逐字相同", async () => {
+  const { ask } = replay(legal);
+  const response = await decideWith(ask, request(dahaiPackage));
+
+  assert.deepEqual(response.usage, {
+    input: legal.usage?.input,
+    output: legal.usage?.output,
+    cache_read: legal.usage?.cacheRead ?? 0,
+    cache_write: legal.usage?.cacheWrite ?? 0,
+  });
+});
+
+test("到上限就停，而且这一手照常打完（不卡死）", async () => {
+  // 假模型有多少次查多少次。上限不是靠求它自觉：问满之后 `tools` 里就没有它了。
+  const { ask, offered, prompts } = insatiable(legal);
+  const response = await decideWith(ask, request(dahaiPackage, { seat: toolSearchSeat }));
+
+  assert.equal(response.action_id, 2, "这一手照常打完了");
+  assert.equal(response.failure, null);
+  assert.equal(response.attempts, 1, "四次查一次一次也没吃掉重试额度");
+  assert.equal(prompts.length, WHAT_IF_LIMIT + 1, "最坐四次查 + 一次出牌");
+  assert.deepEqual(
+    offered.map((ids) => ids.length > 0),
+    [true, true, true, true, false],
+    "前四轮给工具，第五轮不给",
+  );
+  assert.match(response.prompt_tail, /^你查过 4 次，还可以再查 0 次：$/m);
+});
+
+test("问满了还硬调：算「调了别的工具」去重问，而不是默默多给它一次额度", async () => {
+  // 端点不听 schema 时的那一种：每一轮都拿出 `what_if`。
+  // 开头四轮是真查（工具给了），之后三轮是首问 + 两次重试——总共 7 次，**有界**。
+  const { ask, prompts } = replay(whatIfCall(0));
+  const response = await decideWith(ask, request(dahaiPackage, { seat: toolSearchSeat }));
+
+  assert.equal(prompts.length, WHAT_IF_LIMIT + 3);
+  assert.equal(response.attempts, 3);
+  assert.equal(response.action_id, null);
+  assert.match(response.failure ?? "", /模型调了别的工具：what_if/);
+});
+
+test("Bare 与 Assisted 档一轮也不给这个工具：档位的自变量只许有一个", async () => {
+  for (const config of [seat, assistedSeat]) {
+    const { ask, offered, prompts } = replay(legal);
+    const response = await decideWith(ask, request(dahaiPackage, { seat: config }));
+
+    assert.equal(response.action_id, 2);
+    assert.deepEqual(offered, [[]], `${config.tier} 档不该拿到 what-if`);
+    assert.equal(prompts[0].includes("what_if"), false, `${config.tier} 档的 prompt 不该提到它`);
+    assert.equal(response.tools.includes("what_if"), false);
+  }
+});
+
+test("响应那一手没牌可打：工具一轮都不给（空 enum 等于邀它烧一次额度）", async () => {
+  const { ask, offered } = replay(legal);
+  await decideWith(ask, request(responsePackage, { seat: toolSearchSeat }));
+
+  assert.deepEqual(discards(responsePackage), []);
+  assert.ok(offered.length > 0);
+  assert.ok(
+    offered.every((ids) => ids.length === 0),
+    "这一手没牌可打，哪一轮都不该把工具摆出去",
+  );
 });
 
 test("合法动作集是空的（不该发生）也不抛", async () => {

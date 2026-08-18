@@ -67,7 +67,7 @@ type AgentAnswer = {
     Failure: string option
     /// 一共问了几次（首问 + 重试）。
     Attempts: int
-    /// 端到端毫秒，含重试。
+    /// 端到端毫秒，含重试与 what-if 查询那几轮（票 94）。
     LatencyMs: int
     /// 最后一次问出去的 prompt 的**尾部**（票 31）。前缀不在里面：它是事件流的派生物。
     PromptTail: string
@@ -79,8 +79,12 @@ type AgentAnswer = {
     /// 渲染版本号（`模板 id@模板哈希.渲染器摘要`，票 31 + 43）。**算出来的，不是手填的**；
     /// 它是决策记录与牌谱里那份 preamble 之间的键。
     RenderVersion: string
-    /// 工具定义的**形状**（`choose_action` 的 schema，动作 id 的 enum 留空）。**F# 不解释它**：
-    /// 那是 Agent 层那侧的形状，这边只负责原样搬进牌谱（ADR-0005：跨界只传字符串）。
+    /// 这一席把哪几个工具摆到了模型面前，及各自的**形状**（schema，动作 id 的 enum 留空）。
+    ///
+    /// Bare / Assisted 两档只有 `choose_action`；**ToolSearch 档多一份 `what_if`**（票 94）
+    /// ——那一格因此同时是「这一场到底给了它什么能力」的存证。
+    /// **F# 不解释它**：那是 Agent 层那侧的形状，这边只负责原样搬进牌谱
+    /// （ADR-0005：跨界只传字符串）。
     Tools: string
     /// 这一手真发出去的那份 enum：合法动作的 id 集。
     ActionIds: int list

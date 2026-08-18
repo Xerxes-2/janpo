@@ -30,7 +30,8 @@
     "verify:redaction": "node scripts/verify-redaction.mjs",
     "verify:seats": "node scripts/verify-seats.mjs",
     "verify:setup": "node scripts/verify-setup.mjs",
-    "verify:share": "node scripts/verify-share.mjs"
+    "verify:share": "node scripts/verify-share.mjs",
+    "verify:toolsearch": "node scripts/verify-toolsearch.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

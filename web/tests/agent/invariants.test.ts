@@ -17,6 +17,7 @@ import { historyLines } from "../../src/agent/history.ts";
 import { renderPrompt } from "../../src/agent/prompt.ts";
 import { DEFAULT_TEMPLATE, type PromptTemplate, readTemplate } from "../../src/agent/template.ts";
 import type { DecisionPackage, ScaffoldTier } from "../../src/agent/types.ts";
+import { WHAT_IF_LIMIT } from "../../src/agent/what-if.ts";
 import { DEFAULT_WORDING, wordsFor } from "../../src/agent/wording.ts";
 import {
   ankanPackage,
@@ -35,6 +36,7 @@ import {
   promptViolations,
   RULES,
 } from "./invariants.ts";
+import { askedFor } from "./scaffold-crosscheck.ts";
 
 const TIERS: ScaffoldTier[] = ["bare", "assisted"];
 
@@ -50,7 +52,13 @@ const PACKAGES: { name: string; decision: DecisionPackage }[] = [
   ...sequencePackages.map((decision, hand) => ({ name: `decision-sequence[${hand}]`, decision })),
 ];
 
-/** 固件语料：每一份包 × 两档。**档位只动尾部，而尾部也是话**，两档都得验。 */
+/**
+ * 固件语料：每一份包 × 三档。**档位只动尾部，而尾部也是话**，三档都得验。
+ *
+ * ToolSearch 那一档得**真查过几次**才有东西可验（一次都没查时它的尾部与 Bare 逐字节相同），
+ * 因此这里合成几条确定性的查询（`askedFor`）——没它的话第十三条那个「你查过 N 次」
+ * 方向在固件上一次也执行不到（判据 3）。
+ */
 const CORPUS = [
   ...PACKAGES.flatMap(({ name, decision }) =>
     TIERS.map((tier) => ({
@@ -58,6 +66,16 @@ const CORPUS = [
       prompt: renderPrompt(decision, tier, null),
     })),
   ),
+  ...PACKAGES.map(({ name, decision }) => ({
+    where: `${name}・tool_search 档・查过几条`,
+    prompt: renderPrompt(
+      decision,
+      "tool_search",
+      null,
+      DEFAULT_TEMPLATE,
+      askedFor(decision, WHAT_IF_LIMIT),
+    ),
+  })),
   // 重试那一段接在最尾，它排在【可选动作】之后——解析器得知道动作那一节到哪里为止。
   {
     where: "decision-dahai・assisted 档・带重试原因",
@@ -66,7 +84,9 @@ const CORPUS = [
 ];
 
 test("固件上一句在日麻规则下不成立的话都没有", () => {
-  const violations = CORPUS.flatMap((each) => promptViolations(each.prompt, { where: each.where }));
+  const violations = CORPUS.flatMap((each) =>
+    promptViolations(each.prompt, { where: each.where, whatIfLimit: WHAT_IF_LIMIT }),
+  );
 
   assert.deepEqual(violations.map(formatViolation), [], "这几句话在日麻里不成立");
 });
@@ -77,7 +97,9 @@ test("防空转：**每一条**不变量在固件语料上都真的执行过", (
   // 与一条从不失败的断言危害相同。扫真实对局那一趟（进 CI）同样守着这一条。
   const judged: Record<string, number> = {};
   for (const each of CORPUS) {
-    for (const [rule, count] of Object.entries(promptAudit(each.prompt, each).judged)) {
+    for (const [rule, count] of Object.entries(
+      promptAudit(each.prompt, { ...each, whatIfLimit: WHAT_IF_LIMIT }).judged,
+    )) {
       judged[rule] = (judged[rule] ?? 0) + count;
     }
   }
@@ -102,6 +124,10 @@ test("防空转：固件语料里真的有副露、有宝牌指示牌、有可�
 
   assert.equal(total.seats, CORPUS.length * 4, "每份 prompt 都该解析出四家");
   assert.ok(
+    total.whatIfAnswers > 0,
+    "ToolSearch 那几份里得真有查询答案，否则第十三条那个方向等于没验",
+  );
+  assert.ok(
     total.chi > 0 && total.pon > 0,
     `语料里得有吃有碰，实为吃 ${total.chi}、碰 ${total.pon}`,
   );
@@ -123,7 +149,10 @@ for (const proof of PROOFS) {
 
     assert.ok(hit !== undefined, `固件语料里注不进这种错：${proof.note}`);
 
-    const caught = promptViolations(hit.broken as string, { where: hit.where });
+    const caught = promptViolations(hit.broken as string, {
+      where: hit.where,
+      whatIfLimit: WHAT_IF_LIMIT,
+    });
     const mine = caught.filter((violation) => violation.rule === proof.rule);
 
     assert.ok(
@@ -144,7 +173,10 @@ test("票 40 那句原话逐字节喂进去：闸门当场点名（这一票的�
   assert.ok(good.includes("吃 2p（来自他的上家，亮出 3p 4p）"), "修后那句话该在这一手里");
 
   const broken = good.replace("吃 2p（来自他的上家，亮出 3p 4p）", "吃 2p（来自对家，亮出 3p 4p）");
-  const caught = promptViolations(broken, { where: "票 40 修前的 decision-sequence[11]" });
+  const caught = promptViolations(broken, {
+    where: "票 40 修前的 decision-sequence[11]",
+    whatIfLimit: WHAT_IF_LIMIT,
+  });
   const rules = caught.map((violation) => violation.rule);
 
   assert.ok(rules.includes(RULES.chiFromKamicha), "吃只吃得了上家：这句「来自对家」在日麻里不成立");
@@ -167,14 +199,22 @@ test("换一份模板照样验得动：判据从模板现取，不写死默认�
 
   const prompt = renderPrompt(sequencePackages[11], "bare", null, styled);
   assert.deepEqual(
-    promptViolations(prompt, { where: "styled 模板", template: styled }).map(formatViolation),
+    promptViolations(prompt, {
+      where: "styled 模板",
+      template: styled,
+      whatIfLimit: WHAT_IF_LIMIT,
+    }).map(formatViolation),
     [],
   );
   assert.ok(promptCoverage(prompt, styled).chi > 0, "换了措辞之后还得数得出那几组吃");
 
   // 同一句错在新措辞下照样抓得住（「上手」是这份模板里的上家）。
   const broken = prompt.replace("吃！ 2p（来自他的上手，", "吃！ 2p（来自他的对家，");
-  const caught = promptViolations(broken, { where: "styled 模板", template: styled });
+  const caught = promptViolations(broken, {
+    where: "styled 模板",
+    template: styled,
+    whatIfLimit: WHAT_IF_LIMIT,
+  });
 
   assert.deepEqual([...new Set(caught.map((violation) => violation.rule))], [RULES.chiFromKamicha]);
 });
@@ -229,5 +269,5 @@ test("默认模板的抬头与措辞没被这一票改动", () => {
   assert.equal(DEFAULT_TEMPLATE.labels.hand, "【你的手牌】");
   assert.equal(DEFAULT_TEMPLATE.labels.others, "【其他三家】");
   assert.deepEqual(DEFAULT_TEMPLATE.wording.relative, { "1": "下家", "2": "对家", "3": "上家" });
-  assert.equal(Object.keys(RULES).length, 12, "十二条不变量，改了要连同报告一起改");
+  assert.equal(Object.keys(RULES).length, 13, "十三条不变量，改了要连同报告一起改");
 });

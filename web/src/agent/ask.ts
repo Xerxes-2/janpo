@@ -24,6 +24,14 @@ export interface AskRequest {
   prompt: string;
   /** `choose_action` 的 enum：这一手的合法动作 id（字符串形态，StringEnum 要的）。 */
   actionIds: string[];
+  /**
+   * `what_if` 的 enum：这一轮还查得的那几条**打牌**动作 id（票 94）。
+   *
+   * **空表 = 这一轮不把 `what_if` 放进 `tools`**，三种情形都落在这一条上：
+   * 不是 ToolSearch 档、这一手问满了上限、以及这一手压根没有牌可打（响应阶段）。
+   * 上限因此是**模型调不出来**，不是 prompt 里求它自觉。
+   */
+  whatIfIds: string[];
 }
 
 /** 模型这一次的回答。**它永不抛**：出错也是一条带 `stopReason` 的记录。 */

@@ -16,8 +16,8 @@
 //
 // 选项：--seed N（必给：报告要写清这一场从哪颗种子开的）、
 //       --thinkers 0（开思考预算的那几席，默认只有座位 0；`none` = 四席全不开思考）、
-//       --tier bare|assisted（四席的脚手架档位，默认 bare；`assisted` 会在 prompt 尾部
-//         多一节算好的向听与逐张试打）、
+//       --tier bare|assisted|tool_search（四席的脚手架档位，默认 bare；`assisted` 会在 prompt 尾部
+//         多一节算好的向听与逐张试打；`tool_search` 不推那一节，而是多给它一个 what-if 工具，票 94）、
 //       --thinking low|medium（思考档的预算，默认 low）、
 //       --model X（默认 deepseek-v4-flash）、--keep <路径>（导出的牌谱存哪儿）、
 //       --turns N（手数上限，默认 4000 = 打到终局为止）、
@@ -188,6 +188,39 @@ export async function playDemoGame(lane, options) {
     }
 
     // 延迟分两档报：开思考的席与没开的席（气泡的「等待感」就是这两组数）。
+    // ToolSearch 档才有的那一组数（票 94）：**模型实际问了几次**。
+    // 读的是牌谱存下来的尾部（可观测性就是它），不是另记一份计数器。
+    // **分母只算「真给了工具那几手」**：响应那几手没牌可打，工具一轮都不给，
+    // 把它们算进去会把「它问得多勤」读得偏低（判据 13：说清条件）。
+    if (tier === "tool_search") {
+      const asked = decisions.map((record) => ({
+        seat: record.seat,
+        // 有牌可打才给工具（`【可选动作】` 里有一条 `打 X`）。
+        offered: /^- id=\d+：打 /m.test(record.prompt_tail ?? ""),
+        times: Number(/^你查过 (\d+) 次/m.exec(record.prompt_tail ?? "")?.[1] ?? "0"),
+      }));
+      const offered = asked.filter((each) => each.offered);
+      const times = quantiles(offered.map((each) => each.times));
+      const requests = decisions.length + asked.reduce((sum, each) => sum + each.times, 0);
+
+      console.log(
+        `what-if：给过工具的 ${offered.length} / ${decisions.length} 手，` +
+          `其中真去问的 ${offered.filter((each) => each.times > 0).length} 手；` +
+          `每手问几次：中位 ${times.median}、p95 ${times.p95}、` +
+          `最多 ${offered.reduce((most, each) => Math.max(most, each.times), 0)}；` +
+          `总请求 ${requests} 次（= ${decisions.length} 手 + ${requests - decisions.length} 次查询）`,
+      );
+      for (const seat of [0, 1, 2, 3]) {
+        const mine = offered.filter((each) => each.seat === seat);
+        if (mine.length === 0) continue;
+        const each = quantiles(mine.map((one) => one.times));
+        console.log(
+          `  座位 ${seat}：给过工具 ${mine.length} 手、真问的 ${mine.filter((one) => one.times > 0).length} 手、` +
+            `中位 ${each.median}、p95 ${each.p95}`,
+        );
+      }
+    }
+
     const latencies = (mine) =>
       decisions
         .filter((record) => thinkers.includes(record.seat) === mine)

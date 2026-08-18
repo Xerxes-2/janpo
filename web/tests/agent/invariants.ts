@@ -51,6 +51,7 @@
  * | 可选动作的牌来自手牌 | 一条可选动作 |
  * | 同一牌种最多 4 张 | 一份 prompt 里数到的一个牌种 |
  * | 记法只有 mjai 一套 | 一个场风 / 一个自风 / 一条可选动作，加上每份 prompt 各一次全文扫描 |
+ * | 算好的数那几行与可选动作对得上 | 那一节里的一行（试打 / 危险度），加上【你查过】那一行的两次核对 |
  *
  * ## 它不管什么
  *
@@ -82,6 +83,7 @@ export const RULES = {
   actionTilesFromHand: "可选动作的牌来自手牌",
   fourOfAKind: "同一牌种最多 4 张",
   mjaiOnly: "记法只有 mjai 一套",
+  scaffoldEchoesActions: "算好的数那几行与可选动作对得上",
 } as const;
 
 /** 一条不成立的话。三项缺一不可：**哪条不变量、哪一手、哪句话**。 */
@@ -185,6 +187,14 @@ export interface ParsedAction {
 interface Parsed {
   /** 【到目前为止你看到的】那一段，一条事件一行。 */
   history: string[];
+  /**
+   * 【引擎算好的数】那一节的那几行（票 94）。
+   *
+   * **三档共用这一个槽位**：Bare 档一行也没有（空表），Assisted 档是引擎推给它的那一整张表，
+   * ToolSearch 档是**它自己查过的那几条**。因此第十三条不必分档：两档的那几行本来就是
+   * 同一个函数渲的同一种行（票 94 的硬判据）。
+   */
+  scaffold: string[];
   dora: string[];
   boardLine: string;
   /** 场况那一节第一行（场风与局数）的原文。 */
@@ -265,6 +275,7 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
 
   const parsed: Parsed = {
     history: [],
+    scaffold: [],
     dora: [],
     boardLine: "",
     bakazeLine: "",
@@ -364,6 +375,16 @@ function parse(prompt: string, template: PromptTemplate): Parsed {
       parsed.actions.push({ id: Number(option[1]), label: option[2], line: lines[index] });
     }
     if (parsed.actions.length === 0) problems.push("可选动作那一节一条都没有");
+  }
+
+  // 【引擎算好的数】那一节：抬头之后到空行（或末尾）为止。
+  // **找不到不是错**：Bare 档、以及一次都没查的 ToolSearch 档本来就没有这一节。
+  const scaffoldAt = lines.indexOf(labels.scaffold);
+  if (scaffoldAt >= 0) {
+    const rest = lines.slice(scaffoldAt + 1);
+    const end = rest.indexOf("");
+    parsed.scaffold = end < 0 ? rest : rest.slice(0, end);
+    if (parsed.scaffold.length === 0) problems.push("算好的数那一节有抬头却一行都没有");
   }
 
   if (parsed.seats.length === 0) problems.push("一家都没解析出来");
@@ -986,6 +1007,85 @@ function checkMjaiOnly(check: Check): void {
   }
 }
 
+/**
+ * 十二、**算好的数那几行与可选动作对得上**（票 94）。
+ *
+ * 【引擎算好的数】那一节里每一行都点名一个 `id=N（L）`，而 N 与 L 该就是
+ * 【可选动作】里同一行说的那一条。这一条以前没人守：那一节从来没被解析回来过，
+ * 而它正是模型拿来选牌的那几个数——**把数挂到别的 id 上，比数本身算错更阴**：
+ * 每一行单看都通顺，模型按它选完却打了另一张牌。
+ *
+ * 三个方向：
+ *
+ * 1. **试打那几行**（`- id=N（L）：打完 …`）：N 得在可选动作里，且 L 与那一行逐字相同；
+ * 2. **危险度那几行**（`- 第R位 id=N（L）：…`）：同上；
+ * 3. **【你查过】那一行**（ToolSearch 档才有）：已查 + 还能查 = 上限，
+ *    且已查次数就是下面那几条答案的条数——**上限写给模型看的那句话不许与真上限对不上**。
+ *
+ * 第 1、2 两个方向在 **Assisted 档上同样成立**（两档那几行本来就是同一个函数渲的），
+ * 因此它不是一条只为第三档存在的断言，也不会因为语料里没有 ToolSearch 而空转。
+ */
+function checkScaffoldEchoes(check: Check, limit: number): void {
+  const parsed = check.parsed;
+  const byId = new Map(parsed.actions.map((option) => [option.id, option]));
+
+  /** 那一行点名的 `id=N（L）` 与可选动作里同一条对不对得上。 */
+  const echoes = (line: string, id: number, label: string) => {
+    judge(check, RULES.scaffoldEchoesActions);
+    const option = byId.get(id);
+    if (option === undefined) {
+      report(check, RULES.scaffoldEchoesActions, line, `【可选动作】里没有 id=${id} 这一条`);
+      return;
+    }
+    if (option.label !== label) {
+      report(
+        check,
+        RULES.scaffoldEchoesActions,
+        line,
+        `这一行说 id=${id} 是「${label}」，【可选动作】里同一个 id 写的是「${option.label}」`,
+      );
+    }
+  };
+
+  let answered = 0;
+  for (const line of parsed.scaffold) {
+    const trial = /^- id=(\d+)（(.+?)）：打完 /.exec(line);
+    if (trial !== null) {
+      answered += 1;
+      echoes(line, Number(trial[1]), trial[2]);
+      continue;
+    }
+
+    const danger = /^- 第\d+位 id=(\d+)（(.+?)）：/.exec(line);
+    if (danger !== null) echoes(line, Number(danger[1]), danger[2]);
+  }
+
+  const counted = /^你查过 (\d+) 次，还可以再查 (\d+) 次：$/.exec(parsed.scaffold[0] ?? "");
+  if (counted === null) return;
+
+  const [asked, left] = [Number(counted[1]), Number(counted[2])];
+
+  judge(check, RULES.scaffoldEchoesActions);
+  if (asked + left !== limit) {
+    report(
+      check,
+      RULES.scaffoldEchoesActions,
+      parsed.scaffold[0],
+      `已查 ${asked} + 还能查 ${left} ≠ 上限 ${limit}：写给模型看的那句话与真上限对不上`,
+    );
+  }
+
+  judge(check, RULES.scaffoldEchoesActions);
+  if (asked !== answered) {
+    report(
+      check,
+      RULES.scaffoldEchoesActions,
+      parsed.scaffold[0],
+      `说查过 ${asked} 次，下面却摆了 ${answered} 条答案`,
+    );
+  }
+}
+
 /** 报错要抄出那句原话：把命中的位置扩到整行。 */
 function lineAround(prompt: string, index: number): string {
   const start = prompt.lastIndexOf("\n", index) + 1;
@@ -1000,6 +1100,12 @@ export interface CheckOptions {
   where: string;
   /** 判据从模板取，不写死默认模板那几个字。 */
   template?: PromptTemplate;
+  /**
+   * what-if 一手最多问几次（票 94）。**只收一个数，不收那句话的写法**：
+   * 写法由这一层自己认（与手牌、牌河那几行同一个口径），从实现里 `import`
+   * 一句现成的话回来比，等于用同一份数据证它自己。
+   */
+  whatIfLimit: number;
 }
 
 /**
@@ -1038,6 +1144,7 @@ export function promptAudit(prompt: string, options: CheckOptions): Audit {
     checkActionTiles(check);
     checkFourOfAKind(check);
     checkMjaiOnly(check);
+    checkScaffoldEchoes(check, options.whatIfLimit);
   }
 
   return { violations: check.violations, judged: Object.fromEntries(check.judged) };
@@ -1072,6 +1179,12 @@ export function promptCoverage(prompt: string, template: PromptTemplate = DEFAUL
     seats: parsed.seats.length,
     actions: parsed.actions.length,
     historyLines: parsed.history.length,
+    // 算好的数那一节里的行数（票 94）：**为 0 就说明第十三条这一趟等于没验**。
+    scaffoldLines: parsed.scaffold.length,
+    // ToolSearch 档才有的那一行（`你查过 N 次…`）下面摆了几条答案。
+    whatIfAnswers: /^你查过 \d+ 次/.test(parsed.scaffold[0] ?? "")
+      ? parsed.scaffold.filter((line) => /^- id=\d+（.+?）：打完 /.test(line)).length
+      : 0,
     naki: naki.length,
     chi: kinds("chi"),
     pon: kinds("pon"),

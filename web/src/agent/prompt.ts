@@ -44,6 +44,7 @@ import { labelOf } from "./action-label.ts";
 import { historyLines } from "./history.ts";
 import { DEFAULT_TEMPLATE, type PromptTemplate, preambleOf } from "./template.ts";
 import type { DecisionPackage, MaskedSeat, Naki, RevealedSeat, ScaffoldTier } from "./types.ts";
+import { WHAT_IF_LIMIT, WHAT_IF_PREAMBLE, type WhatIf } from "./what-if.ts";
 import { type Words, wordsFor } from "./wording.ts";
 
 /**
@@ -289,6 +290,15 @@ function dangerLines(decision: DecisionPackage, view: ScaffoldView, words: Words
   ];
 }
 
+/** 试打那张表：动作 id → 它那一条。**两处共用**（Assisted 那一节与 ToolSearch 的查询答案）。 */
+function dahaiById(view: ScaffoldView): Map<number, DahaiView> {
+  const byId = new Map<number, DahaiView>();
+  for (const entry of view.dahai) {
+    for (const id of entry.action_ids) byId.set(id, entry);
+  }
+  return byId;
+}
+
 /**
  * Assisted 档多出来的那一节。措辞照 `CONTEXT.md`：**向听数 / 有效牌 / 进退向 / 退向（向听戻し）**，
  * 以及危险度那一批标签（**现物 / 筋 / 壁**，票 25）。
@@ -302,10 +312,7 @@ function scaffoldBlock(
   if (view === null) return null;
 
   // 按**可选动作那一节的顺序**排：两节的 id 对得上，模型不必自己去配。
-  const byId = new Map<number, DahaiView>();
-  for (const entry of view.dahai) {
-    for (const id of entry.action_ids) byId.set(id, entry);
-  }
+  const byId = dahaiById(view);
 
   const trials = decision.actions.flatMap((option) => {
     const entry = byId.get(option.id);
@@ -325,6 +332,73 @@ function scaffoldBlock(
     "逐张试打（进退向 0 为不变，+1 为退向（向听戻し）；有效牌括号里是那张牌的剩余枚数）：",
     ...trials,
     ...dangerLines(decision, view, words),
+  ].join("\n");
+}
+
+// ---- ToolSearch 档：它自己查过的那几条（票 94） ----
+
+/**
+ * 一次查询的答案：**与 Assisted 档同一个函数渲出来的同一行字节**。
+ *
+ * 试打那一行走 `trial`、危险度那一行走 `dangerLine`——就是 `scaffoldBlock` 用的那两个。
+ * **不为工具另算一遍**（票 94 的硬判据）：另算一遍就会长出第二份向听 / 有效牌 / 危险度的口径，
+ * 而两档对照实验的前提正是“数字同一个来源”。`tests/agent/what-if.test.ts` 逐条断言这件事。
+ *
+ * 答不上来时**说一句而不是静静地当作没有**（与 `readScaffold` / `labelOf` 同一个方针）。
+ * 三种因由合成同一条兼底的话，而它们在 `loop.ts` 那一侧的可达性各不相同（判据 4）：
+ * 这一包里没有这条 id、这一条不是打牌——**这两种今天谁也到不了**（工具的 enum 只摆打牌那几条，
+ * 且 `whatIfCall` 再校一道）；而**脚手架整份读不出来是到得了的**（手牌形态异常时
+ * `Scaffold.calculate` 给 None，而工具照样给了它）。写成一条而不是三条，是为了不立两条死分支。
+ */
+function whatIfLines(
+  decision: DecisionPackage,
+  view: ScaffoldView | null,
+  byId: Map<number, DahaiView>,
+  words: Words,
+  id: number,
+): string[] {
+  const unanswerable = (named: string) => `- id=${id}${named}：这一条查不出「打完之后」的数。`;
+
+  const option = decision.actions.find((each) => each.id === id);
+  if (option === undefined) return [unanswerable("")];
+
+  const label = labelOf(option, words);
+  const entry = view === null ? undefined : byId.get(id);
+  if (entry === undefined) return [unanswerable(`（${label}）`)];
+
+  const danger = entry.danger;
+  const lines = [trial(entry, label, id)];
+  if (danger !== undefined && danger !== null) lines.push(dangerLine(danger, label, id));
+  return lines;
+}
+
+/**
+ * ToolSearch 档尾部那一节：**它自己问过的那几条，及各自的答案**。
+ *
+ * **一次都没问就一行也不写**（`null`）：那时 ToolSearch 的尾部与 Bare 逐字节相同
+ * ——这一档加的是能力，不是又一批算好的数值（`CONTEXT.md` 的 `ScaffoldTier`）。
+ *
+ * 它占的是 Assisted 那一节的**同一个槽位**（`labels.scaffold`）：两档不会同时有它，
+ * 而那句抬头说的“引擎算出来的事实，不是建议”两边一样成立。**因此模板的槽位没有变多**
+ * （`CONTEXT.md` 的 `PromptTemplate` 写着八项抬头），多出来的只是段内那几行——那本来就归渲染器。
+ */
+function whatIfBlock(
+  decision: DecisionPackage,
+  template: PromptTemplate,
+  words: Words,
+  asked: readonly WhatIf[],
+): string | null {
+  if (asked.length === 0) return null;
+
+  const view = readScaffold(decision.scaffold);
+  const byId = view === null ? new Map<number, DahaiView>() : dahaiById(view);
+
+  return [
+    template.labels.scaffold,
+    // 还能问几次要写出来：上限是 `loop.ts` 执行的（问满就不给这个工具了），
+    // 而模型得先知道自己快用完了，否则工具突然消失在它看来就是一次莫名其妙的失败。
+    `你查过 ${asked.length} 次，还可以再查 ${Math.max(0, WHAT_IF_LIMIT - asked.length)} 次：`,
+    ...asked.flatMap((query) => whatIfLines(decision, view, byId, words, query.id)),
   ].join("\n");
 }
 
@@ -398,6 +472,43 @@ export interface PromptMessages {
 const JOIN = "\n\n";
 
 /**
+ * ①**system 消息的正文**，按档位（票 94）。
+ *
+ * Bare 与 Assisted 拿到的是 `preambleOf` 原样那一份（**两档逐字节相同，一个字都没变**）；
+ * ToolSearch 多一段工具说明，插在【怎么读这份 prompt】之后、三段结构说明之前。
+ *
+ * ## 为什么 ToolSearch 的前缀不得不与另两档分岔
+ *
+ * `CONTEXT.md` 写着「档位只动得了尾部：两档共用同一份前缀」——那一句写于只有两档时，
+ * 而两档的差别确实全在尾部。第三档的差别是**它多一个调得动的工具**，而那件事必须写给模型看：
+ * 不写它就不知道可以问，写给另两档则是告诉它们一个根本不存在的工具（那会把它们送进兑底）。
+ * 于是只剩两条路：放尾部（**每手全价**，而它一个字不随局面变），或者放前缀。
+ * 取后者，并把「分岔只有这一段」钉成断言：`tests/agent/what-if.test.ts` 里那一条把这一段
+ * 从 ToolSearch 的前缀里剪掉之后，**剩下的字节必须与 Assisted 的前缀逐字节相同**。
+ *
+ * ## 插在哪
+ *
+ * 锚点是**模板给的**那个抬头（`labels.history`）：第④段开头第一句就是它。
+ * 换了模板而那一句不在了，就**接在 system 那一段末尾**（宁可位置不如意，不可这一段消失：
+ * 消失了模型就不知道自己能问，而工具又真的在 `tools` 里）。两条路都有用例钉着。
+ */
+function preambleFor(template: PromptTemplate, tier: ScaffoldTier): string {
+  const base = preambleOf(template);
+  if (tier !== "tool_search") return base;
+
+  // **插进去的就是这一串，两条路共用**：剪掉它之后必须逐字节回到 `base`
+  // ——「前缀的分岔恰好是这一段」那条断言靠的就是它只有一串。
+  const insert = `${JOIN}${WHAT_IF_PREAMBLE}\n`;
+
+  const anchor = `\n${template.labels.history}`;
+  const at = base.indexOf(anchor);
+  if (at < 0) return `${base}${insert}`;
+
+  // `base.slice(at)` 就以那个换行开头，接上 `insert` 末尾那个就是一个空行。
+  return `${base.slice(0, at)}${insert}${base.slice(at)}`;
+}
+
+/**
  * 这一手的三段。`note` 是上一次没被采用的原因（重试时才有）。
  *
  * 档位只决定 `present` 里有没有那一节算好的数——**两档的差异只能是它**，
@@ -409,35 +520,44 @@ export function promptSections(
   tier: ScaffoldTier,
   note: string | null,
   template: PromptTemplate = DEFAULT_TEMPLATE,
+  asked: readonly WhatIf[] = [],
 ): PromptSections {
   const words = wordsFor(
     template.wording,
     decision.observation.self.seat,
     decision.observation.others,
   );
-  const scaffold = (SCAFFOLDS[tier] ?? SCAFFOLDS.bare)(decision, template, words);
+  const scaffold = (SCAFFOLDS[tier] ?? SCAFFOLDS.bare)(decision, template, words, asked);
 
   return {
-    preamble: preambleOf(template),
+    preamble: preambleFor(template, tier),
     history: historySection(decision, words, template),
     present: presentSection(decision, words, template, scaffold, note),
   };
 }
 
 /**
- * 档位 → 那一节算好的数。**分档的接缝在这里**：两档读同一份决策包，
- * 差别只在写不写这一节。
+ * 档位 → 尾部多出来的那一节。**分档的接缝在这里**：三档读同一份决策包，
+ * 差别只在这一节写的是什么。
  *
- * `tool_search` 是 M3 的事（在信息辅助之上追加局面模拟查询工具），在那之前照 Bare 渲染；
- * 配置面板里它是灰的，所以这条分支正常走不到。
+ * - `bare`：一行不写。
+ * - `assisted`：引擎算好的那一整张表（向听 / 逐张试打 / 有效牌 / 危险度排序）。
+ * - `tool_search`（票 94）：**它自己查过的那几条**。一次都没查就还是 `null`
+ *   ——那时它的正文与 Bare 逐字节相同，因为这一档加的是能力而不是又一批算好的数值
+ *   （`CONTEXT.md` 的 `ScaffoldTier`）。
  */
 const SCAFFOLDS: Record<
   ScaffoldTier,
-  (decision: DecisionPackage, template: PromptTemplate, words: Words) => string | null
+  (
+    decision: DecisionPackage,
+    template: PromptTemplate,
+    words: Words,
+    asked: readonly WhatIf[],
+  ) => string | null
 > = {
   bare: () => null,
   assisted: scaffoldBlock,
-  tool_search: () => null,
+  tool_search: whatIfBlock,
 };
 
 /**
@@ -446,6 +566,10 @@ const SCAFFOLDS: Record<
  * 同一局里第 n 手的它必须是第 n+1 手整份 prompt 的**字节前缀**——这就是 provider
  * 的前缀缓存能吃到的那一段，也是 `prefix.test.ts` 里那条属性测试断言的东西。
  * ①进了 system 消息之后这条仍然成立：请求是「system 在前、user 在后」序列化的。
+ *
+ * **这一手查过的那几条一条也不在里面**（票 94）：它们是这一手、这一轮才有的东西，
+ * 与重试那句话同一个性质——写进前缀等于每问一次就把这一局攒下的缓存废一次。
+ * ToolSearch 的前缀与 Assisted 只差那一段工具说明（`preambleFor` 那段注释）。
  */
 export function cacheablePrefix(
   decision: DecisionPackage,
@@ -467,8 +591,9 @@ export function promptMessages(
   tier: ScaffoldTier,
   note: string | null,
   template: PromptTemplate = DEFAULT_TEMPLATE,
+  asked: readonly WhatIf[] = [],
 ): PromptMessages {
-  return messagesOf(promptSections(decision, tier, note, template));
+  return messagesOf(promptSections(decision, tier, note, template, asked));
 }
 
 /**
@@ -493,8 +618,9 @@ export function promptTail(
   tier: ScaffoldTier,
   note: string | null,
   template: PromptTemplate = DEFAULT_TEMPLATE,
+  asked: readonly WhatIf[] = [],
 ): string {
-  return promptSections(decision, tier, note, template).present;
+  return promptSections(decision, tier, note, template, asked).present;
 }
 
 /**
@@ -533,7 +659,8 @@ export function renderPrompt(
   tier: ScaffoldTier,
   note: string | null,
   template: PromptTemplate = DEFAULT_TEMPLATE,
+  asked: readonly WhatIf[] = [],
 ): string {
-  const messages = promptMessages(decision, tier, note, template);
+  const messages = promptMessages(decision, tier, note, template, asked);
   return messages.system + JOIN + messages.user;
 }

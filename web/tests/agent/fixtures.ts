@@ -116,6 +116,24 @@ export const seat: SeatConfig = {
 /** 同一个座位，**只把脚手架档位拨到 Assisted**（票 24：档位是座位级配置）。 */
 export const assistedSeat: SeatConfig = { ...seat, tier: "assisted" };
 
+/** 同一个座位，拨到 ToolSearch（票 94）。 */
+export const toolSearchSeat: SeatConfig = { ...seat, tier: "tool_search" };
+
+/**
+ * 一条**调 `what_if` 的**回答（票 94）。
+ *
+ * 它不是手编的一堆：拿的就是录制下来那一条真回答（`ask-legal`，真模型真的调了一次工具），
+ * **只换工具名与实参**——“一条 tool call 长什么样”那一半仍然是录制产物证的。
+ * **真的拿 `what_if` 过一遍 pi-ai 适配器**那一条在浏览器那道闸门里
+ * （`scripts/verify-toolsearch.mjs`：本机假端点发一条真的 SSE tool call）。
+ */
+export function whatIfCall(actionId: number): AskResult {
+  return {
+    ...legal,
+    toolCall: { name: "what_if", arguments: { action_id: String(actionId) } },
+  };
+}
+
 /** 接本地 Ollama 的座位（票 30）：**provider 是 `custom`、没有 key、有 baseUrl**。 */
 export const localSeat: SeatConfig = {
   ...seat,
@@ -143,18 +161,22 @@ export function replay(...results: AskResult[]): {
   ask: Ask;
   prompts: string[];
   messages: { system: string; user: string }[];
+  /** 每一轮真发出去的 what-if enum（票 94）：**空表就是那一轮没给这个工具**。 */
+  offered: string[][];
 } {
   const prompts: string[] = [];
   const messages: { system: string; user: string }[] = [];
+  const offered: string[][] = [];
   let index = 0;
 
   const ask: Ask = async (asked) => {
     prompts.push(`${asked.system}\n\n${asked.prompt}`);
     messages.push({ system: asked.system, user: asked.prompt });
+    offered.push(asked.whatIfIds);
     const result = results[Math.min(index, results.length - 1)];
     index += 1;
     return result;
   };
 
-  return { ask, prompts, messages };
+  return { ask, prompts, messages, offered };
 }

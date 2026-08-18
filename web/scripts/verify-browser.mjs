@@ -1,6 +1,6 @@
-// 浏览器里那**十五趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十六趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十五趟各开自己的 page / context。
+// 十六趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
 //   2 首页就是一局回放：牌桌在动、没有配桌控件、上帝视角、时间轴拖得动（票 71/75）
@@ -17,9 +17,10 @@
 //  13 思考气泡：气泡里的字来自那一手的记录、bot 席没有、挡不住牌、点得开、兜底那一态（票 76）
 //  14 牌谱从外面进来的两条路：分享链接真往返（剪贴板）、导入 JSON（气泡有话）、坏输入三连（票 78）
 //  15 真人坐下把一局打完：视角按钮不在 DOM 里、整页 HTML 不泄他家手牌、?dev=1 不给开（票 87）
+//  16 ToolSearch 档：真的一条 `what_if` tool call 走完来回、到上限就停、账单是几倍（票 94）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
-// 其余十二趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// 其余十三趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
 // 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
 // 理由写在它自己的文件头上；第 14 趟两个地址都开（分享链接从 `?table=1` 复制、
 // 导入入口在 `/` 上），理由同样在它自己的文件头上。
@@ -43,6 +44,7 @@ import { verifyRedaction } from "./verify-redaction.mjs";
 import { verifySeats } from "./verify-seats.mjs";
 import { verifySetup } from "./verify-setup.mjs";
 import { verifyShare } from "./verify-share.mjs";
+import { verifyToolSearch } from "./verify-toolsearch.mjs";
 import { verifyTracer } from "./verify-tracer.mjs";
 
 /**
@@ -83,7 +85,7 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十五趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十六趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -219,6 +221,16 @@ const gates = [
     how: "node scripts/verify-human.mjs",
     run: (lane) => verifyHuman(lane),
   },
+  // 票 94：**ToolSearch 档整条链路**。两个本机假端点各演一种模型——一个先查两次再出牌、
+  // 一个「能查就查」；本机第三席是 bare 档的对照，座位 3 是 bot。一局走 24 手之后读导出的牌谱：
+  // 查询与答案真的落在那一手的尾部里（**这一档的可观测性就是它**）、到上限就停而这一手照常打完
+  // （0 兜底）、账单是 (查询次数 + 1) 倍、bare 那一席一行查询都没有、preamble 里那一段只有
+  // ToolSearch 席才有。它是这一票唯一一条**真过 pi-ai 适配器**的 `what_if` tool call。
+  {
+    name: "ToolSearch 档：真的一条 what_if tool call 走完来回、到上限就停、账单是几倍",
+    how: "node scripts/verify-toolsearch.mjs",
+    run: (lane) => verifyToolSearch(lane),
+  },
 ];
 
 const lane = await openLane();
@@ -238,7 +250,7 @@ try {
 }
 
 console.log("");
-console.log("十五趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十六趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

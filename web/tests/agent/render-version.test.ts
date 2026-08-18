@@ -57,6 +57,7 @@ test("摘要覆盖的就是渲染器那几个文件：从 prompt.ts 沿值导入
     "src/agent/history.ts",
     "src/agent/prompt.ts",
     "src/agent/template.ts",
+    "src/agent/what-if.ts",
     "src/agent/wording.ts",
   ]);
   assert.ok(files.includes(RENDERER_ROOT), "根就在里面");

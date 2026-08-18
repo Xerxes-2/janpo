@@ -7,9 +7,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { labelOf } from "../../src/agent/action-label.ts";
-import { promptSections, renderPrompt } from "../../src/agent/prompt.ts";
+import { promptSections, promptTail, renderPrompt } from "../../src/agent/prompt.ts";
 import { DEFAULT_TEMPLATE, preambleOf } from "../../src/agent/template.ts";
 import type { DecisionPackage } from "../../src/agent/types.ts";
+import { WHAT_IF_LIMIT } from "../../src/agent/what-if.ts";
 import { DEFAULT_WORDING, wordsFor } from "../../src/agent/wording.ts";
 import {
   ankanPackage,
@@ -130,8 +131,18 @@ test("重试时把上一次错在哪接在末尾", () => {
   assert.match(retry, /action_id=99/);
 });
 
-test("ToolSearch 暂时照 Bare 渲染：它的工具是 M3 的事", () => {
-  assert.equal(renderPrompt(dahaiPackage, "tool_search", null), bare);
+test("ToolSearch 没开口问之前，正文就是 Bare 那一份（多出来的只是那一段工具说明）", () => {
+  // 这一档加的是**自己去问的能力**，不是又一批算好的数值（`CONTEXT.md` 的 `ScaffoldTier`）。
+  // 整档的完整断言在 `what-if.test.ts`，这里只钉两档之间那一步。
+  const search = renderPrompt(dahaiPackage, "tool_search", null);
+
+  assert.notEqual(search, bare, "前缀里多了那一段工具说明");
+  assert.match(search, /【打之前你可以先问】/);
+  assert.equal(
+    promptTail(dahaiPackage, "tool_search", null),
+    promptTail(dahaiPackage, "bare", null),
+    "没问之前尾部与裸奔档逐字节相同",
+  );
 });
 
 // ---- Assisted 档（票 24） ----
@@ -421,7 +432,10 @@ for (const proof of LABEL_CROSSCHECK_PROOFS) {
     // 后两条**纯文本那十二条按设计看不见**：换过的那张牌仍然是一张合法的牌、
     // 碰与吃都在措辞表里。这道对拍存在的理由就是它们。
     if (proof.textBlind) {
-      const alsoText = promptViolations(hit.broken as string, { where: hit.name });
+      const alsoText = promptViolations(hit.broken as string, {
+        where: hit.name,
+        whatIfLimit: WHAT_IF_LIMIT,
+      });
       assert.deepEqual(
         alsoText.map((violation) => violation.rule),
         [],

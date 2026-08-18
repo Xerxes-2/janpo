@@ -9,6 +9,7 @@
 //   pnpm run prompt -- --package tests/fixtures/agent/decision-dahai.json
 //                                                    直接读一份决策包 JSON（不跑 dotnet）
 //   pnpm run prompt -- --diff                        只打两档的差异（Assisted 多出来那一节）
+//   pnpm run prompt -- --tier tool_search --what-if 3 ToolSearch 档，装作它已经查过前 3 条打牌（票 94）
 //   pnpm run prompt -- --persona "你打得很凶。"           换一个人格（票 31）
 //   pnpm run prompt -- --template my-template.json   换一份模板（一段 JSON，或直接写 JSON 本身）
 //
@@ -37,6 +38,9 @@ function parseArguments(argv) {
     package: null,
     persona: "",
     template: "",
+    // ToolSearch 档装作已经查过前几条打牌（票 94）：不给就是一次都没查，
+    // 那时它的尾部与 Bare 逐字节相同——**要看那一节就得说自己查过几次**。
+    "what-if": "0",
     diff: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -106,7 +110,15 @@ const template = resolveTemplate({
   persona: parsed.persona,
   template: templateText(parsed.template),
 });
-const prompts = new Map(TIERS.map((tier) => [tier, renderPrompt(decision, tier, null, template)]));
+/** ToolSearch 档那几条查询：这一手的前 N 条打牌动作（与闸门那一侧同一个取法）。 */
+const asked = decision.actions
+  .filter((option) => option.action?.type === "dahai")
+  .slice(0, Number(parsed["what-if"]))
+  .map((option) => ({ id: option.id }));
+
+const prompts = new Map(
+  TIERS.map((tier) => [tier, renderPrompt(decision, tier, null, template, asked)]),
+);
 
 if (parsed.diff) {
   // 两档只差一节（`prompt.ts` 的 `frame`），把那一节单独打出来。

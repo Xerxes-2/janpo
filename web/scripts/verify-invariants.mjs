@@ -29,6 +29,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderPrompt } from "../src/agent/prompt.ts";
+import { WHAT_IF_LIMIT } from "../src/agent/what-if.ts";
 import { PROOFS } from "../tests/agent/invariant-proofs.ts";
 import { formatViolation, promptAudit, promptCoverage, RULES } from "../tests/agent/invariants.ts";
 import {
@@ -41,6 +42,12 @@ import {
   crosscheckNaki,
   NAKI_CROSSCHECK,
 } from "../tests/agent/naki-crosscheck.ts";
+import {
+  askedFor,
+  crosscheckWhatIf,
+  SCAFFOLD_CROSSCHECK,
+  SCAFFOLD_PROOFS,
+} from "../tests/agent/scaffold-crosscheck.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "../..");
@@ -63,7 +70,15 @@ const CORPORA = [
 ];
 
 const SEATS = [0, 1, 2, 3];
-const TIERS = ["bare", "assisted"];
+
+/**
+ * 三档都渲（票 94 把 ToolSearch 加了进来）。**档位只动尾部，而尾部也是话。**
+ *
+ * ToolSearch 那一档要合成几条查询才有东西可验（一次都没查时它的尾部与 Bare 逐字节相同），
+ * 查几条按手序轮着来：**0..上限 都得走到**，否则「你查过 N 次」那一行的两道核对
+ * 在某个 N 上永远执行不到。查哪几条由 `askedFor` 定（这一手的前几条打牌，deterministic）。
+ */
+const TIERS = ["bare", "assisted", "tool_search"];
 
 function parseArguments(argv) {
   const parsed = { seeds: null, from: 1, jobs: 4, show: 10 };
@@ -176,11 +191,14 @@ const corpus = [];
 for (const { corpus: which, seed, seat, packages } of sequences) {
   for (const [hand, decision] of packages.entries()) {
     for (const tier of TIERS) {
+      // 轮着来：第 hand 手查 hand % (上限+1) 条，因此 0..上限 每一种都出现得到。
+      const asked = tier === "tool_search" ? askedFor(decision, hand % (WHAT_IF_LIMIT + 1)) : [];
       corpus.push({
         which: which.name,
         where: `${which.name} 种子 ${seed}・座位 ${seat}・第 ${hand} 手・${tier} 档`,
         decision,
-        prompt: renderPrompt(decision, tier, null),
+        asked,
+        prompt: renderPrompt(decision, tier, null, undefined, asked),
       });
     }
   }
@@ -192,18 +210,19 @@ if (corpus.length === 0) throw new Error("一份 prompt 都没渲出来——语
 const tally = new Map(
   corpora.map((each) => [
     each.name,
-    { prompts: 0, coverage: {}, judged: {}, crosschecked: {}, labelled: {} },
+    { prompts: 0, coverage: {}, judged: {}, crosschecked: {}, labelled: {}, scaffolded: {} },
   ]),
 );
 const violations = [];
 const mismatches = [];
 const mislabelled = [];
+const miscopied = [];
 
 for (const each of corpus) {
   const mine = tally.get(each.which);
   mine.prompts += 1;
 
-  const audit = promptAudit(each.prompt, { where: each.where });
+  const audit = promptAudit(each.prompt, { where: each.where, whatIfLimit: WHAT_IF_LIMIT });
   violations.push(...audit.violations);
   add(mine.judged, audit.judged);
   add(mine.coverage, promptCoverage(each.prompt));
@@ -215,6 +234,12 @@ for (const each of corpus) {
   const labels = crosscheckLabels(each.decision, each.prompt, each.where);
   mislabelled.push(...labels.violations);
   add(mine.labelled, labels.judged);
+
+  // 第三道对拍（票 94）：算好的数那一节里的每一行 ↔ 决策包里 dotnet 算的那一份。
+  // **两档都过**：Assisted 推给它的那张表与 ToolSearch 查出来的那几条是同一种行。
+  const scaffold = crosscheckWhatIf(each.decision, each.prompt, each.where);
+  miscopied.push(...scaffold.violations);
+  add(mine.scaffolded, scaffold.judged);
 }
 
 const total = (pick) => corpora.reduce((into, each) => add(into, pick(tally.get(each.name))), {});
@@ -222,6 +247,7 @@ const coverage = total((each) => each.coverage);
 const judged = total((each) => each.judged);
 const crosschecked = total((each) => each.crosschecked);
 const labelled = total((each) => each.labelled);
+const scaffolded = total((each) => each.scaffolded);
 
 const seeds = corpora.reduce((count, each) => count + each.seeds.length, 0);
 const hands = corpus.length / TIERS.length;
@@ -287,8 +313,20 @@ for (const kind of Object.keys(labelled).sort()) {
   console.log(`  ${pad(kind, 26)}${labelled[kind]}`);
 }
 
-if (violations.length > 0 || mismatches.length > 0 || mislabelled.length > 0) {
-  const all = [...violations, ...mismatches, ...mislabelled];
+console.log(
+  `\n「${SCAFFOLD_CROSSCHECK}」对拍了 ${Object.values(scaffolded).reduce((sum, each) => sum + each, 0)} 个字段：`,
+);
+for (const what of Object.keys(scaffolded).sort()) {
+  console.log(`  ${pad(what, 26)}${scaffolded[what]}`);
+}
+
+if (
+  violations.length > 0 ||
+  mismatches.length > 0 ||
+  mislabelled.length > 0 ||
+  miscopied.length > 0
+) {
+  const all = [...violations, ...mismatches, ...mislabelled, ...miscopied];
   console.error(
     `\n在日麻规则下不成立、或与决策包对不上的话 ${all.length} 句（印前 ${parsed.show} 条）：\n`,
   );
@@ -298,7 +336,8 @@ if (violations.length > 0 || mismatches.length > 0 || mislabelled.length > 0) {
 
 console.log(
   `\n没有一句在日麻规则下不成立的话，没有一组副露的来源与决策包对不上，` +
-    `也没有一条动作那一行与引擎那份 label 说岔了。`,
+    `没有一条动作那一行与引擎那份 label 说岔了，` +
+    `也没有一个算好的数在抄进 prompt 的路上走了样。`,
 );
 
 // **防空转一：执行次数为 0 的那几条，这一趟的「0 违反」不是证据**（票 49 的核心）。
@@ -327,6 +366,29 @@ if (missing.length > 0) {
   console.error(
     `语料里一次都没出现：${missing.map(([, name]) => name).join("、")}` +
       `——相关的不变量这一趟等于没验。换一批种子（两批都是按形态挑的）。`,
+  );
+  process.exit(1);
+}
+
+// **防空转二之二**（票 94）：算好的数那一节、以及 ToolSearch 档那几条查询答案，真的出现过。
+// 它们为 0 的话，第十三条不变量与第三道对拍这一趟都等于没跑。
+const emptyScaffold = Object.entries({
+  scaffoldLines: "算好的数那一节",
+  whatIfAnswers: "ToolSearch 档查出来的答案",
+}).filter(([item]) => (coverage[item] ?? 0) === 0);
+if (emptyScaffold.length > 0) {
+  console.error(
+    `这一趟一行都没渲出来：${emptyScaffold.map(([, name]) => name).join("、")}` +
+      `——第十三条不变量与「${SCAFFOLD_CROSSCHECK}」这一趟等于没跑。`,
+  );
+  process.exit(1);
+}
+
+const FIELDS = ["向听", "进退向", "有效牌", "危险度名次", "危险度档位", "危险度理由"];
+const uncopied = FIELDS.filter((what) => (scaffolded[what] ?? 0) === 0);
+if (uncopied.length > 0) {
+  console.error(
+    `「${SCAFFOLD_CROSSCHECK}」这一趟没对拍到：${uncopied.join("、")}——那几类字段这一趟没被验过。`,
   );
   process.exit(1);
 }
@@ -393,7 +455,10 @@ for (const proof of PROOFS) {
     process.exit(1);
   }
 
-  const caught = promptAudit(hit.broken, { where: hit.where }).violations;
+  const caught = promptAudit(hit.broken, {
+    where: hit.where,
+    whatIfLimit: WHAT_IF_LIMIT,
+  }).violations;
   const mine = caught.filter((violation) => violation.rule === proof.rule);
   if (mine.length === 0) {
     console.error(
@@ -427,7 +492,10 @@ for (const proof of CROSSCHECK_PROOFS) {
     process.exit(1);
   }
 
-  const alsoText = promptAudit(hit.broken, { where: hit.each.where }).violations;
+  const alsoText = promptAudit(hit.broken, {
+    where: hit.each.where,
+    whatIfLimit: WHAT_IF_LIMIT,
+  }).violations;
   proved += 1;
   console.log(`  ${formatViolation(caught[0])}`);
   console.log(
@@ -455,7 +523,10 @@ for (const proof of LABEL_CROSSCHECK_PROOFS) {
     process.exit(1);
   }
 
-  const alsoText = promptAudit(hit.broken, { where: hit.each.where }).violations;
+  const alsoText = promptAudit(hit.broken, {
+    where: hit.each.where,
+    whatIfLimit: WHAT_IF_LIMIT,
+  }).violations;
   if (proof.textBlind && alsoText.length > 0) {
     console.error(
       `${proof.note}本该是纯文本那十二条看不见的那一种，实际它们红了：` +
@@ -474,6 +545,39 @@ for (const proof of LABEL_CROSSCHECK_PROOFS) {
   );
 }
 
+for (const proof of SCAFFOLD_PROOFS) {
+  const hit = corpus
+    .map((each) => ({ each, broken: proof.mutate(each.prompt) }))
+    .find((entry) => entry.broken !== null);
+
+  if (hit === undefined) {
+    console.error(
+      `「${SCAFFOLD_CROSSCHECK}」没被证明咬得动：${proof.note}的局面语料里一个都没有。`,
+    );
+    process.exit(1);
+  }
+
+  const caught = crosscheckWhatIf(hit.each.decision, hit.broken, hit.each.where).violations;
+  if (caught.length === 0) {
+    console.error(`「${SCAFFOLD_CROSSCHECK}」没咬住：${proof.note}之后它该红，实际一条都没红。`);
+    process.exit(1);
+  }
+
+  const alsoText = promptAudit(hit.broken, {
+    where: hit.each.where,
+    whatIfLimit: WHAT_IF_LIMIT,
+  }).violations;
+  proved += 1;
+  console.log(`  ${formatViolation(caught[0])}`);
+  console.log(
+    `    （${proof.note}；同一处纯文本那十三条${
+      alsoText.length === 0
+        ? "**一条都没红**——只有这道对拍看得见"
+        : `顺带红了：${[...new Set(alsoText.map((v) => v.rule))].join("、")}`
+    }）`,
+  );
+}
+
 console.log(
-  `\n${Object.keys(RULES).length} 条不变量 + 2 道对拍、${proved} 个反向自证，每一条都当场证明咬得动。语义闸门通过。`,
+  `\n${Object.keys(RULES).length} 条不变量 + 3 道对拍、${proved} 个反向自证，每一条都当场证明咬得动。语义闸门通过。`,
 );

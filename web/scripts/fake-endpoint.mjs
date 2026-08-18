@@ -9,9 +9,11 @@
 //   node scripts/fake-endpoint.mjs --cors '*' --https     # 端点自己上 https（自签证书）
 //   node scripts/fake-endpoint.mjs --cors '*' --echo-key  # **回一条把 key 原样抄回来的 401**（票 36）
 //   node scripts/fake-endpoint.mjs --fail 429             # **固定回一个失败状态**（票 47）
+//   node scripts/fake-endpoint.mjs --what-if 2            # **先查两次 what-if 再出牌**（票 94）
+//   node scripts/fake-endpoint.mjs --what-if inf          # **能查就查**（验上限）
 //
 // 选项：--port N（默认 4199）、--action-id N（默认 0）、--reason <一句话>、--cors <origin|*>、
-//       --https、--quiet、--echo-key、--fail <status>、--delay <ms>（票 74：正常答话前
+//       --https、--quiet、--echo-key、--fail <status>、--what-if <N|inf>、--delay <ms>（票 74：正常答话前
 //       固定睡这么久——「真的并发了」的唯一硬证据就是四席同问时墙钟接近一份延迟而不是几份）。
 // **CORS 默认关**：本地端点默认就不放行浏览器，这份默认值本身就是要验的那个坑。
 
@@ -67,6 +69,18 @@ const failStatus = Number.parseInt(flag("--fail", "0"), 10);
  * 只延迟成功那条路：失败路径（--fail / --echo-key）要验的是别的事。
  */
 const delayMs = Number.parseInt(flag("--delay", "0"), 10);
+
+/**
+ * **先查几次 what-if 再出牌**（票 94）：`--what-if 2` = 最多查两次，`--what-if inf` = 能查就查。
+ *
+ * **它看 `tools` 行事**：请求里没摆 `what_if` 就直接出牌——那正是 constrained sampling 下
+ * 真模型的样子（工具不在单子上就点不了），也因此它能把「到上限就停且这一手照常打完」演出来。
+ *
+ * **无状态**：查过几次不记在进程里，而是从 prompt 里读【你查过 N 次】那一行——
+ * 一个端点同时坐几席、几手交错着飞时，进程里那个计数器会串味。
+ */
+const whatIfText = flag("--what-if", "0");
+const whatIfTimes = whatIfText === "inf" ? Number.POSITIVE_INFINITY : Number(whatIfText);
 
 /** 点名那几档的 OpenAI 风格正文。没点名的走一句通用的。 */
 const FAIL_BODIES = {
@@ -124,16 +138,41 @@ function cors(response, request) {
   response.setHeader("access-control-max-age", "600");
 }
 
+/**
+ * 这一次该回哪一条 tool call（票 94）。
+ *
+ * 三道门都过才查：开了 `--what-if`、这一轮真的摆了 `what_if` 这个工具、
+ * 且 prompt 里读出来的「已经查过几次」还没到这个假模型自己那个数。
+ */
+function toolCall(body) {
+  const tools = Array.isArray(body?.tools) ? body.tools : [];
+  const offered = tools
+    .map((tool) => tool?.function ?? tool)
+    .find((each) => each?.name === "what_if");
+  const ids = offered?.parameters?.properties?.action_id?.enum ?? [];
+
+  const prompt = (body?.messages ?? []).map((message) => message?.content ?? "").join("\n");
+  const asked = Number(/^你查过 (\d+) 次/m.exec(prompt)?.[1] ?? "0");
+
+  if (whatIfTimes > 0 && ids.length > 0 && asked < whatIfTimes) {
+    return {
+      name: "what_if",
+      arguments: JSON.stringify({ action_id: String(ids[asked % ids.length]) }),
+    };
+  }
+  return {
+    name: "choose_action",
+    arguments: JSON.stringify({ action_id: String(actionId), reason }),
+  };
+}
+
 /** 一次 tool call 的 SSE，拆成三块发（真端点也是流式的）。 */
-function chunks() {
+function chunks(body) {
   const call = {
     index: 0,
     id: "call_fake",
     type: "function",
-    function: {
-      name: "choose_action",
-      arguments: JSON.stringify({ action_id: String(actionId), reason }),
-    },
+    function: toolCall(body),
   };
   const base = {
     id: "fake",
@@ -213,8 +252,18 @@ const handler = (request, response) => {
     return;
   }
 
-  request.resume();
+  // **正常那条路要读正文**（票 94）：`--what-if` 那一档得看看这一轮摆了哪几个工具。
+  // 上面几条失败路径照旧 `resume()` 丢掉它——它们不看内容。
+  const parts = [];
+  request.on("data", (chunk) => parts.push(chunk));
   request.on("end", () => {
+    let body = null;
+    try {
+      body = JSON.parse(Buffer.concat(parts).toString("utf8"));
+    } catch (_error) {
+      body = null;
+    }
+
     const respond = () => {
       cors(response, request);
       response.writeHead(200, {
@@ -222,7 +271,7 @@ const handler = (request, response) => {
         "cache-control": "no-cache",
         connection: "keep-alive",
       });
-      for (const chunk of chunks()) response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      for (const chunk of chunks(body)) response.write(`data: ${JSON.stringify(chunk)}\n\n`);
       response.end("data: [DONE]\n\n");
     };
     if (delayMs > 0) setTimeout(respond, delayMs);
@@ -237,6 +286,6 @@ server.listen(port, () => {
     ? "固定回 401 并把收到的 key 原样抄进报错"
     : failStatus > 0
       ? `固定回 ${failStatus}`
-      : `固定选 action_id=${actionId}${delayMs > 0 ? `（先睡 ${delayMs} ms）` : ""}`;
+      : `${whatIfTimes > 0 ? `先查 ${whatIfText} 次 what-if，再` : "固定"}选 action_id=${actionId}${delayMs > 0 ? `（先睡 ${delayMs} ms）` : ""}`;
   console.log(`假端点在 ${scheme}://127.0.0.1:${port}/v1（CORS：${origin ?? "不放行"}），${what}`);
 });

@@ -204,9 +204,13 @@ export interface DecideResponse {
 }
 
 /**
- * 一次问话的 token 账单（票 29b）。**四个数都是 provider 报的**：pi-ai 的 `usage` 已经
+ * **这一手**的 token 账单（票 29b）。**四个数都是 provider 报的**：pi-ai 的 `usage` 已经
  * 把各家的字段名统一好了（DeepSeek 的 `prompt_cache_hit_tokens` 由它的
  * `openai-completions` 适配器读进 `cacheRead`），这一层不自己拼。
+ *
+ * **一手发了几次请求就加几次**（票 94）：重试那几轮、ToolSearch 档查 what-if 那几轮都算进来
+ * ——否则那一档的账单在牌谱里与 Bare 档长得一模一样。零重试零查询时与从前逐字相同。
+ * 审计那四项（prompt / 工具定义 / 原始输出 / thinking）照旧只记最后一轮（裁决 26-16）。
  */
 export interface TokenUsage {
   /** 新付全价的输入 token（**不含**命中缓存与写缓存的那两部分）。 */

@@ -37,7 +37,7 @@ import {
   keyFor,
   readBaseUrl,
 } from "./endpoint.ts";
-import { chooseAction } from "./tools.ts";
+import { toolsFor } from "./tools.ts";
 import type { SeatConfig } from "./types.ts";
 
 /**
@@ -169,10 +169,14 @@ export const piAsk: Ask = async (request) => {
   const model = wired.model;
 
   // 固定 preamble 走 system（票 31）：各家的缓存语义更认它，user 消息只剩历史 + 现况 + 动作。
+  //
+  // **载体仍是单条不断增长的 user message**（票 94 没改这件事）：what-if 的答案写回那一条消息的
+  // 尾部再问一遍，而不是拼一个 assistant + toolResult 的多轮上下文：前缀因此仍只由客观事实决定，
+  // 每一轮都吃得到同一段前缀缓存，而那几条查询同时就在牌谱存下来的那份尾部里（可观测性就是它）。
   const context: Context = {
     systemPrompt: request.system,
     messages: [{ role: "user", content: request.prompt, timestamp: Date.now() }],
-    tools: [chooseAction(request.actionIds)],
+    tools: toolsFor(request.actionIds, request.whatIfIds),
   };
 
   // 超时就是 abort：pi-ai 把它记成 `stopReason: "aborted"`，与 provider 报错走同一条兜底路。

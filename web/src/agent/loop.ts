@@ -26,7 +26,8 @@ import { renderVersion } from "./render-version.ts";
 import { type Retry, retryOf, WORTH } from "./retry.ts";
 import { resolveTemplate } from "./template.ts";
 import { CHOOSE_ACTION, toolsShape } from "./tools.ts";
-import type { DecideRequest, DecideResponse } from "./types.ts";
+import type { ActionOption, DecideRequest, DecideResponse } from "./types.ts";
+import { WHAT_IF, type WhatIf, whatIfExhausted } from "./what-if.ts";
 
 /**
  * 一次回答的判读。失败那一支带着**这条失败值不值得再问一遍**（票 47）：
@@ -47,6 +48,37 @@ function strictInt(value: unknown): number | null {
   const text = String(value ?? "").trim();
   if (!/^-?\d+$/.test(text)) return null;
   return Number.parseInt(text, 10);
+}
+
+/**
+ * 这一手哪几条动作是**打牌**（票 94）。what-if 工具的 enum 就是它们。
+ *
+ * 判据是动作消息的 `type`，不是中文 label：**Agent 层认识 id 不认识动作**（ADR-0005），
+ * 而这一句只是读一个 wire 字段来分类，不解释它、也不重造一条动作。
+ * 碰 / 吃 / 立直宣言那几条没有「打完之后」可算，摆进 enum 等于邀模型烧掉一次额度。
+ */
+function discardIdsOf(options: ActionOption[]): string[] {
+  return options
+    .filter((option) => option.action.type === "dahai")
+    .map((option) => String(option.id));
+}
+
+/**
+ * 这一次是不是一次**合格的 what-if 查询**（票 94）；不是就返回 null，走原来那条判读。
+ *
+ * 三道门全过才算：调的是 `what_if`、这一轮**真把这个工具给了它**（`offered` 非空）、
+ * 且 `action_id` 落在这一轮那份 enum 里。后两道是故意的：问满之后、或者根本没给过这个工具时
+ * 它还拿出一条 `what_if`，那就该当「调了别的工具」报回去重问，而不是默默多给它一次额度
+ * ——否则上限就只是一句话而不是一道门。
+ */
+function whatIfCall(result: AskResult, offered: string[]): WhatIf | null {
+  const call = result.toolCall;
+  if (call === null || call.name !== WHAT_IF || offered.length === 0) return null;
+
+  const raw = String(call.arguments.action_id ?? "").trim();
+  if (!offered.includes(raw)) return null;
+
+  return { id: Number.parseInt(raw, 10) };
 }
 
 /**
@@ -134,16 +166,41 @@ interface Asked {
 
 const NOTHING_ASKED: Asked = { tail: "", preamble: "", version: "", tools: "", actionIds: [] };
 
+/** 这一手的 token 账单。**一次都没问成时一直是 null**（没有账单可记）。 */
+type Billed = DecideResponse["usage"];
+
+/**
+ * 把一轮的账单加进这一手的总数（票 94）。
+ *
+ * **记的是「这一手」而不是「最后一轮」**：`TokenUsage` 自己写的就是「这一手的 token 账单」，
+ * 而 ToolSearch 档一手可能真发出去好几次请求（每查一次就多一次）——只记最后一轮的话，
+ * 那一档的账单在牌谱里会与 Bare 档长得一模一样，而这一票要量的正是那个乘数。
+ *
+ * **裁决 26-16 不受影响**：那一条说的是**审计四项**（prompt / 工具定义 / 原始输出 / thinking）
+ * 只记最后一轮（否则牌谱体积翻几倍），它们照旧只记最后一轮。账单是四个数，加起来不胀。
+ * **零重试、零查询的那一手（即 Bare / Assisted 的常态）加完与从前逐字相同**。
+ */
+function billed(into: Billed, result: AskResult | null): Billed {
+  const usage = result?.usage ?? null;
+  if (usage === null) return into;
+
+  const base = into ?? { input: 0, output: 0, cache_read: 0, cache_write: 0 };
+  return {
+    input: base.input + usage.input,
+    output: base.output + usage.output,
+    cache_read: base.cache_read + (usage.cacheRead ?? 0),
+    cache_write: base.cache_write + (usage.cacheWrite ?? 0),
+  };
+}
+
 /**
  * 一轮问话里审计要的那几项。一次都没问成时 `result` 是 null。
  *
  * **token 账单也在这里过界**（票 29b）：`cache_read` 是「前缀真的命中了」的唯一证据，
  * 由 `TablePage.settle` 收进这一手的 `DecisionRecord`，页面上看得见。
- * 记的是**最后一轮**那次（与 prompt / 输出同一轮，裁决 26-16）。
+ * 审计那四项记的是**最后一轮**那次（裁决 26-16）；**账单记的是这一手的合计**（`billed`）。
  */
-function audited(asked: Asked, result: AskResult | null) {
-  const usage = result?.usage ?? null;
-
+function audited(asked: Asked, result: AskResult | null, usage: Billed) {
   return {
     prompt_tail: asked.tail,
     preamble: asked.preamble,
@@ -152,15 +209,7 @@ function audited(asked: Asked, result: AskResult | null) {
     action_ids: asked.actionIds,
     output: rawOutput(result),
     thinking: result?.thinking ?? null,
-    usage:
-      usage === null
-        ? null
-        : {
-            input: usage.input,
-            output: usage.output,
-            cache_read: usage.cacheRead ?? 0,
-            cache_write: usage.cacheWrite ?? 0,
-          },
+    usage,
   };
 }
 
@@ -183,7 +232,7 @@ function refuse(why: string, attempts: number, latencyMs: number): DecideRespons
     failure: why,
     attempts,
     latency_ms: latencyMs,
-    ...audited(NOTHING_ASKED, null),
+    ...audited(NOTHING_ASKED, null, null),
   };
 }
 
@@ -227,6 +276,8 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
   const template = resolveTemplate(request.seat);
   const version = renderVersion(template);
   const rounds = Math.max(1, request.retry_limit + 1);
+  // ToolSearch 档才有的那一批（票 94）：只有打牌那几条查得出「打完之后」。
+  const discardIds = request.seat.tier === "tool_search" ? discardIdsOf(options) : ([] as string[]);
 
   let attempts = 0;
   let latencyMs = 0;
@@ -235,16 +286,22 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
   let note: string | null = null;
   let asked: Asked = NOTHING_ASKED;
   let last: AskResult | null = null;
+  let usage: Billed = null;
+  /** 这一手已经查过的那几条。**只增不减**，它同时是上限的计数器与尾部那一节的内容。 */
+  const queries: WhatIf[] = [];
 
   while (attempts < rounds) {
+    // 问满了就不再给这个工具（空表）——**上限在这一行执行**，不是求模型自觉。
+    const offered = whatIfExhausted(queries) ? [] : discardIds;
+
     // 一轮只渲染一次：发出去的两条消息与存进牌谱的尾部必须是同一次渲染的产物。
-    const sections = promptSections(request.decision, request.seat.tier, note, template);
+    const sections = promptSections(request.decision, request.seat.tier, note, template, queries);
     const messages = messagesOf(sections);
     asked = {
       tail: sections.present,
       preamble: sections.preamble,
       version,
-      tools: toolsShape(),
+      tools: toolsShape(request.seat.tier),
       actionIds,
     };
 
@@ -255,9 +312,22 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
         system: messages.system,
         prompt: messages.user,
         actionIds: enumIds,
+        whatIfIds: offered,
       });
       last = result;
       latencyMs += result.latencyMs;
+      usage = billed(usage, result);
+
+      // **查一次不算一次回答**（票 94）：它不吃重试额度，只吃 what-if 自己那个上限。
+      // 循环因此仍旧有界：最多 `WHAT_IF_LIMIT` 次查 + `rounds` 次回答。
+      // 问满之后它再调 `what_if` 就落回 `judge` 的「调了别的工具」——而那一条路上
+      // `tools` 里根本没有它，模型要是还能拿出来，那就是端点真的不听 schema。
+      const query = whatIfCall(result, offered);
+      if (query !== null) {
+        queries.push(query);
+        continue;
+      }
+
       verdict = judge(result, ids);
     } catch (error) {
       // 不该发生（超时与报错都是值），但真抛了也只是这一次失败，不是整局崩掉。
@@ -274,7 +344,7 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
         failure: null,
         attempts,
         latency_ms: latencyMs,
-        ...audited(asked, last),
+        ...audited(asked, last, usage),
       };
     }
 
@@ -288,6 +358,6 @@ async function answered(ask: Ask, request: DecideRequest): Promise<DecideRespons
 
   return {
     ...refuse(gaveUpBecause(why, retry, rounds), attempts, latencyMs),
-    ...audited(asked, last),
+    ...audited(asked, last, usage),
   };
 }

@@ -89,7 +89,7 @@ test("判不出来就当值得重试：「可能不一样」在不知道的时�
 // 而这两句话写在 `piai.ts` 里 —— 谁改了措辞，这里当场红。
 
 test("接线阶段就失败的那两档：一个请求都没发，重问读的还是同一份座位配置", async () => {
-  const asked = { system: "", prompt: "", actionIds: ["0"] };
+  const asked = { system: "", prompt: "", actionIds: ["0"], whatIfIds: [] };
 
   const unknownProvider = await piAsk({ ...asked, seat: { ...seat, provider: "no-such-family" } });
   assert.equal(unknownProvider.stopReason, "error");

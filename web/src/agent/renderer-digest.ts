@@ -9,6 +9,7 @@
  * - `src/agent/history.ts`
  * - `src/agent/prompt.ts`
  * - `src/agent/template.ts`
+ * - `src/agent/what-if.ts`
  * - `src/agent/wording.ts`
  */
-export const RENDERER_DIGEST = "c5d02a9d";
+export const RENDERER_DIGEST = "2e223d25";

@@ -1,5 +1,5 @@
 /**
- * 十一条语义不变量的**反向自证**（票 41）。
+ * 语义不变量的**反向自证**（票 41）。
  *
  * **一道从不失败的闸门等于没有闸门**（票 34 立的规矩，ci-web.sh 里那道 poison 就是它）。
  * `invariants.ts` 里每一条都配一个把好句子改坏的**变异**：改完那一条必须当场红，
@@ -202,5 +202,40 @@ export const PROOFS: Proof[] = [
     rule: RULES.mjaiOnly,
     note: "把场风写成中文风名（`1z` → 东）",
     mutate: (prompt) => replaceOnce(prompt, /^场风 1z・/m, "场风 东・"),
+  },
+  {
+    rule: RULES.scaffoldEchoesActions,
+    // 这一种错**纯看那一行是看不出来的**：`打 3p` 与 `打 5p` 都是通顺的一行，
+    // 只有把它与【可选动作】里同一个 id 对起来才知道它把数挂到了别的牌上。
+    note: "把算好的数那一节里一条试打点名的牌换成另一张（那一行仍然通顺）",
+    mutate: (prompt) => {
+      const found = /^- id=(\d+)（打 (\S+?)）：打完 /m.exec(prompt);
+      if (found === null) return null;
+      const other = found[2] === "1m" ? "9s" : "1m";
+      return prompt.replace(found[0], found[0].replace(`（打 ${found[2]}）`, `（打 ${other}）`));
+    },
+  },
+  {
+    rule: RULES.scaffoldEchoesActions,
+    note: "把一条危险度挂到一个根本不在这一手里的 id 上",
+    mutate: (prompt) => {
+      const found = /^- 第(\d+)位 id=(\d+)（/m.exec(prompt);
+      if (found === null) return null;
+      return prompt.replace(found[0], `- 第${found[1]}位 id=997（`);
+    },
+  },
+  {
+    rule: RULES.scaffoldEchoesActions,
+    // ToolSearch 档那一行：写给模型看的「还能问几次」与真上限对不上，
+    // 模型就会按一个错的预算去分配它那几次查询。
+    note: "把「你查过 N 次，还可以再查 M 次」里的 M 加一（加起来不再等于上限）",
+    mutate: (prompt) => {
+      const found = /^你查过 (\d+) 次，还可以再查 (\d+) 次：$/m.exec(prompt);
+      if (found === null) return null;
+      return prompt.replace(
+        found[0],
+        `你查过 ${found[1]} 次，还可以再查 ${Number(found[2]) + 1} 次：`,
+      );
+    },
   },
 ];
