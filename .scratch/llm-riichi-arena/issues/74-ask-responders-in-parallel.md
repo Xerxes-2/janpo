@@ -10,6 +10,22 @@
 
 **Status:** ready-for-agent
 
+## 前几波留给你的既成事实（70–77 除 74/78/79 外全已并入 `main`）
+
+- **四席的形状**（票 73）：`SeatingPlan = { Profiles; Seats }`；按座位取配置用
+  `TablePage.seatConfigOf (seat) (model) : LlmSeat option`（bot 席 = None）；`SeatingPlan.llmSeats` 列出模型席。
+  `LiveTable.Pinned` 已是 **`Rendering option list`（每席一项）**——「一局内不变」按座位各自成立。
+- **气泡的取值器**（票 76）：`TableState.bubbles : TableModel -> Table -> (Seat -> Bubble option)`，
+  `Bubble = Thinking | Spoke | Troubled`。**你只改它里面 `asking` 那一段**（今天读的是单席的
+  `AgentStatus.Asking`）；视图与 17 条用例全读这一个函数。`AgentLine` 的 `data-seats` 是四个名字逗号串。
+- **`verify-bubbles` 要扩成四席各配一个假端点**（票 76 交代的：今天浏览器那侧只验得到
+  「一席有、三席没有」）。灌坐法用 `web/scripts/seating.mjs` 的 `plantSeating`。
+- **别改 `TablePage.initial` 的签名**（`rules` + `seating` 两参）——W3/W4 各撞过一次，教训在
+  `DECISIONS.md`。票 78 此刻在另一个工作区里。
+- **73-1 的触发条件**：若你要往 `SeatingPlan` 上加东西，先看 `DECISIONS.md` 73-1（统成
+  `RosterDraft` + 独立档案库）；不加就不动。
+- flash 档的真实基线（票 73 真跑）：单手延迟中位数 **1873 ms**、缓存命中 45%、105 次问话 0 兜底。
+
 ## 一条已经查实的既成事实（不必重新论证，但要有断言守着）
 
 响应阶段里**某席的合法动作集不因另一席先答而改变**：`GameState` 的响应阶段收到一家的答复时，

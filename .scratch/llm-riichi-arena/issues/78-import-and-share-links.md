@@ -7,6 +7,24 @@
 
 **Status:** ready-for-agent
 
+## 前几波留给你的既成事实（70–77 除 74/79 外全已并入 `main`）
+
+- **编解码现成**（票 77）：`Share.toPayload : Paifu -> JS.Promise<string>`、
+  `Share.ofPayload : string -> JS.Promise<Result<Paifu,string>>`、`Share.paifuText`。
+  错误已分两层前缀：「**载荷读不动：**…」（勝人重取链接）vs「**牌谱读不动：**…」。
+  实测长度：东风战 4,842 / 半庄 7,720 字符；「太长就勝 JSON」的阈值建议 8,000（非实测，你定数写依据）。
+- **地址解析在 `Route.fs`**：`Route.landing () : Home | Table`（只读 query 的 `table=1`）。
+  **hash 目前不解码**：带 hash 打开落在 Home、不炸——把它接上就是你的活。hash 只装载荷，不当路由（35-1）。
+- **回放载入的形状**（票 71/75）：`ReplayTable = Loading | Failed of reason | Ready of frames * cursor`；
+  `Table.replay : Paifu -> Result<Table list, string>`；Demo 走 `Demo.paifu () : Promise<Result<Paifu,string>>`。
+  你加的是第二、第三个来源：hash 载荷与本地文件——落进同一个 `ReplayTable`，时间轴与气泡白拿。
+- **`table-no-bubbles` 那句话**（票 76）已经在页面上说「完整版得让对方把 JSON 给你」——
+  你的导入入口要接得上这句话（从那里点得到）。
+- 复制按铮放 `TablePanel.hostControls`（Live 侧）；导出已用 `Table.paifu`，分享拿它的结果过
+  `Paifu.stripAudit` 再 `Share.toPayload`。
+- 浏览器闸门现在**十三趟**；新增一趟要同时改 `verify-browser.mjs` 名单与 `ci-web.sh` 趟数措辞
+  （现在是「十九道 / 后十三趟」）——票 74 可能同时在改这两处，照现状改，冲突调度器解。
+
 ## 要什么行为
 
 - [ ] `?table=1` 上一个「复制分享链接」：把这一桌到此刻为止的**棋谱**装进 hash，写进剪贴板，
