@@ -11,10 +11,11 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出十七个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// **这一层还转出十八个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` / `home` /
-/// `shared` / `init` / `update` / `rosterOf` / `seatConfigOf` / `renderingPending` / `rulesPending` /
-/// `live` / `shown` / `canAdvance` / `timeline` / `reveals` / `bubbles` / `detail` / `recordless`。转出来之后
+/// `shared` / `init` / `update` / `rosterOf` / `seatConfigOf` / `nameplates` / `renderingPending` /
+/// `rulesPending` / `live` / `shown` / `canAdvance` / `timeline` / `reveals` / `bubbles` / `detail` /
+/// `recordless`。转出来之后
 /// **这个程序集的公开面只多了这几个名字**：那几块里跨文件用的助手一律 `internal`，
 /// 出不了 `Janpo.Web`。
 ///
@@ -55,6 +56,9 @@ module TablePage =
 
     /// 这一席此刻真正会用的那份配置（票 73）。实现与理由见 `TableState.seatConfigOf`。
     let seatConfigOf (seat: Seat) (model: TableModel) : LlmSeat option = TableState.seatConfigOf seat model
+
+    /// 名牌上那一句「这一席是谁在打」（票 82）。实现与理由见 `TableState.nameplates`。
+    let nameplates (model: TableModel) : string list = TableState.nameplates model
 
     /// 人格与模板改过了、但要等下一局才发得出去吗。实现与理由见 `TableState.renderingPending`。
     let renderingPending (model: TableModel) : bool = TableState.renderingPending model
@@ -158,10 +162,15 @@ module TablePage =
     /// **默认暂停**（`Playback.initial`）：要点、要读牌桌的那几道无头闸门全靠这一条。
     let private hostPage (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         layout model (Some live) dispatch [
+            // **一行就够**（票 83 交给票 82 的那件）：这一段的读者是**主持人自己**，
+            // 他每开一次这一页都要从它头上跳过去——而一整屏只有 800px，四行说明占了 82px。
+            // **首页那两段不动**（`homePage`）：那一段是写给头一回来的访客的。
+            // 剪掉的那几句（key 存哪、虚线是摸切、模型看到的和你一样多）各自还在：
+            // 前一句在配桌那一块的「这几格都是什么意思？」里（票 83），后两句在首页。
             Html.p [
                 prop.className "intro"
-                prop.text
-                    "默认四家自带选手（均匀随机）；下面四行是四个座位各自的绑定——每一席可以换成「有主见」，也可以交给一份模型档案（key 在档案里只填一次，一把 key 坐几席都行，四家全是模型也行）。按「播放」看它们一手一手打。他家的手牌看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
+                prop.testId "table-intro"
+                prop.text "这一页是你自己开的一桌：下面把任一席交给一份模型档案（key 只填一次），按「播放」看它们一手一手打。"
             ]
         ]
 

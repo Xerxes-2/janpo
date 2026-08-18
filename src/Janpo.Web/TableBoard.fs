@@ -17,6 +17,10 @@ type Seating = {
     Anchor: Seat
     /// 亲：那枚「亲」标签。
     Oya: Seat
+    /// 名牌上那一句「这一席是谁在打」（票 82），按座位升序：
+    /// Live 是档案名 + 脚手架档位（bot 席是「均匀随机」/「有主见」），回放是牌谱里的 `provider/model`。
+    /// **判据不在这一层**（`TableState.nameplates`）：这里只把算好的那一句画到名牌上。
+    Nameplates: string list
 }
 
 /// 牌桌与结算的视图（票 70 从 `TablePage.fs` 拆出来的第三块）：一家的三排牌、牌桌中央、
@@ -269,6 +273,22 @@ module TableBoard =
             ]
             |> List.map (fun (mark, className) -> Html.span [ prop.key mark; prop.className className; prop.text mark ])
 
+        // 名牌上的选手（票 82）：一眼看得出这一席是哪份档案、哪一档在打（或者是自带 bot）。
+        // 没话可说时整个不画（字数对不上的牌谱）——空牌子比没牌子更让人以为掉了东西（票 32 同一条）。
+        let playerLabel =
+            seating.Nameplates
+            |> List.tryItem index
+            |> Option.filter (fun player -> player <> "")
+            |> Option.map (fun player ->
+                Html.span [
+                    prop.key "player"
+                    prop.className "seat-player"
+                    prop.testId $"seat-{index}-player"
+                    prop.custom ("data-player", player)
+                    prop.text player
+                ])
+            |> Option.toList
+
         // 方位的文字只在**坐着看**时写：上帝视角根本没有观测者，写「自家」会指向一个不存在的人。
         // 那一档的参照系改由牌桌中央那一句话声明（`tableCenter`）。
         let positionLabel = [
@@ -299,6 +319,7 @@ module TableBoard =
                                     prop.text $"座位 {index}・{Kaze.toDisplay view.Jikaze}家"
                                 ]
                             ]
+                            @ playerLabel
                             @ positionLabel
                             @ [
                                 Html.span [
@@ -429,7 +450,10 @@ module TableBoard =
         // 牌桌布局以**看牌桌的那个人**为准，副露里的左中右以**副露方自己**为准。
         // M1 传下来的第六条（相对方位必须显式声明参照系）在这里就是这一句——
         // 牌桌上不再写「来自X」之后，读者靠它才知道横放那张的位置该怎么读。
-        let nakiLegend = "副露：横放那张的位置就是来源，按副露方自己的左右算——最左＝上家、中间＝对家、最右＝下家（暗杠无源）"
+        // 票 82 给它接了后半句：左右两家的牌侧着摆之后，**那一排在屏幕上是竖的**。
+        // 不接这一句的话，读者拿「最左」去对一列牌会当场读错来源。
+        let nakiLegend =
+            "副露：横放那张的位置就是来源，按副露方自己的左右算——最左＝上家、中间＝对家、最右＝下家（暗杠无源）；左右两家的牌侧着摆，那条「左→右」在屏幕上就是「上→下」"
 
         let frame =
             match board.Viewer with
@@ -724,6 +748,7 @@ module TableBoard =
                 Viewer = board.Viewer
                 Anchor = Board.anchor board
                 Oya = (GameState.context table.State).Oya
+                Nameplates = TableState.nameplates model
             }
 
             // Agent 层那一行只属于 Live（票 71）：回放里没有在飞的问话，

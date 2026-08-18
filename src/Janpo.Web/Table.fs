@@ -304,6 +304,20 @@ module Table =
 
     // ---- 回放（票 71） ----
 
+    /// 牌谱开头那条 `start_game` 里那一列名字（mjai 的 `names`），按座位升序。
+    ///
+    /// **回放里它是「这一席是谁在打」的唯一来源**（票 82 的名牌）：回放没有配桌
+    /// （`TableState.rosterOf` 恒是 None），而牌谱里那几个名字是**当时录下来的**。
+    /// **档案名不在里面**（`Roster.playerName`）：那是本机的私人叫法，牌谱是可分享物。
+    /// 一条 `start_game` 都没有的牌谱进不了回放（`Replay.trace` 拦住了），这里回空表。
+    let names (paifu: Paifu) : string list =
+        paifu.Events
+        |> List.tryPick (fun event ->
+            match event with
+            | StartGame names -> Some names
+            | _ -> None)
+        |> Option.defaultValue []
+
     /// 把一局的**开局局面**摆上这张牌桌（回放专用）。
     ///
     /// **不走 `nextKyoku`**：那一条从随机流开局，而回放的牌山是从事件流重建的

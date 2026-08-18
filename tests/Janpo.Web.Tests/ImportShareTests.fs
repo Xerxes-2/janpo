@@ -166,9 +166,27 @@ module ImportShareTests =
         Assert.False(TablePage.recordless imported, "全量牌谱带决策记录，导入的那一份气泡有话")
 
         match imported.Source with
-        | Source.Replay(ReplayTable.Ready(frames, _)) ->
+        | Source.Replay(ReplayTable.Ready(frames, _, names)) ->
             Assert.Equal<DecisionRecord list>([ record ], (List.last frames).Decisions)
+            // 牌谱里那一列 `names` 跟着胶片一起进来了（票 82）：名牌上写的就是它。
+            Assert.Equal<string list>(Table.names full, names)
         | other -> failwith $"导入之后该是逐帧的回放，却是 {other}"
+
+    [<Fact>]
+    let ``回放的名牌来自牌谱里那一列 names：档案名是本机的私人叫法，牌谱里没有`` () =
+        let replayed = loaded ()
+
+        // 两头对上：名牌上那四句就是牌谱 `start_game` 里那一列（票 82）。
+        Assert.Equal<string list>(Table.names demo, TablePage.nameplates replayed)
+
+        // 阳性对照：那一列真是 `provider/model`（先前两边都是空表也能让上一条变绿）。
+        Assert.Equal<string list>(
+            [ for _ in Seat.all demo.Ruleset -> "deepseek/deepseek-v4-flash" ],
+            TablePage.nameplates replayed
+        )
+
+        // 牌谱还在拉的那一瞬根本没有牌桌，也就没有名牌（不编一行占位的字）。
+        Assert.Empty(TablePage.nameplates (TablePage.home () |> fst))
 
     [<Fact>]
     let ``导入的三种失法各有中文原因，而正在播的那份回放不受影响`` () =

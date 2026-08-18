@@ -34,6 +34,13 @@ const TURN_BUDGET = 90;
 /** 取完快照再走几手，用来验「巡目真的在走」。 */
 const JUNME_STEPS = 6;
 
+/**
+ * 上帝视角下再走几手，为的是**等到左右两家轮到刚摸那张**（票 82）：
+ * 那张牌一次只在一家手里，而竖排那两家的「刚摸那张摆开了」是纵向的一段空。
+ * 四家轮着摸，五手之内必然轮到——轮不到就说明这一条在空转，闸门自己会说。
+ */
+const DRAWN_HUNT = 5;
+
 /** 方位（`Board.position` 的输出），按「相对观测者第几家」排。 */
 const POSITIONS = ["self", "shimocha", "toimen", "kamicha"];
 
@@ -78,10 +85,15 @@ function readBoard(page) {
         const tsumogiri = kawa.querySelector('[data-tsumogiri="true"]');
         const tegiri = kawa.querySelector('[data-tsumogiri="false"]');
 
+        const player = pick("player");
+
         return {
           seat,
           position: node.getAttribute("data-seat-position"),
           riichi: node.getAttribute("data-riichi"),
+          // 名牌上「这一席是谁在打」（票 82）：人读的是那几个字，`data-player` 是同一件事
+          // 给机器看的那一半。
+          player: { text: text(player), data: attr(player, "data-player") },
           marks: [...node.querySelectorAll(".seat-head .mark")].map((mark) => mark.textContent),
           score: { text: text(pick("score")), data: attr(pick("score"), "data-score") },
           junme: { text: text(pick("junme")), data: attr(pick("junme"), "data-junme") },
@@ -94,11 +106,20 @@ function readBoard(page) {
             // 牌背画得出来吗（票 32）：边框色与牌背图（票 80 起是 Back.svg，从前是斜纹底）缺一样就是一块看不见的牌。
             backInk: back === null ? null : getComputedStyle(back).borderTopColor,
             backPattern: back === null ? null : getComputedStyle(back).backgroundImage,
-            // 刚摸那张的额外间距（票 22 定的记号）：摸切打的就是它，摆回手牌里就看不出来了。
-            drawnGap:
-              hand.querySelector(".tile.drawn") === null
-                ? null
-                : Number.parseFloat(getComputedStyle(hand.querySelector(".tile.drawn")).marginLeft),
+            // 这一排牌**每一张画在哪儿、多大**（票 82 起读真坐标）：一手牌是不是一条线、
+            // 刚摸那张有没有摆开、左右两家的牌有没有真的转 90°，三条断言都读它。
+            // 从前只读 `.tile.drawn` 的 `margin-left`——那个数在竖排那两家恒为 0，
+            // 而「摆开了没有」本来就该按**画出来的间距**判，不该按某一条 CSS 属性判。
+            tiles: [...hand.querySelectorAll(".tile")].map((tile) => {
+              const rect = tile.getBoundingClientRect();
+              return {
+                x: rect.x + rect.width / 2,
+                y: rect.y + rect.height / 2,
+                w: rect.width,
+                h: rect.height,
+                drawn: tile.classList.contains("drawn"),
+              };
+            }),
           },
           kawa: {
             data: kawa.getAttribute("data-kawa-count"),
@@ -214,7 +235,7 @@ function coverage(shot) {
     dora: Number(shot.center.dora.data) >= 1,
     // 票 38 那七种记号里剩下的两种（赤牌的红字、刚摸那张的间距）：不摆出来就没处可验。
     aka: shot.aka.text !== null,
-    drawn: shot.seats.some((seat) => seat.hand.drawnGap !== null),
+    drawn: shot.seats.some((seat) => seat.hand.tiles.some((tile) => tile.drawn)),
   };
 }
 
@@ -253,12 +274,8 @@ function checkHands(shot, problems) {
   }
 
   // 刚摸那张摆得离手牌远一点（票 22）。它是七种记号里占「间距」那一维的那一个。
-  for (const seat of shot.seats) {
-    if (seat.hand.drawnGap !== null && !(seat.hand.drawnGap > 0))
-      problems.push(
-        `座位 ${seat.seat} 刚摸的那张没摆开（margin-left ${seat.hand.drawnGap}px）：它就混回手牌里了`,
-      );
-  }
+  // **量的是画出来的间距**（票 82）：它与「牌摆成一行还是一列」一起在下面那个函数里。
+  for (const seat of shot.seats) checkHandLine(seat, problems);
 
   const revealed = shot.seats.filter((seat) => seat.hand.hidden === "false");
   if (revealed.length !== 1)
@@ -267,6 +284,99 @@ function checkHands(shot, problems) {
     problems.push(
       `亮着手牌的是座位 ${revealed[0].seat}，可它画在「${revealed[0].position}」那个方位上`,
     );
+}
+
+/**
+ * ①' 一手牌读得出是一手牌（票 82）：**它必须摆成一条线**，而且那条线的方向跟着方位走。
+ *
+ * 三件事一起核，都读真坐标：
+ *
+ *   1. **不换行 / 不换列**：上下两家横着一排（y 一样、x 递增），左右两家竖着一列（x 一样、y 递增）。
+ *      主人试玩报的正是这一条——三分之一宽放不下 14 张，一手牌被折成两截就读不出是一手牌；
+ *   2. **左右两家的牌真的转了 90°**：转过之后画出来的盒子是横的（宽 > 高），上下两家仍是竖的。
+ *      `getBoundingClientRect` 给的是**变换之后**的盒子，因此这一条量的是眼睛看到的朝向，
+ *      不是「样式表里写了 rotate」；
+ *   3. **刚摸那张摆开了**（票 22 的记号）：它与前一张之间那段空，必须比手牌里其余相邻两张之间的都大。
+ *      从前这一条读 `.tile.drawn` 的 `margin-left`——竖排那两家那个数恒为 0，
+ *      而记号本身仍在（改成了纵向的那一段空）。
+ */
+function checkHandLine(seat, problems) {
+  const tiles = seat.hand.tiles;
+  if (tiles.length < 2) return;
+
+  const sideways = seat.position === "kamicha" || seat.position === "shimocha";
+  const along = sideways ? "y" : "x";
+  const across = sideways ? "x" : "y";
+  const line = sideways ? "列" : "行";
+  const where = `座位 ${seat.seat}（${seat.position}）的手牌`;
+
+  const spread =
+    Math.max(...tiles.map((tile) => tile[across])) - Math.min(...tiles.map((tile) => tile[across]));
+  if (spread > 1)
+    problems.push(
+      `${where} ${tiles.length} 张没摆成一${line}（${across} 差了 ${Math.round(spread)}px）：` +
+        "折成两截就读不出是一手牌了（票 82）",
+    );
+
+  for (let index = 1; index < tiles.length; index += 1) {
+    if (!(tiles[index][along] > tiles[index - 1][along]))
+      problems.push(
+        `${where}第 ${index} 张没画在第 ${index - 1} 张后面` +
+          `（${along}=${Math.round(tiles[index][along])} vs ${Math.round(tiles[index - 1][along])}）：` +
+          `这一家的牌该按${sideways ? "上→下" : "左→右"}排`,
+      );
+  }
+
+  // 转没转 90°：左右两家画出来的盒子该是横的，上下两家该是竖的。
+  const landscape = tiles.filter((tile) => tile.w > tile.h).length;
+  if (sideways && landscape !== tiles.length)
+    problems.push(
+      `${where}只有 ${landscape}/${tiles.length} 张转了 90°` +
+        `（第一张画出来是 ${Math.round(tiles[0].w)}×${Math.round(tiles[0].h)}）：左右两家的牌该侧着摆（票 82）`,
+    );
+  if (!sideways && landscape !== 0)
+    problems.push(`${where}有 ${landscape}/${tiles.length} 张横过来了：上下两家的牌该正着摆`);
+
+  // 刚摸那张与前一张之间那段空，比其余相邻两张之间的都大。
+  const drawnIndex = tiles.findIndex((tile) => tile.drawn);
+  if (drawnIndex > 0) {
+    const size = sideways ? tiles[drawnIndex].h : tiles[drawnIndex].w;
+    const gapAt = (index) => tiles[index][along] - tiles[index - 1][along] - size;
+    const drawnGap = gapAt(drawnIndex);
+    const others = [];
+    for (let index = 1; index < tiles.length; index += 1)
+      if (index !== drawnIndex) others.push(gapAt(index));
+    const widest = others.length === 0 ? 0 : Math.max(...others);
+
+    if (!(drawnGap > widest + 1))
+      problems.push(
+        `座位 ${seat.seat} 刚摸的那张没摆开（与前一张空 ${Math.round(drawnGap)}px，` +
+          `手牌里其余相邻两张空 ${Math.round(widest)}px）：它就混回手牌里了`,
+      );
+  }
+}
+
+/**
+ * ①'' 名牌上看得出**这一席是谁在打**（票 82 的意见⑤）。
+ *
+ * 这一道跑的是四家自带 bot 的一桌，因此名牌上该写那两档的中文（「均匀随机」/「有主见」），
+ * 而且**与状态行那一份对得上**（`data-seats` 是 `Roster.names` 那一份 wire 名）：
+ * 两头说的是同一件事，一头写死了另一头当场就红。
+ * 模型席那一半（档案名 + 脚手架档位）由 `verify-seats` 核，回放那一半（`provider/model`）
+ * 由 `verify-home` 核——**三种来源各有各的闸门**。
+ */
+function checkNameplates(shot, want, problems) {
+  for (const seat of shot.seats) {
+    const where = `座位 ${seat.seat} 的名牌`;
+    if (seat.player.text === null || seat.player.text === "")
+      problems.push(`${where}上没写这一席是谁在打（seat-${seat.seat}-player）`);
+    else if (seat.player.text !== seat.player.data)
+      problems.push(
+        `${where}上写着「${seat.player.text}」，data-player 却是「${seat.player.data}」`,
+      );
+    else if (seat.player.text !== want)
+      problems.push(`${where}上写着「${seat.player.text}」，可这一席坐的是「${want}」`);
+  }
 }
 
 /** ② 河：张数对得上，且**手切与摸切画得不一样**（两者都是公开信息）。 */
@@ -501,6 +611,9 @@ async function checkNakiPositions(page, problems) {
   // 票 73 之后四席各拨各的，因此这里逐席拨回去。
   for (const index of [0, 1, 2, 3]) await page.getByTestId(`table-seat-${index}-random`).click();
   const said = [];
+  // 防空转（票 82）：位置断言按方位取轴（左右两家竖着摆），因此**四个方位都得真核过**。
+  // 五个视角轮一圈本来就会把同一组副露摆到四个方位上——没轮到就说明视角那一圈没生效。
+  const seenPositions = new Set();
 
   for (const corpus of NAKI_CORPUS) {
     await page.getByTestId("table-seed").fill(String(corpus.seed));
@@ -543,6 +656,8 @@ async function checkNakiPositions(page, problems) {
         .sort()
         .join("、");
 
+      for (const group of shot) seenPositions.add(group.position);
+
       if (reference === null) reference = { where, shape };
       else if (shape !== reference.shape)
         problems.push(
@@ -553,9 +668,27 @@ async function checkNakiPositions(page, problems) {
     said.push(`种子 ${corpus.seed} 走 ${walked} 手：${[...new Set(seen)].sort().join("、")}`);
   }
 
+  const missedPositions = POSITIONS.filter((position) => !seenPositions.has(position));
+  if (missedPositions.length > 0)
+    problems.push(
+      `副露的位置断言没在这几个方位上执行过：${missedPositions.join("、")}` +
+        "——左右两家竖着摆（票 82），那两个方位不核等于位置编码只验了一半",
+    );
+
   // 参照系那句话得写在牌桌上（M1 第六条）：位置编码是一套约定，不写出来读者只能猜。
+  // **左右两家竖排之后那句话要多说一件事**（票 82）：副露方自己的左→右在屏幕上是上→下。
   const legend = await page.getByTestId("table-naki-legend").textContent();
-  for (const word of ["最左", "上家", "中间", "对家", "最右", "下家", "副露方"]) {
+  for (const word of [
+    "最左",
+    "上家",
+    "中间",
+    "对家",
+    "最右",
+    "下家",
+    "副露方",
+    "左右两家",
+    "上→下",
+  ]) {
     if (!legend.includes(word))
       problems.push(
         `牌桌上那句副露位置的说明里没有「${word}」：位置编码没声明参照系（读的是「${legend}」）`,
@@ -583,6 +716,7 @@ export async function verifyBoard(lane) {
   let naki = { seen: "无" };
   let bottoms = "";
   let positions = [];
+  let sidewaysDrawn = 0;
 
   try {
     page.on("pageerror", (error) => pageProblems.push(`[pageerror] ${error.message}`));
@@ -592,6 +726,12 @@ export async function verifyBoard(lane) {
 
     await page.goto(hostPage(url), { waitUntil: "load" });
     await page.getByTestId("table-board").waitFor();
+
+    // **先坐到座位 0**（票 82）：这一页的默认视角从此是上帝视角（票 81 交办的那一件），
+    // 而下面八项里的「有且只有一家亮着手牌」量的是**坐着看**那一份投影。
+    // 不点这一下的话它量的是闸门自己——票 81 给 `verify-bubbles` 补的是同一句话（那边补的是上帝）。
+    // **断言一条没放宽**：只是把它依赖的那个视角显式说出来。
+    await page.getByTestId("table-view-0").click();
 
     // 四家都换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），
     // 而立直、供托与立直棒这三项要立直才走得到。票 73 之后四席各拨各的，因此拨四次。
@@ -628,6 +768,7 @@ export async function verifyBoard(lane) {
       problems.push(`状态行写着「${shot.agent}」，可其余座位坐的是「有主见」那一档`);
 
     checkHands(shot, problems);
+    checkNameplates(shot, "有主见", problems);
     checkKawa(shot, problems);
 
     const groups = await readNakiGroups(page);
@@ -647,6 +788,28 @@ export async function verifyBoard(lane) {
     later = await readBoard(page);
     checkJunme(shot, later, stepped, problems);
     checkScores(later, total, problems);
+
+    // **竖排那两家的牌面只有上帝视角摆得出来**（坐着看时他家整排是牌背）：
+    // 「一列不换列」「转了 90°」「刚摸那张纵向摆开」这三条因此在上帝视角上再核一遍。
+    // 走几手是为了让**左右两家真的轮到手**——刚摸那张一次只在一家手里，
+    // 碰不上的话那一条在竖排这一侧就从没开过口（判据 3）。
+    await page.getByTestId("table-view-god").click();
+    for (let step = 0; step < DRAWN_HUNT && sidewaysDrawn === 0; step += 1) {
+      const godShot = await readBoard(page);
+      for (const seat of godShot.seats) checkHandLine(seat, problems);
+      sidewaysDrawn += godShot.seats.filter(
+        (seat) =>
+          (seat.position === "kamicha" || seat.position === "shimocha") &&
+          seat.hand.tiles.some((tile) => tile.drawn),
+      ).length;
+      if (sidewaysDrawn === 0 && !(await stepOnce(page))) break;
+    }
+    if (sidewaysDrawn === 0)
+      problems.push(
+        `上帝视角下走了 ${DRAWN_HUNT} 手，左右两家一次都没轮到刚摸那张：` +
+          "「竖排那两家刚摸的牌摆开了」那一条在空转",
+      );
+    await page.getByTestId("table-view-0").click();
 
     bottoms = await checkLayout(page, problems);
     // 票 51：横放那张的**位置**就是来源。它另走两局均匀随机的牌（把九种槽位结果摆齐），
@@ -677,6 +840,20 @@ export async function verifyBoard(lane) {
         .join("/")} 张牌背，牌背画得出来）`,
   );
   console.log(
+    `  手牌摆成一条线 ✓（${shot.seats
+      .map(
+        (seat) =>
+          `${seat.position} ${seat.hand.tiles.length} 张${
+            seat.position === "kamicha" || seat.position === "shimocha" ? "竖着一列" : "横着一行"
+          }`,
+      )
+      .join("、")}）`,
+  );
+  console.log(`  （上帝视角里）竖排那两家刚摸的牌也摆开了 ✓（轮到 ${sidewaysDrawn} 家）`);
+  console.log(
+    `  名牌 ✓（${shot.seats.map((seat) => `座位 ${seat.seat} ${seat.player.text}`).join("、")}）`,
+  );
+  console.log(
     `  河 ✓（共 ${kawa.tsumogiri + kawa.tegiri} 张：摸切 ${kawa.tsumogiri} 虚线、手切 ${kawa.tegiri} 实线）`,
   );
   console.log(`  副露 ✓（${naki.seen}）`);
@@ -693,7 +870,7 @@ export async function verifyBoard(lane) {
   console.log(`  立直状态 ✓（座位 ${riichi.join("、")} 立直，头上有标签）`);
   console.log(
     `  （顺带）赤牌 ${shot.aka.text}（${shot.aka.pai}）牌框 ${shot.aka.border} ≠ 普通 ${shot.aka.plain.pai} ${shot.aka.plain.border}、牌面图也不同、` +
-      `刚摸那张的间距 ${shot.seats.find((seat) => seat.hand.drawnGap !== null).hand.drawnGap}px ✓`,
+      `刚摸那张摆开了 ✓`,
   );
   console.log(`  方位 ✓（${bottoms}）`);
   console.log("  副露的位置就是来源 ✓（五个视角逐个对拍绝对座位，且五个视角看到的位置逐字相同）");

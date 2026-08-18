@@ -410,6 +410,26 @@ module SeatingPlan =
 
     // ---- 渲染层出口（ADR-0001） ----
 
+    /// 牌桌上每家名牌上那一句「这一席是谁在打」（票 82），按座位升序。
+    ///
+    /// **模型席写的是档案名 + 脚手架档位**：两席引同一份档案而档位不同是对照实验的常态
+    /// （CONTEXT.md 的 `ModelProfile` / `ScaffoldTier` 是两个维度），只写档案名就分不出那两席。
+    /// **bot 席不写档位**：它们不走 prompt，那一格对它们没意义，写上去只会让人以为它在生效。
+    ///
+    /// **它不是 `names`**（那一份恒是 `provider/model`，上牌谱）：档案名是本机的私人叫法，
+    /// 只活在这一页上（`ModelProfile.Name` 那条术语）。
+    let nameplates (seating: SeatingPlan) : string list =
+        seating.Seats
+        |> List.map (fun binding ->
+            match binding.Choice with
+            | SeatChoice.Bot kind -> Bot.toDisplay kind
+            | SeatChoice.Profile name ->
+                match tryProfile name seating with
+                | Some profile -> $"{profile.Name}・{ScaffoldTier.toDisplay binding.Tier}"
+                // 引的那份档案被删了：这一席**真的**退回了均匀随机（`playerOf` 同一条），
+                // 名牌就要跟着说实话——写着模型名而实际在打的是 bot 是句假话。
+                | None -> Bot.toDisplay Bot.Uniform)
+
     /// 四家全是自带 bot 时状态线上那句话。**同一种 bot 坐满时仍旧是「四家都是……的选手」**
     /// （票 42 那句话一字未改），混着坐时逐席报——写一句「四家都是随机选手」
     /// 而实际有一席是有主见的，那就是句错话。

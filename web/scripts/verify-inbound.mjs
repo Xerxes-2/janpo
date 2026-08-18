@@ -75,7 +75,8 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
 
 /**
  * 这一桌此刻**与视角无关**的那份摘要：四家点数与河的张数、场况、供托、剩余摸牌。
- * 主持人那一页坐在座位 0、分享/导入那一页是上帝视角，因此不能拿手牌的明暗来比。
+ * 两页从票 82 起都默认上帝视角，但这一段仍旧只比与视角无关的那几样：
+ * 视角是页面上按得动的一枚按钮，拿它当前提的断言迟早会被下一次改默认值咬到。
  */
 async function boardSummary(page) {
   return await page.evaluate(() => {

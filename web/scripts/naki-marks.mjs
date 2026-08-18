@@ -12,6 +12,33 @@
 export const WHO = { 1: "下家", 2: "对家", 3: "上家" };
 
 /**
+ * **副露方自己的「左→右」在屏幕上是哪个方向**（票 82）。
+ *
+ * 位置编码本身一字未改（票 51：横放那张落在第几格就是来源，参照系是副露方），
+ * 变的只是那一排画在屏幕的哪条轴上：上下两家仍是横着一排（x 递增），
+ * **左右两家竖着一列（y 递增）**——牌转了 90°，“左右”跟着转成了“上下”。
+ * **两侧一律从上往下读**（不镜像）：屏幕前只有一个读者，四家都按同一个方向读才不会把一家读反。
+ */
+const RUN = {
+  self: { key: "x", said: "左→右", next: "右边" },
+  toimen: { key: "x", said: "左→右", next: "右边" },
+  kamicha: { key: "y", said: "上→下", next: "下边" },
+  shimocha: { key: "y", said: "上→下", next: "下边" },
+};
+
+/**
+ * 加杠加上去那张该叠在当初碰来那张的哪一侧：**副露方自己的「上面」**
+ * （= 离自己更远那一侧）。上下两家那一侧在屏幕上方，
+ * 上家（坐左、脸朝右）在右侧，下家（坐右、脸朝左）在左侧。
+ */
+const STACK = {
+  self: { key: "y", sign: -1, said: "上面" },
+  toimen: { key: "y", sign: -1, said: "上面" },
+  kamicha: { key: "x", sign: 1, said: "右边（上家那一侧的外侧）" },
+  shimocha: { key: "x", sign: -1, said: "左边（下家那一侧的外侧）" },
+};
+
+/**
  * 横放那张该落在第几格——**位置本身就是来源**（票 51）。
  *
  * 参照系是**副露方自己的左中右**：上家最左、对家中间、下家最右；
@@ -40,8 +67,9 @@ const SHAPE = {
  * 从页面上把四家的副露逐组读回来。读的是 `data-`（同一件事给机器看的那一半），
  * 人看见的那一半是**横放那张在第几格**与那枚「＋」——两者对不上时下面那道断言会说出来。
  *
- * 逐格连**屏幕横坐标**一起读：DOM 顺序对、画出来左右反了的话，「最左＝上家」这句话就假了
- * （票 44 §3.3 同一条教训：属性与坐标两头都要核）。
+ * 逐格连**屏幕坐标**一起读（两个轴都读）：DOM 顺序对、画出来反了的话，
+ * 「最左＝上家」这句话就假了（票 44 §3.3 同一条教训：属性与坐标两头都要核）。
+ * **方位也读回来**（票 82）：那一排画在哪条轴上跟着方位走（`RUN`）。
  */
 export function readNakiGroups(page) {
   return page.evaluate(() =>
@@ -57,6 +85,8 @@ export function readNakiGroups(page) {
 
           return {
             seat,
+            // 这一家画在哪个方位（`Board.position` 的输出）：副露那一排的轴跟着它走。
+            position: node.closest("[data-seat-position]")?.getAttribute("data-seat-position"),
             kind: node.getAttribute("data-naki"),
             from: node.getAttribute("data-naki-from"),
             fromSeat: node.getAttribute("data-naki-from-seat"),
@@ -72,8 +102,9 @@ export function readNakiGroups(page) {
                 added: addedTile !== null,
                 tiles: slot.querySelectorAll(".tile").length,
                 x: center(slot).x,
-                takenY: takenTile === null ? null : center(takenTile).y,
-                addedY: addedTile === null ? null : center(addedTile).y,
+                y: center(slot).y,
+                takenAt: takenTile === null ? null : center(takenTile),
+                addedAt: addedTile === null ? null : center(addedTile),
               };
             }),
             // 「来自上家」那句话**牌桌上看不见了**（票 51 主人裁定：位置为主、文字不留），
@@ -95,9 +126,10 @@ export function readNakiGroups(page) {
  * 3. 来源的**中文说法与绝对座位对得上**：参照系是副露方，不是观测者（漂了这条当场就红），
  *    且**吃恒来自上家**；
  * 4. 只有加杠有那一张 `data-naki-added`（后加上去的，出自自家手里），且它**叠在**
- *    横放那张上面（同一格、画得更高）；
+ *    横放那张的外侧（同一格、按副露方自己的上下算，见 `STACK`）；
  * 5. **横放那张所在的槽位 ↔ 绝对座位**（票 51 的位置编码），吃恒在最左；
- * 6. 那几格在屏幕上从左到右画着，DOM 顺序与坐标同向；
+ * 6. 那几格在屏幕上**按副露方自己的左→右**画着（见 `RUN`：上下两家是屏幕的左→右，
+ *    左右两家竖着摆，因此是屏幕的上→下），DOM 顺序与坐标同向；
  * 7. 来源那句中文仍写给读屏用户（`.naki-from`），但**牌桌上看不见**。
  *
  * 防空转由调用方负责（一组鸣来的副露都没有时，下面全部断言都会空着全绿）。
@@ -118,13 +150,23 @@ export function checkNakiGroups(groups) {
         missing.push(`${where}摆成 ${group.slots.length} 格，该有 ${shape.slots} 格`);
     }
 
-    // 那几格必须从左往右画。DOM 顺序与坐标一致才谈得上「最左＝上家」——
-    // 样式里一句 `row-reverse` 就能让属性全对、画出来全反。
-    for (let index = 1; index < group.slots.length; index += 1) {
-      if (!(group.slots[index].x > group.slots[index - 1].x))
-        missing.push(
-          `${where}第 ${index} 格没画在第 ${index - 1} 格右边（x=${Math.round(group.slots[index].x)} vs ${Math.round(group.slots[index - 1].x)}）：左右反了，位置就读不出来源`,
-        );
+    // 那几格必须**按副露方自己的左→右**画出来（票 82 起分方位取轴：上下两家是屏幕的左→右，
+    // 左右两家的牌转了 90°，那一排跟着变成屏幕的上→下）。DOM 顺序与坐标一致才谈得上
+    // 「最左＝上家」——样式里一句 `row-reverse` / `column-reverse` 就能让属性全对、画出来全反。
+    const run = RUN[group.position];
+    if (run === undefined) {
+      missing.push(`${where}所在的那一家没写方位（data-seat-position=「${group.position}」）`);
+    } else {
+      for (let index = 1; index < group.slots.length; index += 1) {
+        const here = group.slots[index][run.key];
+        const before = group.slots[index - 1][run.key];
+        if (!(here > before))
+          missing.push(
+            `${where}第 ${index} 格没画在第 ${index - 1} 格${run.next}` +
+              `（${run.key}=${Math.round(here)} vs ${Math.round(before)}）：` +
+              `这一家的副露该按 ${run.said} 排，反了位置就读不出来源`,
+          );
+      }
     }
 
     if (group.kind === "暗杠") {
@@ -176,13 +218,22 @@ export function checkNakiGroups(groups) {
     // 维基「槓」点名了这个坏处：上家からのポンが対面からの大明槓に化ける。
     if (group.kind === "加杠") {
       const stacked = group.slots.find((slot) => slot.added);
+      const stack = STACK[group.position];
       if (stacked === undefined) missing.push(`${where}没画出加上去的那张`);
       else if (!stacked.taken)
         missing.push(`${where}加上去的那张没跟当初碰来的那张摞在一格：位置读出来会变成另一个来源`);
-      else if (!(stacked.addedY < stacked.takenY))
-        missing.push(
-          `${where}加上去的那张没叠在上面（y=${Math.round(stacked.addedY)} vs ${Math.round(stacked.takenY)}）：看不出它是后加的`,
-        );
+      else if (stack === undefined)
+        missing.push(`${where}所在的那一家没写方位（data-seat-position）`);
+      else {
+        // 「叠在上面」按**副露方自己**的上下算（票 82）：左右两家的牌转了 90°，
+        // 那一侧在屏幕上是左右方向。差值要过半张牌（> 4px）才算真叠开了。
+        const stackGap = (stacked.addedAt[stack.key] - stacked.takenAt[stack.key]) * stack.sign;
+        if (!(stackGap > 4))
+          missing.push(
+            `${where}加上去的那张没叠在${stack.said}` +
+              `（${stack.key}=${Math.round(stacked.addedAt[stack.key])} vs ${Math.round(stacked.takenAt[stack.key])}）：看不出它是后加的`,
+          );
+      }
     }
   }
 

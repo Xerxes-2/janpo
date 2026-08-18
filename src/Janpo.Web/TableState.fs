@@ -204,8 +204,12 @@ type ReplayTable =
     | Loading
     /// 拉不动 / 读不动 / 回放不动：一句中文原因。**不许白屏**。
     | Failed of reason: string
-    /// fold 好了：逐帧的牌桌与播到第几帧。
-    | Ready of frames: Table list * cursor: int
+    /// fold 好了：逐帧的牌桌、播到第几帧，以及牌谱开头那一列 `names`。
+    ///
+    /// **名字跟着胶片走**（票 82）：帧是对事件流 fold 出来的，而 `names` 在 `start_game`
+    /// 那一条事件上——它不属于任何一局，因此 fold 不出来，只能在这一层带着。
+    /// 名牌上写的就是它（`provider/model`）：回放没有配桌，编一份出来只会被人当真。
+    | Ready of frames: Table list * cursor: int * names: string list
 
 /// **这一桌的牌从哪来**（票 71）。地址上的两页就是这两个 case（`Route.Landing`）。
 ///
@@ -581,7 +585,7 @@ module TableState =
             | Error message -> Shown.Fault message
         | Source.Replay ReplayTable.Loading -> Shown.Loading
         | Source.Replay(ReplayTable.Failed reason) -> Shown.Fault reason
-        | Source.Replay(ReplayTable.Ready(frames, cursor)) ->
+        | Source.Replay(ReplayTable.Ready(frames, cursor, _)) ->
             match List.tryItem cursor frames with
             | Some table -> Shown.Board table
             // 走不到：帧号只由 `replayTick` 与「从头再放」动，两处都夹在 [0, 末帧] 之间。
@@ -607,7 +611,7 @@ module TableState =
             match live.Table with
             | Ok table -> Table.pending table |> Option.isSome
             | Error _ -> false
-        | Source.Replay(ReplayTable.Ready(frames, cursor)) -> cursor < List.length frames - 1
+        | Source.Replay(ReplayTable.Ready(frames, cursor, _)) -> cursor < List.length frames - 1
         | Source.Replay ReplayTable.Loading
         | Source.Replay(ReplayTable.Failed _) -> false
 
@@ -669,6 +673,24 @@ module TableState =
             match Roster.playerAt seat roster with
             | SeatPlayer.Llm config -> Some config
             | SeatPlayer.Bot _ -> None)
+
+    /// 名牌上那一句「这一席是谁在打」（票 82），按座位升序；没话可说的那几席是空表。
+    ///
+    /// **两种来源各有各的真源，因此它在 `Source` 上分岔**：
+    /// Live 读配桌（档案名 + 脚手架档位；bot 席是那两档的中文），
+    /// 回放读牌谱开头那条 `start_game` 的 `names`（`provider/model`）。
+    /// **回放里不编档案名**：那是本机的私人叫法，牌谱里根本没有。
+    ///
+    /// 读 `live.Seating` 而不是 `effective live`：定型（`Rendering`）定的是人格与模板，
+    /// 名牌上那两样（交给谁、哪一档）不在定型里——拨一下当场就该变。
+    ///
+    /// **公开的**：牌桌上那行与用例读同一个推导。
+    let nameplates (model: TableModel) : string list =
+        match model.Source with
+        | Source.Live live -> SeatingPlan.nameplates live.Seating
+        | Source.Replay(ReplayTable.Ready(_, _, names)) -> names
+        // 还在拉 / 拉不动那两段根本没有牌桌，也就没有名牌。
+        | Source.Replay _ -> []
 
     /// 配桌那三项拨过了、但要按「重开」才生效吗（票 72）。
     ///
@@ -957,7 +979,12 @@ module TableState =
     ///
     /// **它不 fold、不判规则**：帧早在 `DemoLoaded` 那一刻一次 fold 好了（`Table.replay`），
     /// 这里只动一个整数。时间轴（拖动与逐事件步进）是票 75 的活，本票只顺着播。
-    let private replayTick (frames: Table list) (cursor: int) (model: TableModel) : TableModel * Cmd<TableMsg> =
+    let private replayTick
+        (frames: Table list)
+        (names: string list)
+        (cursor: int)
+        (model: TableModel)
+        : TableModel * Cmd<TableMsg> =
         let last = List.length frames - 1
 
         if cursor >= last then
@@ -969,7 +996,7 @@ module TableState =
         else
             let played = {
                 model with
-                    Source = Source.Replay(ReplayTable.Ready(frames, cursor + 1))
+                    Source = Source.Replay(ReplayTable.Ready(frames, cursor + 1, names))
             }
 
             if cursor + 1 >= last then
@@ -1001,7 +1028,8 @@ module TableState =
                 {
                     model with
                         Ruleset = paifu.Ruleset
-                        Source = Source.Replay(ReplayTable.Ready(frames, 0))
+                        // 名字从牌谱里读（`Table.names`）：回放没有配桌，这是唯一来源（票 82）。
+                        Source = Source.Replay(ReplayTable.Ready(frames, 0, Table.names paifu))
                         Playback = playback
                 },
                 schedule playback
@@ -1129,7 +1157,7 @@ module TableState =
         | Source.Live _
         | Source.Replay ReplayTable.Loading
         | Source.Replay(ReplayTable.Failed _) -> None
-        | Source.Replay(ReplayTable.Ready(frames, cursor)) ->
+        | Source.Replay(ReplayTable.Ready(frames, cursor, _)) ->
             // 取不到那一帧走不到：帧号只由 `replayTick` / `moveCursor` /「从头再放」动，
             // 三处都夹在 [0, 末帧] 之间。真走到了就当没有时间轴，`shown` 那边会把话说出来。
             List.tryItem cursor frames
@@ -1151,12 +1179,12 @@ module TableState =
     ///
     /// **一拖就暂停**：手搭在时间轴上的人显然不想让定时器接着跑（与 Live 的「单步」同一个做法）。
     /// `Playback.pause` 顺带换世代，在飞的那记定时器因此作废（`Playback.accepts`）。
-    let private moveCursor (frame: int) (frames: Table list) (model: TableModel) : TableModel =
+    let private moveCursor (frame: int) (frames: Table list) (names: string list) (model: TableModel) : TableModel =
         let last = List.length frames - 1
 
         {
             model with
-                Source = Source.Replay(ReplayTable.Ready(frames, frame |> max 0 |> min last))
+                Source = Source.Replay(ReplayTable.Ready(frames, frame |> max 0 |> min last, names))
                 Playback = Playback.pause model.Playback
         }
 
@@ -1243,7 +1271,7 @@ module TableState =
         | Source.Live _
         | Source.Replay ReplayTable.Loading
         | Source.Replay(ReplayTable.Failed _) -> false
-        | Source.Replay(ReplayTable.Ready(frames, _)) ->
+        | Source.Replay(ReplayTable.Ready(frames, _, _)) ->
             // 末帧看得见整份牌谱的记录（`recordedBy` 切的是「手序 < 这一帧手数」）。
             frames
             |> List.tryLast
@@ -1286,7 +1314,8 @@ module TableState =
             model with
                 Source =
                     match model.Source with
-                    | Source.Replay(ReplayTable.Ready _) -> Source.Replay(ReplayTable.Ready(frames, frame))
+                    | Source.Replay(ReplayTable.Ready(_, _, names)) ->
+                        Source.Replay(ReplayTable.Ready(frames, frame, names))
                     // Live 那一侧没有游标：牌桌那一桌原样留着。
                     | source -> source
                 Opened = List.tryItem frame frames
@@ -1295,7 +1324,7 @@ module TableState =
 
         let frames =
             match model.Source with
-            | Source.Replay(ReplayTable.Ready(frames, _)) -> frames
+            | Source.Replay(ReplayTable.Ready(frames, _, _)) -> frames
             | Source.Replay _
             | Source.Live _ -> liveFrames model
 
@@ -1364,7 +1393,13 @@ module TableState =
             // **默认暂停**（`Playback.initial`）：`?table=1` 是最安静的一页，
             // 要点、要读牌桌的那几道无头闸门全靠这一条。
             Playback = Playback.initial
-            Viewpoint = Viewpoint.Seated Seat.first
+            // **默认上帝视角**（票 81 交给票 82 的那一件；理由见 `DECISIONS.md` 81-2 那一段）：
+            // 票 81 之后视角是气泡的闸门，坐座位 0 的话**把模型摆在 1–3 席的主持人
+            // 第一眼看不到自家模型说话**。`unlocked`（ADR-0003）管的是「有真人在对局中」，
+            // 而今天 `humanSeated` 恒 false——没有可泄露的对象；
+            // 「模型看到的和你一样多」那条演示离一次点击（座位 N 那枚按钮）就够。
+            // **`reveals` 与 `unlocked` 的规则一个字没动**：改的只有这一处默认值。
+            Viewpoint = Viewpoint.God
             // 危险度默认关（票 25）。
             ShowDanger = false
             // 还没点开任何一手的全文面板（票 76）。
@@ -1387,7 +1422,7 @@ module TableState =
             // **回放默认上帝视角**（裁决 71-8，票 75 执行）：这份牌谱已经打完了，
             // 没有人还在对局，因此不存在「提前看到他家手牌」那件事（票 22 那条泄露挂账
             // 针对的是真人坐席在场）；而复盘的价值全在看得见四家。
-            // **Live 那一页不动**（`initial` 仍是坐到座位 0）：那一页牌还在打。
+            // **Live 那一页从票 82 起也是上帝视角**（见 `initial`）：两页因此同一个默认。
             Viewpoint = Viewpoint.God
             ShowDanger = false
             Opened = None
@@ -1476,12 +1511,12 @@ module TableState =
             // 回放的「从头再放」：回到第 0 帧，接着自动播。**帧不必重算**——它们是值。
             // `Playback.restart` 顺带换世代：正播着时再按，在飞的那记定时器必须作废，
             // 否则它与新发的那记一起被认下，牌桌从此双倍速走（票 78 按红过一次）。
-            | Source.Replay(ReplayTable.Ready(frames, _)) ->
+            | Source.Replay(ReplayTable.Ready(frames, _, names)) ->
                 let playback = Playback.restart model.Playback.Speed model.Playback
 
                 {
                     model with
-                        Source = Source.Replay(ReplayTable.Ready(frames, 0))
+                        Source = Source.Replay(ReplayTable.Ready(frames, 0, names))
                         Playback = playback
                 },
                 schedule playback
@@ -1524,7 +1559,7 @@ module TableState =
         | Ticked generation when not (Playback.accepts generation model.Playback) -> model, Cmd.none
         | Ticked _ ->
             match model.Source with
-            | Source.Replay(ReplayTable.Ready(frames, cursor)) -> model |> replayTick frames cursor
+            | Source.Replay(ReplayTable.Ready(frames, cursor, names)) -> model |> replayTick frames names cursor
             | Source.Replay _ -> model, Cmd.none
             | Source.Live live ->
                 let advanced, cmd = step model.Ruleset live
@@ -1536,7 +1571,7 @@ module TableState =
                 |> resume cmd
         | CursorMoved frame ->
             match model.Source with
-            | Source.Replay(ReplayTable.Ready(frames, _)) -> moveCursor frame frames model, Cmd.none
+            | Source.Replay(ReplayTable.Ready(frames, _, names)) -> moveCursor frame frames names model, Cmd.none
             // 还没 fold 好的那两段没有帧可拖；Live 那一侧根本没有时间轴
             // （在 Live 里点历史某一手是票 76）。两条都是「没有事情发生」，不是错误。
             | Source.Replay _

@@ -559,6 +559,42 @@ module TablePageTests =
             | Some config -> Assert.Equal(profile.ApiKey, config.ApiKey)
             | None -> failwith $"座位 {Seat.index seat} 该是模型"
 
+    [<Fact>]
+    let ``名牌上看得出这一席是谁在打：Live 写档案名与档位，bot 写那两档`` () =
+        // 两席引同一份档案、档位不同——对照实验的常态（CONTEXT.md：档案与档位是两个维度）。
+        // **只写档案名就分不出那两席**，因此名牌上两样都要有。
+        let seats = Seat.all Ruleset.yonma
+        let at (index: int) : Seat = List.item index seats
+
+        let plan =
+            bots
+            |> SeatingPlan.bind (at 0) (SeatChoice.Profile profile.Name)
+            |> SeatingPlan.bind (at 1) (SeatChoice.Profile profile.Name)
+            |> SeatingPlan.editSeat (at 1) SeatField.Tier (ScaffoldTier.toWire ScaffoldTier.Assisted)
+            |> SeatingPlan.bind (at 2) (SeatChoice.Bot Bot.Opinionated)
+
+        let model = TablePage.initial RulesetDraft.initial plan |> fst
+
+        Assert.Equal<string list>([ "凶狠的老张・裸奔"; "凶狠的老张・信息辅助"; "有主见"; "均匀随机" ], TablePage.nameplates model)
+
+        // 拨一席换档位，名牌当场跟着变（**不等下一局**：定型定的是人格与模板，不是这两样）。
+        let switched =
+            model
+            |> step (SeatEdited(at 0, SeatField.Tier, ScaffoldTier.toWire ScaffoldTier.Assisted))
+
+        Assert.Equal<string list>([ "凶狠的老张・信息辅助"; "凶狠的老张・信息辅助"; "有主见"; "均匀随机" ], TablePage.nameplates switched)
+
+        // **档案名不上牌谱**（`Roster.names` 恒是 `provider/model`）：名牌只活在这一页上。
+        Assert.Equal<string list>(
+            [
+                "deepseek/deepseek-v4-flash"
+                "deepseek/deepseek-v4-flash"
+                "opinionated"
+                "random"
+            ],
+            Roster.names (rosterOf model)
+        )
+
     /// 推到「几席同时在飞」的那一刻就停（票 74：响应阶段一次把所有待答席问出去）。
     /// 预算内没遇到就 fail——**没执行到的断言等于没有断言**（判据 3）。
     let private askedMany (model: TableModel) : TableModel =

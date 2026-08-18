@@ -96,6 +96,56 @@ async function seatShape(page) {
 }
 
 /**
+ * **名牌上看得出这一席是谁在打**（票 82 的意见⑤）——这一道核的是**模型席那一半**：
+ * 牌桌上那一席的名牌写着**档案名 + 脚手架档位**（bot 席写那两档的中文）。
+ *
+ * 三条断言，各守一件：
+ *
+ *   ① 四家的名牌逐字对得上这一桌的坐法（两席同一份档案、一席另一份、一席 bot）；
+ *   ② **档案名只活在这一页上**：它绝不该进牌谱（那一条在下面的导出断言里，两处互为对照）；
+ *   ③ **档位真的写在名牌上**：把座位 1 拨成「信息辅助」，它那一枚名牌当场跟着变，
+ *      而**引同一份档案的座位 0 不动**——两席同档案不同档位正是对照实验的常态，
+ *      只写档案名就分不出那两席（拨完拨回去，后面那几程看到的仍是人刚打开时那一屏）。
+ */
+async function nameplates(page) {
+  return await page.evaluate(() =>
+    [0, 1, 2, 3].map(
+      (seat) =>
+        document.querySelector(`[data-testid="seat-${seat}-player"]`)?.textContent?.trim() ?? null,
+    ),
+  );
+}
+
+async function nameplateProblems(page) {
+  const problems = [];
+  const plate = async (seat) => (await nameplates(page))[seat];
+
+  const wanted = [`${GOOD}・裸奔`, `${GOOD}・裸奔`, `${BROKEN}・裸奔`, "均匀随机"];
+  const said = await nameplates(page);
+  for (const seat of [0, 1, 2, 3]) {
+    if (said[seat] !== wanted[seat])
+      problems.push(
+        `座位 ${seat} 的名牌上写着「${said[seat]}」，该是「${wanted[seat]}」：` +
+          "名牌上要看得出这一席是哪份档案、哪一档在打（票 82）",
+      );
+  }
+
+  await page.getByTestId("table-seat-1-tier").selectOption("assisted");
+  const switched = await plate(1);
+  const untouched = await plate(0);
+  if (switched !== `${GOOD}・信息辅助`)
+    problems.push(
+      `把座位 1 拨成「信息辅助」之后名牌仍写着「${switched}」：档位没写在名牌上，` +
+        "同一份档案坐两席就分不出哪一席给了多少信息（票 82）",
+    );
+  if (untouched !== `${GOOD}・裸奔`)
+    problems.push(`拨座位 1 的档位把座位 0 的名牌也改成了「${untouched}」：档位是**座位级**的`);
+  await page.getByTestId("table-seat-1-tier").selectOption("bare");
+
+  return problems;
+}
+
+/**
  * **四席一眼看得全**（票 83 的硬判据）。四条断言，各守一件：
  *
  *   ① 四行同时完整落在视口里（不用滚就读得完「座位 → 选手 → 档位」）；
@@ -238,8 +288,10 @@ export async function verifySeats(lane, options = {}) {
     }
     console.log(bound.join("\n"));
     console.log(`状态线上的四席：${await readAttr("table-agent", "data-seats")}`);
+    console.log(`牌桌上四家的名牌：${(await nameplates(page)).join(" / ")}`);
 
     problems.push(...(await seatDensityProblems(page)));
+    problems.push(...(await nameplateProblems(page)));
 
     // **key 在界面上只出现在档案编辑处**：座位那几行一个 key 输入框都没有。
     const keyFields = await page

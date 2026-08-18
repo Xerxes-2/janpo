@@ -34,7 +34,19 @@
 // 跑法：`cd web && pnpm run build && pnpm run verify:home`
 // 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { stepTurns } from "./table-drive.mjs";
+
+const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** 首页那份 Demo 牌谱里那一列 `names`（名牌上写的就是它，票 82）。 */
+function demoNames() {
+  const paifu = JSON.parse(readFileSync(resolve(webRoot, "public/demo-paifu.json"), "utf8"));
+  return paifu.events?.[0]?.names ?? [];
+}
 
 /**
  * 只属于主持人那一页的控件。首页上出现任何一个都算「第一眼是张表单」。
@@ -84,6 +96,33 @@ const SAMPLE_GAP_MS = 1000;
  * **按一下、看结果不必把视线甩回页面顶部**。
  */
 const OPS_TO_BOARD_MAX_PX = 40;
+
+/**
+ * **一屏**（票 83 把这条交给票 82）：在这个视口里打开 `?table=1`，
+ * 「操作块顶边 → 牌桌底边」必须一次看得完，不用滚。
+ *
+ * 票 83 落地时这个数是 **912 px**（要滚约 112 px；它当时按四家横排量的是约 150 px），
+ * 票 82 把左右两家竖起来、桌心改成横排之后是 **约 700 px**。
+ * **视口写死在断言里**：一屏这件事离了「多大的屏」就没有意义。
+ */
+const ONE_SCREEN = { width: 1280, height: 800 };
+
+/**
+ * 量一屏之前先走几手（票 82）。**开局那一刻量不出这件事**：河是空的，四家的面板都矮
+ * （旧几何在开局那一刻也只跨 745 px，这一条那时是绿的）。牌桌真正变高是河长起来之后——
+ * 32 手 ≈ 每家 8 巡：**旧几何在这里跨 912 px（红），新几何 723 px**。
+ * 再往后每家的河每多一行，上下两家各高一截（36–48 手 785 px；河到 13 张之后仍旧要滚，
+ * 报告 82 §4 有整张表）——这一条钉的是**中盘那一屏**，不是终盘。
+ */
+const ONE_SCREEN_TURNS = 32;
+
+/**
+ * 主持人那一页抬头那段说明的高度上限（票 82）。一行正文在这一页上是 27 px，
+ * 40 px 是「一行 + 边距微调」，**写到两行就超**。
+ * 票 82 之前它是四行 **82 px**——那一段的读者是主持人自己，他每开一次这一页都要从它头上跳过去。
+ * **首页那两段不在这条断言里**：那一段是写给头一回来的访客的。
+ */
+const HOST_INTRO_MAX_PX = 40;
 
 /** 在滑块的这个位置上点一下（0 = 最左 = 第 0 帧，1 = 最右 = 末帧）。 */
 const DRAG_TO = 0.75;
@@ -211,6 +250,104 @@ function opsProblems(shape, where, wantsSetup) {
   return said;
 }
 
+/**
+ * **一屏那一条**（票 82 兑现票 83 交下来的那 150 px）：在 1280×800 里打开 `?table=1`，
+ * 「按一下」的那一排与整张牌桌要一次看得完。
+ *
+ * 顺带量抬头那一段：主持人那一页的说明压到一行。
+ * 两条都读**真坐标**，因此几何一退化当场就红——票 83 立那条 40 px 时用的是同一个办法。
+ */
+async function oneScreenProblems(lane, url) {
+  const page = await lane.newPage({ viewport: ONE_SCREEN });
+  const said = [];
+
+  try {
+    await page.goto(`${url}/?table=1`, { waitUntil: "load" });
+    await page.getByTestId("table-board").waitFor({ timeout: 15000 });
+
+    const { walked } = await stepTurns(page, { limit: ONE_SCREEN_TURNS });
+    if (walked < ONE_SCREEN_TURNS)
+      said.push(
+        `量一屏之前只走得动 ${walked} 手（要 ${ONE_SCREEN_TURNS} 手）：` +
+          "河还没长起来，这一条量的是开局那一刻——那时它恒为真（票 82）",
+      );
+
+    const shot = await page.evaluate(() => {
+      const at = (testId) => {
+        const node = document.querySelector(`[data-testid="${testId}"]`);
+        if (node === null) return null;
+        const rect = node.getBoundingClientRect();
+        return {
+          top: Math.round(rect.top + window.scrollY),
+          bottom: Math.round(rect.bottom + window.scrollY),
+          height: Math.round(rect.height),
+        };
+      };
+      return { ops: at("table-ops"), board: at("table-board"), intro: at("table-intro") };
+    });
+
+    if (shot.ops === null || shot.board === null) {
+      said.push("?table=1 上没有操作块或牌桌：一屏那一条无从量起");
+      return { said, shot };
+    }
+
+    const span = shot.board.bottom - shot.ops.top;
+    if (span > ONE_SCREEN.height)
+      said.push(
+        `?table=1 走 ${ONE_SCREEN_TURNS} 手之后，在 ${ONE_SCREEN.width}×${ONE_SCREEN.height} 里「操作块 + 整张牌桌」跨了 ${span} px：` +
+          `还要滚 ${span - ONE_SCREEN.height} px 才看得全（票 82/83 的一屏目标）`,
+      );
+
+    if (shot.intro === null) {
+      said.push('?table=1 上没有抬头那一段（[data-testid="table-intro"]）');
+    } else if (shot.intro.height > HOST_INTRO_MAX_PX) {
+      said.push(
+        `?table=1 的抬头占了 ${shot.intro.height} px（上限 ${HOST_INTRO_MAX_PX} px = 一行）：` +
+          "这一段的读者是主持人自己，不必每次读四行（票 82）",
+      );
+    }
+
+    return { said, shot };
+  } finally {
+    await page.close();
+  }
+}
+
+/**
+ * **名牌上看得出这一席是谁在打**（票 82 的意见⑤）——这一道核的是**回放那一半**：
+ * 牌谱里那一列 `names`（`provider/model`）。
+ *
+ * 两头对上：页面上那四枚名牌 ↔ **资产文件里**那条 `start_game` 的 `names`。
+ * 拿资产当期望值而不是拿页面自己的另一处，是因为回放的名字只有一个真源；
+ * **档案名不许出现**（那是本机的私人叫法，牌谱里根本没有，编一个出来会被人当真）。
+ */
+async function nameplateProblems(page, names) {
+  const said = [];
+  const plates = await page.evaluate(() =>
+    [0, 1, 2, 3].map(
+      (seat) =>
+        document.querySelector(`[data-testid="seat-${seat}-player"]`)?.textContent?.trim() ?? null,
+    ),
+  );
+
+  for (const seat of [0, 1, 2, 3]) {
+    if (plates[seat] !== names[seat])
+      said.push(
+        `座位 ${seat} 的名牌上写着「${plates[seat]}」，牌谱里那一列写的是「${names[seat]}」：` +
+          "回放的名牌只有牌谱这一个真源（票 82）",
+      );
+  }
+
+  // 阳性对照：那一列真是 `provider/model` 的形状（四个空串也能让上面那一圈全绿）。
+  if (!names.every((name) => /^[^/\s]+\/[^/\s]+$/.test(name)))
+    said.push(
+      `这份牌谱里的 names 是「${names.join("，")}」，不是 provider/model 的形状：` +
+        "上面那一圈因此什么都没证明",
+    );
+
+  return { said, plates };
+}
+
 /** 四家的手牌扣起来几份（`data-hand-hidden`，投影的形状，不是渲染纪律）。 */
 async function hiddenHands(page) {
   return await page.evaluate(
@@ -279,6 +416,7 @@ export async function verifyHome(lane) {
   const leaks = [];
   let dragCount = 0;
   let hostOps = null;
+  let oneScreen = null;
 
   try {
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
@@ -322,6 +460,10 @@ export async function verifyHome(lane) {
     // ——**两屏同一条规则**，只量一屏的话另一屏随时可以退化成票 83 之前那副样子。
     const homeOps = await opsShape(page);
     missing.push(...opsProblems(homeOps, "首页", false));
+
+    // ⑩ 名牌上看得出这一席是谁在打（票 82）：回放那一半，写的是牌谱里的 `provider/model`。
+    const nameplates = await nameplateProblems(page, demoNames());
+    missing.push(...nameplates.said);
 
     // ⑤ 默认上帝视角（裁决 71-8）：四家的手牌都摊着。
     // **后面那一下是阳性对照**：切到坐位 0 之后他家必须扣回去——
@@ -547,6 +689,10 @@ export async function verifyHome(lane) {
       }
     }
 
+    // ⑪ 一屏（票 82 兑现票 83 那 150 px）：另开一页量，因为它要一个写死的视口。
+    oneScreen = await oneScreenProblems(lane, url);
+    missing.push(...oneScreen.said);
+
     // ④ 页脚照旧（票 37）：地址本身不在这里复述（真源在 `src/Janpo.Web/Footer.fs` 一处）。
     await page.goto(`${url}/`, { waitUntil: "load" });
     const footerLinks = await page
@@ -581,6 +727,13 @@ export async function verifyHome(lane) {
       `操作控件贴着牌桌 ✓（首页隔 ${homeOps.board.top - homeOps.ops.bottom} px、` +
         `?table=1 隔 ${hostOps.board.top - hostOps.ops.bottom} px，上限 ${OPS_TO_BOARD_MAX_PX} px；` +
         "两屏都没有吸底元素；?table=1 的配桌表单在操作条之上）",
+    );
+    console.log(
+      `名牌上看得出这一席是谁在打 ✓（四家：${nameplates.plates.join(" / ")}，与牌谱里那一列 names 逐字相同）`,
+    );
+    console.log(
+      `一屏 ✓（${ONE_SCREEN.width}×${ONE_SCREEN.height} 里 ?table=1 走 ${ONE_SCREEN_TURNS} 手之后，「操作块 + 整张牌桌」跨 ` +
+        `${oneScreen.shot.board.bottom - oneScreen.shot.ops.top} px；抬头一段 ${oneScreen.shot.intro.height} px）`,
     );
     console.log("页脚里有回仓库的外链与许可（MIT）✓");
     return [];

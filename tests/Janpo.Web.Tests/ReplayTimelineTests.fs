@@ -415,7 +415,7 @@ module ReplayTimelineTests =
         // 开局那一帧一律没有（它没落定新的一手，手数沿用着上一局的）。
         Assert.Equal(None, recordAt 0)
 
-    // ---- 71-8：回放默认上帝视角，Live 不动 ----
+    // ---- 71-8：回放默认上帝视角（票 82 起 Live 也是） ----
 
     [<Fact>]
     let ``回放默认上帝视角：四家的牌都摊着`` () =
@@ -456,10 +456,22 @@ module ReplayTimelineTests =
             )
 
     [<Fact>]
-    let ``Live 那一页的默认视角不动，也没有时间轴`` () =
+    let ``两页默认同一个视角（上帝），而 Live 仍没有时间轴`` () =
         let model, _ = TablePage.initial RulesetDraft.initial hostSeating
 
-        Assert.Equal(Viewpoint.Seated Seat.first, model.Viewpoint)
+        // 票 82（票 81 交办的那件）：从前 Live 默认坐座位 0，而票 81 之后视角是气泡的闸门
+        // ——把模型摆在 1–3 席的主持人第一眼看不到自家模型说话。
+        // **两页同一个默认**才是这一条的重点，因此两边一起钉：只改一页当场就红。
+        Assert.Equal(Viewpoint.God, model.Viewpoint)
+        Assert.Equal((TablePage.home () |> fst).Viewpoint, model.Viewpoint)
+
+        // 默认变了，**坐下去那一条路一字未动**（`reveals` 与 `unlocked` 的规则都没碰）：
+        // 按一下座位 N 仍旧只看得见那一席。
+        let seated = model |> step (ViewpointPicked(Viewpoint.Seated Seat.first))
+        Assert.Equal(Viewpoint.Seated Seat.first, seated.Viewpoint)
+        Assert.True(TablePage.reveals seated Seat.first)
+        Assert.False(TablePage.reveals seated (List.item 1 (Seat.all Ruleset.yonma)))
+
         Assert.True(Option.isNone (TablePage.timeline model), "Live 里点历史某一手是票 76")
 
         // 拖它一律无事发生（页面上根本没有那根轴，但 update 是纯的，喂进去也不许把它弄坏）。
