@@ -219,20 +219,6 @@ module RiichiTests =
             Draws = "1z"
         }
 
-    /// 立直后见逃的剧本：Oya 听 5z 单骑，第 1 巡立直；座位 1 第 1 巡就摸切 5z，
-    /// Oya 放过它（永久振听），第 2 巡摸进 2z 只能摸切。
-    let private minogashiScript =
-        {
-            Hands =
-                [
-                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
-                    "1p 4p 7p 1s 4s 7s 1z 2z 3z 4z 6z 7z 9m"
-                    "2p 5p 8p 2s 5s 8s 1z 2z 3z 4z 6z 7z 9m"
-                    "3p 6p 9p 3s 6s 9s 1z 2z 3z 4z 6z 7z 9m"
-                ]
-            Draws = "1z 5z 3z 4z 2z"
-        }
-
     /// **振听时立直、用宣言牌换听**的剧本（票 13 的对拍报出来的那个 bug）：
     ///
     /// Oya 听 `3p / 6p`，第 1 巡摸进和了牌 `6p` 却打掉它 → 永久振听；

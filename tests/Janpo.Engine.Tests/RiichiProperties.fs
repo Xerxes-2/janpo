@@ -11,15 +11,18 @@ open Janpo.Engine.Tests.GameStateFixtures
 /// 最值钱的两条：**供托的根数恒等于「局初供托 + `reach_accepted` 的条数」**（立直棒不会
 /// 凭空多出来也不会漏记），以及**一发只可能亮在立直成立的那家头上**。
 ///
-/// **这一族的采样有多稀**（票 96 把 `GameStateArbitraries` 的全域——400 颗种子 × 10 条轨迹
-/// ——逐步数了一遍）：21.7 万个局面里只有 **104 个**「有家立直中」，且全部来自
-/// `riichiSeeking` 那一条轨迹；换算下来，一趟属性（100 个样本）里这几条断言只有
-/// **约 10%** 的概率真的开过口（判据 3）。因此**具名用例才是这一族的主力闸门**：
-/// `RiichiTests` 与下面那两条 `[<Fact>]`。
+/// **这一族的采样有多稀：票 97 之前稀到十趟有九趟空转**。票 96 把 `GameStateArbitraries`
+/// 的全域逐步数了一遍：21.7 万个局面里只有 **104 个**「有家立直中」（一个样本 0.103%，
+/// 一趟 100 个样本只有 **9.8%** 的概率开过口，判据 3）。票 97 往轨迹表里补了三条
+/// **摊好牌山的立直轨迹**（三家立直到荒牌流局 / 四家立直 / 立直一发荣和），
+/// 现在是每个样本 **11.2%**、一趟 **99.999%**。重量与占比用 `scripts/fsi/arbitrary-coverage.fsx`
+/// 量，别拍脑袋。
 ///
-/// **立直 + 副露（暗杠）在这个取值域里到不了**：`riichiSeeking` 从不杠、`kanSeeking`
-/// 从不立直，因此 `stillTenpai` 里 `nakiCount > 0` 那一支靠的是 `KanTests` 里
-/// `riichiAnkanScript` 的具名用例（判据 4：覆盖不到的要写出来）。
+/// **采样仍然到不了每趟的那几支**（判据 4：覆盖不到的写出来，别留在旁白里）：
+/// 「宣言牌还没打出去」89%、「立直中的家被问荣和」46%、「立直后暗杠进动作集」15%。
+/// 它们的闸门不是随机采样，是下面那条定点锚点
+/// （`摊好牌山的三条立直轨迹：每一类立直局面都到过，六条不变量逐步都成立`）
+/// 与 `RiichiTests` 的具名用例。
 [<Properties(Arbitrary = [| typeof<GameStateArbitraries> |], Parallelism = 8)>]
 module RiichiProperties =
 
@@ -223,6 +226,102 @@ module RiichiProperties =
 
     [<Property>]
     let ``立直中的家永远听牌，且它的手牌自立直起不再变`` (state: GameState) = riichiHandsIntact state
+
+    // ---- 摊好牌山的定点锚点（采样保证不了的那几支靠它们） ----
+
+    /// 正在打牌那家的立直状态（不是打牌阶段就是 `RiichiState.none`）。
+    let private actorRiichi (state: GameState) : RiichiState =
+        match GameState.phase state with
+        | AwaitingDahai phase -> riichiOf phase.Actor state
+        | AwaitingResponse _
+        | Ended _ -> RiichiState.none
+
+    /// 票 97 往 `GameStateArbitraries.Traces` 里补的那三条**摊好牌山的立直轨迹**（同一份）。
+    let private scriptedRiichiTraces =
+        [
+            "三家立直后暗杠", riichiKanTrace sanchaRiichiAnkanScript
+            "四家立直", riichiTrace suuchaRiichiScript
+            "立直一发荣和", riichiTrace minogashiScript
+        ]
+
+    /// 这六类局面**每一类都得到过**，否则下面那条锚点会悄悄退化成空转（判据 3）。
+    /// 括号里是它们在**随机采样**里一趟开口的概率（票 97 实测）：越低的越指望这条锚点。
+    let private riichiSituations: (string * (GameState -> bool)) list =
+        [
+            "立直中且有副露（99.6%）",
+            fun state ->
+                GameState.players state
+                |> List.exists (fun player ->
+                    RiichiState.isActive (PlayerState.riichi player)
+                    && PlayerState.nakiCount player > 0)
+            "立直成立且轮到它打牌（98.4%）", actorRiichi >> RiichiState.isAccepted
+            "宣言牌还没打出去（89.2%）",
+            fun state ->
+                match actorRiichi state with
+                | RiichiState.Declared _ -> true
+                | RiichiState.Accepted _
+                | RiichiState.None -> false
+            "立直中的家被问荣和（45.7%）",
+            fun state ->
+                match GameState.phase state with
+                | AwaitingResponse phase ->
+                    phase.Responses
+                    |> List.exists (fun choice -> RiichiState.isActive (riichiOf choice.Seat state))
+                | AwaitingDahai _
+                | Ended _ -> false
+            "立直后暗杠进了动作集（14.9%）",
+            fun state ->
+                match GameState.phase state with
+                | AwaitingDahai phase ->
+                    RiichiState.isActive (riichiOf phase.Actor state)
+                    && phase.Actions
+                       |> List.exists (fun action ->
+                           match action with
+                           | Action.Ankan _ -> true
+                           | Action.Dahai _
+                           | Action.Hora _
+                           | Action.Pon _
+                           | Action.Chi _
+                           | Action.Riichi _
+                           | Action.Kakan _
+                           | Action.Minkan _
+                           | Action.Ryuukyoku _
+                           | Action.None _ -> false)
+                | AwaitingResponse _
+                | Ended _ -> false
+            "一发亮着（99.2%）", fun state -> GameState.players state |> List.exists PlayerState.ippatsu
+        ]
+
+    /// 上面那六条随机属性的判据本身。**锚点跑的就是它们，不另写一份**
+    /// （否则锚点与属性会各自飘，而那正是判据 3 抱怨的那种「看着在守」）。
+    let private riichiInvariants: (string * (GameState -> bool)) list =
+        [
+            "供托守恒", ``场上的立直棒恒等于局初供托加上这一局成立的立直，和了收走之后归零``
+            "reach 配对", ``每条 reach_accepted 都对得上一条 reach，且成立的不多于宣言的``
+            "一发", ``一发只可能亮在立直成立的那家头上，任何鸣牌之后全场都没有一发``
+            "立直后只剩摸切", ``立直成立之后那家只剩自摸和、暗杠与摸切，宣言牌那一手只剩仍然听牌的打法``
+            "立直中鸣不了但被问荣和", ``立直中的座位鸣不了牌，但仍然被问到荣和``
+            "立直中的手牌不再变", riichiHandsIntact
+        ]
+
+    /// **票 97 的定点锚点**：三条摊好牌山的立直轨迹逐步验上面六条不变量，
+    /// **并先自证六类关键局面一类不缺**。随机采样把「有家立直中」抬到了一趟必开口，
+    /// 但「宣言牌还没打出去」「被问荣和」「立直后暗杠」这几支仍然没到那一步（见模块头）
+    /// ——**那几支的闸门就是这一条**。
+    [<Fact>]
+    let ``摊好牌山的三条立直轨迹：每一类立直局面都到过，六条不变量逐步都成立`` () =
+        let states = scriptedRiichiTraces |> List.collect snd
+
+        for situation, predicate in riichiSituations do
+            let hits = states |> List.filter predicate |> List.length
+
+            Assert.True(hits > 0, $"三条立直轨迹里一个「{situation}」的局面都没有：这条锚点已经退化成空转了")
+
+        for label, trace in scriptedRiichiTraces do
+            trace
+            |> List.iteri (fun index state ->
+                for invariant, predicate in riichiInvariants do
+                    Assert.True(predicate state, $"{label} 第 {index} 步破了「{invariant}」（立直中的手牌：{riichiHandsOf state}）"))
 
     /// 一局**立直之后自摸和**的全部局面（`tsumoHoraScript` 的牌山 + 见立直就立直的选手）：
     /// Oya 听 `5z` 单骑，第 1 巡摸进 `1z` 就立直、摸切宣言牌，第 2 巡摸进 `5z`

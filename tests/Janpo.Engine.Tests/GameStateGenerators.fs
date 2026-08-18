@@ -236,6 +236,55 @@ module GameStateFixtures =
             Draws = "9s 9p 8p 8m 2m 9p 2m"
         }
 
+    // ---- 立直的剧本（RiichiTests / RiichiProperties 共用） ----
+    //
+    // **随机取样几乎给不出立直局面**：票 96 把 `GameStateArbitraries` 的全域扫了一遍，
+    // 21.7 万个局面里只有 104 个「有家立直中」。因此立直也要像杠那样摊牌山
+    // （备注 N-8 的同一课），下面这几条剧本就是喂给它们的。
+
+    /// 立直后见逃的剧本：Oya 听 5z 单骑，第 1 巡立直；座位 1 第 1 巡就摸切 5z，
+    /// 它放过了那一张（见逃）——**立直后的见逃是永久振听**，之后座位 2 与 3 再摸切
+    /// 3z / 4z，它都荣和不了；自己第 2 巡摸进 2z 仍旧听 5z。
+    ///
+    /// **同一座牌山换个选手就是另一条用例**：见和就和的选手（`riichiSeeking`）拿它跑出来的是
+    /// **立直一发荣和**的五步一局，而那五步里有一步是「立直中的家被问荣和」
+    /// （全域扫一遍只有 3 个那一类的局面，票 97）。
+    let minogashiScript =
+        {
+            Hands =
+                [
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 1p 2p 3p 5z"
+                    "1p 4p 7p 1s 4s 7s 1z 2z 3z 4z 6z 7z 9m"
+                    "2p 5p 8p 2s 5s 8s 1z 2z 3z 4z 6z 7z 9m"
+                    "3p 6p 9p 3s 6s 9s 1z 2z 3z 4z 6z 7z 9m"
+                ]
+            Draws = "1z 5z 3z 4z 2z"
+        }
+
+    /// 三家立直、其中两家立直后暗杠、一路打到荒牌流局的剧本（票 97）：
+    ///
+    /// - 座位 0：`123456789m + 555z + 1z`，第 1 巡摸进 6z 宣立直摸切，听 1z 单骑；
+    ///   第 2 巡摸进第四张 5z——听牌与面子构成都不变，**杠得**（`RiichiState.allowsAnkan`）；
+    /// - 座位 1（`111s 999s 111p 999p + 7z`）与座位 2（`222m 888m 222p 888p + 3z`）配牌就是
+    ///   四暗刻单骑（听 7z / 3z），各自摸进 4z 宣立直摸切；座位 1 之后摸到第四张 1s，同样暗杠；
+    /// - 座位 3 一手孤张，既和不了也听不了。
+    ///
+    /// **只有三家立直**（四家立直当场流局，那是 `suuchaRiichiScript`），且配它的选手
+    /// `riichiKanSeeking` 从不宣言和了，因此这一局打到荒牌流局（听牌料 +1000 × 3 / −3000）：
+    /// **75 步里 74 步都是「有家立直中」**——立直那一族属性的主力取值域是它。
+    /// 这几句牌理都是引擎跑出来的，不是手算的（判据 19）。
+    let sanchaRiichiAnkanScript =
+        {
+            Hands =
+                [
+                    "1m 2m 3m 4m 5m 6m 7m 8m 9m 5z 5z 5z 1z"
+                    "1s 1s 1s 9s 9s 9s 1p 1p 1p 9p 9p 9p 7z"
+                    "2m 2m 2m 8m 8m 8m 2p 2p 2p 8p 8p 8p 3z"
+                    "3p 6p 9p 3s 6s 9s 1z 2z 3z 6z 7z 4m 5m"
+                ]
+            Draws = "6z 4z 4z 4z 5z"
+        }
+
     // ---- 杠的剧本（KanTests / KanProperties 共用） ----
 
     /// 暗杠的剧本：Oya 手里三张 9s 加一条 123456789m 与 5z 单骑，第一次自摸就摸进第四张 9s。
@@ -847,6 +896,89 @@ module GameStateFixtures =
 
             chosen, rng
 
+    /// 见立直就立直、之后见暗杠就暗杠的选手，**从不宣言和了**：
+    /// 能立直就宣言，能暗杠就杠，其余时候优先摸切（摸切不在合法动作里时取第一条手切），
+    /// 响应一律「过」。
+    ///
+    /// **它是为「立直 + 副露」那一支来的**：`riichiSeeking` 从不杠、`kanSeeking` 从不立直，
+    /// 因此旧的取值域里「立直中且有副露」的局面**一个都没有**（票 96 报告 §6.2），
+    /// 而 `RiichiProperties.stillTenpai` 里 `nakiCount > 0` 那一支只能靠它喂。
+    /// **不宣言和了**是故意的：一局打满十八巡，立直中的局面才够密（见逃就永久振听，
+    /// 那也是真局面）。
+    let riichiKanSeeking: Player<Rng> =
+        fun rng _ choice ->
+            let pick (predicate: Action -> bool) =
+                choice.Actions |> List.tryFind predicate
+
+            let chosen =
+                pick (fun action ->
+                    match action with
+                    | Action.Riichi _ -> true
+                    | Action.Dahai _
+                    | Action.Hora _
+                    | Action.Pon _
+                    | Action.Chi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
+                    | Action.Ryuukyoku _
+                    | Action.None _ -> false)
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Ankan _ -> true
+                        | Action.Dahai _
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai(_, _, tsumogiri) -> tsumogiri
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai _ -> true
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.None _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.Hora _ -> false))
+                |> Option.defaultValue (List.head choice.Actions)
+
+            chosen, rng
+
     /// 见鸣就鸣的选手：能碰就碰、能吃就吃（碰优先），其余时候打合法动作集里第一条打牌，
     /// **从不宣言和了**。鸣牌的不变量要一条副露密集的轨迹，随机选手鸣得太稀。
     let nakiSeeking: Player<Rng> =
@@ -1019,6 +1151,18 @@ module GameStateFixtures =
     let kanTrace (rinshan: string) (script: Script) : GameState list =
         traceFrom kanSeeking (Rng.ofSeed 1) (startScriptedRinshan rinshan script)
 
+    /// 一局**必然有人立直**的全部局面：摊好的立直剧本 + 见立直就立直的选手。
+    ///
+    /// **光靠随机取样验不到立直**：见立直就立直的选手跑 400 颗种子、三万多个局面，
+    /// 其中「有家立直中」的只有 104 个（票 96 的全域扫描）。这是 `kanTrace` 的同一课。
+    let riichiTrace (script: Script) : GameState list =
+        traceFrom riichiSeeking (Rng.ofSeed 1) (startScripted script)
+
+    /// 一局**立直之后还暗杠**的全部局面：摊好的立直剧本 + 立直完照样杠、从不和了的选手。
+    /// 「立直 + 副露」这个组合只有它喂得进来（见 `riichiKanSeeking`）。
+    let riichiKanTrace (script: Script) : GameState list =
+        traceFrom riichiKanSeeking (Rng.ofSeed 1) (startScripted script)
+
     /// 一局**以和了收尾**的全部局面。随机选手几乎永远和不了（扫过 400 个种子，一次都没有），
     /// 可达局面里必须有一批和了的，牌数守恒与手牌张数这些不变量才验得到和了这条路。
     let horaTrace (script: Script) : GameState list =
@@ -1063,32 +1207,59 @@ module GameStateFixtures =
 /// 局面与动作的生成器。局面只生成**可达**的那些：随机开一局、随机走若干步。
 type GameStateArbitraries =
 
-    /// 十条轨迹与它们的权重。**每一条都是 `Gen.fresh`，不是 `Gen.constant`**：
-    /// `Gen.constant` 的参数是即时求值的，那张表每构造一次就把十条轨迹全跑完、只用其中一条
-    /// （实测：取 400 个样本调了 4000 次 `traceFrom`，而一条轨迹是「把一局用 seeking 选手打完」）。
-    /// `Gen.fresh` 在**选中之后**才求值，因此一个样本只跑一条（4000 → 400）。
+    /// 十三条轨迹：**权重、名字与「怎么跑出这一条」**。生成器与探针
+    /// （`scripts/fsi/arbitrary-coverage.fsx`）读的是**同一份表**——采样占比要量得准，
+    /// 探针就不能自己抄一份会飘的副本。
     ///
-    /// **权重与轨迹一条没改**，且 `Gen.fresh` 与 `Gen.constant` 都不消耗随机流：
-    /// 同一颗种子取出来的样本改前改后逐个相同（报告 56 §2 里有一份 400 个样本的对拍）。
-    static member private tracesFor(seed: int) : (int * Gen<GameState list>) list =
+    /// **权重不是拍脑袋拍出来的**：一个样本先均匀取种子、再按权重取轨迹、再在那条轨迹里
+    /// 均匀取一步，因此一类局面被抽中的概率是 `Σ (w/W) · 那条轨迹里它的密度`。
+    /// 改权重前先用探针量一遍，改完再量一遍：**加一条轨迹就会挤掉别族的占比**
+    /// （票 97 的报告里有逐族的改前改后对照表）。
+    static member Traces(seed: int) : (int * string * (unit -> GameState list)) list =
         [
-            4, Gen.fresh (fun () -> GameStateFixtures.trace Kyoku.randomPlayer seed)
-            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed)
+            4, "random", fun () -> GameStateFixtures.trace Kyoku.randomPlayer seed
+            4, "tenpaiSeeking", fun () -> GameStateFixtures.trace GameStateFixtures.tenpaiSeeking seed
             // 副露密集的一局：鸣牌的不变量（牌数守恒、手牌张数、河被鸣走的记号）靠它验。
-            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.nakiSeeking seed)
+            // **权重 4 → 6 是票 97 补的补偿**：下面三条立直轨迹把它稀释了，而「刚鸣完那一手」
+            // （禁食替、不摸牌、只有手切）只有 random 与它两条喂得出来，本来就只有 92.8% 的趟数开口。
+            6, "nakiSeeking", fun () -> GameStateFixtures.trace GameStateFixtures.nakiSeeking seed
             // 杠密集的一局：王牌、岭上牌与新宝牌的不变量靠它验。
-            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.kanSeeking seed)
+            4, "kanSeeking", fun () -> GameStateFixtures.trace GameStateFixtures.kanSeeking seed
             // 摊好的三局：一局三个暗杠、一局大明杠后岭上开花、一局暗杠后岭上开花。
             // 随机取样里杠太稀，杠的不变量非得有这几条轨迹不可。
-            2, Gen.fresh (fun () -> GameStateFixtures.kanTrace "2m 3m 7z" GameStateFixtures.threeKanScript)
-            1, Gen.fresh (fun () -> GameStateFixtures.kanTrace "1z" GameStateFixtures.minkanScript)
-            1, Gen.fresh (fun () -> GameStateFixtures.kanTrace "5z" GameStateFixtures.ankanScript)
-            // 立直密集的一局：立直棒、供托守恒与「立直后只能摸切」靠它验。
-            4, Gen.fresh (fun () -> GameStateFixtures.trace GameStateFixtures.riichiSeeking seed)
+            // `ankan` 的权重 1 → 2 同样是票 97 的补偿：它才三步，却背着「杠进得了动作集」
+            // 将近六成的采样概率（改前全族 2.18% 里的 1.28%；三步里有一步是它）。
+            2, "threeKan", fun () -> GameStateFixtures.kanTrace "2m 3m 7z" GameStateFixtures.threeKanScript
+            1, "minkan", fun () -> GameStateFixtures.kanTrace "1z" GameStateFixtures.minkanScript
+            2, "ankan", fun () -> GameStateFixtures.kanTrace "5z" GameStateFixtures.ankanScript
+            // 立直密集的一局：它是取值域里**唯一的随机牌山立直来源**（票 96 那条真反例就出在这里），
+            // 但它稀：三万多个局面里只有 104 个「有家立直中」。密度靠下面三条摊牌山的补，
+            // **这一条的权重一张不减**：摊好的牌山局面固定，找新 bug 靠的是它的随机牌山。
+            4, "riichiSeeking", fun () -> GameStateFixtures.trace GameStateFixtures.riichiSeeking seed
+            // 摊好的三局立直（票 97）。旧表里「有家立直中」的样本只占 0.103%，
+            // 算下来 `RiichiProperties` 一趟只有 9.8% 的概率开过口——十趟有九趟空转（判据 3）。
+            // 三家立直到荒牌流局那一条是主力（75 步里 74 步立直中，且带着立直后的暗杠），
+            // 四家立直与立直一发荣和那两条各只有九步与五步，分别喂「宣言牌还没打出去」
+            // 与「立直中的家被问荣和」这两类局面（它们在旧表里全域只有 4 个与 3 个）。
+            2, "riichiAnkan", fun () -> GameStateFixtures.riichiKanTrace GameStateFixtures.sanchaRiichiAnkanScript
+            1, "suuchaRiichi", fun () -> GameStateFixtures.riichiTrace GameStateFixtures.suuchaRiichiScript
+            1, "riichiRon", fun () -> GameStateFixtures.riichiTrace GameStateFixtures.minogashiScript
             // 摊好的两局：一局自摸和收尾、一局荣和收尾。
-            1, Gen.fresh (fun () -> GameStateFixtures.horaTrace GameStateFixtures.tsumoHoraScript)
-            1, Gen.fresh (fun () -> GameStateFixtures.horaTrace GameStateFixtures.doubleRonScript)
+            1, "tsumoHora", fun () -> GameStateFixtures.horaTrace GameStateFixtures.tsumoHoraScript
+            1, "doubleRon", fun () -> GameStateFixtures.horaTrace GameStateFixtures.doubleRonScript
         ]
+
+    /// 把轨迹表接成 FsCheck 的带权重生成器。**每一条都是 `Gen.fresh`，不是 `Gen.constant`**：
+    /// `Gen.constant` 的参数是即时求值的，那张表每构造一次就把整张表全跑完、只用其中一条
+    /// （票 56 实测：取 400 个样本调了 4000 次 `traceFrom`，而一条轨迹是「把一局用 seeking 选手打完」）。
+    /// `Gen.fresh` 在**选中之后**才求值，因此一个样本只跑一条（4000 → 400）。
+    ///
+    /// 票 97 把表拆成上面那份 `Traces` 时**抽样分布一字没变**：同一颗随机种子、
+    /// 三种 `size` 各 200 个样本，拆前拆后的指纹逐个相同（权重本身的变动是另一回事，
+    /// 逐族影响在票 97 的报告里）。
+    static member private tracesFor(seed: int) : (int * Gen<GameState list>) list =
+        GameStateArbitraries.Traces seed
+        |> List.map (fun (weight, _, run) -> weight, Gen.fresh run)
 
     static member GameState() : Arbitrary<GameState> =
         gen {
