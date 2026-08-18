@@ -12,6 +12,13 @@
 
 **Status:** ready-for-agent
 
+## 换资产时要翻面的断言（票 78 集成时留的提醒）
+
+- 首页 `table-no-bubbles` 那句指路话**会消失**（真资产带决策记录），气泡出现：
+  `verify-home` 第Ⅶ条与 `verify-inbound` 里核那句话的断言都要跟着翻面（改成「气泡必须在」）
+- `HomePageTests` 那条 **≤512 KB** 体积断言大概会撞（票 75 实测：带 thinking 约 2.5 MB/250 手）：
+  放宽要给数（首屏耗时、堆增量），不许悄悄改数字
+
 ## key 的规矩（硬约束 4，不许有例外）
 
 - key 从 `/tmp/deepseek_key` 读，**绝不进代码、测试、fixture、报告、提交**

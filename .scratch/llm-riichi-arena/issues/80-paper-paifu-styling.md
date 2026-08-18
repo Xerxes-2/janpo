@@ -9,6 +9,15 @@ M1 一路的判据是「CSS 不许过夜」（功能票不许顺手打磨），�
 
 **Status:** ready-for-agent
 
+## W5 新增、一起罩住的部件（74/78 已并入 `main`）
+
+- 「在想」气泡带**已等秒数与上限**（`seat-{N}-bubble[data-bubble="thinking"]` 的
+  `data-waited`/`data-wait-limit`）——这个数字要有个体面的展示形态
+- 分享：`table-share`（按铮）、`table-share-note`（`data-share`=copied/oversized/failed）
+- 导入：`table-import`（file input，原生控件要样式化）、`table-import-fault`（错误行）
+- 浏览器闸门现在**二十道 / 后十四趟**；你不加新闸门，但改数值断言时这些文件都在
+  `web/scripts/`（`verify-board` 的赤牌 rgb 与间距、`verify-bubbles` 的矩形不相交等）
+
 ## 主人的三条裁决（照做，别自由发挥）
 
 1. **只做静态。** 动效（补间动画）、移动端重排、暗色模式都**没选=不做**（spec 的「动画预算后置」照旧）。
