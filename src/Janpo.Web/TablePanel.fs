@@ -7,6 +7,18 @@ open Janpo
 /// **配桌那三项规则**（对局长度 / 赤宝牌 / 食断，票 72）、视角与种子那一排、
 /// 模型坐席与 provider / 模型 / key / 超时 / 思考预算 / 脚手架 / 人格 / 模板那一整屏。
 ///
+/// **这一屏只有两个出口**（票 83 划的那条分界线）：
+///
+/// - `setup`（「配这一桌」）：对局长度·赤宝牌·食断、种子与重开、四席绑定、模型档案库。
+///   开局前用一次，因此收在页面上半。**只属于 Live**：回放没有配桌。
+/// - `ops`（「操作这一桌」）：播放 / 暂停 / 单步 / 下一局 / 倍速 / 从头再放 / 时间轴 /
+///   跳到局号 / 导出牌谱 / 复制分享链接 / 导入牌谱 / 视角 / 危险度。开局后一直在用，
+///   因此**紧贴牌桌上沿**（`TablePage` 把它摆在 `board` 正上方）。
+///
+/// 判据是「这个控件作用于什么」：改这一桌**怎么开**的归 `setup`，改这一桌**怎么走 / 怎么看**
+/// 的归 `ops`。视角与危险度改的是牌桌的呈现，因此在后者；种子改的是下一桌怎么开，因此在前者。
+/// **两页共用同一套装配**（首页回放与 `?table=1`），分岔只在「摆哪几个按钮」上。
+///
 /// **控件工厂也在这里**（`button` / `picker` / `textField` / `areaField` / `selectField`）：
 /// 它们只被这一屏用。牌桌本体在 `TableBoard`，页面状态在 `TableState`。
 [<RequireQualifiedAccess>]
@@ -266,20 +278,22 @@ module TablePanel =
         ]
 
     /// 控制条。**牌从哪来决定摆哪几个按钮**（票 71），而播放本身两边共用一份实现。
-    let internal controls (model: TableModel) (dispatch: TableMsg -> unit) =
+    let private controls (model: TableModel) (dispatch: TableMsg -> unit) =
         match TableState.live model with
         | Some live -> hostControls model live dispatch
         | None -> replayControls model dispatch
 
-    /// 配桌那一排（票 72）：**对局长度 / 赤宝牌 / 食断**，加一句「什么时候生效」。
+    /// 配桌那一排（票 72）：**对局长度 / 赤宝牌 / 食断**，加上**种子与重开**（票 83 收过来的）。
     ///
-    /// **只属于 Live**：回放那一侧的规则集是牌谱自带的那一份（ADR-0004），拨不动。
+    /// **只属于 Live**：回放那一侧的规则集是牌谱自带的那一份（ADR-0004），拨不动；
+    /// 种子同理（回放的牌是录下来的）。
     ///
-    /// **拨完不当场生效**：与种子同一条路，要按下面那枚「重开」。半场换规则会让同一份
-    /// 牌谱前后按两套规则算，回放就重现不了。因此这一排末尾那一格把两件事都印出来：
+    /// **四样拨完都要按那一枚「重开」**，因此票 83 把它们并成一排（票 72 报告里记的
+    /// 那条 nitpick：它们语义上本来就是一组）。半场换规则会让同一份牌谱前后按两套规则算，
+    /// 回放就重现不了。因此这一排末尾那一格把两件事都印出来：
     /// **这一桌真在按的那一份**（`data-rules`，与导出牌谱里的 `ruleset` 逐项对得上），
     /// 以及拨到的那三项是不是已经与它不同了（`data-rules-pending`，就是 `TableState.rulesPending`）。
-    let internal setup (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
+    let private rulesRow (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         let lengths =
             GameLength.all
             |> List.map (fun length ->
@@ -313,13 +327,27 @@ module TablePanel =
         let label (key: string) (text: string) =
             Html.span [ prop.key key; prop.className "label"; prop.text text ]
 
+        // 种子与重开（票 83 从视角那一排收过来）：它们与上面三项一样是「下一桌怎么开」，
+        // 而视角改的是「这一桌怎么看」。「重开」就在同一排上，拨完不用再找它。
+        let seeding = [
+            Html.span [ prop.key "seed-label"; prop.className "label"; prop.text "种子" ]
+            Html.input [
+                prop.key "seed-input"
+                prop.testId "table-seed"
+                prop.value live.SeedText
+                prop.onChange (SeedEdited >> dispatch)
+            ]
+            button "table-restart" false "重开" Restarted dispatch
+        ]
+
         Html.div [
-            prop.className "controls"
+            prop.className "controls rules-row"
             prop.children (
                 (label "length-label" "对局长度" :: lengths)
                 @ (label "akadora-label" "赤宝牌"
                    :: axis "akadora" live.Rules.Akadora RuleChoice.Akadora)
                 @ (label "kuitan-label" "食断" :: axis "kuitan" live.Rules.Kuitan RuleChoice.Kuitan)
+                @ seeding
                 @ [
                     Html.span [
                         prop.key "rules"
@@ -333,9 +361,11 @@ module TablePanel =
             )
         ]
 
-    /// 视角那一排。**两种来源共用**（回放里视角照旧切得动）；
-    /// 种子与「重开」只属于 Live——回放的牌是**录下来的**，没有种子可换。
-    let internal viewpoints (model: TableModel) (dispatch: TableMsg -> unit) =
+    /// 视角那一排。**两种来源共用**（回放里视角照旧切得动）。
+    ///
+    /// **它属于「操作这一桌」**（票 83）：视角与危险度改的是牌桌的呈现，拨一下当场就要看见
+    /// 牌桌变样，因此跟着牌桌走；种子与「重开」改的是下一桌怎么开，已经挤到 `rulesRow` 上去了。
+    let private viewpoints (model: TableModel) (dispatch: TableMsg -> unit) =
         let seats =
             Seat.all model.Ruleset
             |> List.map (fun seat ->
@@ -345,20 +375,6 @@ module TablePanel =
                     $"座位 {Seat.index seat}"
                     (ViewpointPicked(Viewpoint.Seated seat))
                     dispatch)
-
-        let seeding =
-            match TableState.live model with
-            | None -> []
-            | Some live -> [
-                Html.span [ prop.key "seed-label"; prop.className "label"; prop.text "种子" ]
-                Html.input [
-                    prop.key "seed-input"
-                    prop.testId "table-seed"
-                    prop.value live.SeedText
-                    prop.onChange (SeedEdited >> dispatch)
-                ]
-                button "table-restart" false "重开" Restarted dispatch
-              ]
 
         Html.div [
             prop.className "controls"
@@ -375,8 +391,19 @@ module TablePanel =
                     // 危险度（票 25）：围观者想看就拨开，**默认关**。
                     picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch
                 ]
-                @ seeding
             )
+        ]
+
+    /// 「操作这一桌」那一整块（票 83）：控制条 + 视角那一排。
+    ///
+    /// **它紧贴牌桌上沿**，不做视口吸底：吸底会盖住牌桌下沿，而那正是自家手牌那一排
+    /// ——「按一下、看结果」看的就是它。**两屏共用这一个出口**（首页回放与 `?table=1`），
+    /// 分岔在它里面（`controls`）而不在页面装配上。
+    let internal ops (model: TableModel) (dispatch: TableMsg -> unit) =
+        Html.div [
+            prop.className "ops"
+            prop.testId "table-ops"
+            prop.children [ controls model dispatch; viewpoints model dispatch ]
         ]
 
     // ---- 视图：四席绑定与模型档案（票 73） ----
@@ -472,6 +499,14 @@ module TablePanel =
     ///
     /// **四席各一行、全摆在面上**（票面的硬判据）：别让人点四次才知道谁坐哪。
     /// **这一行里没有 key**：key 只出现在下面的档案编辑处，一把 key 坐三席也只填一次。
+    ///
+    /// **人格与模板那两块大文本收进一个 `details`**（票 83）：一席一行才看得完四席。
+    ///
+    /// - **收起时看得出有没有内容**：摘要上写着哪一格填了（人读那几个字，闸门读 `data-seat-custom`）。
+    ///   只画一枚小圆点不行——看得出「有东西」却看不出「哪一格有」。
+    /// - **展开一席不把另外三席顶出屏外**：敲开之后它独占本行的下一行（CSS 里的
+    ///   `.seat-detail[open]`），只长高一排文本框的高度，不把四席拆成两屏。
+    ///   闸门量的就是这一条（`verify-seats`：展开座位 0 之后四行仍在同一屏里）。
     let private seatRow (live: LiveTable) (seat: Seat) (dispatch: TableMsg -> unit) =
         let index = Seat.index seat
         let binding = SeatingPlan.bindingAt seat live.Seating
@@ -496,9 +531,72 @@ module TablePanel =
                     (SeatBound(seat, SeatChoice.Profile profile.Name))
                     dispatch)
 
+        // 这一席自己填过的那两格（收起来之后就靠这两个字认）。**人读的与闸门读的同一个判据**：
+        // 两份各自取一遍的话，改其中一份就会让图上写着一回事、`data-*` 写着另一回事。
+        let hasPersona = SeatBinding.field SeatField.Persona binding <> ""
+        let hasTemplate = SeatBinding.field SeatField.Template binding <> ""
+
+        let filled = [
+            if hasPersona then
+                "人格"
+            if hasTemplate then
+                "模板"
+        ]
+
+        let mark =
+            match filled with
+            | [] -> "人格·模板〇默认"
+            | some -> "人格·模板●" + String.concat "·" some
+
+        // `data-seat-custom` 给闸门读：空串 / `persona` / `template` / `persona,template`。
+        let wire = [
+            if hasPersona then
+                "persona"
+            if hasTemplate then
+                "template"
+        ]
+
+        let custom =
+            Html.details [
+                prop.key "seat-detail"
+                prop.className "seat-detail"
+                prop.children [
+                    Html.summary [
+                        prop.testId $"table-seat-{index}-detail"
+                        prop.className (
+                            if List.isEmpty filled then
+                                "seat-mark"
+                            else
+                                "seat-mark filled"
+                        )
+                        prop.custom ("data-seat-custom", String.concat "," wire)
+                        prop.text mark
+                    ]
+                    Html.div [
+                        prop.className "controls seat-fields"
+                        prop.children [
+                            areaField
+                                $"table-seat-{index}-persona"
+                                "人格（一局内不变）"
+                                "留空＝没有人格。例：你是一位以防守见长的雀士，宁可少和一把也不点炮。"
+                                (SeatBinding.field SeatField.Persona binding)
+                                (fun value -> SeatEdited(seat, SeatField.Persona, value))
+                                dispatch
+                            areaField
+                                $"table-seat-{index}-template"
+                                "模板（一局内不变）"
+                                "留空＝默认模板。一段 JSON：{\"id\":\"我的\",\"labels\":{\"history\":\"【回放】\"}}"
+                                (SeatBinding.field SeatField.Template binding)
+                                (fun value -> SeatEdited(seat, SeatField.Template, value))
+                                dispatch
+                        ]
+                    ]
+                ]
+            ]
+
         Html.div [
             prop.key $"seat-{index}"
-            prop.className "controls"
+            prop.className "controls seat-row"
             prop.testId $"table-seat-{index}"
             // 这一席拨到了哪儿（给闸门看；人看的是哪一枚按钮亮着）。
             prop.custom ("data-seat-choice", SeatChoice.toWire binding.Choice)
@@ -523,20 +621,7 @@ module TablePanel =
                              ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, tier <> ScaffoldTier.ToolSearch))
                         (fun value -> SeatEdited(seat, SeatField.Tier, value))
                         dispatch
-                    areaField
-                        $"table-seat-{index}-persona"
-                        "人格（一局内不变）"
-                        "留空＝没有人格。例：你是一位以防守见长的雀士，宁可少和一把也不点炮。"
-                        (SeatBinding.field SeatField.Persona binding)
-                        (fun value -> SeatEdited(seat, SeatField.Persona, value))
-                        dispatch
-                    areaField
-                        $"table-seat-{index}-template"
-                        "模板（一局内不变）"
-                        "留空＝默认模板。一段 JSON：{\"id\":\"我的\",\"labels\":{\"history\":\"【回放】\"}}"
-                        (SeatBinding.field SeatField.Template binding)
-                        (fun value -> SeatEdited(seat, SeatField.Template, value))
-                        dispatch
+                    custom
                 ]
             )
         ]
@@ -636,7 +721,7 @@ module TablePanel =
             prop.key "profiles"
             prop.className "controls"
             prop.children [
-                Html.span [ prop.key "profiles-label"; prop.className "label"; prop.text "模型档案" ]
+                Html.span [ prop.key "profiles-label"; prop.className "label"; prop.text "库里的" ]
                 yield! tabs
                 button "table-profile-new" false "新建档案" ProfileAdded dispatch
                 button
@@ -696,29 +781,75 @@ module TablePanel =
 
     /// 四席绑定 + 模型档案库（票 73）：**四 LLM 同桌**就是这一屏。
     ///
+    /// **两块分开**（票 83）：上面那块是**谁坐哪、给多少信息**（坐位 → 选手 → 档位），
+    /// 下面那块是**怎么问模型**（provider·模型·key·超时·思考）。它们是两种东西：
+    /// 一份档案坐三席时下面那块只填一遍，上面那块要拨三次——混在一片读不出这件事。
+    ///
     /// **key 只进 localStorage**（`Store`），不外发到本平台——本平台根本没有后端。
     /// **不提供订阅制登录**：pi-ai 的 OAuth 流程是 Node-only（票 18），浏览器里只有 API key
     /// 这一条路；Bedrock 同理不在 provider 列表里。
-    let internal llmPanel (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
+    let private llmPanel (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         let custom = live.Seating.Profiles |> List.exists ModelProfile.isCustom
+
+        let heading (key: string) (text: string) =
+            Html.h2 [ prop.key key; prop.className "block-title"; prop.text text ]
 
         Html.section [
             prop.className "llm-panel"
             prop.testId "table-llm-panel"
             prop.children [
-                yield! Seat.all model.Ruleset |> List.map (fun seat -> seatRow live seat dispatch)
-                yield! profileEditor live dispatch
-                renderingLine model live
-                Html.p [ prop.key "note"; prop.className "intro"; prop.text panelNote ]
-                // 自定义端点那段话只在库里有那么一份档案时出现：两个坑（CORS、mixed content）
-                // 说清楚要一整段，而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
-                if custom then
-                    Html.p [
-                        prop.key "custom-note"
-                        prop.className "intro"
-                        prop.testId "table-llm-custom-note"
-                        prop.text
-                            "自定义端点：baseUrl 填到含 /v1 那一层（Ollama 是 http://localhost:11434/v1，LM Studio 是 http://localhost:1234/v1），本地端点通常不用填 key，模型名照端点里的实名填。两个坑要先踩平：端点默认不放行浏览器跨域（Ollama 设 OLLAMA_ORIGINS，LM Studio 在设置里开 CORS），且 https 页面调 http 端点会被浏览器拦掉——配法见 docs/host/custom-endpoint.md。接不上时上面那行会直说「连不上自定义端点」，那不是模型不肯选。"
+                Html.div [
+                    prop.key "seating"
+                    prop.className "panel-block"
+                    prop.testId "table-seating"
+                    prop.children [
+                        heading "seating-title" "谁坐哪一席：选手·档位·（人格·模板）"
+                        yield! Seat.all model.Ruleset |> List.map (fun seat -> seatRow live seat dispatch)
                     ]
+                ]
+                Html.div [
+                    prop.key "profiles-block"
+                    prop.className "panel-block"
+                    prop.testId "table-profiles"
+                    prop.children [
+                        heading "profiles-title" "模型档案库：怎么问这个模型（key 只在这里填）"
+                        yield! profileEditor live dispatch
+                        renderingLine model live
+                    ]
+                ]
+                // 那一大段说明收起来（票 83）：**它是查阅用的**，不是每次都要读的。
+                // 一字未删，只是不再占着视线中心；摘要上写清楚里面是什么，人才知道该不该点开。
+                Html.details [
+                    prop.key "note"
+                    prop.className "panel-note"
+                    prop.children [
+                        Html.summary [
+                            prop.testId "table-panel-note"
+                            prop.text "这几格都是什么意思？key 存在哪釿？模型不说话怎么办？（点开看）"
+                        ]
+                        Html.p [ prop.className "intro"; prop.text panelNote ]
+                        // 自定义端点那段话只在库里有那么一份档案时出现：两个坑（CORS、mixed content）
+                        // 说清楚要一整段，而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
+                        if custom then
+                            Html.p [
+                                prop.key "custom-note"
+                                prop.className "intro"
+                                prop.testId "table-llm-custom-note"
+                                prop.text
+                                    "自定义端点：baseUrl 填到含 /v1 那一层（Ollama 是 http://localhost:11434/v1，LM Studio 是 http://localhost:1234/v1），本地端点通常不用填 key，模型名照端点里的实名填。两个坑要先踩平：端点默认不放行浏览器跨域（Ollama 设 OLLAMA_ORIGINS，LM Studio 在设置里开 CORS），且 https 页面调 http 端点会被浏览器拦掉——配法见 docs/host/custom-endpoint.md。接不上时上面那行会直说「连不上自定义端点」，那不是模型不肯选。"
+                            ]
+                    ]
+                ]
             ]
+        ]
+
+    /// 「配这一桌」那一整块（票 83）：规则三项 + 种子与重开一排，四席绑定与模型档案库一块。
+    ///
+    /// **只属于 Live**（回放没有配桌，`TableState.rosterOf` 就是这么说的），而且**收在页面上半**：
+    /// 它开局前用一次，不该占着视线中心。开局之后一直在用的那一批在 `ops` 里，贴着牌桌。
+    let internal setup (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
+        Html.section [
+            prop.className "setup"
+            prop.testId "table-setup"
+            prop.children [ rulesRow model live dispatch; llmPanel model live dispatch ]
         ]

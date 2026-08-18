@@ -767,7 +767,77 @@ input[type="range"] {
 
 .llm-panel .controls {
   flex-wrap: wrap;
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
+}
+
+/* 配桌那一块里面不再另留一截空（票 83）：规则那一排与四席是同一件事的两半。 */
+.setup > .llm-panel {
+  margin: 0.5rem 0 0;
+}
+
+/* 座位绑定与档案库是**两块**（票 83）：一块答「谁坐哪」，一块答「怎么问模型」。
+   一条淡线隔开，小标题说清这一块答的是哪一问。 */
+.llm-panel .panel-block + .panel-block {
+  border-top: 1px solid var(--line);
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.llm-panel .block-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
+  margin: 0.5rem 0 0.25rem;
+}
+
+/* 四席一席一行：行间收到 0.25rem，四行才读得成一张表。 */
+.llm-panel .seat-row {
+  margin: 0.25rem 0;
+}
+
+/* 人格与模板那一格（票 83）。收起时贴在行尾只占一枚记号的地方；
+   **敲开之后独占本行的下一行**（`flex: 1 1 100%`），因此只长一排文本框的高度，
+   另外三席跟着下移不到半屏，不会被顶出屏外（`verify-seats` 量的就是这一条）。 */
+.seat-detail {
+  margin-left: auto;
+}
+
+.seat-detail[open] {
+  flex: 1 1 100%;
+  margin-left: 0;
+}
+
+.seat-detail > .seat-mark {
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 0.3rem;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+/* 填过的那几席一眼认得出来：实线靛青框。**摘要上还写着哪一格填了**
+   ——颜色只是下款，字才是主语（色盲与黑白截图里照样读得出）。 */
+.seat-detail > .seat-mark.filled {
+  border-style: solid;
+  border-color: var(--indigo);
+  color: var(--indigo);
+  opacity: 1;
+  font-weight: 600;
+}
+
+.seat-detail .seat-fields {
+  margin: 0.35rem 0 0.5rem;
+}
+
+/* 那一大段说明（`panelNote`）：留着，但收成一行小字。它是查阅用的。 */
+.panel-note > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  opacity: 0.75;
+  margin-top: 0.5rem;
 }
 
 .llm-panel .field {
@@ -858,6 +928,37 @@ input[type="range"] {
   .seat[data-seat-position="shimocha"] .naki-row {
     align-self: flex-start;
   }
+}
+
+/* —— 一条分界线（票 83）：「配这一桌」在上，「操作这一桌」贴着牌桌 ——
+
+   `.setup` 开局前用一次，它让出视线中心；`.ops` 开局后一直在用，它紧贴牌桌上沿。
+   **不做视口吸底**（`position: sticky/fixed` 一处没有）：吸底会盖住牌桌下沿，
+   而那正是自家手牌那一排——「按一下、看结果」看的就是它。 */
+
+.setup {
+  margin: 0 0 0.75rem;
+}
+
+/* 规则三项 + 种子 + 重开在同一排（四样拨完都要按那枚「重开」）：窗口窄就换行，
+   不把那句「什么时候生效」挤出去。 */
+.rules-row {
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+
+/* 操作区：两三排控件是同一组，行间收紧。排完就是牌桌。 */
+.ops .controls {
+  margin: 0.4rem 0;
+  flex-wrap: wrap;
+}
+
+/* 分享那句分工说明（票 78）留在原地但调小：它必须一直看得见，
+   又不该把牌桌推下去一整段。 */
+.ops .intro {
+  font-size: 0.8rem;
+  margin: 0.25rem 0;
+  max-width: 60rem;
 }
 
 /* 回放的时间轴（票 75）。三排各一件事：播放控制、拖动与逐步、局边界。

@@ -18,9 +18,11 @@ open Janpo
 /// **这个程序集的公开面只多了这几个名字**：那几块里跨文件用的助手一律 `internal`，
 /// 出不了 `Janpo.Web`。
 ///
-/// **这一页现在有两个布局**（票 71）：`/` 是首页的 Demo 回放（自动播，没有配桌与模型面板），
-/// `?table=1` 是主持人自己开的一桌（今天那一页一字不少）。**牌桌与结算的渲染只有一份**
-/// （`board`），播放、视角与危险度那两排也只有一份——分岔只在「摆哪几个按钮」上。
+/// **这一页只有一套装配**（票 83；票 71 那两个布局已合成 `layout`）：
+/// **抬头 → 配这一桌 → 操作这一桌 → 牌桌**。`/` 是首页的 Demo 回放（自动播，没有配桌），
+/// `?table=1` 是主持人自己开的一桌（东西一样不少）。**牌桌与结算的渲染只有一份**
+/// （`board`），播放、视角与危险度也只有一份（`TablePanel.ops`）——
+/// 两屏的分岔只剩下抬头下面那几句话，以及「配桌那一块只有 Live 有」。
 [<RequireQualifiedAccess>]
 module TablePage =
 
@@ -93,57 +95,67 @@ module TablePage =
         | Shown.Fault reason -> Html.p [ prop.className "error"; prop.testId "table-error"; prop.text reason ]
         | Shown.Board table -> TableBoard.tableBody model dispatch table
 
+    /// 一页只有一套装配（票 83）：**抬头 → 配这一桌 → 操作这一桌 → 牌桌**。
+    ///
+    /// 首页（回放）与 `?table=1`（Live）走的是这同一条规则，分岔只有一处——
+    /// **配桌那一块只有 Live 有**（回放没有配桌：牌是录下来的）。控件摆哪几个由 `TablePanel`
+    /// 自己按 `Source` 分，页面这一层不再有两个布局。
+    ///
+    /// **操作控件紧贴牌桌上沿**（票 83 的第一条）：按一下就能看见结果，视线不必甩回页面顶部。
+    /// **不做视口吸底**：吸底那一条会盖住牌桌下沿，而那正是自家手牌那一排。
+    let private layout
+        (model: TableModel)
+        (live: LiveTable option)
+        (dispatch: TableMsg -> unit)
+        (intro: ReactElement list)
+        =
+        let setup =
+            live
+            |> Option.toList
+            |> List.map (fun live -> TablePanel.setup model live dispatch)
+
+        Html.div [
+            prop.className "page table-page"
+            prop.children (
+                // h1 抄的是 `web/index.html` 那个 `<title>`（票 33 定的稿）：
+                // 标签页上与页面上不该各说各的。改品牌语先改那一行，再抄过来。
+                (Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场" :: intro)
+                @ setup
+                @ [ TablePanel.ops model dispatch; board model dispatch ]
+            )
+        ]
+
     /// 首页（`/`）：**访客的第一眼是一桌牌在走**（spec 的 story 1，ADR-0003 由 Demo Paifu 兑现）。
     ///
     /// **没有配桌与模型面板**：第一眼不该是一张表单（票 35 的「默认视图只该有牌桌」同一条标准）。
     /// 想自己开一桌的人走那条链接去 `?table=1`——Host 那一侧访客得摸得到。
     let private homePage (model: TableModel) (dispatch: TableMsg -> unit) =
-        Html.div [
-            prop.className "page table-page"
-            prop.children [
-                // h1 抄的是 `web/index.html` 那个 `<title>`（票 33 定的稿）：
-                // 标签页上与页面上不该各说各的。改品牌语先改那一行，再抄过来。
-                Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场"
-                Html.p [
-                    prop.className "intro"
-                    prop.testId "home-intro"
-                    prop.text
-                        "下面这一局是录下来的，正在自动回放——不用配置、不用 API key，打开就看得见牌怎么走。这是上帝视角，四家的牌都摊着——牌谱已经打完了，复盘本来就该看得见四家；想验「模型看到的和你一样多」就按一下坐到某个座位，那时他家的暗牌在页面拿到的数据里根本不存在。虚线的牌是摸切。拖时间轴回看任意一手，或者点局号跳到那一局的开局。"
+        layout model None dispatch [
+            Html.p [
+                prop.className "intro"
+                prop.testId "home-intro"
+                prop.text
+                    "下面这一局是录下来的，正在自动回放——不用配置、不用 API key，打开就看得见牌怎么走。这是上帝视角，四家的牌都摊着——牌谱已经打完了，复盘本来就该看得见四家；想验「模型看到的和你一样多」就按一下坐到某个座位，那时他家的暗牌在页面拿到的数据里根本不存在。虚线的牌是摸切。拖时间轴回看任意一手，或者点局号跳到那一局的开局。"
+            ]
+            Html.p [
+                prop.className "intro"
+                prop.children [
+                    Html.a [ prop.testId "home-host-link"; prop.href Route.tableHref; prop.text "自己开一桌 →" ]
+                    Html.span [ prop.text "　自带 API key，把一个座位交给模型，看它一手一手打。" ]
                 ]
-                Html.p [
-                    prop.className "intro"
-                    prop.children [
-                        Html.a [ prop.testId "home-host-link"; prop.href Route.tableHref; prop.text "自己开一桌 →" ]
-                        Html.span [ prop.text "　自带 API key，把一个座位交给模型，看它一手一手打。" ]
-                    ]
-                ]
-                TablePanel.controls model dispatch
-                TablePanel.viewpoints model dispatch
-                board model dispatch
             ]
         ]
 
     /// 主持人那一页（`?table=1`）：配桌、模型面板、种子、单步 / 播放 / 倍速、导出、下一局、
-    /// 视角、危险度——**今天那一页一字不少**（票 71 只换了它的地址）。
+    /// 视角、危险度——**东西一样不少**（票 83 只换了它们的先后：配桌收到上面，操作贴着牌桌）。
     ///
     /// **默认暂停**（`Playback.initial`）：要点、要读牌桌的那几道无头闸门全靠这一条。
     let private hostPage (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
-        Html.div [
-            prop.className "page table-page"
-            prop.children [
-                Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场"
-                Html.p [
-                    prop.className "intro"
-                    prop.text
-                        "默认四家自带选手（均匀随机）；下面四行是四个座位各自的绑定——每一席可以换成「有主见」，也可以交给一份模型档案（key 在档案里只填一次，一把 key 坐几席都行，四家全是模型也行）。按「播放」看它们一手一手打。他家的手牌看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
-                ]
-                TablePanel.controls model dispatch
-                // 配桌那三项（票 72）摆在种子与「重开」那一排上面：它们走的是同一条路
-                // ——拨完都要按那一枚「重开」才开出新的一桌。
-                TablePanel.setup model live dispatch
-                TablePanel.viewpoints model dispatch
-                TablePanel.llmPanel model live dispatch
-                board model dispatch
+        layout model (Some live) dispatch [
+            Html.p [
+                prop.className "intro"
+                prop.text
+                    "默认四家自带选手（均匀随机）；下面四行是四个座位各自的绑定——每一席可以换成「有主见」，也可以交给一份模型档案（key 在档案里只填一次，一把 key 坐几席都行，四家全是模型也行）。按「播放」看它们一手一手打。他家的手牌看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
             ]
         ]
 

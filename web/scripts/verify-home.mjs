@@ -62,10 +62,25 @@ const HOST_TEST_IDS = [
   "table-length-tonpuusen",
   "table-akadora-on",
   "table-kuitan-on",
+  // 「配这一桌」那一整块与它里面新分出来的两块（票 83）。**`table-ops` 不在这份名单里**：
+  // 操作控件两屏共用一套装配，首页上它**应当**在（而且就贴在牌桌上沿）。
+  "table-setup",
+  "table-seating",
+  "table-profiles",
+  "table-seat-0-detail",
+  "table-panel-note",
 ];
 
 /** 隔多久采第二次手数。1 秒够 2× 播三四手（`TableState.demoSpeed`），也不至于让 CI 变慢。 */
 const SAMPLE_GAP_MS = 1000;
+
+/**
+ * 操作条与牌桌之间允许的空隔（票 83）。实测 **16 px**（两者只隔着 `.ops .controls`
+ * 那条 0.4rem 的外边距）；40 px 留的是行高与边距微调的余地，**再塞进一行字就超**
+ * （一行正文在这一页上是 27 px）。它守的就是票 83 要的那一件事：
+ * **按一下、看结果不必把视线甩回页面顶部**。
+ */
+const OPS_TO_BOARD_MAX_PX = 40;
 
 /** 在滑块的这个位置上点一下（0 = 最左 = 第 0 帧，1 = 最右 = 末帧）。 */
 const DRAG_TO = 0.75;
@@ -110,6 +125,87 @@ async function boardDigest(page) {
       ])
       .join("\n"),
   );
+}
+
+/**
+ * 「操作这一桌」那一块与牌桌的位置关系（票 83）：两个矩形、中间的空隔，
+ * 以及操作块里有没有人偷偷加了吸底（`position: fixed/sticky`）。
+ * **读的是真坐标与计算样式**：「贴着牌桌」是个几何事实，DOM 里摆得相邻不算。
+ */
+async function opsShape(page) {
+  return await page.evaluate(() => {
+    const at = (testId) => {
+      const node = document.querySelector(`[data-testid="${testId}"]`);
+      if (node === null) return null;
+      const rect = node.getBoundingClientRect();
+      return {
+        top: Math.round(rect.top + window.scrollY),
+        bottom: Math.round(rect.bottom + window.scrollY),
+      };
+    };
+    const ops = document.querySelector('[data-testid="table-ops"]');
+    const stuck =
+      ops === null
+        ? []
+        : [ops, ...ops.querySelectorAll("*")]
+            .map((node) => getComputedStyle(node).position)
+            .filter((position) => position === "fixed" || position === "sticky");
+    return {
+      ops: at("table-ops"),
+      board: at("table-board"),
+      setup: at("table-setup"),
+      stuck: stuck.length,
+    };
+  });
+}
+
+/**
+ * **操作控件贴着牌桌**（票 83 的第一条）。四条断言，两屏各量一遍：
+ *
+ *   ① 那一块真的在（两屏共用同一套装配，不是只给主持人那一页做了一份）；
+ *   ② 它在牌桌**上方**；
+ *   ③ 两者之间不允许再塞东西（空隔 ≤ `OPS_TO_BOARD_MAX_PX`）——票 83 之前这一段是
+ *      **1136 px** 的配桌表单，按一下单步要把视线甩回去；
+ *   ④ **不做视口吸底**（调度器裁的）：吸底会盖住牌桌下沿，而那正是自家手牌那一排。
+ *
+ * 主持人那一页多一条：**配桌那一块在操作块之上**（分界线的方向）。
+ */
+function opsProblems(shape, where, wantsSetup) {
+  const said = [];
+  if (shape.ops === null) {
+    said.push(`${where} 上没有「操作这一桌」那一块（[data-testid="table-ops"]）`);
+    return said;
+  }
+  if (shape.board === null) return said; // 牌桌没摆出来是别的断言的事
+
+  const gap = shape.board.top - shape.ops.bottom;
+  if (gap < 0) {
+    said.push(
+      `${where} 的操作条落到了牌桌下面（操作条 ${shape.ops.top}→${shape.ops.bottom}、牌桌 ${shape.board.top}）`,
+    );
+  } else if (gap > OPS_TO_BOARD_MAX_PX) {
+    said.push(
+      `${where} 的操作条与牌桌之间隔了 ${gap} px（上限 ${OPS_TO_BOARD_MAX_PX} px）：` +
+        "中间又塞进了东西，按一下就看不见结果了（票 83）",
+    );
+  }
+  if (shape.stuck > 0) {
+    said.push(
+      `${where} 的操作块里有 ${shape.stuck} 个吸底/吸顶的元素（position: fixed|sticky）：` +
+        "吸底会盖住牌桌下沿，而那正是自家手牌那一排",
+    );
+  }
+  if (wantsSetup) {
+    if (shape.setup === null) {
+      said.push(`${where} 上没有配桌那一块（[data-testid="table-setup"]）`);
+    } else if (shape.setup.bottom > shape.ops.top) {
+      said.push(
+        `${where} 的配桌表单没收到操作条上面去（配桌 ${shape.setup.top}→${shape.setup.bottom}、` +
+          `操作条从 ${shape.ops.top} 开始）：分界线反了`,
+      );
+    }
+  }
+  return said;
 }
 
 /** 四家的手牌扣起来几份（`data-hand-hidden`，投影的形状，不是渲染纪律）。 */
@@ -179,6 +275,7 @@ export async function verifyHome(lane) {
   const missing = [];
   const leaks = [];
   let dragCount = 0;
+  let hostOps = null;
 
   try {
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
@@ -217,6 +314,11 @@ export async function verifyHome(lane) {
       const count = await page.getByTestId(testId).count();
       if (count !== 0) leaks.push(`首页上还挂着 [data-testid="${testId}"]（${count} 个）`);
     }
+
+    // ⑨ 操作控件贴着牌桌（票 83）。首页这一遍；主持人那一页在 ③ 点过去之后再量一遍
+    // ——**两屏同一条规则**，只量一屏的话另一屏随时可以退化成票 83 之前那副样子。
+    const homeOps = await opsShape(page);
+    missing.push(...opsProblems(homeOps, "首页", false));
 
     // ⑤ 默认上帝视角（裁决 71-8）：四家的手牌都摊着。
     // **后面那一下是阳性对照**：切到坐位 0 之后他家必须扣回去——
@@ -391,6 +493,11 @@ export async function verifyHome(lane) {
       if (landed.searchParams.get("table") !== "1") {
         missing.push(`那条路点过去落在 ${page.url()}，不是 ?table=1`);
       }
+
+      // ⑨ 的后一半（票 83）：主持人那一页同样要「配桌在上、操作贴着牌桌」。
+      // 它才是票 83 真正要治的那一页（改之前这一段是 1136 px 的配桌表单）。
+      hostOps = await opsShape(page);
+      missing.push(...opsProblems(hostOps, "?table=1", true));
       // 主持人那一页**默认暂停**：那几道要点、要读牌桌的闸门全靠这一条。
       const playing = (await page.getByTestId("table-play").textContent()).trim();
       if (playing !== "播放") {
@@ -426,6 +533,11 @@ export async function verifyHome(lane) {
       "这份牌谱带着推理 ✓（四席各一个气泡且里面真有话、那句指路话不在了；未结算不摆里宝牌、结算那一屏摆）",
     );
     console.log("「自己开一桌」点过去就是 ?table=1，且那一页默认暂停 ✓");
+    console.log(
+      `操作控件贴着牌桌 ✓（首页隔 ${homeOps.board.top - homeOps.ops.bottom} px、` +
+        `?table=1 隔 ${hostOps.board.top - hostOps.ops.bottom} px，上限 ${OPS_TO_BOARD_MAX_PX} px；` +
+        "两屏都没有吸底元素；?table=1 的配桌表单在操作条之上）",
+    );
     console.log("页脚里有回仓库的外链与许可（MIT）✓");
     return [];
   } finally {

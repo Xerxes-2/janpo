@@ -11,7 +11,10 @@
 //   3. 三席各有自己的决策记录（否则上面那几条断言在空转）；
 //   4. **断电演习扩到多席**：坏 key 那一席每手兜底，而这一局照样打得完，
 //      **兜底只涨在那一席**；
-//   5. 删掉一份还被座位引用的档案：那几席退回 bot，**页面把这件事说出来**。
+//   5. 删掉一份还被座位引用的档案：那几席退回 bot，**页面把这件事说出来**；
+//   6. **四席一眼看得全**（票 83）：四行同时落在一屏里，人格与模板那两块大文本默认收着，
+//      **收着也看得出哪一席填过**（座位 0/1/2 有人格、座位 3 没有——这一对就是阴阳对照组），
+//      **展开一席不把另外三席顶出屏外**，且展开之后那一格里真是那一席的人格。
 //
 // 第二程 —— **老配置不许丢**：把上一版的 `janpo.llm.*`（含一把 key）灌进一个干净的
 //   浏览器上下文，打开页面，看它迁成「一份档案 + 老配置选中的那一席引用它」，
@@ -67,6 +70,106 @@ function startEndpoint(port, origin, args) {
     ["scripts/fake-endpoint.mjs", "--port", String(port), "--cors", origin, "--quiet", ...args],
     { cwd: webRoot, stdio: ["ignore", "ignore", "inherit"] },
   );
+}
+
+/**
+ * 四席那几行此刻各自的矩形，以及「人格·模板」那一格敲开了没有、摘要上写着什么。
+ * **读的是真坐标**（`getBoundingClientRect`）：「一眼看得全」是个几何事实，DOM 里有这四行不算。
+ */
+async function seatShape(page) {
+  return await page.evaluate(() => {
+    const rows = [0, 1, 2, 3].map((index) => {
+      const row = document.querySelector(`[data-testid="table-seat-${index}"]`);
+      const mark = document.querySelector(`[data-testid="table-seat-${index}-detail"]`);
+      const rect = row.getBoundingClientRect();
+      return {
+        seat: index,
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        open: mark.closest("details").open,
+        custom: mark.getAttribute("data-seat-custom"),
+        said: (mark.textContent ?? "").trim(),
+      };
+    });
+    return { rows, viewport: window.innerHeight };
+  });
+}
+
+/**
+ * **四席一眼看得全**（票 83 的硬判据）。四条断言，各守一件：
+ *
+ *   ① 四行同时完整落在视口里（不用滚就读得完「座位 → 选手 → 档位」）；
+ *   ② 人格与模板那两块大文本**默认收着**；
+ *   ③ 收着也看得出哪一席填过：座位 0/1/2 灌了人格、座位 3 没灌
+ *      ——**后一半是阴性对照**，没它的话「记号恒亮」同样能让上一句变绿（判据 3）；
+ *   ④ **展开一席不把另外三席顶出屏外**，而且展开之后那一格里真是那一席的人格
+ *      （收起来的那一格得真装着东西，不能只是一枚空壳记号）。
+ *
+ * 量完把它合上：后面那几程看到的应当是与人刚打开时同一个屏。
+ */
+async function seatDensityProblems(page) {
+  const problems = [];
+  const { rows, viewport } = await seatShape(page);
+
+  const offscreen = rows.filter((row) => row.top < 0 || row.bottom > viewport);
+  if (offscreen.length > 0) {
+    problems.push(
+      `四席没落在同一屏里（视口 ${viewport} px）：` +
+        offscreen.map((row) => `座位 ${row.seat} 在 ${row.top}→${row.bottom}`).join("、"),
+    );
+  }
+
+  const opened = rows.filter((row) => row.open);
+  if (opened.length > 0) {
+    problems.push(
+      `人格 / 模板那两块大文本默认就摊开着（座位 ${opened.map((row) => row.seat).join("、")}）：四席就一眼看不完了`,
+    );
+  }
+
+  for (const seat of [0, 1, 2]) {
+    if (rows[seat].custom !== "persona") {
+      problems.push(
+        `座位 ${seat} 灌了人格，收起来的那一格却写着「${rows[seat].said}」（data-seat-custom="${rows[seat].custom}"）`,
+      );
+    }
+  }
+  if (rows[3].custom !== "") {
+    problems.push(`座位 3 一个字的人格与模板都没灌，记号却说「${rows[3].said}」：那枚记号是恒亮的`);
+  }
+  if (rows[0].said === rows[3].said) {
+    problems.push(
+      `填过人格的座位 0 与没填的座位 3 收起来长得一模一样（都写着「${rows[0].said}」）：人看不出哪一席定制过`,
+    );
+  }
+
+  // ④ 敲开座位 0 那一格：里面真是它自己的人格，而四行仍在同一屏里。
+  await page.getByTestId("table-seat-0-detail").click();
+  const persona = page.getByTestId("table-seat-0-persona");
+  if (!(await persona.isVisible())) {
+    problems.push("敲开座位 0 的「人格·模板」，人格那一格却没出来：收起来的东西就敲不开了");
+  } else if ((await persona.inputValue()) !== personaFor(0)) {
+    problems.push(
+      `敲开座位 0 的人格，里面写的是「${await persona.inputValue()}」，该是「${personaFor(0)}」`,
+    );
+  }
+
+  const expanded = await seatShape(page);
+  const pushedOut = expanded.rows.filter((row) => row.top < 0 || row.bottom > expanded.viewport);
+  if (pushedOut.length > 0) {
+    problems.push(
+      `展开座位 0 之后，座位 ${pushedOut.map((row) => row.seat).join("、")} 被顶出了屏外` +
+        `（视口 ${expanded.viewport} px，它们在 ${pushedOut.map((row) => `${row.top}→${row.bottom}`).join("、")}）`,
+    );
+  }
+  console.log(
+    `四席在一屏里 ✓（视口 ${viewport} px，四行跨 ${rows[0].top}→${rows[3].bottom}；` +
+      `展开一席后跨 ${expanded.rows[0].top}→${expanded.rows[3].bottom}），` +
+      `记号：${rows.map((row) => `座位 ${row.seat}「${row.said}」`).join("　")}`,
+  );
+
+  // 敲回去：后面那几程看到的应当是与人刚打开时同一个屏。
+  await page.getByTestId("table-seat-0-detail").click();
+  return problems;
 }
 
 /** 四 LLM 同桌那一趟。返回的是失败清单（空 = 绿）。 */
@@ -135,6 +238,8 @@ export async function verifySeats(lane, options = {}) {
     }
     console.log(bound.join("\n"));
     console.log(`状态线上的四席：${await readAttr("table-agent", "data-seats")}`);
+
+    problems.push(...(await seatDensityProblems(page)));
 
     // **key 在界面上只出现在档案编辑处**：座位那几行一个 key 输入框都没有。
     const keyFields = await page
