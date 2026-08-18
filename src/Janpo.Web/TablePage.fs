@@ -87,8 +87,8 @@ module TablePage =
     /// 轮到真人出牌了吗（票 87）。实现与理由见 `TableState.humanTurn`。
     let humanTurn (model: TableModel) : DecisionPackage option = TableState.humanTurn model
 
-    /// 替真人自动过掉的那几次（票 87）。实现与理由见 `TableState.autoPasses`。
-    let autoPasses (model: TableModel) : AutoPass list = TableState.autoPasses model
+    /// 真人自己按「过」的那几次（票 87 开账、票 88 换了语义）。实现与理由见 `TableState.passes`。
+    let passes (model: TableModel) : HumanPass list = TableState.passes model
 
     /// 这一席的推理此刻看不看得见（票 81）。实现与理由见 `TableState.reveals`。
     ///

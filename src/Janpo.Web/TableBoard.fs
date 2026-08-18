@@ -869,6 +869,10 @@ module TableBoard =
                             )
                         ]
                     ]
+                    // 真人那一排按钮（票 88）：**紧贴牌桌下沿**——自家手牌就在牌桌的下一排，
+                    // 而「碰不碰」与「打哪张」是同一件事，两样东西不该隔着半屏。
+                    // 不轮到他、或者这一手一条宣言都没有时它一行都不画。
+                    @ HumanLine.calls model dispatch
                     @ fault
                     // 气泡点开的那一手（票 76）：紧挨着牌桌——上面那张牌桌就是它说的那一刻。
                     @ ThinkingBubble.detail model dispatch

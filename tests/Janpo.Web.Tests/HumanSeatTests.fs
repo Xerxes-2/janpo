@@ -71,18 +71,23 @@ module HumanSeatTests =
         | Some observation -> observation
         | None -> failwith $"座位 {index} 该有一份观测"
 
-    /// 把这一桌推到**终局**：轮到真人就点包里的头一条打牌，否则单步（一局终了就开下一局）。
+    /// 把这一桌推到**终局**：轮到真人就点包里的头一条打牌（响应阶段按「过」），
+    /// 否则单步（一局终了就开下一局）。
     ///
     /// **它就是闸门那句「点手牌→打出→等三家→再点」在 dotnet 上的那一份**；
     /// `limit` 是防死循环的闸，正常一整场东风战约 440 步（探针实测 363 步 + 74 次点击）。
+    ///
+    /// **响应阶段不再自动过了**（票 88）：那一手同样停下来等他，因此这里要替他按「过」。
+    /// **两支都不允许落空**：一包里要么有打牌、要么有「过」（`Action.None` 那段注释）。
     let private playedOut (limit: int) (model: TableModel) : TableModel =
         // 一步：轮到真人就点包里的头一条，否则单步（这一局终了就开下一局）。
         let moved (model: TableModel) : TableModel =
             match TablePage.humanTurn model with
             | Some package ->
-                match HumanSeat.dahaiOptions package with
-                | (id, _, _, _) :: _ -> step (HumanPlayed id) model
-                | [] -> failwith "轮到真人出牌，却一张牌都点不出去"
+                match HumanSeat.dahaiOptions package, HumanSeat.pass package with
+                | (id, _, _, _) :: _, _ -> step (HumanPlayed id) model
+                | [], Some pass -> step (HumanPlayed pass.Id) model
+                | [], None -> failwith "轮到真人，却既没牌可打也没有「过」可按"
             | None ->
                 let table = tableOf model
 
@@ -278,20 +283,20 @@ module HumanSeatTests =
     // ---- 响应阶段一律自动过，而且说得出过掉了什么 ----
 
     [<Fact>]
-    let ``响应阶段一律自动过，且记得住过掉了什么（票 88 换成真按钮时读的就是它）`` () =
+    let ``响应阶段停下来等他：他自己按那一条「过」，而放掉了什么记得住（票 88 换掉了票 87 的自动过）`` () =
         let played = humanAt 0 |> playedOut 2000
-        let passes = TablePage.autoPasses played
+        let passes = TablePage.passes played
 
-        // 防空转（判据 3）：这一整场里真的发生过自动过。
+        // 防空转（判据 3）：这一整场里他真的按过「过」。
         Assert.NotEmpty passes
 
         for pass in passes do
             Assert.Equal(seat 0, pass.Seat)
-            // **过掉了什么必须记下来**：一条空的「替你过了」等于没说。
+            // **放掉了什么必须记下来**：一条空的「你按了过」等于没说。
             Assert.NotEmpty pass.Skipped
-            // 「过」本身不在里面：它是替他提交的那一条，不是被跳过的那几条。
+            // 「过」本身不在里面：它是他按下去的那一条，不是被放掉的那几条。
             Assert.DoesNotContain("过", String.concat "、" pass.Skipped)
-            Assert.Contains(string pass.Turn, AutoPass.toDisplay pass)
+            Assert.Contains(string pass.Turn, HumanPass.toDisplay pass)
 
     [<Fact>]
     let ``真人坐一席，把一整场东风战打完：终局点数四家和为定值`` () =

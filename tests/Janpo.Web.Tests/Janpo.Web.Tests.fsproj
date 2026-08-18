@@ -29,6 +29,7 @@
     <Compile Include="TablePageTests.fs" />
     <!-- 真人坐席（票 87）：第四种选手、合法性驱动的出牌、自动过与可见性三锁。 -->
     <Compile Include="HumanSeatTests.fs" />
+    <Compile Include="HumanCallTests.fs" />
     <!-- 配桌上那三项规则开关（票 72）：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变。 -->
     <Compile Include="TableSetupTests.fs" />
     <!-- 首页那一屏（票 71）：那份资产够不够格当门面，以及拉 / 播 / 停 / 再放那个状态机。 -->

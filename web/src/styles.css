@@ -948,6 +948,35 @@ input[type="range"] {
   opacity: 1;
 }
 
+/* 真人那一排响应动作（票 88）：吃 / 碰 / 杠 / 立直 / 和了 / 九种九牌，以及「过」。
+   **紧贴牌桌下沿**（`.controls` 那条 1.5rem 上边距收掉一半）：自家手牌就在牌桌最下一排，
+   鸣不鸣与打哪张是同一件事，视线不该在一屏之内来回甩。
+   一排按钮居中：它出现得突然（他家一打牌就冒出来），摆在牌桌正下方最找得到。 */
+.human-calls {
+  margin: 0.75rem 0 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* 能鸣的那几枚 = 靛青（与「点得动的那张牌」同一个色相，票 80 的四色相不新开）。
+   **它比手牌那圈描边重**：那一排是「此刻你可以做的事」，而手牌是常态。 */
+.human-calls button.call {
+  border-color: var(--indigo);
+  background: var(--indigo-wash);
+  color: var(--indigo);
+  font-weight: 700;
+}
+
+/* 「过」= 一枚素的（纸色）：它是「什么都不做」的那一条，不该跟吃碰杠抢眼。
+   **但它必须一直在**（票 88 的票面：响应阶段不点就卡住是最难受的死法），
+   因此只降存在感、不降可点性。 */
+.human-calls button.call.pass {
+  border-color: var(--line-strong);
+  background: var(--paper-raised);
+  color: inherit;
+  font-weight: 400;
+}
+
 /* 窄视口（票 44）：三列的真牌桌在约 40rem 以下会把每一列挤到放不下半排河，
    那时**改成竖排**——自家仍在最下、对家仍在最上，左右两家按上家 → 下家的顺序夹在中间。
    方位关系因此只退化不颠倒。M1 验的 820px 仍走三列那一套。
