@@ -30,6 +30,11 @@ const HOST_TEST_IDS = [
   "table-llm-provider",
   "table-llm-key",
   "table-bot-random",
+  // 配桌那三项规则开关（票 72）：回放的规则集是牌谱自带的那一份，首页上拨不得。
+  "table-rules",
+  "table-length-tonpuusen",
+  "table-akadora-on",
+  "table-kuitan-on",
 ];
 
 /** 隔多久采第二次手数。1 秒够 2× 播三四手（`TableState.demoSpeed`），也不至于让 CI 变慢。 */

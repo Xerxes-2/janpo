@@ -20,6 +20,8 @@
   <ItemGroup>
     <Compile Include="Agent.fs" />
     <Compile Include="Roster.fs" />
+    <!-- 配桌上拨得动的那三项规则（票 72）：排在 `Store.fs` 前面——它们落 localStorage。 -->
+    <Compile Include="RulesetDraft.fs" />
     <Compile Include="Store.fs" />
     <Compile Include="Download.fs" />
     <!-- 地址栏读出来的那点东西（票 71）：页面侧认地址的地方只有它。 -->

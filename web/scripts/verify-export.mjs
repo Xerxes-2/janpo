@@ -102,7 +102,9 @@ export async function verifyExport(lane, options = {}) {
           localStorage.setItem("janpo.llm.provider", "deepseek");
           localStorage.setItem("janpo.llm.model", model);
           localStorage.setItem("janpo.llm.api_key", apiKey);
-          localStorage.setItem("janpo.llm.timeout_ms", "60000");
+          // 与页面默认值同一个数（票 72：`LlmSeat.initial.TimeoutMs`）。**这一档才用得着它**
+          // ——`--thinking medium` 实测单手 17–180 秒，60 秒会把手验跑成一串兜底。
+          localStorage.setItem("janpo.llm.timeout_ms", "240000");
           localStorage.setItem("janpo.llm.thinking", thinking);
         },
         [seat, model, apiKey, thinking],

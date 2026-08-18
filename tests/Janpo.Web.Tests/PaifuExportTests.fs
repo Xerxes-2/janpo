@@ -33,7 +33,7 @@ module PaifuExportTests =
 
     /// 座位 1 交给 LLM 的一桌。
     let private llmTable () : TableModel =
-        TablePage.initial (Some(seat 1)) config |> fst
+        TablePage.initial RulesetDraft.initial (Some(seat 1)) config |> fst
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 

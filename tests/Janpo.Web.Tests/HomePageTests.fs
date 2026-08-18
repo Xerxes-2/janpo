@@ -253,7 +253,7 @@ module HomePageTests =
                 Template = ""
             }
 
-        let model, _ = TablePage.initial None config
+        let model, _ = TablePage.initial RulesetDraft.initial None config
 
         Assert.False(model.Playback.Playing)
         Assert.True(Option.isSome (TablePage.live model))

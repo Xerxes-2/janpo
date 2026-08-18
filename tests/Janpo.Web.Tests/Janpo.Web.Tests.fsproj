@@ -21,6 +21,8 @@
     <Compile Include="ReplayTableTests.fs" />
     <Compile Include="AgentTests.fs" />
     <Compile Include="TablePageTests.fs" />
+    <!-- 配桌上那三项规则开关（票 72）：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变。 -->
+    <Compile Include="TableSetupTests.fs" />
     <!-- 首页那一屏（票 71）：那份资产够不够格当门面，以及拉 / 播 / 停 / 再放那个状态机。 -->
     <Compile Include="HomePageTests.fs" />
     <Compile Include="PaifuExportTests.fs" />

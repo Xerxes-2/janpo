@@ -25,7 +25,7 @@ module TablePageTests =
 
     /// 座位 0 交给 LLM 的一桌（开局第一手就是它：亲摸完牌等着打）。
     let private llmTable () : TableModel =
-        TablePage.initial (Some Seat.first) config |> fst
+        TablePage.initial RulesetDraft.initial (Some Seat.first) config |> fst
 
     /// 这一桌的 Live 那一半（票 71）。**这一整个模块跑的都是 `?table=1` 那一页**：
     /// 配桌、模型座席与 Agent 层的驱动只属于 Live，回放那一侧根本没有它们。
@@ -128,7 +128,9 @@ module TablePageTests =
 
     [<Fact>]
     let ``随机座位当场落子，LLM 座位改成发一个请求出去`` () =
-        let random = TablePage.initial None config |> fst |> step Advanced
+        let random =
+            TablePage.initial RulesetDraft.initial None config |> fst |> step Advanced
+
         let llm = llmTable () |> step Advanced
 
         Assert.True((tableOf random).Latest |> Option.isSome)
@@ -185,7 +187,7 @@ module TablePageTests =
         // **种子 42 的开局第一手两档不同**：刚摸进的 7p 让手牌进了一步，摸切就是退向，
         // 因此 Bare 摸切而 Assisted 改打一张不退向听的——档位传错了这条就红。
         let start (tier: ScaffoldTier) =
-            TablePage.initial (Some Seat.first) { config with Tier = tier }
+            TablePage.initial RulesetDraft.initial (Some Seat.first) { config with Tier = tier }
             |> fst
             |> step (TableMsg.SeedEdited "42")
             |> step TableMsg.Restarted
@@ -394,7 +396,7 @@ module TablePageTests =
     let ``自带 bot 默认是均匀随机：默认视图那几道闸门量的仍是它`` () =
         // 曳光弹对拍、牌谱导出、副露来源那几道闸门跑的都是默认那一桌
         // （票 42 的边界：换默认值会让它们量到另一个选手）。
-        let model = TablePage.initial None config |> fst
+        let model = TablePage.initial RulesetDraft.initial None config |> fst
 
         Assert.Equal(Bot.Uniform, (liveOf model).Bot)
         Assert.Equal<string list>([ "random"; "random"; "random"; "random" ], Roster.names (rosterOf model))
@@ -402,7 +404,9 @@ module TablePageTests =
     [<Fact>]
     let ``拨成有主见的：配桌换人，牌谱里的名字跟着换`` () =
         let picked =
-            TablePage.initial None config |> fst |> step (BotPicked Bot.Opinionated)
+            TablePage.initial RulesetDraft.initial None config
+            |> fst
+            |> step (BotPicked Bot.Opinionated)
 
         Assert.Equal(Bot.Opinionated, (liveOf picked).Bot)
 
@@ -437,7 +441,7 @@ module TablePageTests =
             | Some _ -> loop (left - 1) (model |> step Advanced)
 
         let played =
-            TablePage.initial None config
+            TablePage.initial RulesetDraft.initial None config
             |> fst
             |> step (BotPicked Bot.Opinionated)
             |> loop 400

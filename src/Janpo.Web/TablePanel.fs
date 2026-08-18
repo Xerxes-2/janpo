@@ -3,7 +3,8 @@ namespace Janpo.Web
 open Feliz
 open Janpo
 
-/// 配桌与模型面板（票 70 从 `TablePage.fs` 拆出来的第二块）：播放控制、视角与种子那一排、
+/// 配桌与模型面板（票 70 从 `TablePage.fs` 拆出来的第二块）：播放控制、
+/// **配桌那三项规则**（对局长度 / 赤宝牌 / 食断，票 72）、视角与种子那一排、
 /// 模型坐席与 provider / 模型 / key / 超时 / 思考预算 / 脚手架 / 人格 / 模板那一整屏。
 ///
 /// **控件工厂也在这里**（`button` / `picker` / `textField` / `areaField` / `selectField`）：
@@ -109,6 +110,68 @@ module TablePanel =
         match TableState.live model with
         | Some live -> hostControls model live dispatch
         | None -> replayControls model dispatch
+
+    /// 配桌那一排（票 72）：**对局长度 / 赤宝牌 / 食断**，加一句「什么时候生效」。
+    ///
+    /// **只属于 Live**：回放那一侧的规则集是牌谱自带的那一份（ADR-0004），拨不动。
+    ///
+    /// **拨完不当场生效**：与种子同一条路，要按下面那枚「重开」。半场换规则会让同一份
+    /// 牌谱前后按两套规则算，回放就重现不了。因此这一排末尾那一格把两件事都印出来：
+    /// **这一桌真在按的那一份**（`data-rules`，与导出牌谱里的 `ruleset` 逐项对得上），
+    /// 以及拨到的那三项是不是已经与它不同了（`data-rules-pending`，就是 `TableState.rulesPending`）。
+    let internal setup (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
+        let lengths =
+            GameLength.all
+            |> List.map (fun length ->
+                picker
+                    $"table-length-{GameLength.toWire length}"
+                    (live.Rules.Length = length)
+                    (GameLength.toDisplay length)
+                    (RulePicked(RuleChoice.Length length))
+                    dispatch)
+
+        // 一根轴两枚按钮（有 / 无），与 bot 那一排同一个形状。**择一而不是打勾**：
+        // 摆出来的两枚里哪一枚亮着，一眼就看得出现在拨在哪边。
+        let axis (name: string) (chosen: bool) (choose: bool -> RuleChoice) =
+            [ true; false ]
+            |> List.map (fun on ->
+                picker
+                    $"table-{name}-{RulesetDraft.switchToWire on}"
+                    (chosen = on)
+                    (RulesetDraft.switchToDisplay on)
+                    (RulePicked(choose on))
+                    dispatch)
+
+        let pending = TableState.rulesPending model
+
+        let said =
+            if pending then
+                "拨好了：按「重开」才开出新的一桌（不半场换规则）。"
+            else
+                "这一桌就是按这三项开的。"
+
+        let label (key: string) (text: string) =
+            Html.span [ prop.key key; prop.className "label"; prop.text text ]
+
+        Html.div [
+            prop.className "controls"
+            prop.children (
+                (label "length-label" "对局长度" :: lengths)
+                @ (label "akadora-label" "赤宝牌"
+                   :: axis "akadora" live.Rules.Akadora RuleChoice.Akadora)
+                @ (label "kuitan-label" "食断" :: axis "kuitan" live.Rules.Kuitan RuleChoice.Kuitan)
+                @ [
+                    Html.span [
+                        prop.key "rules"
+                        prop.className (if pending then "rendering pending" else "rendering")
+                        prop.testId "table-rules"
+                        prop.custom ("data-rules", RulesetDraft.ofRuleset model.Ruleset |> RulesetDraft.toWire)
+                        prop.custom ("data-rules-pending", (if pending then "true" else "false"))
+                        prop.text said
+                    ]
+                ]
+            )
+        ]
 
     /// 视角那一排。**两种来源共用**（回放里视角照旧切得动）；
     /// 种子与「重开」只属于 Live——回放的牌是**录下来的**，没有种子可换。
@@ -277,6 +340,14 @@ module TablePanel =
             prop.text (said + note)
         ]
 
+    /// 模型面板底下那一段说明。
+    ///
+    /// **超时那一句里的数字插值而不手写**（票 72）：默认值只有 `LlmSeat.initial` 一个真源，
+    /// 下一个人改它时面板上那句话不会静默地过期（从前写在注释里的「30 秒」就过了一年才被发现）。
+    let private panelNote =
+        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数；两格都在可缓存的前缀里，因此一局之内不会变——开局后再改照样存住，但要下一局才发得出去（上面那行会直说）。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的）；认证失败这类再问一遍还是一样的错不重试，直接兜底。对局不会卡住。"
+        + $"超时那一格默认 {LlmSeat.initial.TimeoutMs} ms（{LlmSeat.initial.TimeoutMs / 1000} 秒）：开着思考预算的模型单手实测要 17–180 秒，调得太短会把正在想的那一手提前掐成兜底；本地模型首次加载更慢，该调大就调大。"
+
     /// 配桌：哪个座位交给 LLM，以及那个座位的 provider / 模型 / key / 超时 / 思考预算。
     ///
     /// **key 只进 localStorage**（`Store`），不外发到本平台——本平台根本没有后端。
@@ -382,12 +453,7 @@ module TablePanel =
                     ]
                 ]
                 renderingLine model live
-                Html.p [
-                    prop.key "note"
-                    prop.className "intro"
-                    prop.text
-                        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数；两格都在可缓存的前缀里，因此一局之内不会变——开局后再改照样存住，但要下一局才发得出去（上面那行会直说）。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的）；认证失败这类再问一遍还是一样的错不重试，直接兜底。对局不会卡住。"
-                ]
+                Html.p [ prop.key "note"; prop.className "intro"; prop.text panelNote ]
                 // 自定义端点那段话只在选中它时出现：两个坑（CORS、mixed content）说清楚要一整段，
                 // 而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
                 if LlmSeat.isCustom live.Llm then

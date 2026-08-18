@@ -1,6 +1,6 @@
-// 浏览器里那**十趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十一趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十趟各开自己的 page / context。
+// 十一趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
 //   2 首页就是一局回放：牌桌在动、没有配桌控件、有一条去 `?table=1` 的路（票 71）
@@ -12,9 +12,10 @@
 //   8 回显 key 的自建网关：报错原文进牌谱前必须已打码（票 36）
 //   9 URL 分享的载荷：真往返 + 逐位置腐蚀 + 审计三样一个都不上路（票 77）
 //  10 **反向自证**：抹不干净的载荷必须让第 9 趟那条断言当场红（票 77）
+//  11 配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变（票 72）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
-// 其余八趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// 其余九趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
 // 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
 // 理由写在它自己的文件头上。
 //
@@ -31,6 +32,7 @@ import { verifyExport } from "./verify-export.mjs";
 import { verifyGolden } from "./verify-golden.mjs";
 import { verifyHome } from "./verify-home.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
+import { verifySetup } from "./verify-setup.mjs";
 import { verifyShare } from "./verify-share.mjs";
 import { verifyTracer } from "./verify-tracer.mjs";
 
@@ -72,7 +74,7 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十一趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -152,6 +154,16 @@ const gates = [
     how: "node scripts/verify-share.mjs --poison（它单跑时**该**以 1 退出）",
     run: strippedProof,
   },
+  // 票 72：配桌上那三项规则开关（对局长度 / 赤宝牌 / 食断，spec 的 story 13）真的传到了引擎。
+  // 每一条断言读的都是**页面上点出来的那一桌导出的牌谱**：打完一整场东风战（场风全是东、
+  // 且赤牌真的进了事件流，是下面那条「一张都没有」的阳性对照）→ 拨三项而**不重开**（牌谱里
+  // 一个字段都不许变：不许半场换规则）→ 重开后打完一整场半庄（南场真的打到了、
+  // 赤宝牌一张不剩、食断跟着关）→ 重新打开这一页，三项还在（localStorage）。
+  {
+    name: "配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 ruleset 跟着变",
+    how: "node scripts/verify-setup.mjs",
+    run: (lane) => verifySetup(lane),
+  },
 ];
 
 const lane = await openLane();
@@ -171,7 +183,7 @@ try {
 }
 
 console.log("");
-console.log("十趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十一趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

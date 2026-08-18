@@ -74,6 +74,10 @@ type AgentStatus =
 type LiveTable = {
     /// 输入框里的文本。**没解析过**——解析在「重开」那一步做，因此打字不会重开一桌。
     SeedText: string
+    /// 配桌上拨到的那三项规则（票 72）。**它不是这一桌正在按的那一份**
+    /// （那是 `TableModel.Ruleset`）：与种子同一条路——拨完要按「重开」才开出新的一桌。
+    /// **不许半场换规则**：同一份牌谱前后按两套规则算的话，回放就重现不了它。
+    Rules: RulesetDraft
     /// 牌桌；开不了局时是中文错误文案。
     Table: Result<Table, string>
     /// 哪个座位交给 LLM；None = 四家都是自带 bot。
@@ -180,6 +184,9 @@ type TableMsg =
     | LlmSeatPicked of seat: Seat option
     /// 其余座位换成哪种自带 bot（票 42）。
     | BotPicked of kind: Bot
+    /// 拨配桌上那三项规则开关（票 72）。**拨完不当场生效**：
+    /// 它只改「下一桌」那一份，要按「重开」才换得掉规则（与种子同一条路）。
+    | RulePicked of rule: RuleChoice
     /// 改配置面板里的一个字段。
     | LlmEdited of field: LlmField * value: string
     /// 把这一桌到此刻为止的牌谱存成一个 JSON 文件（票 26）。
@@ -322,6 +329,16 @@ module TableState =
     /// 只会与这里漂（票 42 前它真的漂过一份，在 `PaifuExportTests`）。
     let rosterOf (model: TableModel) : Roster option =
         live model |> Option.map (rosterFor model.Ruleset)
+
+    /// 配桌那三项拨过了、但要按「重开」才生效吗（票 72）。
+    ///
+    /// **它就是页面上那句「按重开才开出新的一桌」的判据**：拨得动，但绝不半场换规则
+    /// （同一份牌谱前后按两套规则算就回放不了）。回放那一侧恒为 false：它根本没有配桌。
+    /// **公开的**：视图与页面逻辑的用例读同一个判据（同 `renderingPending`）。
+    let rulesPending (model: TableModel) : bool =
+        match live model with
+        | None -> false
+        | Some live -> RulesetDraft.ruleset live.Rules <> model.Ruleset
 
     /// 面板上那两格改过了、但要等下一局才发得出去吗（票 46）。
     ///
@@ -543,8 +560,11 @@ module TableState =
 
     /// `?table=1` 初次摆的那一桌，**配置从外面给**。拆出来是为了它是纯的：
     /// 读 localStorage 在 `init` 那一层，因此页面逻辑的用例（dotnet 侧）用得上这个入口。
-    let initial (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> =
-        let ruleset = Ruleset.yonma
+    ///
+    /// **配桌那三项也从外面给**（票 72）：上一次拨到哪儿同样存在 localStorage 里，
+    /// 而这一桌开出来就是按它开的——牌桌的规则集恒由它推（`RulesetDraft.ruleset`）。
+    let initial (rules: RulesetDraft) (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> =
+        let ruleset = RulesetDraft.ruleset rules
         let seedText = string defaultSeed
 
         {
@@ -552,6 +572,7 @@ module TableState =
             Source =
                 Source.Live {
                     SeedText = seedText
+                    Rules = rules
                     Table = openTable (Roster.withLlm ruleset Bot.Uniform llmAt config) seedText
                     // 自带 bot 默认均匀随机（票 42）：它是黄金用例与闸门的基准。
                     Bot = Bot.Uniform
@@ -594,7 +615,9 @@ module TableState =
     let init () : TableModel * Cmd<TableMsg> =
         match Route.landing () with
         | Landing.Home -> home ()
-        | Landing.Table -> initial (Store.readSeat Ruleset.yonma) (Store.readSeatConfig ())
+        | Landing.Table ->
+            let rules = Store.readRules ()
+            initial rules (Store.readSeat (RulesetDraft.ruleset rules)) (Store.readSeatConfig ())
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match message with
@@ -613,13 +636,18 @@ module TableState =
                 schedule playback
             | Source.Replay _ -> model, Cmd.none
             | Source.Live live ->
+                // **配桌拨到的那三项在这一刻才生效**（票 72）：与种子同一条路。
+                // 半场换规则会让同一份牌谱前后按两套规则算，而回放只读得到牌谱里那一份。
+                let ruleset = RulesetDraft.ruleset live.Rules
+
                 // 在飞的那一次问话作废：它的 id 是按旧那桌的决策包编的号。
                 {
                     model with
+                        Ruleset = ruleset
                         Source =
                             Source.Live {
                                 live with
-                                    Table = openTable (rosterFor model.Ruleset live) live.SeedText
+                                    Table = openTable (rosterFor ruleset live) live.SeedText
                                     // 重开一桌就是回到第一局：人格与模板跟着松开（票 46）。
                                     Pinned = None
                                     Awaiting = None
@@ -690,6 +718,13 @@ module TableState =
                 save (fun () -> Store.writeSeat seat))
         // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（与换模型坐席同一个做法）。
         | BotPicked kind -> model |> onLive (fun _ live -> { live with Bot = kind }, Cmd.none)
+        // **只拨下一桌那一份**（票 72）：牌桌正在按的那份规则集（`model.Ruleset`）
+        // 只有 `Restarted` 动得了。拨到的值当场落 localStorage，下次打开还在。
+        | RulePicked rule ->
+            model
+            |> onLive (fun _ live ->
+                let rules = RulesetDraft.pick rule live.Rules
+                { live with Rules = rules }, save (fun () -> Store.writeRules rules))
         | LlmEdited(field, value) ->
             model
             |> onLive (fun _ live ->
