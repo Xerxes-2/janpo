@@ -9,6 +9,19 @@
 
 **Status:** ready-for-agent
 
+## 上一波留给你的既成事实（票 70 与 77 已并入 `main`）
+
+- **页面已经拆开了**（票 70，零行为改动）。`<Compile>` 顺序即编译顺序：
+  `App.fs → TableState.fs → AgentLine.fs → TableBoard.fs → TablePanel.fs → TablePage.fs → Footer.fs → Main.fs`。
+  **你的活主要在 `TableState.fs`**（`TableModel` / `TableMsg` / `init` / `update` / `schedule` 全在里面）；
+  `TablePage.fs` 只剩 58 行转出外壳——**加新的公开入口要两处都加**（`TableState` 定义 + `TablePage` 转出），
+  否则 `tests/Janpo.Web.Tests` 调不到。跳文件的助手一律 `internal`，dotnet 侧用例看不见。
+  五个模块都带 `[<RequireQualifiedAccess>]`。
+- **分享载荷的编解码已经有了**（票 77）：`Share.toPayload` / `Share.ofPayload`（都是 Promise）。
+  **但这一票仍然不接它**（接上去是票 78）：带 hash 打开时退回首页 Demo，不许白屏。
+- 浏览器闸门现在是 **九趟**（票 77 新增两趟 `verify-share`）；改趟数措辞时
+  `ci-web.sh` / `verify-browser.mjs` / `browser-lane.mjs` 三处都要跟着改（票 77 刚改过一轮，照它的样子）。
+
 ## 主人已经裁掉的分叉（照做，别重新设计）
 
 - **一页一 Model，模式是联合类型**：`Source = Live of … | Replay of …`，
@@ -42,8 +55,18 @@
 
 ## 闸门（web/scripts）
 
-- [ ] 现有四道改开 `?table=1`：`verify-board` / `verify-export`（两趟）/ `verify-llm-seat` / `table-drive`
-      —— 它们今天开 `/` 就按 `table-*` testId 找那张**静止**的牌桌
+谁在导航到 `/`（我替你数完了，**别漏**）：`shoot-table` / `verify-board` / `verify-custom-endpoint` /
+`verify-export` / `verify-golden` / `verify-llm-seat` / `verify-redaction` / `verify-share` / `verify-tracer`（开两次）。
+`table-drive.mjs` 不导航（它是页面内驱动的助手，被上面三道 import）。
+
+- [ ] **要点、要读牌桌的都改开 `?table=1`**：`verify-board` / `verify-export`（三趟，含 `--poison`）/
+      `verify-llm-seat` / `verify-redaction` / `verify-custom-endpoint` / `shoot-table`
+- [ ] **只是借页面跑引擎与闸门代码的也改开 `?table=1`**：`verify-golden` / `verify-share`
+      ——它默认暂停，是最安静的一页；留在 `/` 上会被自动播放与资产拉取干扰
+- [ ] `verify-tracer` **继续开 `/`**（它量的就是「默认视图里没有开发向内容」）；
+      含义从此变成「首页 Demo 里没有开发向内容」，断言一条不准放宽
+- [ ] `shoot-table` 的输出是 `docs/images/table.png`（README 在用）：它得改开 `?table=1`，
+      否则那张图会默默变成 Demo 的截图。**另出一张首页的**（访客第一眼是产品门面，值得有图）
 - [ ] 新一道开 `/`：断言 ① 牌桌在动（隔一会儿采两次，手数不同）② 页面上没有配桌控件
       ③ 有一条去 `?table=1` 的路 ④ 页脚照旧（票 37）
 - [ ] `verify-tracer` 那两道照旧绿（`/` 无开发向内容、`?dev=1` 才有曳光弹）
