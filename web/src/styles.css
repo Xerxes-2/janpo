@@ -572,3 +572,38 @@ h1 {
     align-self: flex-start;
   }
 }
+
+/* 回放的时间轴（票 75）。三排各一件事：播放控制、拖动与逐步、局边界。
+   `.controls` 那条 `margin: 1.5rem 0` 会让三排之间空出一大截，因此这里收紧到 0.5rem
+   ——它们是同一组控件。 */
+
+.replay-controls .controls {
+  margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+/* `.controls input` 把输入框钉在 8rem 宽（种子框要的），而滑块要占满剩下的位置。 */
+.replay-controls input.timeline {
+  width: auto;
+  flex: 1 1 14rem;
+  min-width: 10rem;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* 「第 191 手・南4·2局」比「第 3 手・东1局」宽：不钉住的话滑块会在拖动中途伸缩，
+   手底下的东西跟着跑。右对齐是为了数字那一头不跳。 */
+.replay-controls .timeline-at {
+  min-width: 9.5rem;
+  text-align: right;
+}
+
+/* 决策记录的原文按行断开：thinking 是整段文字，挤成一行读不下来（票 75；气泡是票 76）。 */
+.replay-record {
+  white-space: pre-wrap;
+  border-left: 2px solid var(--line);
+  padding-left: 0.75rem;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}

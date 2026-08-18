@@ -88,22 +88,132 @@ module TablePanel =
             )
         ]
 
-    /// 首页回放的控制条（票 71）：只有播 / 暂停、「从头再放」与倍速。
+    /// 时间轴那一根滑块（票 75）。**滑块的 `value` 就是游标**：拖到哪一帧牌桌就是那一帧
+    /// （O(1) 取帧，帧在载入时一次 fold 好）。旁边那句话说的是「第几手 / 第几局」。
     ///
-    /// **没有单步**：时间轴（拖动与逐事件步进）是票 75 的活，本票的回放只顺着播。
-    /// **没有「下一局」**：局间那一步就写在牌谱里，回放自己走过去。
-    let private replayControls (model: TableModel) (dispatch: TableMsg -> unit) =
+    /// `prop.onChange` 收 `int` 那一条重载读的是 `valueAsNumber`，正是 range 输入框该用的那一个。
+    /// `data-*` 给无头闸门读：人读的是那句中文，机器读的是它们，两边对不上就是错。
+    let private timelineRow (timeline: Timeline) (dispatch: TableMsg -> unit) =
+        let at =
+            timeline.Marks
+            |> List.tryItem timeline.Kyoku
+            |> Option.map (fun mark -> mark.Label)
+            |> Option.defaultValue "—"
+
         Html.div [
-            prop.className "controls"
-            prop.children (
-                [
-                    playButton model dispatch
-                    button "table-restart" false "从头再放" Restarted dispatch
-                    Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
+            prop.key "timeline"
+            prop.className "controls timeline-row"
+            prop.children [
+                button "table-back" (timeline.Cursor <= 0) "上一步" (CursorMoved(timeline.Cursor - 1)) dispatch
+                button
+                    "table-forward"
+                    (timeline.Cursor >= timeline.Last)
+                    "下一步"
+                    (CursorMoved(timeline.Cursor + 1))
+                    dispatch
+                Html.input [
+                    prop.key "slider"
+                    prop.testId "table-timeline"
+                    prop.className "timeline"
+                    prop.type' "range"
+                    prop.min 0
+                    prop.max timeline.Last
+                    prop.value timeline.Cursor
+                    prop.custom ("data-cursor", timeline.Cursor)
+                    prop.custom ("data-last", timeline.Last)
+                    prop.onChange (fun (frame: int) -> dispatch (CursorMoved frame))
                 ]
-                @ speeds model dispatch
+                Html.span [
+                    prop.key "at"
+                    // `timeline-at` 把它的宽度钉住：「第 3 手・东1局」与「第 191 手・南4·2局」不一样宽，
+                    // 不钉的话滑块会在拖动中途自己伸缩——拖到一半手底下的东西会跑。
+                    prop.className "values timeline-at"
+                    prop.testId "table-timeline-at"
+                    prop.custom ("data-turns", timeline.Turns)
+                    prop.custom ("data-kyoku", timeline.Kyoku)
+                    prop.text $"第 {timeline.Turns} 手・{at}局"
+                ]
+            ]
+        ]
+
+    /// 局边界那一排（票 75）：一局一枚，点下去就是把游标挪到那一局的**开局帧**。
+    ///
+    /// **不另立一条消息**：跳局就是拖到那一帧（`CursorMoved`），游标怂一条路。
+    let private kyokuRow (timeline: Timeline) (dispatch: TableMsg -> unit) =
+        Html.div [
+            prop.key "kyoku"
+            prop.className "controls kyoku-row"
+            prop.children (
+                Html.span [ prop.key "kyoku-label"; prop.className "label"; prop.text "跳到" ]
+                :: (timeline.Marks
+                    |> List.mapi (fun index mark ->
+                        picker
+                            $"table-kyoku-{index}"
+                            (index = timeline.Kyoku)
+                            mark.Label
+                            (CursorMoved mark.Frame)
+                            dispatch))
             )
         ]
+
+    /// 刚落定那一手的决策记录（票 75）：**原文印出来就行**，好看的四家气泡是票 76。
+    ///
+    /// 没有记录的那几手（bot 自己决的、以及开局那一帧）**一行都不画**：
+    /// 印一个空壳比不印更难读。现在首页那份 Demo 是 bot 牌谱（一条记录都没有），
+    /// 因此这一段在它上面永远不会出现（判据 4：语料到不了的情形要显式写出来）——
+    /// 阳性对照在 `ReplayTimelineTests` 里拌了一条记录进去；票 79 换上真资产后它才在页上开口。
+    let private recordRow (record: DecisionRecord) =
+        // 兜底原因摆在最前面：那一手不是模型自己决的，读它的思考前得先知道这件事（票 23）。
+        let said =
+            [
+                record.Fallback |> Option.map (fun reason -> $"兜底：{reason}")
+                record.Reason
+                record.Thinking
+            ]
+            |> List.choose id
+            |> String.concat "\n"
+
+        let body = if said = "" then "（这一手没留下理由与思考原文）" else said
+
+        Html.p [
+            prop.key "record"
+            prop.className "replay-record"
+            prop.testId "table-replay-record"
+            prop.custom ("data-record-turn", record.Turn)
+            prop.custom ("data-record-seat", Seat.index record.Seat)
+            prop.text $"第 {record.Turn} 手・座位 {Seat.index record.Seat}：{body}"
+        ]
+
+    /// 首页回放的控制条（票 71）与它的时间轴（票 75）：
+    /// 播 / 暂停、「从头再放」与倍速一排，步进与滑块一排，局边界一排。
+    ///
+    /// **没有「下一局」那枚按钮**：局间那一步就写在牌谱里，回放自己走过去；
+    /// 想直接去某一局的走局边界那一排（它拖的仍然是同一个游标）。
+    /// **暂停与倍速照旧**：回放与 Live 共用同一份 `Playback`，没有第二套定时器。
+    let private replayControls (model: TableModel) (dispatch: TableMsg -> unit) =
+        let playRow =
+            Html.div [
+                prop.key "play"
+                prop.className "controls"
+                prop.children (
+                    [
+                        playButton model dispatch
+                        button "table-restart" false "从头再放" Restarted dispatch
+                        Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
+                    ]
+                    @ speeds model dispatch
+                )
+            ]
+
+        // 牌谱还没拉回来（或者拉不动）时根本没有帧，那时只摆控制条。
+        let rails =
+            match TableState.timeline model with
+            | None -> []
+            | Some timeline ->
+                [ timelineRow timeline dispatch; kyokuRow timeline dispatch ]
+                @ (timeline.Record |> Option.toList |> List.map recordRow)
+
+        Html.div [ prop.className "replay-controls"; prop.children (playRow :: rails) ]
 
     /// 控制条。**牌从哪来决定摆哪几个按钮**（票 71），而播放本身两边共用一份实现。
     let internal controls (model: TableModel) (dispatch: TableMsg -> unit) =

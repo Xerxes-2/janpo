@@ -19,6 +19,8 @@
     <Compile Include="BoardTests.fs" />
     <!-- 一份牌谱摆成逐帧的牌桌（票 71）：首页 Demo 回放的地基。 -->
     <Compile Include="ReplayTableTests.fs" />
+    <!-- 回放的时间轴（票 75）：游标动得对不对（拖、步进、跳局、两头与幂等）。 -->
+    <Compile Include="ReplayTimelineTests.fs" />
     <Compile Include="AgentTests.fs" />
     <Compile Include="TablePageTests.fs" />
     <!-- 配桌上那三项规则开关（票 72）：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变。 -->

@@ -13,9 +13,9 @@ open Janpo
 ///
 /// **这一层还转出九个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` /
-/// `init` / `update` / `rosterOf` / `renderingPending` / `rulesPending` / `live` / `shown` / `canAdvance`。
-/// 转出来之后**这个程序集的公开面只多了这几个名字**：那四块里跨文件用的助手一律 `internal`，
-/// 出不了 `Janpo.Web`。
+/// `init` / `update` / `rosterOf` / `renderingPending` / `rulesPending` / `live` / `shown` /
+/// `canAdvance` / `timeline`。转出来之后**这个程序集的公开面只多了这几个名字**：那四块里
+/// 跨文件用的助手一律 `internal`，出不了 `Janpo.Web`。
 ///
 /// **这一页现在有两个布局**（票 71）：`/` 是首页的 Demo 回放（自动播，没有配桌与模型面板），
 /// `?table=1` 是主持人自己开的一桌（今天那一页一字不少）。**牌桌与结算的渲染只有一份**
@@ -54,6 +54,9 @@ module TablePage =
     /// 还推得动吗（播放那一枚按钮灰不灰）。实现与理由见 `TableState.canAdvance`。
     let canAdvance (model: TableModel) : bool = TableState.canAdvance model
 
+    /// 回放的时间轴（票 75）；Live 时是 None。实现与理由见 `TableState.timeline`。
+    let timeline (model: TableModel) : Timeline option = TableState.timeline model
+
     // ---- 视图 ----
 
     /// 牌桌那一格。**两种来源共用这一份**（票 71）：Live 画正在打的那一桌，
@@ -87,7 +90,7 @@ module TablePage =
                     prop.className "intro"
                     prop.testId "home-intro"
                     prop.text
-                        "下面这一局是录下来的，正在自动回放——不用配置、不用 API key，打开就看得见牌怎么走。他家的手牌看不到牌面：模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
+                        "下面这一局是录下来的，正在自动回放——不用配置、不用 API key，打开就看得见牌怎么走。这是上帝视角，四家的牌都摊着——牌谱已经打完了，复盘本来就该看得见四家；想验「模型看到的和你一样多」就按一下坐到某个座位，那时他家的暗牌在页面拿到的数据里根本不存在。虚线的牌是摸切。拖时间轴回看任意一手，或者点局号跳到那一局的开局。"
                 ]
                 Html.p [
                     prop.className "intro"

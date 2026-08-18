@@ -132,6 +132,42 @@ type Source =
     /// `/`：随应用分发的 Demo Paifu 回放（ADR-0003：访客的第一眼）。
     | Replay of replay: ReplayTable
 
+/// 时间轴上的一个局边界（票 75）：这一局的开局落在第几帧，以及轴上写着的那几个字。
+///
+/// **它不是第二份局面**：两格都从那一帧的牌桌上读出来（`GameState.context`），
+/// 局边界的落点因此只有这一处，跳过去就是把游标挪到 `Frame`。
+type KyokuMark = {
+    /// 这一局开局那一帧的帧号。
+    Frame: int
+    /// 按钮上那几个字：场风 + 局数，连庄时带本场（同一个「东1」会出现好几次）。
+    Label: string
+}
+
+/// 回放的时间轴（票 75）。**只有回放有**：Live 那一侧点历史某一手是票 76。
+///
+/// **游标是权威，其余每一格都是它的函数**（ADR-0002）：帧在载入时一次 fold 好
+/// （`Table.replay`），拖动因此是 O(1) 取帧——**这里没有第二份状态，也没有缓存**。
+///
+/// **公开的**：视图与页面逻辑的用例读同一处推导（同 `canAdvance` / `renderingPending`），
+/// 在用例里拄一份同样的算法只会与这里漂。
+type Timeline = {
+    /// 现在停在第几帧（0 起）。滑块的 `value` 就是它。
+    Cursor: int
+    /// 末帧的帧号（= 帧数 − 1）。滑块的上界。
+    Last: int
+    /// 这一帧落定了几手（跨局累计，CONTEXT.md 的 Turn）。轴上那句「第 N 手」读的是它。
+    Turns: int
+    /// 各局的开局帧，按帧号升序。
+    Marks: KyokuMark list
+    /// 现在停在第几局（`Marks` 里的序号，0 起）。
+    Kyoku: int
+    /// **刚落定那一手**的决策记录；那一手没问过模型、或停在某一局的开局帧时是 None。
+    ///
+    /// **不是「这一帧看得见的全部记录」**（那是 `Table.Decisions`）：时间轴要显示的是
+    /// 「上一手是谁想了什么」，与牌桌上那句「上一手：……」说的是同一手。
+    Record: DecisionRecord option
+}
+
 /// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**，因此牌桌与结算的渲染只有一份。
 [<RequireQualifiedAccess>]
 type Shown =
@@ -176,6 +212,9 @@ type TableMsg =
     | Ticked of generation: int
     /// 换视角（坐到某个座位 / 上帝视角）。
     | ViewpointPicked of viewpoint: Viewpoint
+    /// 回放的时间轴拖到了第几帧（票 75）。逐事件步进与跳局边界发的也是它
+    /// ——**游标怂一条路**，而不是每种走法各一条消息。越界的帧号夹回 [0, 末帧]。
+    | CursorMoved of frame: int
     /// 开 / 关牌桌上的危险度排序（票 25）。
     | DangerToggled
     /// 这一局看完了，开下一局。
@@ -549,6 +588,83 @@ module TableState =
                 },
                 schedule playback
 
+    /// 一帧是某一局的**开局**吗（票 75）。**判据就是 `Table.opened` 干的那件事**：
+    /// 它把「上一手」清空，而落定的每一手都会写上一手（`Table.played`）。
+    /// **不拿 `Game.played` 的长度当局号**：那一格在一局终了那一帧就已经 +1，
+    /// 拿它划局会把结算那一屏划给下一局。
+    let private isOpening (table: Table) : bool = Option.isNone table.Latest
+
+    /// 轴上那一格写着的字：「东1」、连庄时「东1·1」。**取自这一帧的场况**，
+    /// 与牌桌中央那句「东 1 局 0 本场」同一个源（`GameState.context`）。
+    let private kyokuLabel (table: Table) : string =
+        let context = GameState.context table.State
+        let honba = if context.Honba > 0 then $"·{context.Honba}" else ""
+
+        $"{Kaze.toDisplay context.Bakaze}{context.Kyoku}{honba}"
+
+    /// 各局的开局帧，按帧号升序。**现扫而不存下来**：帧是值，扫一遍是 O(帧数)，
+    /// 而多存一份就多一份会漂的东西（判据 9）。半庄约 800 帧，实测见报告 75。
+    let private marksOf (frames: Table list) : KyokuMark list =
+        frames
+        |> List.indexed
+        |> List.filter (snd >> isOpening)
+        |> List.map (fun (frame, table) -> {
+            Frame = frame
+            Label = kyokuLabel table
+        })
+
+    /// **刚落定那一手**的决策记录（票 75）。帧上那几条记录是「手序 < 这一帧手数」
+    /// 的全部（`Table.replay` 切的），因此最后一条只要手序正好是 `Turns - 1` 就是它。
+    ///
+    /// **开局那几帧一律 None**：它们没落定新的一手（`Latest = None`），
+    /// 而手数沿用着上一局的，不拦的话会把上一局末手的思考摆到新局的开局屏上。
+    let private recordOf (table: Table) : DecisionRecord option =
+        match table.Latest with
+        | None -> None
+        | Some _ ->
+            table.Decisions
+            |> List.tryLast
+            |> Option.filter (fun record -> record.Turn = table.Turns - 1)
+
+    /// 回放的时间轴（票 75）；Live 与还没 fold 好的那两段都是 None。
+    ///
+    /// **公开的**：`TablePanel` 画滑块与局边界读它，dotnet 侧的用例读的也是它。
+    let timeline (model: TableModel) : Timeline option =
+        match model.Source with
+        | Source.Live _
+        | Source.Replay ReplayTable.Loading
+        | Source.Replay(ReplayTable.Failed _) -> None
+        | Source.Replay(ReplayTable.Ready(frames, cursor)) ->
+            // 取不到那一帧走不到：帧号只由 `replayTick` / `moveCursor` /「从头再放」动，
+            // 三处都夹在 [0, 末帧] 之间。真走到了就当没有时间轴，`shown` 那边会把话说出来。
+            List.tryItem cursor frames
+            |> Option.map (fun table ->
+                let marks = marksOf frames
+
+                {
+                    Cursor = cursor
+                    Last = List.length frames - 1
+                    Turns = table.Turns
+                    Marks = marks
+                    // 停在第几局 = 开局帧不晚于游标的那几局里的最后一个。
+                    Kyoku = (marks |> List.sumBy (fun mark -> if mark.Frame <= cursor then 1 else 0)) - 1
+                    Record = recordOf table
+                })
+
+    /// 拖到第几帧（票 75）。**它不 fold、不判规则**：帧早在 `DemoLoaded` 那一刻一次 fold
+    /// 好了（`Table.replay`），这里只夹一个整数——拖动因此是 O(1) 取帧。
+    ///
+    /// **一拖就暂停**：手搭在时间轴上的人显然不想让定时器接着跑（与 Live 的「单步」同一个做法）。
+    /// `Playback.pause` 顺带换世代，在飞的那记定时器因此作废（`Playback.accepts`）。
+    let private moveCursor (frame: int) (frames: Table list) (model: TableModel) : TableModel =
+        let last = List.length frames - 1
+
+        {
+            model with
+                Source = Source.Replay(ReplayTable.Ready(frames, frame |> max 0 |> min last))
+                Playback = Playback.pause model.Playback
+        }
+
     /// 去拉那份 Demo 牌谱。**副作用一律由 Cmd 发**（同 `askCmd`）：
     /// 效果体只在浏览器里执行，dotnet 侧只把它编出来、不跑。
     let private demoCmd: Cmd<TableMsg> =
@@ -603,7 +719,11 @@ module TableState =
             Source = Source.Replay ReplayTable.Loading
             // 还没开播：牌谱拉回来那一刻才 `Playback.playing`（否则定时器空转）。
             Playback = Playback.initial
-            Viewpoint = Viewpoint.Seated Seat.first
+            // **回放默认上帝视角**（裁决 71-8，票 75 执行）：这份牌谱已经打完了，
+            // 没有人还在对局，因此不存在「提前看到他家手牌」那件事（票 22 那条泄露挂账
+            // 针对的是真人坐席在场）；而复盘的价值全在看得见四家。
+            // **Live 那一页不动**（`initial` 仍是坐到座位 0）：那一页牌还在打。
+            Viewpoint = Viewpoint.God
             ShowDanger = false
         },
         demoCmd
@@ -681,6 +801,13 @@ module TableState =
                         Source = Source.Live advanced
                 }
                 |> resume cmd
+        | CursorMoved frame ->
+            match model.Source with
+            | Source.Replay(ReplayTable.Ready(frames, _)) -> moveCursor frame frames model, Cmd.none
+            // 还没 fold 好的那两段没有帧可拖；Live 那一侧根本没有时间轴
+            // （在 Live 里点历史某一手是票 76）。两条都是「没有事情发生」，不是错误。
+            | Source.Replay _
+            | Source.Live _ -> model, Cmd.none
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
         | DangerToggled ->
             {

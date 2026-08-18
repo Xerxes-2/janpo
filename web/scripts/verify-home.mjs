@@ -1,12 +1,17 @@
 // 首页（票 71）：**访客打开 `/` 什么都不用配，第一眼就是一桌牌在走**
 //（spec 的 story 1，ADR-0003 由 Demo Paifu 兑现）。
 //
-// 四条断言，各守一件这一票才成立的事：
+// 六条断言，各守一件这一票才成立的事：
 //
 //   ① 牌桌**在动**：隔一会儿采两次，手数必须不同（自动播是这一页的全部卖点）；
 //   ② 页面上**没有配桌控件**：访客第一眼不该是一张表单（票 35 的「默认视图只该有牌桌」同一条标准）；
 //   ③ 有一条**去 `?table=1`** 的路：Host 那一侧访客得摸得到，而且点过去真的是那一页；
-//   ④ 页脚照旧（票 37）：回仓库的外链与许可。
+//   ④ 页脚照旧（票 37）：回仓库的外链与许可；
+//   ⑤ **默认上帝视角**（裁决 71-8，票 75 执行）：四家的手牌都摊着；切到座位视角之后
+//      至少三家扣起来——**后半句是阳性对照**，没有它这条断言在「投影恒亮」时也会绿；
+//   ⑥ **时间轴真的拖得动**（票 75）：在滑块上真点一下（不是设 value），牌桌跳到那一处；
+//      拖回 0 是开局那一瞬；「下一步 → 上一步」走一个来回之后 DOM 逐字相同（幂等）；
+//      点某一局的局号就落在那一局的开局帧。
 //
 // **它与 `verify-tracer` 不重**：那一道量的是「首页里没有开发向内容」（藏没藏住），
 // 这一道量的是「首页本身像不像个门面」。两道都开 `/`，其余七道全开 `?table=1`。
@@ -40,6 +45,98 @@ const HOST_TEST_IDS = [
 /** 隔多久采第二次手数。1 秒够 2× 播三四手（`TableState.demoSpeed`），也不至于让 CI 变慢。 */
 const SAMPLE_GAP_MS = 1000;
 
+/** 在滑块的这个位置上点一下（0 = 最左 = 第 0 帧，1 = 最右 = 末帧）。 */
+const DRAG_TO = 0.75;
+
+/** 时间轴此刻的三个数（人读的是那句中文，机器读的是这三个）。 */
+async function timelineAt(page) {
+  return await page.evaluate(() => {
+    const slider = document.querySelector('[data-testid="table-timeline"]');
+    const at = document.querySelector('[data-testid="table-timeline-at"]');
+    return {
+      cursor: Number.parseInt(slider?.getAttribute("data-cursor") ?? "-1", 10),
+      last: Number.parseInt(slider?.getAttribute("data-last") ?? "-1", 10),
+      turns: Number.parseInt(at?.getAttribute("data-turns") ?? "-1", 10),
+      kyoku: Number.parseInt(at?.getAttribute("data-kyoku") ?? "-1", 10),
+    };
+  });
+}
+
+/**
+ * 牌桌此刻画出来的那一份摘要（四家的张数、点数与牌面，加上那两句话）。
+ * **幂等那条断言比的就是它**：同一个游标来回到达两次，这份摘要必须逐字相同。
+ */
+async function boardDigest(page) {
+  return await page.evaluate(() =>
+    [0, 1, 2, 3]
+      .map((index) => {
+        const hand = document.querySelector(`[data-testid="seat-${index}-hand"]`);
+        const kawa = document.querySelector(`[data-testid="seat-${index}-kawa"]`);
+        const score = document.querySelector(`[data-testid="seat-${index}-score"]`);
+        return [
+          hand?.getAttribute("data-hand-count"),
+          hand?.getAttribute("data-hand-hidden"),
+          hand?.textContent,
+          kawa?.getAttribute("data-kawa-count"),
+          kawa?.textContent,
+          score?.getAttribute("data-score"),
+        ].join("|");
+      })
+      .concat([
+        document.querySelector('[data-testid="table-latest"]')?.textContent ?? "",
+        document.querySelector('[data-testid="table-timeline-at"]')?.textContent ?? "",
+      ])
+      .join("\n"),
+  );
+}
+
+/** 四家的手牌扣起来几份（`data-hand-hidden`，投影的形状，不是渲染纪律）。 */
+async function hiddenHands(page) {
+  return await page.evaluate(
+    () =>
+      [0, 1, 2, 3]
+        .map(
+          (index) =>
+            document
+              .querySelector(`[data-testid="seat-${index}-hand"]`)
+              ?.getAttribute("data-hand-hidden") ?? "?",
+        )
+        .filter((each) => each !== "false").length,
+  );
+}
+
+/**
+ * 等页面安静下来。**超时不扔异常而是返回 false**：这一道闸门的契约是交一份失败清单
+ * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把十趟一起搞挂。
+ */
+async function settles(page, predicate, argument) {
+  try {
+    await page.waitForFunction(predicate, argument, { timeout: 5000 });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+/** 等牌桌真的停下来（拖动一定暂停，因此这是拖动落定的信号）。 */
+async function paused(page) {
+  return await settles(
+    page,
+    () => document.querySelector('[data-testid="table-play"]')?.textContent?.trim() === "播放",
+  );
+}
+
+/** 等游标真的落到 `frame`（React 重渲染是异步的）。 */
+async function settledAt(page, frame) {
+  return await settles(
+    page,
+    (expected) =>
+      document.querySelector('[data-testid="table-timeline"]')?.getAttribute("data-cursor") ===
+      String(expected),
+    frame,
+  );
+}
+
 /** 这一屏此刻走到第几手（牌桌上那句「上一手：……」旁边没有数字，就数四家的河）。 */
 async function progress(page) {
   return await page.evaluate(() =>
@@ -59,6 +156,7 @@ export async function verifyHome(lane) {
   const problems = [];
   const missing = [];
   const leaks = [];
+  let dragCount = 0;
 
   try {
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
@@ -98,6 +196,104 @@ export async function verifyHome(lane) {
       if (count !== 0) leaks.push(`首页上还挂着 [data-testid="${testId}"]（${count} 个）`);
     }
 
+    // ⑤ 默认上帝视角（裁决 71-8）：四家的手牌都摊着。
+    // **后面那一下是阳性对照**：切到坐位 0 之后他家必须扣回去——
+    // 没有它的话，「投影恒亮」这种坏法同样能让上一句变绿（票 32 那次就是这么滑过去的）。
+    const hiddenAtGod = await hiddenHands(page);
+    if (hiddenAtGod !== 0) {
+      missing.push(`首页不是上帝视角：四家里有 ${hiddenAtGod} 家的手牌扣着（裁决 71-8）`);
+    }
+
+    await page.getByTestId("table-view-0").click();
+    const hiddenAtSeat = await hiddenHands(page);
+    if (hiddenAtSeat < 3) {
+      missing.push(
+        `切到座位 0 视角后只有 ${hiddenAtSeat} 家扣着（该是 3 家）——上一条断言因此不算数`,
+      );
+    }
+    await page.getByTestId("table-view-god").click();
+
+    // ⑥ 时间轴（票 75）。**在滑块上真点**：设 `value` 不能证明人拖得动它。
+    // 一拖就暂停（`TableState.moveCursor`），因此下面几条量的都是静止的牌桌。
+    const slider = page.getByTestId("table-timeline");
+    if ((await slider.count()) === 0) {
+      missing.push('首页上没有时间轴（[data-testid="table-timeline"]）：回放拖不动（票 75）');
+    } else {
+      const box = await slider.boundingBox();
+      await slider.click({ position: { x: box.width * DRAG_TO, y: box.height / 2 } });
+      // 一拖就暂停，因此「播放键上写着『播放』」就是这一次拖动落定了的信号；
+      // 不等它的话下面读到的可能还是自动播那一帧（React 重渲染是异步的）。
+      if (!(await paused(page))) missing.push("在时间轴上点了一下，牌桌却没停下来（拖动该暂停）");
+      const dragged = await timelineAt(page);
+      const kawaAtDrag = await progress(page);
+
+      // 点在四分之三处：拇指宽度会让它偏几个百分点，因此只要求落在那一带里。
+      if (!(dragged.cursor > dragged.last * 0.5 && dragged.cursor < dragged.last * 0.95)) {
+        missing.push(
+          `在时间轴 ${Math.round(DRAG_TO * 100)}% 处点一下，游标却停在 ${dragged.cursor}/${dragged.last}`,
+        );
+      }
+
+      // 幂等：「下一步 → 上一步」走一个来回，DOM 摘要必须逐字相同。
+      const digestBefore = await boardDigest(page);
+      await page.getByTestId("table-forward").click();
+      const stepped = await settledAt(page, dragged.cursor + 1);
+      await page.getByTestId("table-back").click();
+      const stepBack = await settledAt(page, dragged.cursor);
+      if (!stepped || !stepBack) {
+        missing.push(
+          `「下一步 / 上一步」没把游标挪到第 ${dragged.cursor + 1} / ${dragged.cursor} 帧（逐事件步进坏了）`,
+        );
+      }
+      const digestAfter = await boardDigest(page);
+      if (digestBefore !== digestAfter) {
+        missing.push(
+          `同一个游标（第 ${dragged.cursor} 帧）来回到达两次，牌桌却不一样了：\n${digestBefore}\n——\n${digestAfter}`,
+        );
+      }
+
+      // 拖回 0：开局那一瞬（四家的河都是空的，且「还没走一手」）。
+      await slider.click({ position: { x: 0, y: box.height / 2 } });
+      if (!(await settledAt(page, 0))) missing.push("拖到滑块最左端，游标却没回到第 0 帧");
+      const kawaAtHead = await progress(page);
+      const latest = (await page.getByTestId("table-latest").textContent()).trim();
+      if (kawaAtHead !== 0 || !latest.includes("还没走一手")) {
+        missing.push(
+          `拖回第 0 帧却不是开局那一瞬：四家的河共 ${kawaAtHead} 张，上一手那句写着「${latest}」`,
+        );
+      }
+      if (kawaAtDrag <= kawaAtHead) {
+        missing.push(
+          `拖到后面与拖回开头看到的是同一屏（河各 ${kawaAtDrag} / ${kawaAtHead} 张）：牌桌没跟着游标走`,
+        );
+      }
+
+      // 局边界：点第二局的局号，落在那一局的**开局帧**上。
+      const second = page.getByTestId("table-kyoku-1");
+      if ((await second.count()) === 0) {
+        missing.push('时间轴上没有局边界可跳（[data-testid="table-kyoku-1"]）（票 75）');
+      } else {
+        await second.click();
+        // 刚刚才拖回第 0 帧，因此「游标不再是 0」就是跳局落定的信号。
+        await settles(
+          page,
+          () =>
+            document
+              .querySelector('[data-testid="table-timeline"]')
+              ?.getAttribute("data-cursor") !== "0",
+        );
+        const jumped = await timelineAt(page);
+        const said = (await page.getByTestId("table-latest").textContent()).trim();
+        if (jumped.kyoku !== 1 || jumped.turns <= 0 || !said.includes("还没走一手")) {
+          missing.push(
+            `跳到第二局落在了第 ${jumped.kyoku} 局、第 ${jumped.turns} 手，上一手那句写着「${said}」`,
+          );
+        }
+      }
+
+      dragCount = 5;
+    }
+
     // ③ 去 `?table=1` 的路：**真点过去**，落地那一页必须是主持人那一页。
     const link = page.getByTestId("home-host-link");
     if ((await link.count()) === 0) {
@@ -132,6 +328,12 @@ export async function verifyHome(lane) {
 
     console.log(`牌桌在动 ✓（${SAMPLE_GAP_MS} ms 里四家的河从 ${before} 张长到 ${after} 张）`);
     console.log(`首页上没有配桌控件 ✓（查了 ${HOST_TEST_IDS.length} 个）`);
+    console.log(
+      `默认上帝视角 ✓（四家全摊着；切到座位 0 后 ${hiddenAtSeat} 家扣回去，阳性对照成立）`,
+    );
+    console.log(
+      `时间轴拖得动 ✓（真点了 ${dragCount} 下：拖到 3/4 处、步进一个来回、拖回 0、跳第二局）`,
+    );
     console.log("「自己开一桌」点过去就是 ?table=1，且那一页默认暂停 ✓");
     console.log("页脚里有回仓库的外链与许可（MIT）✓");
     return [];
