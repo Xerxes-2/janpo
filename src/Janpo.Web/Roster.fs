@@ -20,6 +20,9 @@ type Bot =
 /// 而那件事在 `Table.decide` 那道缝上分岔，引擎一无所知。
 ///
 /// M1 只有两种。Mortal 与真人坐席是 M3 的 case，加在这里。
+///
+/// **它与 `SeatChoice` 是两层**（票 73）：页面上人选的是「均匀随机 / 有主见 / 某份档案」
+/// （`SeatChoice`，按名字引用档案），推导到这一层时档案已经展开成一份 `LlmSeat`。
 [<RequireQualifiedAccess>]
 type SeatPlayer =
     /// 引擎自带的 bot。动作当场就有。
@@ -86,15 +89,9 @@ module Roster =
     /// 四家都是均匀随机选手。
     let allRandom (ruleset: Ruleset) : Roster = allBots ruleset Bot.Uniform
 
-    /// 一席交给 LLM，其余是 `kind` 那种 bot（23 号票那一桌）。`seat` 是 None 时四家全是 bot。
-    /// 座位越界时也是四家全 bot（`Seat.mapAt` 越界不改）。
-    let withLlm (ruleset: Ruleset) (kind: Bot) (seat: Seat option) (config: LlmSeat) : Roster =
-        match seat with
-        | None -> allBots ruleset kind
-        | Some seat -> {
-            Ruleset = ruleset
-            Seats = (allBots ruleset kind).Seats |> Seat.mapAt seat (fun _ -> SeatPlayer.Llm config)
-          }
+    /// 每席各指定一个选手（票 73：四家都可以是模型）。
+    /// **谁坐哪里由页面那一侧推**（`SeatingPlan.roster`）：引擎不认识「模型档案」这件事。
+    let create (ruleset: Ruleset) (seats: SeatPlayer list) : Roster = { Ruleset = ruleset; Seats = seats }
 
     // ---- 查表 ----
 
@@ -103,17 +100,22 @@ module Roster =
         Seat.tryItem seat roster.Seats
         |> Option.defaultValue (SeatPlayer.Bot Bot.Uniform)
 
+    /// 一个选手在牌谱里的名字。**只有这一份**：页面上那一行摘要（`SeatingPlan.names`）
+    /// 读的也是它，两份写法只会漂。
+    ///
+    /// **档案的名字不在里面**（票 73）：那是本机的私人叫法，
+    /// 而牌谱是可分享物——LLM 席恒叫 `provider/model`。
+    let playerName (player: SeatPlayer) : string =
+        match player with
+        | SeatPlayer.Bot kind -> Bot.toWire kind
+        | SeatPlayer.Llm config -> $"{config.Provider}/{config.Model}"
+
     /// 各家的名字，按座位升序——mjai `start_game` 的 `names`，也就是牌谱第一条事件里的那一列。
     ///
     /// **它是 wire 数据不是渲染**（ADR-0001）：自带 bot 叫 `random` / `opinionated`，
     /// LLM 座位叫 `provider/model`。
     /// **key 不在里面**：牌谱是可分享物，它里头永远不能出现 API key。
-    let names (roster: Roster) : string list =
-        roster.Seats
-        |> List.map (fun player ->
-            match player with
-            | SeatPlayer.Bot kind -> Bot.toWire kind
-            | SeatPlayer.Llm config -> $"{config.Provider}/{config.Model}")
+    let names (roster: Roster) : string list = roster.Seats |> List.map playerName
 
     /// 坐着 LLM 的那些座位。M1 只会有一个，形状仍按多个写——M2 是四家 LLM 同桌。
     let llmSeats (roster: Roster) : (Seat * LlmSeat) list =

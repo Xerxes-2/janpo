@@ -13,17 +13,16 @@ open Janpo.Web
 /// ——导出的事件流交回引擎 fold，逐条事件与终局精算都必须与原来那一场相同。
 module PaifuExportTests =
 
-    let private config: LlmSeat =
+    /// 库里那一份档案（票 73）：**key 在这里**，而它绝不许出现在导出的牌谱里。
+    let private profile: ModelProfile =
         {
+            Name = "凶狠的老张"
             Provider = "deepseek"
             Model = "deepseek-v4-flash"
             BaseUrl = ""
             ApiKey = "sk-测试用的假 key"
             TimeoutMs = 12000
             Thinking = Thinking.Medium
-            Tier = ScaffoldTier.Bare
-            Persona = ""
-            Template = ""
         }
 
     let private seat (index: int) : Seat =
@@ -31,9 +30,15 @@ module PaifuExportTests =
         | Some seat -> seat
         | None -> failwith $"{index} 应当是合法座位"
 
-    /// 座位 1 交给 LLM 的一桌。
+    /// 座位 1 交给那份档案的一桌。
     let private llmTable () : TableModel =
-        TablePage.initial RulesetDraft.initial (Some(seat 1)) config |> fst
+        let seating =
+            { SeatingPlan.initial Ruleset.yonma with
+                Profiles = [ profile ]
+            }
+            |> SeatingPlan.bind (seat 1) (SeatChoice.Profile profile.Name)
+
+        TablePage.initial RulesetDraft.initial seating |> fst
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 
@@ -233,7 +238,9 @@ module PaifuExportTests =
         | other -> failwith $"第一条应当是 start_game，却是 {other}"
 
         // 可分享物里永远不能出现 API key（ADR-0003）。
-        Assert.DoesNotContain(config.ApiKey, Paifu.encoder paifu |> Encode.toString 0)
+        Assert.DoesNotContain(profile.ApiKey, Paifu.encoder paifu |> Encode.toString 0)
+        // 档案的名字同理（票 73）：那是本机的私人叫法，牌谱是可分享物。
+        Assert.DoesNotContain(profile.Name, Paifu.encoder paifu |> Encode.toString 0)
 
     [<Fact>]
     let ``导出的事件流回放出同一个终局，逐条事件都相同`` () =

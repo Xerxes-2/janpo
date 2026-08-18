@@ -329,15 +329,19 @@ module TablePanel =
             )
         ]
 
-    // ---- 视图：配置面板 ----
+    // ---- 视图：四席绑定与模型档案（票 73） ----
 
-    /// 一个文本输入框。`kind` 是 `password` 时人看不见自己填的 key。
+    /// 一格文本输入。`kind` 是 `password` 时人看不见自己填的 key。
+    ///
+    /// **三个控件工厂收的都是「现在的值 + 改成什么」**（而不是一个字段枚举加一份配置）：
+    /// 档案编辑处与四席那几行填的是两种东西（`ModelProfile` 与 `SeatBinding`），
+    /// 共用同一批控件的唯一办法就是让它们只认字符串。
     let private textField
         (testId: string)
         (kind: string)
         (label: string)
-        (which: LlmField)
-        (live: LiveTable)
+        (value: string)
+        (edited: string -> TableMsg)
         (dispatch: TableMsg -> unit)
         =
         Html.label [
@@ -348,8 +352,8 @@ module TablePanel =
                 Html.input [
                     prop.testId testId
                     prop.type' kind
-                    prop.value (LlmSeat.field which live.Llm)
-                    prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
+                    prop.value value
+                    prop.onChange (edited >> dispatch)
                 ]
             ]
         ]
@@ -360,8 +364,8 @@ module TablePanel =
         (testId: string)
         (label: string)
         (hint: string)
-        (which: LlmField)
-        (live: LiveTable)
+        (value: string)
+        (edited: string -> TableMsg)
         (dispatch: TableMsg -> unit)
         =
         Html.label [
@@ -371,10 +375,10 @@ module TablePanel =
                 Html.span [ prop.className "label"; prop.text label ]
                 Html.textarea [
                     prop.testId testId
-                    prop.rows 3
+                    prop.rows 2
                     prop.placeholder hint
-                    prop.value (LlmSeat.field which live.Llm)
-                    prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
+                    prop.value value
+                    prop.onChange (edited >> dispatch)
                 ]
             ]
         ]
@@ -386,9 +390,9 @@ module TablePanel =
     let private selectField
         (testId: string)
         (label: string)
-        (which: LlmField)
+        (value: string)
         (options: (string * string * bool) list)
-        (live: LiveTable)
+        (edited: string -> TableMsg)
         (dispatch: TableMsg -> unit)
         =
         Html.label [
@@ -398,8 +402,8 @@ module TablePanel =
                 Html.span [ prop.className "label"; prop.text label ]
                 Html.select [
                     prop.testId testId
-                    prop.value (LlmSeat.field which live.Llm)
-                    prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
+                    prop.value value
+                    prop.onChange (edited >> dispatch)
                     prop.children [
                         for value, display, enabled in options ->
                             Html.option [
@@ -413,7 +417,189 @@ module TablePanel =
             ]
         ]
 
-    /// 人格与模板那两格下面那一行（票 46 的 31-D 与「一局内不变」）。**两件事是一件事的两面**：
+    /// 一席那一行（票 73）：**交给谁**（均匀随机 / 有主见 / 库里每份档案各一枚），
+    /// 加上这一席自己的脚手架档位、人格与 prompt 模板。
+    ///
+    /// **四席各一行、全摆在面上**（票面的硬判据）：别让人点四次才知道谁坐哪。
+    /// **这一行里没有 key**：key 只出现在下面的档案编辑处，一把 key 坐三席也只填一次。
+    let private seatRow (live: LiveTable) (seat: Seat) (dispatch: TableMsg -> unit) =
+        let index = Seat.index seat
+        let binding = SeatingPlan.bindingAt seat live.Seating
+
+        let bots =
+            Bot.all
+            |> List.map (fun kind ->
+                picker
+                    $"table-seat-{index}-{Bot.toWire kind}"
+                    (binding.Choice = SeatChoice.Bot kind)
+                    (Bot.toDisplay kind)
+                    (SeatBound(seat, SeatChoice.Bot kind))
+                    dispatch)
+
+        let profiles =
+            live.Seating.Profiles
+            |> List.mapi (fun each profile ->
+                picker
+                    $"table-seat-{index}-profile-{each}"
+                    (binding.Choice = SeatChoice.Profile profile.Name)
+                    profile.Name
+                    (SeatBound(seat, SeatChoice.Profile profile.Name))
+                    dispatch)
+
+        Html.div [
+            prop.key $"seat-{index}"
+            prop.className "controls"
+            prop.testId $"table-seat-{index}"
+            // 这一席拨到了哪儿（给闸门看；人看的是哪一枚按钮亮着）。
+            prop.custom ("data-seat-choice", SeatChoice.toWire binding.Choice)
+            // 这一席在牌谱里叫什么（`Roster.names` 那一份）：**档案的名字不在里面**。
+            prop.custom (
+                "data-seat-name",
+                SeatingPlan.names live.Seating |> List.tryItem index |> Option.defaultValue ""
+            )
+            prop.children (
+                (Html.span [ prop.key "seat-label"; prop.className "label"; prop.text $"座位 {index}" ]
+                 :: bots)
+                @ profiles
+                @ [
+                    // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。
+                    // 工具搜索档是 M3 的，灰着；它真被选上也不会坏事（prompt 与兜底都退回 Bare）。
+                    selectField
+                        $"table-seat-{index}-tier"
+                        "脚手架"
+                        (SeatBinding.field SeatField.Tier binding)
+                        (ScaffoldTier.all
+                         |> List.map (fun tier ->
+                             ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, tier <> ScaffoldTier.ToolSearch))
+                        (fun value -> SeatEdited(seat, SeatField.Tier, value))
+                        dispatch
+                    areaField
+                        $"table-seat-{index}-persona"
+                        "人格（一局内不变）"
+                        "留空＝没有人格。例：你是一位以防守见长的雀士，宁可少和一把也不点炮。"
+                        (SeatBinding.field SeatField.Persona binding)
+                        (fun value -> SeatEdited(seat, SeatField.Persona, value))
+                        dispatch
+                    areaField
+                        $"table-seat-{index}-template"
+                        "模板（一局内不变）"
+                        "留空＝默认模板。一段 JSON：{\"id\":\"我的\",\"labels\":{\"history\":\"【回放】\"}}"
+                        (SeatBinding.field SeatField.Template binding)
+                        (fun value -> SeatEdited(seat, SeatField.Template, value))
+                        dispatch
+                ]
+            )
+        ]
+
+    /// 档案编辑处（票 73）：库里那几份各一枚、新建与删除，以及**开着那一份**的六格。
+    ///
+    /// **key 在界面上只出现在这里**（票面的硬判据）：座位那几行不重复填 key，
+    /// 因此「同一把 key 坐三席」不必把它填三遍。
+    ///
+    /// **baseUrl 那一格只在选了自定义端点时出现**（票 30）：官方八家根本不看它，
+    /// 摆在那里只会让人以为能把 DeepSeek 改道。
+    let private profileEditor (live: LiveTable) (dispatch: TableMsg -> unit) =
+        let tabs =
+            live.Seating.Profiles
+            |> List.mapi (fun index profile ->
+                picker $"table-profile-{index}" (index = live.Editing) profile.Name (ProfileOpened index) dispatch)
+
+        let fields =
+            match SeatingPlan.profileAt live.Editing live.Seating with
+            // 一份档案都没有（全删光了）：只剩「新建」那一枚，没有格子可填。
+            | None -> []
+            | Some profile ->
+                let edited (field: ProfileField) =
+                    fun (value: string) -> ProfileEdited(field, value)
+
+                [
+                    Html.div [
+                        prop.key "profile-fields"
+                        prop.className "controls"
+                        prop.children [
+                            textField "table-profile-name" "text" "档案名" profile.Name (edited ProfileField.Name) dispatch
+                            selectField
+                                "table-profile-provider"
+                                "provider"
+                                profile.Provider
+                                (ModelProfile.providers
+                                 |> List.map (fun name -> name, ModelProfile.providerToDisplay name, true))
+                                (edited ProfileField.Provider)
+                                dispatch
+                            // 模型名一直是自由文本：本地模型叫 `qwen3:8b` 的叫 `gpt-oss-20b@q4` 的都有，
+                            // 下拉框只会挡路。
+                            textField
+                                "table-profile-model"
+                                "text"
+                                "模型"
+                                profile.Model
+                                (edited ProfileField.Model)
+                                dispatch
+                            if ModelProfile.isCustom profile then
+                                textField
+                                    "table-profile-base-url"
+                                    "text"
+                                    "baseUrl"
+                                    profile.BaseUrl
+                                    (edited ProfileField.BaseUrl)
+                                    dispatch
+                            textField
+                                "table-profile-key"
+                                "password"
+                                "API key"
+                                profile.ApiKey
+                                (edited ProfileField.ApiKey)
+                                dispatch
+                            textField
+                                "table-profile-timeout"
+                                "number"
+                                "超时 (ms)"
+                                (ModelProfile.field ProfileField.TimeoutMs profile)
+                                (edited ProfileField.TimeoutMs)
+                                dispatch
+                            selectField
+                                "table-profile-thinking"
+                                "思考预算"
+                                (ModelProfile.field ProfileField.Thinking profile)
+                                (Thinking.all
+                                 |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level, true))
+                                (edited ProfileField.Thinking)
+                                dispatch
+                        ]
+                    ]
+                ]
+
+        // 删掉一份还被座位引用的档案，那几席会退回 bot——**页面把这件事说出来**，
+        // 不许静静地变成「没有选手」。这一行只在真发生过之后才出现。
+        let notice =
+            live.Notice
+            |> Option.toList
+            |> List.map (fun said ->
+                Html.p [
+                    prop.key "profile-notice"
+                    prop.className "rendering pending"
+                    prop.testId "table-profile-notice"
+                    prop.text said
+                ])
+
+        Html.div [
+            prop.key "profiles"
+            prop.className "controls"
+            prop.children [
+                Html.span [ prop.key "profiles-label"; prop.className "label"; prop.text "模型档案" ]
+                yield! tabs
+                button "table-profile-new" false "新建档案" ProfileAdded dispatch
+                button
+                    "table-profile-delete"
+                    (Option.isNone (SeatingPlan.profileAt live.Editing live.Seating))
+                    "删掉这一份"
+                    (ProfileDeleted live.Editing)
+                    dispatch
+            ]
+        ]
+        :: (fields @ notice)
+
+    /// 四席那几行下面那一行（票 46 的 31-D 与「一局内不变」）。**两件事是一件事的两面**：
     /// 渲染版号说「发出去的是哪一份」，后半句说「你刚才改的那一份什么时候生效」。
     ///
     /// 版号取自**最近一条决策记录**，不在这一层重算：它是 `模板 id@模板哈希.渲染器摘要`
@@ -452,121 +638,31 @@ module TablePanel =
 
     /// 模型面板底下那一段说明。
     ///
-    /// **超时那一句里的数字插值而不手写**（票 72）：默认值只有 `LlmSeat.initial` 一个真源，
+    /// **超时那一句里的数字插值而不手写**（票 72）：默认值只有 `ModelProfile.initial` 一个真源，
     /// 下一个人改它时面板上那句话不会静默地过期（从前写在注释里的「30 秒」就过了一年才被发现）。
     let private panelNote =
-        "key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数；两格都在可缓存的前缀里，因此一局之内不会变——开局后再改照样存住，但要下一局才发得出去（上面那行会直说）。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的）；认证失败这类再问一遍还是一样的错不重试，直接兜底。对局不会卡住。"
-        + $"超时那一格默认 {LlmSeat.initial.TimeoutMs} ms（{LlmSeat.initial.TimeoutMs / 1000} 秒）：开着思考预算的模型单手实测要 17–180 秒，调得太短会把正在想的那一手提前掐成兜底；本地模型首次加载更慢，该调大就调大。"
+        "一份「模型档案」就是「怎么问这个模型」（provider・模型・key・baseUrl・超时・思考预算），key 只在这里填一次；四席各自挑一份档案（或者自带 bot），并各带自己的脚手架档位、人格与模板——同一份档案坐两席、两席两种人格，那正是对照实验要的形态。key 只存在这台浏览器的 localStorage 里，请求由浏览器直发 provider，不经本平台（它没有后端）。订阅制的 OAuth 登录在浏览器里用不了，只能填 API key。脚手架换成信息辅助后，prompt 里会多一节引擎算好的向听数、有效牌与逐张试打的进退向。人格与模板是另一个维度：它们只换措辞，不换给不给那几个算好的数；两格都在可缓存的前缀里，因此一局之内不会变——开局后再改照样存住，但要下一局才发得出去（上面那行会直说），而且它按座位各算各的。模型超时、报错或给不出合法动作时，重试两次仍不行就兜底代打（裸奔档摸切，信息辅助档打一张不退向听的）；认证失败这类再问一遍还是一样的错不重试，直接兜底。对局不会卡住。"
+        + $"超时那一格默认 {ModelProfile.initial.TimeoutMs} ms（{ModelProfile.initial.TimeoutMs / 1000} 秒）：开着思考预算的模型单手实测要 17–180 秒，调得太短会把正在想的那一手提前掐成兜底；本地模型首次加载更慢，该调大就调大。"
 
-    /// 配桌：哪个座位交给 LLM，以及那个座位的 provider / 模型 / key / 超时 / 思考预算。
+    /// 四席绑定 + 模型档案库（票 73）：**四 LLM 同桌**就是这一屏。
     ///
     /// **key 只进 localStorage**（`Store`），不外发到本平台——本平台根本没有后端。
     /// **不提供订阅制登录**：pi-ai 的 OAuth 流程是 Node-only（票 18），浏览器里只有 API key
     /// 这一条路；Bedrock 同理不在 provider 列表里。
-    ///
-    /// **baseUrl 那一格只在选了自定义端点时出现**（票 30）：官方八家根本不看它，
-    /// 摆在那里只会让人以为能把 DeepSeek 改道。
     let internal llmPanel (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
-        let seats =
-            picker "table-llm-none" (Option.isNone live.LlmAt) "无" (LlmSeatPicked None) dispatch
-            :: [
-                for seat in Seat.all model.Ruleset ->
-                    picker
-                        $"table-llm-{Seat.index seat}"
-                        (live.LlmAt = Some seat)
-                        $"座位 {Seat.index seat}"
-                        (LlmSeatPicked(Some seat))
-                        dispatch
-            ]
-
-        // 剩下那几家由哪种自带 bot 坐（票 42）。**均匀随机是默认**：它是对拍与闸门的基准；
-        // 有主见的那个能和就和、听牌就立直，立直与供托那几条路径靠它才真的走得到。
-        let bots =
-            Bot.all
-            |> List.map (fun kind ->
-                picker $"table-bot-{Bot.toWire kind}" (live.Bot = kind) (Bot.toDisplay kind) (BotPicked kind) dispatch)
+        let custom = live.Seating.Profiles |> List.exists ModelProfile.isCustom
 
         Html.section [
             prop.className "llm-panel"
             prop.testId "table-llm-panel"
             prop.children [
-                Html.div [
-                    prop.key "seat"
-                    prop.className "controls"
-                    prop.children (
-                        (Html.span [ prop.key "llm-label"; prop.className "label"; prop.text "模型坐席" ]
-                         :: seats)
-                        @ (Html.span [ prop.key "bot-label"; prop.className "label"; prop.text "其余座位" ]
-                           :: bots)
-                    )
-                ]
-                Html.div [
-                    prop.key "config"
-                    prop.className "controls"
-                    prop.children [
-                        selectField
-                            "table-llm-provider"
-                            "provider"
-                            LlmField.Provider
-                            (LlmSeat.providers
-                             |> List.map (fun name -> name, LlmSeat.providerToDisplay name, true))
-                            live
-                            dispatch
-                        // 模型名一直是自由文本：本地模型叫 `qwen3:8b` 的叫 `gpt-oss-20b@q4` 的都有，
-                        // 下拉框只会挡路。
-                        textField "table-llm-model" "text" "模型" LlmField.Model live dispatch
-                        if LlmSeat.isCustom live.Llm then
-                            textField "table-llm-base-url" "text" "baseUrl" LlmField.BaseUrl live dispatch
-                        textField "table-llm-key" "password" "API key" LlmField.ApiKey live dispatch
-                        textField "table-llm-timeout" "number" "超时 (ms)" LlmField.TimeoutMs live dispatch
-                        selectField
-                            "table-llm-thinking"
-                            "思考预算"
-                            LlmField.Thinking
-                            (Thinking.all
-                             |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level, true))
-                            live
-                            dispatch
-                        // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。
-                        // 工具搜索档是 M3 的，灰着；它真被选上也不会坏事（prompt 与兜底都退回 Bare）。
-                        selectField
-                            "table-llm-tier"
-                            "脚手架"
-                            LlmField.Tier
-                            (ScaffoldTier.all
-                             |> List.map (fun tier ->
-                                 ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, tier <> ScaffoldTier.ToolSearch))
-                            live
-                            dispatch
-                    ]
-                ]
-                // 人格与模板（票 31）：**与脚手架档位是两个维度**，因此另起一行。
-                // 两格都进可缓存的前缀，因此改它们 = 废掉那一局的缓存（渲染版本号会跟着变）。
-                Html.div [
-                    prop.key "prompt"
-                    prop.className "controls"
-                    prop.children [
-                        areaField
-                            "table-llm-persona"
-                            "人格（一局内不变）"
-                            "留空就没有人格。例：你是一位以防守见长的雀士，宁可少和一把，也不点炮。"
-                            LlmField.Persona
-                            live
-                            dispatch
-                        areaField
-                            "table-llm-template"
-                            "prompt 模板（一局内不变）"
-                            "留空就用默认模板。一段 JSON，给几项换几项：{\"id\":\"我的模板\",\"labels\":{\"history\":\"【战况回放】\"}}"
-                            LlmField.Template
-                            live
-                            dispatch
-                    ]
-                ]
+                yield! Seat.all model.Ruleset |> List.map (fun seat -> seatRow live seat dispatch)
+                yield! profileEditor live dispatch
                 renderingLine model live
                 Html.p [ prop.key "note"; prop.className "intro"; prop.text panelNote ]
-                // 自定义端点那段话只在选中它时出现：两个坑（CORS、mixed content）说清楚要一整段，
-                // 而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
-                if LlmSeat.isCustom live.Llm then
+                // 自定义端点那段话只在库里有那么一份档案时出现：两个坑（CORS、mixed content）
+                // 说清楚要一整段，而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
+                if custom then
                     Html.p [
                         prop.key "custom-note"
                         prop.className "intro"

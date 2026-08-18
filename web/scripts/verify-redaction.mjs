@@ -26,6 +26,7 @@ import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -92,20 +93,23 @@ export async function verifyRedaction(lane, options = {}) {
     const page = await context.newPage();
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
 
-    // 座位配置只从 localStorage 来（`Store.readSeatConfig`）：自定义端点 + 一把真交出去的 key。
-    await page.addInitScript(
-      ([seat, baseUrl, apiKey]) => {
-        localStorage.setItem("janpo.llm.seat", String(seat));
-        localStorage.setItem("janpo.llm.provider", "custom-openai");
-        localStorage.setItem("janpo.llm.model", "fake-model");
-        localStorage.setItem("janpo.llm.base_url", baseUrl);
-        localStorage.setItem("janpo.llm.api_key", apiKey);
-        localStorage.setItem("janpo.llm.timeout_ms", "10000");
-        localStorage.setItem("janpo.llm.thinking", "off");
-        localStorage.setItem("janpo.llm.tier", "bare");
-      },
-      [seat, baseUrl, FAKE_KEY],
-    );
+    // 坐法只从 localStorage 来（`Store.readSeating`，票 73）：库里一份走自定义端点的档案
+    // （**key 只在档案里填一次**），把它绑在那一席上。
+    await plantSeating(page, {
+      profiles: [
+        {
+          name: "回显 key 的那个端点",
+          provider: "custom-openai",
+          model: "fake-model",
+          base_url: baseUrl,
+          api_key: FAKE_KEY,
+          timeout_ms: "10000",
+        },
+      ],
+      seats: [0, 1, 2, 3].map((index) =>
+        index === seat ? { choice: profileChoice("回显 key 的那个端点") } : {},
+      ),
+    });
 
     console.log(`页面 ${pageOrigin}　端点 ${baseUrl}（会原样回显 key 的 401）　模型坐席 ${seat}`);
     console.log(`交给端点的那把假 key：${FAKE_KEY}`);

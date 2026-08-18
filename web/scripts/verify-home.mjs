@@ -24,17 +24,28 @@
 
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 
-/** 只属于主持人那一页的控件。首页上出现任何一个都算「第一眼是张表单」。 */
+/**
+ * 只属于主持人那一页的控件。首页上出现任何一个都算「第一眼是张表单」。
+ *
+ * **这份名单自带阳性对照**（判据 3）：点过去 `?table=1` 之后逐个查它们**必须都在**。
+ * 少了这一步的话，写错一个 testId（或者某个控件被改名删掉）会让对应那条断言
+ * 变成永远为真——一道从不失败的闸门等于没有闸门。
+ */
 const HOST_TEST_IDS = [
   "table-llm-panel",
   "table-seed",
   "table-step",
   "table-next",
   "table-export",
-  "table-llm-none",
-  "table-llm-provider",
-  "table-llm-key",
-  "table-bot-random",
+  // 四席绑定与模型档案库（票 73）：key 只出现在档案编辑处，座位那几行不重复填。
+  "table-seat-0-random",
+  "table-seat-0-opinionated",
+  "table-seat-0-tier",
+  "table-seat-3-persona",
+  "table-profile-0",
+  "table-profile-new",
+  "table-profile-provider",
+  "table-profile-key",
   // 配桌那三项规则开关（票 72）：回放的规则集是牌谱自带的那一份，首页上拨不得。
   "table-rules",
   "table-length-tonpuusen",
@@ -301,6 +312,17 @@ export async function verifyHome(lane) {
     } else {
       await link.click();
       await page.getByTestId("table-llm-panel").waitFor({ timeout: 15000 });
+
+      // **阳性对照**：上面那份名单里的每一个都得在主持人这一页上真的存在，
+      // 否则「首页上没有它」这条断言是空转的（判据 3）。
+      for (const testId of HOST_TEST_IDS) {
+        if ((await page.getByTestId(testId).count()) === 0) {
+          missing.push(
+            `?table=1 上没有 [data-testid="${testId}"]：那么「首页上没有它」那一条永远为真（空转）`,
+          );
+        }
+      }
+
       const landed = new URL(page.url());
       if (landed.searchParams.get("table") !== "1") {
         missing.push(`那条路点过去落在 ${page.url()}，不是 ?table=1`);
@@ -327,7 +349,9 @@ export async function verifyHome(lane) {
     if (missing.length > 0) return failure("首页少了该给访客的东西：", missing);
 
     console.log(`牌桌在动 ✓（${SAMPLE_GAP_MS} ms 里四家的河从 ${before} 张长到 ${after} 张）`);
-    console.log(`首页上没有配桌控件 ✓（查了 ${HOST_TEST_IDS.length} 个）`);
+    console.log(
+      `首页上没有配桌控件 ✓（查了 ${HOST_TEST_IDS.length} 个，且每一个在 ?table=1 上都真的存在）`,
+    );
     console.log(
       `默认上帝视角 ✓（四家全摊着；切到座位 0 后 ${hiddenAtSeat} 家扣回去，阳性对照成立）`,
     );

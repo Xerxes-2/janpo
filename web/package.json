@@ -24,6 +24,7 @@
     "verify:invariants": "node scripts/verify-invariants.mjs",
     "verify:export": "node scripts/verify-export.mjs",
     "verify:redaction": "node scripts/verify-redaction.mjs",
+    "verify:seats": "node scripts/verify-seats.mjs",
     "verify:setup": "node scripts/verify-setup.mjs",
     "verify:share": "node scripts/verify-share.mjs"
   },

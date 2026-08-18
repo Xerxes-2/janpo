@@ -21,17 +21,26 @@
 //   cd web && pnpm run fable && pnpm run verify:export
 //   node scripts/verify-export.mjs --to-end    # 一路打到终局精算那一屏
 //   JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-export.mjs --llm --thinking medium
+//   JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-export.mjs --llm --seats 0,1   # 两席同一份档案
 //   node scripts/verify-export.mjs --poison   # 反向自证：这一趟**必须**红
 //
 // 选项：--turns N（导出前先走几手，默认 60；一局打完就接着开下一局）、
 //       --to-end（打完一整场再导出：走到终局精算出现为止，手数上限默认 4000）、
-//       --seed N（开跑前先换一个种子重开一桌）、--seat N、--model X、--thinking off|low|medium|high、
+//       --seed N（开跑前先换一个种子重开一桌）、--seats 0,1（交给模型的那几席，票 73；默认 1）、
+//       --model X、--thinking off|low|medium|high、
 //       --keep <路径>（把下下来的牌谱另存一份，报告里的样例就是这么来的）、
 //       --poison（往导出物里拌一把 key，见下面 `poisoned`）。
 
 import { copyFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import {
+  PROFILE_NAME,
+  personaFor,
+  plantSeating,
+  preambleProblems,
+  profileChoice,
+} from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
 import { stepTurns } from "./table-drive.mjs";
 
@@ -64,7 +73,7 @@ export async function verifyExport(lane, options = {}) {
     toEnd = false,
     turns = toEnd ? 4000 : 60,
     seed = null,
-    seat = 1,
+    seats = [1],
     model = "deepseek-v4-flash",
     thinking = "off",
     keep = null,
@@ -96,27 +105,35 @@ export async function verifyExport(lane, options = {}) {
     });
 
     if (withLlm) {
-      await page.addInitScript(
-        ([seat, model, apiKey, thinking]) => {
-          localStorage.setItem("janpo.llm.seat", String(seat));
-          localStorage.setItem("janpo.llm.provider", "deepseek");
-          localStorage.setItem("janpo.llm.model", model);
-          localStorage.setItem("janpo.llm.api_key", apiKey);
-          // 与页面默认值同一个数（票 72：`LlmSeat.initial.TimeoutMs`）。**这一档才用得着它**
-          // ——`--thinking medium` 实测单手 17–180 秒，60 秒会把手验跑成一串兜底。
-          localStorage.setItem("janpo.llm.timeout_ms", "240000");
-          localStorage.setItem("janpo.llm.thinking", thinking);
-        },
-        [seat, model, apiKey, thinking],
-      );
+      // 手验那一档（票 73 之后可以是**好几席**）：库里一份档案，`seats` 里点名的那几席
+      // 各自引用它，并**各给一句不同的人格**——同一份 key 只填一次，而两席的 preamble 该不同。
+      await plantSeating(page, {
+        profiles: [
+          {
+            name: PROFILE_NAME,
+            provider: "deepseek",
+            model,
+            api_key: apiKey,
+            // 与页面默认值同一个数（票 72：`ModelProfile.initial.TimeoutMs`）。**这一档才用得着它**
+            // ——`--thinking medium` 实测单手 17–180 秒，60 秒会把手验跑成一串兜底。
+            timeout_ms: "240000",
+            thinking,
+          },
+        ],
+        seats: [0, 1, 2, 3].map((index) =>
+          seats.includes(index)
+            ? { choice: profileChoice(PROFILE_NAME), persona: personaFor(index) }
+            : {},
+        ),
+      });
     } else {
-      // 票 34 的那一档：**key 灌进去，坐席不给**。页面照样把这把 key 从 localStorage 读进配置
-      // （`Store.readSeatConfig`），但四家仍是随机选手（座位存空串就是「四家都随机」），
+      // 票 34 的那一档：**key 灌进去，坐席不给**。页面照样把这把 key 从 localStorage 读进档案
+      // （`Store.readSeating`），但四家仍是随机选手（一席都没绑到档案上），
       // 于是一个请求都发不出去——而导出的字节里照样不该出现它。
-      await page.addInitScript((fakeKey) => {
-        localStorage.setItem("janpo.llm.seat", "");
-        localStorage.setItem("janpo.llm.api_key", fakeKey);
-      }, FAKE_KEY);
+      await plantSeating(page, {
+        profiles: [{ name: PROFILE_NAME, api_key: FAKE_KEY }],
+        seats: [{}, {}, {}, {}],
+      });
     }
 
     await page.goto(hostPage(url), { waitUntil: "load" });
@@ -132,7 +149,7 @@ export async function verifyExport(lane, options = {}) {
     }
 
     console.log(
-      `模式：${withLlm ? `一席交给 ${model}（思考预算 ${thinking}）` : "四家随机选手（不发任何请求）"}　` +
+      `模式：${withLlm ? `座位 ${seats.join("、")} 交给 ${model}（思考预算 ${thinking}）` : "四家随机选手（不发任何请求）"}　` +
         `${toEnd ? `一路打到终局（手数上限 ${turns}）` : `先走 ${turns} 手`}`,
     );
     if (!withLlm) console.log(`localStorage 里躺着一把假 key：${FAKE_KEY}`);
@@ -246,6 +263,24 @@ export async function verifyExport(lane, options = {}) {
       }
       if (report.events < 10) problems.push(`只导出了 ${report.events} 条事件，这一桌根本没走动`);
       if (withLlm && report.decisions === 0) problems.push("一席交给了模型，却一条决策记录都没有");
+
+      // 一份档案坐几席时（票 73）：各席的 preamble 要**正文不同、渲染版本相同**。
+      if (withLlm && seats.length > 1) {
+        const paifu = JSON.parse(text);
+        for (const preamble of paifu.prompting?.preambles ?? []) {
+          console.log(
+            `  座位 ${preamble.seat} 的 preamble：${preamble.render_version}　${preamble.text.length} 字　` +
+              `头一句「${preamble.text.split("\n")[0].slice(0, 40)}」`,
+          );
+        }
+        problems.push(...preambleProblems(paifu, seats));
+        // 决策记录也要各席都有（否则上面那几条断言在空转）。
+        for (const seat of seats) {
+          const mine = (paifu.decisions ?? []).filter((record) => record.seat === seat);
+          console.log(`  座位 ${seat} 的决策记录 ${mine.length} 条`);
+          if (mine.length === 0) problems.push(`座位 ${seat} 一条决策记录都没有`);
+        }
+      }
     }
 
     // 可分享物里永远不能出现 API key（ADR-0003）。**导出这条路给出去的是两样东西**：
@@ -284,7 +319,9 @@ if (isEntry(import.meta.url)) {
       toEnd,
       turns: Number.parseInt(flag("--turns", toEnd ? "4000" : "60"), 10),
       seed: flag("--seed", null),
-      seat: Number.parseInt(flag("--seat", "1"), 10),
+      seats: flag("--seats", "1")
+        .split(",")
+        .map((each) => Number.parseInt(each, 10)),
       model: flag("--model", "deepseek-v4-flash"),
       thinking: flag("--thinking", "off"),
       keep: flag("--keep", null),

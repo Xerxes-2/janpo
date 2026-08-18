@@ -227,9 +227,13 @@ module HomePageTests =
                 TableMsg.KyokuAdvanced
                 TableMsg.Exported
                 TableMsg.SeedEdited "42"
-                TableMsg.BotPicked Bot.Opinionated
-                TableMsg.LlmSeatPicked(Some Seat.first)
-                TableMsg.LlmEdited(LlmField.Model, "deepseek-v4")
+                TableMsg.SeatBound(Seat.first, SeatChoice.Bot Bot.Opinionated)
+                TableMsg.SeatBound(Seat.first, SeatChoice.Profile "凶狠的老张")
+                TableMsg.SeatEdited(Seat.first, SeatField.Persona, "你打得很凶。")
+                TableMsg.ProfileAdded
+                TableMsg.ProfileOpened 0
+                TableMsg.ProfileDeleted 0
+                TableMsg.ProfileEdited(ProfileField.Model, "deepseek-v4")
                 TableMsg.Answered(1, staleAnswer)
             ]
 
@@ -240,20 +244,8 @@ module HomePageTests =
 
     [<Fact>]
     let ``主持人那一页仍然默认暂停：要点、要读牌桌的闸门全靠这一条`` () =
-        let config: LlmSeat =
-            {
-                Provider = "deepseek"
-                Model = "deepseek-v4-flash"
-                BaseUrl = ""
-                ApiKey = ""
-                TimeoutMs = 30000
-                Thinking = Thinking.Off
-                Tier = ScaffoldTier.Bare
-                Persona = ""
-                Template = ""
-            }
-
-        let model, _ = TablePage.initial RulesetDraft.initial None config
+        let model, _ =
+            TablePage.initial RulesetDraft.initial (SeatingPlan.initial Ruleset.yonma)
 
         Assert.False(model.Playback.Playing)
         Assert.True(Option.isSome (TablePage.live model))

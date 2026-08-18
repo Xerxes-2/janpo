@@ -25,6 +25,10 @@ type Awaiting = {
 /// provider 缓存全废，还让同一局面的对照多出一个自变量。这个类型就是那条不变量的执行者
 /// ——一局的**头一次问话**把它俩定住，改动落到面板与 localStorage，但要等下一局才发得出去。
 ///
+/// **一席一份**（票 73）：四家同桌时这条不变量按**座位各自**成立——座位 1 被问过话不该把
+/// 座位 2 的人格一并定住（那一席本局可能还没开过口），因此 `LiveTable.Pinned` 是一个
+/// 「每家一项」的列表而不是一份。
+///
 /// **边界取「局」不是「场」**：局间更换仍然支持，牌谱按「座位 + 渲染版本」记得住每一版
 /// （那正是 `Paifu.Preamble` 是一个列表的理由，见 `src/Janpo.Engine/Paifu.fs` 那段注释）。
 ///
@@ -36,17 +40,25 @@ type Rendering = { Persona: string; Template: string }
 [<RequireQualifiedAccess>]
 module Rendering =
 
-    /// 这份配置此刻的人格与模板。
+    /// 这份配置此刻的人格与模板（发出去的那一份）。
     let ofSeat (seat: LlmSeat) : Rendering = {
         Persona = seat.Persona
         Template = seat.Template
     }
 
-    /// 把定型的那两格盖回配置里。**其余字段照面板现在的样子**：
-    /// 它们不在可缓存前缀里（provider / 模型 / key / 超时 / 思考预算），
-    /// 或者只动尾部（脚手架档位），换了下一手就该生效。
-    let applyTo (rendering: Rendering) (seat: LlmSeat) : LlmSeat = {
-        seat with
+    /// 面板上那一席此刻的人格与模板（拨到的那一份）。
+    /// **两个入口取的是同两格**，只是一个从已经合成好的 `LlmSeat` 上取、
+    /// 一个从座位绑定上取——“定型的那一版”与“面板现在那一版”比的就是它俩。
+    let ofBinding (binding: SeatBinding) : Rendering = {
+        Persona = binding.Persona
+        Template = binding.Template
+    }
+
+    /// 把定型的那两格盖回这一席的绑定里。**其余字段照面板现在的样子**：
+    /// 档案那六格不在可缓存前缀里（provider / 模型 / key / 超时 / 思考预算），
+    /// 脚手架档位只动尾部——它们换了下一手就该生效。
+    let applyTo (rendering: Rendering) (binding: SeatBinding) : SeatBinding = {
+        binding with
             Persona = rendering.Persona
             Template = rendering.Template
     }
@@ -80,22 +92,26 @@ type LiveTable = {
     Rules: RulesetDraft
     /// 牌桌；开不了局时是中文错误文案。
     Table: Result<Table, string>
-    /// 哪个座位交给 LLM；None = 四家都是自带 bot。
-    LlmAt: Seat option
-    /// 不是 LLM 的那几家由哪种自带 bot 坐（票 42）。**默认均匀随机**：
-    /// `?table=1` 上那几道闸门（牌桌八项、牌谱导出、副露来源）量的都是它跑出来的那几局。
-    Bot: Bot
-    /// 那个座位的配置（也就是配置面板里填的那份，同时落在 localStorage）。
+    /// 这一桌的坐法（票 73）：**模型档案库 + 四席各自的绑定**，同时落在 localStorage。
     ///
-    /// **它不一定就是这一手发出去的那份**：人格与模板在一局之内定住（见 `Rendering`），
-    /// 真正发出去的那份由 `TablePage.rosterOf` 推导。
-    Llm: LlmSeat
-    /// 这一局已经定型的人格与模板；`None` = 这一局还没问过话，改了当场生效。
+    /// **它不一定就是这一手发出去的那份**：各席的人格与模板在一局之内定住（见 `Rendering`），
+    /// 真正发出去的那份由 `rosterOf` 推导。
+    Seating: SeatingPlan
+    /// 档案编辑处此刻开着的是第几份（0 起）；越界 = 一份都没开着（档案库空的那一刻）。
     ///
-    /// **在一局的头一次问话时定住**，`Restarted` 与 `KyokuAdvanced` 时松开。
-    /// 定住之后面板照收编辑（`Llm` 会变），但发出去的仍是这一份——页面上那行
-    /// 「下一局生效」说的就是它俩不一致（`TablePage.renderingPending`）。
-    Pinned: Rendering option
+    /// **key 在界面上只出现在这一处**（票 73 的硬判据）：座位那几行一律不重填 key。
+    Editing: int
+    /// 刚刚发生、页面必须说出来的那件事（票 73）：删掉的那份档案还被几席引用着。
+    ///
+    /// **不许静静地变成「没有选手」**：那几席当场退回 bot，而人得知道这件事发生过。
+    Notice: string option
+    /// **每席一项**（按座位升序）：这一局已经定型的人格与模板；
+    /// `None` = 这一席这一局还没被问过话，改了当场生效。
+    ///
+    /// **在那一席这一局的头一次问话时定住**，`Restarted` 与 `KyokuAdvanced` 时四席一起松开。
+    /// 定住之后面板照收编辑（`SeatingPlan` 会变），但发出去的仍是这一份——页面上那行
+    /// 「下一局生效」说的就是它俩不一致（`renderingPending`）。
+    Pinned: Rendering option list
     /// 在等回执吗。**等着的时候不续定时器**，否则牌桌会空转。
     Awaiting: Awaiting option
     /// 问话的票号，每问一次 +1。
@@ -219,15 +235,22 @@ type TableMsg =
     | DangerToggled
     /// 这一局看完了，开下一局。
     | KyokuAdvanced
-    /// 把哪个座位交给 LLM。
-    | LlmSeatPicked of seat: Seat option
-    /// 其余座位换成哪种自带 bot（票 42）。
-    | BotPicked of kind: Bot
+    /// 把某一席交给谁（票 73）：均匀随机 / 有主见 / 某份模型档案。
+    /// **四席各管各的**，因此四家都可以是模型。
+    | SeatBound of seat: Seat * choice: SeatChoice
+    /// 改某一席的脚手架档位 / 人格 / prompt 模板（票 73：这三项是座位级的）。
+    | SeatEdited of seat: Seat * field: SeatField * value: string
+    /// 档案编辑处换一份档案来编。
+    | ProfileOpened of index: int
+    /// 新建一份档案（摆在库尾，当场开在编辑处）。
+    | ProfileAdded
+    /// 删掉第几份档案。引用它的那几席退回 bot，**页面把这件事说出来**。
+    | ProfileDeleted of index: int
+    /// 改开着那一份档案的一个字段。
+    | ProfileEdited of field: ProfileField * value: string
     /// 拨配桌上那三项规则开关（票 72）。**拨完不当场生效**：
     /// 它只改「下一桌」那一份，要按「重开」才换得掉规则（与种子同一条路）。
     | RulePicked of rule: RuleChoice
-    /// 改配置面板里的一个字段。
-    | LlmEdited of field: LlmField * value: string
     /// 把这一桌到此刻为止的牌谱存成一个 JSON 文件（票 26）。
     | Exported
     /// 首页那份 Demo Paifu 拉回来了（票 71）。**它不会不来**：拉不动也是一个值
@@ -347,17 +370,28 @@ module TableState =
         | Some _ -> Cmd.none
         | None -> schedule playback
 
-    /// 这一手真正发出去的那份座位配置（票 46）：人格与模板取**本局定型的那一版**，
-    /// 其余字段取面板现在的值。还没定型（这一局一次都没问过）时就是面板上那份。
-    let private effective (live: LiveTable) : LlmSeat =
-        match live.Pinned with
-        | None -> live.Llm
-        | Some pinned -> live.Llm |> Rendering.applyTo pinned
+    /// 这一刻真正发得出去的那份坐法（票 46 的定型，票 73 改成按座位各自成立）：
+    /// 每一席的人格与模板取**那一席本局定型的那一版**，其余字段取面板现在的值。
+    /// 某一席还没定型（这一局一次都没被问过）时就是面板上那一条。
+    let private effective (live: LiveTable) : SeatingPlan = {
+        live.Seating with
+            Seats =
+                live.Seating.Seats
+                |> List.mapi (fun index binding ->
+                    match List.tryItem index live.Pinned |> Option.flatten with
+                    | None -> binding
+                    | Some pinned -> binding |> Rendering.applyTo pinned)
+    }
 
-    /// 这一桌的配桌：一席交给 LLM（选了的话），其余交给选中的那种自带 bot。
-    /// **推导出来而不存下来**：配置只有 `Bot` / `LlmAt` / `Llm` 这一份，不会与第二份对不上。
+    /// 四席的定型一起松开（重开一桌 / 开下一局）。**长度跟着座位数走**：
+    /// 写死 `[ None; None; None; None ]` 会在三麻上多出一席。
+    let private loosened (live: LiveTable) : Rendering option list =
+        live.Seating.Seats |> List.map (fun _ -> None)
+
+    /// 这一桌的配桌：四席各自绑定的那个选手（票 73）。
+    /// **推导出来而不存下来**：坐法只有 `SeatingPlan` 这一份，不会与第二份对不上。
     let private rosterFor (ruleset: Ruleset) (live: LiveTable) : Roster =
-        Roster.withLlm ruleset live.Bot live.LlmAt (effective live)
+        SeatingPlan.roster ruleset (effective live)
 
     /// 这一桌的配桌（谁坐哪里）；**回放没有配桌**，那时是 None。
     ///
@@ -368,6 +402,17 @@ module TableState =
     /// 只会与这里漂（票 42 前它真的漂过一份，在 `PaifuExportTests`）。
     let rosterOf (model: TableModel) : Roster option =
         live model |> Option.map (rosterFor model.Ruleset)
+
+    /// 这一席此刻真正会用的那份配置（票 73）；坐的是自带 bot（或者回放）时是 None。
+    ///
+    /// **公开的**：“这一席到底拿哪份档案、哪一档脚手架在打”只有这一处推导，
+    /// 票 74（并发）与票 76（四家气泡）与用例读的都是它。
+    let seatConfigOf (seat: Seat) (model: TableModel) : LlmSeat option =
+        rosterOf model
+        |> Option.bind (fun roster ->
+            match Roster.playerAt seat roster with
+            | SeatPlayer.Llm config -> Some config
+            | SeatPlayer.Bot _ -> None)
 
     /// 配桌那三项拨过了、但要按「重开」才生效吗（票 72）。
     ///
@@ -383,13 +428,18 @@ module TableState =
     ///
     /// **它就是页面上那句「下一局生效」的判据**：不锁那两格，但也绝不静默地半局换掉。
     /// **公开的**：视图与页面逻辑的用例读同一个判据，拄一份同样的推导只会漂。
+    /// **四席里只要有一席欠着就算**（票 73）：那句话说的是“你刚才改的东西本局还没生效”，
+    /// 而它对哪一席成立都是同一件事。
     let renderingPending (model: TableModel) : bool =
         match live model with
         | None -> false
         | Some live ->
-            match live.Pinned with
-            | None -> false
-            | Some pinned -> pinned <> Rendering.ofSeat live.Llm
+            live.Pinned
+            |> List.mapi (fun index pinned ->
+                match pinned, List.tryItem index live.Seating.Seats with
+                | Some pinned, Some binding -> pinned <> Rendering.ofBinding binding
+                | _ -> false)
+            |> List.exists id
 
     /// 导出文件的名字。**种子只有解析得出来才进文件名**：输入框里是人随手填的文本，
     /// 原样拼进文件名会把斜杠之类的东西带进去。
@@ -434,20 +484,23 @@ module TableState =
                 Cmd.none
             | Some(Demand.Asked(package, config)) ->
                 let ticket = live.Ticket + 1
+                let asked = DecisionPackage.seat package
 
                 {
                     live with
                         Ticket = ticket
-                        // 这一局的头一次问话把人格与模板定住（票 46）：之后再改只落到面板，
-                        // 本局发出去的字节不再变。已经定型的局里重盖同一份，无影响。
-                        Pinned = Some(Rendering.ofSeat config)
+                        // 这一席这一局的头一次问话把它的人格与模板定住（票 46；票 73 改成一席一份）：
+                        // 之后再改只落到面板，本局这一席发出去的字节不再变。
+                        // **只定住被问的那一席**：别家本局可能还没开过口，那几席的两格仍改得动。
+                        // 盖回去的就是 `config` 里那两格（它本来就是定型后的那一份），因此重盖幂等。
+                        Pinned = live.Pinned |> Seat.mapAt asked (fun _ -> Some(Rendering.ofSeat config))
                         Awaiting =
                             Some {
                                 Ticket = ticket
                                 Package = package
                                 Config = config
                             }
-                        Agent = AgentStatus.Asking(DecisionPackage.seat package)
+                        Agent = AgentStatus.Asking asked
                 },
                 askCmd ticket {
                     Package = package
@@ -679,9 +732,14 @@ module TableState =
     ///
     /// **配桌那三项也从外面给**（票 72）：上一次拨到哪儿同样存在 localStorage 里，
     /// 而这一桌开出来就是按它开的——牌桌的规则集恒由它推（`RulesetDraft.ruleset`）。
-    let initial (rules: RulesetDraft) (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> =
+    ///
+    /// **坐法是一整份 `SeatingPlan`**（票 73）：档案库 + 四席绑定。从前那两个参
+    /// （`Seat option` + 单份 `LlmSeat`）只装得下一席模型，而 M2 要的是四 LLM 同桌。
+    let initial (rules: RulesetDraft) (seating: SeatingPlan) : TableModel * Cmd<TableMsg> =
         let ruleset = RulesetDraft.ruleset rules
         let seedText = string defaultSeed
+        // 绑定的条数对齐到座位数：它从 localStorage 来，什么长度都可能。
+        let seating = SeatingPlan.fit ruleset seating
 
         {
             Ruleset = ruleset
@@ -689,13 +747,13 @@ module TableState =
                 Source.Live {
                     SeedText = seedText
                     Rules = rules
-                    Table = openTable (Roster.withLlm ruleset Bot.Uniform llmAt config) seedText
-                    // 自带 bot 默认均匀随机（票 42）：它是黄金用例与闸门的基准。
-                    Bot = Bot.Uniform
-                    LlmAt = llmAt
-                    Llm = config
-                    // 还没问过话：这一局的人格与模板还改得动（票 46）。
-                    Pinned = None
+                    Table = openTable (SeatingPlan.roster ruleset seating) seedText
+                    Seating = seating
+                    // 档案库非空时开着头一份；空库时这个 0 就是越界（编辑处不摆）。
+                    Editing = 0
+                    Notice = None
+                    // 还没问过话：四席的人格与模板都还改得动（票 46）。
+                    Pinned = seating.Seats |> List.map (fun _ -> None)
                     Awaiting = None
                     Ticket = 0
                     Agent = AgentStatus.Idle
@@ -737,7 +795,7 @@ module TableState =
         | Landing.Home -> home ()
         | Landing.Table ->
             let rules = Store.readRules ()
-            initial rules (Store.readSeat (RulesetDraft.ruleset rules)) (Store.readSeatConfig ())
+            initial rules (Store.readSeating (RulesetDraft.ruleset rules))
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match message with
@@ -768,8 +826,8 @@ module TableState =
                             Source.Live {
                                 live with
                                     Table = openTable (rosterFor ruleset live) live.SeedText
-                                    // 重开一桌就是回到第一局：人格与模板跟着松开（票 46）。
-                                    Pinned = None
+                                    // 重开一桌就是回到第一局：四席的人格与模板一起松开（票 46/73）。
+                                    Pinned = loosened live
                                     Awaiting = None
                                     Agent = AgentStatus.Idle
                             }
@@ -830,21 +888,72 @@ module TableState =
                     live with
                         Table = Result.map Table.nextKyoku live.Table
                         // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
-                        Pinned = None
+                        Pinned = loosened live
                         Awaiting = None
                 },
                 Cmd.none)
-        | LlmSeatPicked seat ->
+        // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（票 73 之前那两条消息同理）。
+        | SeatBound(seat, choice) ->
             model
             |> onLive (fun _ live ->
+                let seating = live.Seating |> SeatingPlan.bind seat choice
+
                 {
                     live with
-                        LlmAt = seat
+                        Seating = seating
                         Agent = AgentStatus.Idle
+                        Notice = None
                 },
-                save (fun () -> Store.writeSeat seat))
-        // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（与换模型坐席同一个做法）。
-        | BotPicked kind -> model |> onLive (fun _ live -> { live with Bot = kind }, Cmd.none)
+                save (fun () -> Store.writeSeating seating))
+        | SeatEdited(seat, field, value) ->
+            model
+            |> onLive (fun _ live ->
+                let seating = live.Seating |> SeatingPlan.editSeat seat field value
+                { live with Seating = seating }, save (fun () -> Store.writeSeating seating))
+        | ProfileOpened index -> model |> onLive (fun _ live -> { live with Editing = index }, Cmd.none)
+        | ProfileAdded ->
+            model
+            |> onLive (fun _ live ->
+                let seating = SeatingPlan.addProfile live.Seating
+
+                {
+                    live with
+                        Seating = seating
+                        // 新建完就把编辑处开在它上面：人下一步要填的正是它。
+                        Editing = List.length live.Seating.Profiles
+                        Notice = None
+                },
+                save (fun () -> Store.writeSeating seating))
+        // 删掉一份还被座位引用的档案：那几席退回 bot，**页面把这件事说出来**（票 73）。
+        | ProfileDeleted index ->
+            model
+            |> onLive (fun _ live ->
+                match SeatingPlan.profileAt index live.Seating with
+                | None -> live, Cmd.none
+                | Some doomed ->
+                    let seating, orphans = SeatingPlan.removeProfile index live.Seating
+
+                    let notice =
+                        if List.isEmpty orphans then
+                            $"删掉了档案「{doomed.Name}」。"
+                        else
+                            let seats = orphans |> List.map (Seat.index >> string) |> String.concat "、"
+
+                            $"删掉了档案「{doomed.Name}」：座位 {seats} 本来引用着它，已退回{Bot.toDisplay Bot.Uniform}。"
+
+                    {
+                        live with
+                            Seating = seating
+                            // 编辑处退到库里还在的那一份（删的是最后一份时退到前一份）。
+                            Editing = min index (List.length seating.Profiles - 1)
+                            Notice = Some notice
+                    },
+                    save (fun () -> Store.writeSeating seating))
+        | ProfileEdited(field, value) ->
+            model
+            |> onLive (fun _ live ->
+                let seating = live.Seating |> SeatingPlan.editProfile live.Editing field value
+                { live with Seating = seating }, save (fun () -> Store.writeSeating seating))
         // **只拨下一桌那一份**（票 72）：牌桌正在按的那份规则集（`model.Ruleset`）
         // 只有 `Restarted` 动得了。拨到的值当场落 localStorage，下次打开还在。
         | RulePicked rule ->
@@ -852,11 +961,6 @@ module TableState =
             |> onLive (fun _ live ->
                 let rules = RulesetDraft.pick rule live.Rules
                 { live with Rules = rules }, save (fun () -> Store.writeRules rules))
-        | LlmEdited(field, value) ->
-            model
-            |> onLive (fun _ live ->
-                let config = LlmSeat.edit field value live.Llm
-                { live with Llm = config }, save (fun () -> Store.writeSeatConfig config))
         | Answered(ticket, answer) ->
             match model.Source with
             | Source.Replay _ -> model, Cmd.none

@@ -11,10 +11,10 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出九个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// **这一层还转出十个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` /
-/// `init` / `update` / `rosterOf` / `renderingPending` / `rulesPending` / `live` / `shown` /
-/// `canAdvance` / `timeline`。转出来之后**这个程序集的公开面只多了这几个名字**：那四块里
+/// `init` / `update` / `rosterOf` / `seatConfigOf` / `renderingPending` / `rulesPending` / `live` /
+/// `shown` / `canAdvance` / `timeline`。转出来之后**这个程序集的公开面只多了这几个名字**：那四块里
 /// 跨文件用的助手一律 `internal`，出不了 `Janpo.Web`。
 ///
 /// **这一页现在有两个布局**（票 71）：`/` 是首页的 Demo 回放（自动播，没有配桌与模型面板），
@@ -23,9 +23,10 @@ open Janpo
 [<RequireQualifiedAccess>]
 module TablePage =
 
-    /// `?table=1` 初次摆的那一桌，配桌那三项与模型配置都从外面给。实现与理由见 `TableState.initial`。
-    let initial (rules: RulesetDraft) (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> =
-        TableState.initial rules llmAt config
+    /// `?table=1` 初次摆的那一桌，配桌那三项与**坐法**（档案库 + 四席绑定）都从外面给。
+    /// 实现与理由见 `TableState.initial`。
+    let initial (rules: RulesetDraft) (seating: SeatingPlan) : TableModel * Cmd<TableMsg> =
+        TableState.initial rules seating
 
     /// 首页（`/`）初次摆的那一屏：一份还没拉回来的 Demo 回放。实现见 `TableState.home`。
     let home () : TableModel * Cmd<TableMsg> = TableState.home ()
@@ -44,6 +45,9 @@ module TablePage =
 
     /// 这一桌的配桌（谁坐哪里）；回放没有配桌。实现与理由见 `TableState.rosterOf`。
     let rosterOf (model: TableModel) : Roster option = TableState.rosterOf model
+
+    /// 这一席此刻真正会用的那份配置（票 73）。实现与理由见 `TableState.seatConfigOf`。
+    let seatConfigOf (seat: Seat) (model: TableModel) : LlmSeat option = TableState.seatConfigOf seat model
 
     /// 人格与模板改过了、但要等下一局才发得出去吗。实现与理由见 `TableState.renderingPending`。
     let renderingPending (model: TableModel) : bool = TableState.renderingPending model
@@ -117,7 +121,7 @@ module TablePage =
                 Html.p [
                     prop.className "intro"
                     prop.text
-                        "默认四家自带选手（下面可切均匀随机 / 有主见）；挑一个座位交给模型，按「播放」看它一手一手打。他家的手牌看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
+                        "默认四家自带选手（均匀随机）；下面四行是四个座位各自的绑定——每一席可以换成「有主见」，也可以交给一份模型档案（key 在档案里只填一次，一把 key 坐几席都行，四家全是模型也行）。按「播放」看它们一手一手打。他家的手牌看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
                 ]
                 TablePanel.controls model dispatch
                 // 配桌那三项（票 72）摆在种子与「重开」那一排上面：它们走的是同一条路

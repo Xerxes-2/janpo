@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { preview } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -153,20 +154,21 @@ async function runTable(plan) {
       }
     });
 
-    // 配置只从 localStorage 来（`Store.readSeatConfig`）：**没有 key**，本地端点不校验它。
-    await page.addInitScript(
-      ([seat, baseUrl]) => {
-        localStorage.setItem("janpo.llm.seat", String(seat));
-        localStorage.setItem("janpo.llm.provider", "custom-openai");
-        localStorage.setItem("janpo.llm.model", "fake-model");
-        localStorage.setItem("janpo.llm.base_url", baseUrl);
-        localStorage.setItem("janpo.llm.api_key", "");
-        localStorage.setItem("janpo.llm.timeout_ms", "10000");
-        localStorage.setItem("janpo.llm.thinking", "off");
-        localStorage.setItem("janpo.llm.tier", "bare");
-      },
-      [seat, baseUrl],
-    );
+    // 坐法只从 localStorage 来（`Store.readSeating`，票 73）：**没有 key**，本地端点不校验它。
+    await plantSeating(page, {
+      profiles: [
+        {
+          name: "本地端点",
+          provider: "custom-openai",
+          model: "fake-model",
+          base_url: baseUrl,
+          timeout_ms: "10000",
+        },
+      ],
+      seats: [0, 1, 2, 3].map((index) =>
+        index === seat ? { choice: profileChoice("本地端点") } : {},
+      ),
+    });
 
     console.log(
       `模式 ${mode}：页面 ${pageOrigin}　端点 ${baseUrl}　CORS ${plan.cors ? `放行 ${pageOrigin}` : "不放行"}`,
@@ -176,10 +178,10 @@ async function runTable(plan) {
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
     const readAttr = async (testId, name) => await page.getByTestId(testId).getAttribute(name);
 
-    // 配置面板：选了自定义端点，baseUrl 那一格才在（官方八家看不到它）。
-    const provider = await page.getByTestId("table-llm-provider").inputValue();
-    const shown = await page.getByTestId("table-llm-base-url").count();
-    console.log(`配置面板：provider=${provider}　baseUrl 输入框 ${shown === 1 ? "在" : "不在"}`);
+    // 档案编辑处：选了自定义端点，baseUrl 那一格才在（官方八家看不到它）。
+    const provider = await page.getByTestId("table-profile-provider").inputValue();
+    const shown = await page.getByTestId("table-profile-base-url").count();
+    console.log(`档案编辑处：provider=${provider}　baseUrl 输入框 ${shown === 1 ? "在" : "不在"}`);
 
     await page.getByTestId("table-speed-8×").click();
     await page.getByTestId("table-play").click();

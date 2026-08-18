@@ -1,6 +1,6 @@
-// 浏览器里那**十一趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十二趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十一趟各开自己的 page / context。
+// 十二趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
 //   2 首页就是一局回放：牌桌在动、没有配桌控件、上帝视角、时间轴拖得动（票 71/75）
@@ -13,9 +13,10 @@
 //   9 URL 分享的载荷：真往返 + 逐位置腐蚀 + 审计三样一个都不上路（票 77）
 //  10 **反向自证**：抹不干净的载荷必须让第 9 趟那条断言当场红（票 77）
 //  11 配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变（票 72）
+//  12 四 LLM 同桌：一份档案坐两席（人格各不同）、坏 key 那一席只兜自己的底、老配置迁得过来（票 73）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
-// 其余九趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// 其余十趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
 // 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
 // 理由写在它自己的文件头上。
 //
@@ -32,6 +33,7 @@ import { verifyExport } from "./verify-export.mjs";
 import { verifyGolden } from "./verify-golden.mjs";
 import { verifyHome } from "./verify-home.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
+import { verifySeats } from "./verify-seats.mjs";
 import { verifySetup } from "./verify-setup.mjs";
 import { verifyShare } from "./verify-share.mjs";
 import { verifyTracer } from "./verify-tracer.mjs";
@@ -74,7 +76,7 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十一趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十二趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -167,6 +169,17 @@ const gates = [
     how: "node scripts/verify-setup.mjs",
     run: (lane) => verifySetup(lane),
   },
+  // 票 73：**四 LLM 同桌**。两个本地假端点（一个答话、一个固定回 401），
+  // 一份档案坐两席、两席人格各不同，第三席引用那份坏 key 的档案，座位 3 是 bot。
+  // 一局打完之后逐条核导出的牌谱：`names` 三个 `provider/model`（**档案的名字与 key 都不在里面**）、
+  // 两席的 preamble 正文不同而渲染版本相同（对照实验的自变量只许有一个）、
+  // 兜底只涨在坏 key 那一席、删掉还被引用的档案时页面把这件事说出来。
+  // 它还带第二程：老 `janpo.llm.*` 迁成一份档案 + 那一席的绑定，且**只迁一次**。
+  {
+    name: "四 LLM 同桌：一份档案坐两席（人格各不同）、断电演习只塌那一席、老配置迁得过来",
+    how: "node scripts/verify-seats.mjs",
+    run: (lane) => verifySeats(lane),
+  },
 ];
 
 const lane = await openLane();
@@ -186,7 +199,7 @@ try {
 }
 
 console.log("");
-console.log("十一趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十二趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

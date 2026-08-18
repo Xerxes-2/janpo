@@ -31,11 +31,13 @@ module AgentLine =
     ///
     /// 没有模型坐席时那一句要说清楚**是哪一种自带 bot**（票 42 之后就不只一种了）：
     /// 杆子拨到「有主见」时牌桌上会出立直与供托，而行里还写着「四家都是随机选手」就是句错话。
-    /// 措辞只有一份真源（`Bot.toDisplay`，与面板上那个控件同字）。
+    /// 措辞只有一份真源（`SeatingPlan.botsToDisplay`，它又只读 `Bot.toDisplay`，与面板上那些控件同字）。
+    /// 票 73 之后四席各管各的，因此“四家都是 bot”与“坐着几席模型”都从 `SeatingPlan` 推。
     let internal agentLine (live: LiveTable) (table: Table) =
         let state, text =
             match live.Agent with
-            | AgentStatus.Idle when Option.isNone live.LlmAt -> "idle", $"四家都是{Bot.toDisplay live.Bot}的选手"
+            | AgentStatus.Idle when List.isEmpty (SeatingPlan.llmSeats live.Seating) ->
+                "idle", SeatingPlan.botsToDisplay live.Seating
             | AgentStatus.Idle -> "idle", "模型座位已就位，还没轮到它"
             | AgentStatus.Asking seat -> "asking", $"正在等座位 {Seat.index seat} 的模型回话……"
             | AgentStatus.Spoke(seat, reason, latency) ->
@@ -56,8 +58,9 @@ module AgentLine =
             prop.className (if state = "troubled" then "agent error" else "agent")
             prop.testId "table-agent"
             prop.custom ("data-agent", state)
-            // 坐着的是哪种自带 bot（票 44）：上面那句中文给人看，这一条给闸门看。
-            prop.custom ("data-bot", Bot.toWire live.Bot)
+            // 四席坐着谁（票 44 的 `data-bot`，票 73 扩成四席）：上面那句中文给人看，
+            // 这一条给闸门看——逗号隔开的四个名字，与牌谱里那一列 `names` 同一份真源。
+            prop.custom ("data-seats", SeatingPlan.names live.Seating |> String.concat ",")
             prop.custom ("data-fallbacks", string fallbacks)
             prop.text (text + tally)
         ]

@@ -20,6 +20,9 @@
   <ItemGroup>
     <Compile Include="Agent.fs" />
     <Compile Include="Roster.fs" />
+    <!-- 模型档案库与四席绑定（票 73）：排在 `Roster.fs` 后面（要 `Bot` / `SeatPlayer`）、
+         `Store.fs` 前面（它落 localStorage）。 -->
+    <Compile Include="SeatingPlan.fs" />
     <!-- 配桌上拨得动的那三项规则（票 72）：排在 `Store.fs` 前面——它们落 localStorage。 -->
     <Compile Include="RulesetDraft.fs" />
     <Compile Include="Store.fs" />

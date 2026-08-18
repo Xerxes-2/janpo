@@ -72,6 +72,8 @@ http://localhost:5173/?dev=1          # 曳光弹（同种子的一局 / 一整�
 
 ```sh
 JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-llm-seat.mjs   # 真跑一局：LLM 坐一席 + 三随机
+JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-llm-seat.mjs --seats 0,1   # 两席引用同一份档案（人格各不同，票 73）
+JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-export.mjs --llm --seats 0,1  # 同上，外加导出牌谱逐条核 preamble
 node scripts/verify-llm-seat.mjs --bad-key                          # 断电演习：坏 key，整局照样打完
 JANPO_KEY_FILE=/tmp/deepseek_key node scripts/record-agent-fixtures.mjs  # 重录 tests/fixtures/agent/
 ```

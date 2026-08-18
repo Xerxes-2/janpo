@@ -148,7 +148,7 @@ function readBoard(page) {
         color: aka === null ? null : getComputedStyle(aka).color,
         plain: plain === null ? null : getComputedStyle(plain).color,
       },
-      bot: attr(field("table-agent"), "data-bot"),
+      bound: attr(field("table-agent"), "data-seats"),
       agent: text(field("table-agent")),
     };
   });
@@ -453,7 +453,8 @@ function outcome(group) {
  */
 async function checkNakiPositions(page, problems) {
   // 语料是**均匀随机**那一档（上面八项那一段把它切成了「有主见」）。
-  await page.getByTestId("table-bot-random").click();
+  // 票 73 之后四席各拨各的，因此这里逐席拨回去。
+  for (const index of [0, 1, 2, 3]) await page.getByTestId(`table-seat-${index}-random`).click();
   const said = [];
 
   for (const corpus of NAKI_CORPUS) {
@@ -547,9 +548,10 @@ export async function verifyBoard(lane) {
     await page.goto(hostPage(url), { waitUntil: "load" });
     await page.getByTestId("table-board").waitFor();
 
-    // 其余座位换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），
-    // 而立直、供托与立直棒这三项要立直才走得到。
-    await page.getByTestId("table-bot-opinionated").click();
+    // 四家都换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），
+    // 而立直、供托与立直棒这三项要立直才走得到。票 73 之后四席各拨各的，因此拨四次。
+    for (const index of [0, 1, 2, 3])
+      await page.getByTestId(`table-seat-${index}-opinionated`).click();
     await page.getByTestId("table-seed").fill(String(SEED));
     await page.getByTestId("table-restart").click();
 
@@ -574,8 +576,9 @@ export async function verifyBoard(lane) {
         `种子 ${SEED} 走了 ${walked} 手，这几项一次都没摆出来：${uncovered.join("、")}——断言在空转`,
       );
 
-    if (shot.bot !== "opinionated")
-      problems.push(`其余座位该是「有主见」那一档，data-bot 却是「${shot.bot}」`);
+    // 四席逐个核（票 73：从前那个全局开关只报一个名字，现在四席各报各的）。
+    if (shot.bound !== "opinionated,opinionated,opinionated,opinionated")
+      problems.push(`四席都该是「有主见」那一档，data-seats 却是「${shot.bound}」`);
     if (!shot.agent.includes("有主见"))
       problems.push(`状态行写着「${shot.agent}」，可其余座位坐的是「有主见」那一档`);
 

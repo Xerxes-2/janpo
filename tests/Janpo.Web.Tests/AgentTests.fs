@@ -28,11 +28,25 @@ module AgentTests =
     /// 接本地 Ollama 的那一座（票 30）：**provider 是自定义端点、没有 key、有 baseUrl**。
     let private localConfig: LlmSeat =
         { config with
-            Provider = LlmSeat.customProvider
+            Provider = ModelProfile.customProvider
             Model = "qwen3:8b"
             ApiKey = ""
             BaseUrl = "http://localhost:11434/v1"
         }
+
+    /// 上面那份配置在票 73 之后的来历：一份档案（怎么问）+ 一条座位绑定（给多少信息 / 什么风格）。
+    let private profile: ModelProfile =
+        {
+            Name = "凶狠的老张"
+            Provider = "deepseek"
+            Model = "deepseek-v4-flash"
+            ApiKey = "sk-测试用的假 key"
+            BaseUrl = ""
+            TimeoutMs = 12000
+            Thinking = Thinking.Low
+        }
+
+    let private binding: SeatBinding = SeatBinding.initial
 
     let private package () : DecisionPackage =
         let state =
@@ -169,43 +183,56 @@ module AgentTests =
 
     [<Fact>]
     let ``读不懂的值一律原样不改：一次误输入不该把设定清掉`` () =
-        Assert.Equal(config, LlmSeat.edit LlmField.TimeoutMs "三万" config)
-        Assert.Equal(config, LlmSeat.edit LlmField.TimeoutMs "-1" config)
-        Assert.Equal(config, LlmSeat.edit LlmField.Thinking "疯狂" config)
-        Assert.Equal(config, LlmSeat.edit LlmField.Tier "开挂" config)
+        Assert.Equal(profile, ModelProfile.edit ProfileField.TimeoutMs "三万" profile)
+        Assert.Equal(profile, ModelProfile.edit ProfileField.TimeoutMs "-1" profile)
+        Assert.Equal(profile, ModelProfile.edit ProfileField.Thinking "疯狂" profile)
+        Assert.Equal(binding, SeatBinding.edit SeatField.Tier "开挂" binding)
 
-        Assert.Equal({ config with TimeoutMs = 5000 }, LlmSeat.edit LlmField.TimeoutMs " 5000 " config)
+        Assert.Equal({ profile with TimeoutMs = 5000 }, ModelProfile.edit ProfileField.TimeoutMs " 5000 " profile)
 
-        Assert.Equal({ config with Thinking = Thinking.High }, LlmSeat.edit LlmField.Thinking "high" config)
+        Assert.Equal(
+            { profile with
+                Thinking = Thinking.High
+            },
+            ModelProfile.edit ProfileField.Thinking "high" profile
+        )
 
     [<Fact>]
     let ``脚手架档位是座位级配置：拨一下就换一档`` () =
         // 主持人在座位上切 Bare / Assisted，因此脚手架强度是个可对照的实验变量（票 24）。
         Assert.Equal(
-            { config with
+            { binding with
                 Tier = ScaffoldTier.Assisted
             },
-            LlmSeat.edit LlmField.Tier "assisted" config
+            SeatBinding.edit SeatField.Tier "assisted" binding
         )
 
         // 三个 case 都认得出来：ToolSearch 只是面板上灰着，不是这一层拦的。
         for tier in ScaffoldTier.all do
-            Assert.Equal({ config with Tier = tier }, LlmSeat.edit LlmField.Tier (ScaffoldTier.toWire tier) config)
+            Assert.Equal(
+                { binding with Tier = tier },
+                SeatBinding.edit SeatField.Tier (ScaffoldTier.toWire tier) binding
+            )
 
     [<Fact>]
     let ``人格与档位是两个维度，不缠在一个枚举里`` () =
         // 主人 8/16 第五次裁决第 2 条：同一个人格可以跑两档，同一档可以跑两个人格。
-        let styled = config |> LlmSeat.edit LlmField.Persona "你打得很凶。"
+        let styled = binding |> SeatBinding.edit SeatField.Persona "你打得很凶。"
 
         Assert.Equal("你打得很凶。", styled.Persona)
-        Assert.Equal(config.Tier, styled.Tier)
+        Assert.Equal(binding.Tier, styled.Tier)
 
         Assert.Equal(
             { styled with
                 Tier = ScaffoldTier.Assisted
             },
-            LlmSeat.edit LlmField.Tier "assisted" styled
+            SeatBinding.edit SeatField.Tier "assisted" styled
         )
+
+        // 票 73 又给它加了一条：**这三样都在座位上，不在档案里**——同一份档案坐两席，
+        // 两席各带各的人格与档位（对照实验的自变量），而 key 只填一次。
+        Assert.Equal("你打得很凶。", (SeatBinding.config profile styled).Persona)
+        Assert.Equal(profile.ApiKey, (SeatBinding.config profile styled).ApiKey)
 
     [<Fact>]
     let ``人格与模板原样存着，这一层不判读`` () =
@@ -213,27 +240,37 @@ module AgentTests =
         // （`template.ts` 读不动就退回默认），而不是在这里把人填到一半的字清掉。
         let half = """{"labels":{"history":"""
 
-        Assert.Equal(half, (LlmSeat.edit LlmField.Template half config).Template)
-        Assert.Equal("  前后带空格  ", (LlmSeat.edit LlmField.Persona "  前后带空格  " config).Persona)
+        Assert.Equal(half, (SeatBinding.edit SeatField.Template half binding).Template)
+
+        Assert.Equal("  前后带空格  ", (SeatBinding.edit SeatField.Persona "  前后带空格  " binding).Persona)
 
     [<Fact>]
     let ``每个字段读出来再写回去都是原样的`` () =
-        // localStorage 那一层就是这么存的（`Store` 遍历 `LlmField.all`），
+        // localStorage 那一层就是这么存的（`Store` 遍历 `ProfileField.all` / `SeatField.all`），
         // 因此这条同时钉住「存进去再读回来不会变形」。
-        for field in LlmField.all do
-            Assert.Equal(config, LlmSeat.edit field (LlmSeat.field field config) config)
+        for field in ProfileField.all do
+            Assert.Equal(profile, ModelProfile.edit field (ModelProfile.field field profile) profile)
+
+        for field in SeatField.all do
+            Assert.Equal(binding, SeatBinding.edit field (SeatBinding.field field binding) binding)
 
     [<Fact>]
     let ``字段的键名两两不同：否则两个设定会写到同一格`` () =
-        let keys = LlmField.all |> List.map LlmField.key
+        // 票 73 把它们劈成了两组（`janpo.profiles.<i>.` 与 `janpo.seats.<i>.` 两个前缀），
+        // 这里仍旧**连起来查一遍**：两组的键名撞车虽然不会真写到同一格，
+        // 但读代码的人从此要记住「它俩不是一回事」——那是下一次拼错键名的起点。
+        let keys =
+            (ProfileField.all |> List.map ProfileField.key)
+            @ (SeatField.all |> List.map SeatField.key)
 
         Assert.Equal<string list>(List.distinct keys, keys)
-        Assert.Equal(9, List.length keys)
+        Assert.Equal(7, List.length ProfileField.all)
+        Assert.Equal(3, List.length SeatField.all)
 
     [<Fact>]
     let ``provider 列表里没有 Bedrock——它是 Node-only`` () =
-        Assert.DoesNotContain("amazon-bedrock", LlmSeat.providers)
-        Assert.Contains("deepseek", LlmSeat.providers)
+        Assert.DoesNotContain("amazon-bedrock", ModelProfile.providers)
+        Assert.Contains("deepseek", ModelProfile.providers)
 
     // ---- 自定义端点（票 30）----
 
@@ -241,34 +278,43 @@ module AgentTests =
     let ``自定义端点是 provider 列表里多出来的那一项，排在最后`` () =
         // 它不是 pi-ai 认识的一家，而是「你自己那一家」；Agent 侧的同名常量在 `endpoint.ts`。
         // **带后缀**（票 46/30-A）：叫 `custom` 的话，pi-ai 哪天真有同名的一家就静默地进不来。
-        Assert.Equal("custom-openai", LlmSeat.customProvider)
-        Assert.Contains(LlmSeat.customProvider, LlmSeat.providers)
-        Assert.Equal(Some LlmSeat.customProvider, List.tryLast LlmSeat.providers)
+        Assert.Equal("custom-openai", ModelProfile.customProvider)
+        Assert.Contains(ModelProfile.customProvider, ModelProfile.providers)
+        Assert.Equal(Some ModelProfile.customProvider, List.tryLast ModelProfile.providers)
         // 旧 id 不在下拉框里了，它只活在迁移路上。
-        Assert.DoesNotContain(LlmSeat.legacyCustomProvider, LlmSeat.providers)
+        Assert.DoesNotContain(ModelProfile.legacyCustomProvider, ModelProfile.providers)
 
     [<Fact>]
     let ``localStorage 里的旧 provider id 升成新的，不静默地读成另一家`` () =
         // 上一版页面存进 localStorage 的是 `custom`（票 30）。读回来时当场升成
         // `custom-openai`：两个 id 指的本来就是同一件事，而原样留着才是读成别的东西
-        // （`isCustom` 会当它不是自定义端点）。`Store.readSeatConfig` 走的就是 `edit`。
-        let migrated = config |> LlmSeat.edit LlmField.Provider LlmSeat.legacyCustomProvider
+        // （`isCustom` 会当它不是自定义端点）。`Store.readSeating` 走的就是 `edit`。
+        let migrated =
+            profile
+            |> ModelProfile.edit ProfileField.Provider ModelProfile.legacyCustomProvider
 
-        Assert.Equal(LlmSeat.customProvider, migrated.Provider)
-        Assert.True(LlmSeat.isCustom migrated)
+        Assert.Equal(ModelProfile.customProvider, migrated.Provider)
+        Assert.True(ModelProfile.isCustom migrated)
 
         // 其余 provider id 一律原样：迁移只有这一条。
-        Assert.Equal("deepseek", (config |> LlmSeat.edit LlmField.Provider "deepseek").Provider)
-        Assert.Equal("anthropic", (config |> LlmSeat.edit LlmField.Provider "anthropic").Provider)
+        Assert.Equal("deepseek", (profile |> ModelProfile.edit ProfileField.Provider "deepseek").Provider)
+
+        Assert.Equal("anthropic", (profile |> ModelProfile.edit ProfileField.Provider "anthropic").Provider)
 
     [<Fact>]
     let ``走不走自定义端点只看 provider：官方八家填了 baseUrl 也不走`` () =
-        Assert.True(LlmSeat.isCustom localConfig)
-        Assert.False(LlmSeat.isCustom config)
+        let local =
+            { profile with
+                Provider = ModelProfile.customProvider
+                BaseUrl = "http://localhost:11434/v1"
+            }
+
+        Assert.True(ModelProfile.isCustom local)
+        Assert.False(ModelProfile.isCustom profile)
 
         Assert.False(
-            LlmSeat.isCustom
-                { config with
+            ModelProfile.isCustom
+                { profile with
                     BaseUrl = "http://localhost:11434/v1"
                 }
         )
@@ -288,11 +334,11 @@ module AgentTests =
         Assert.Contains("\"base_url\":\"http://localhost:11434/v1\"", json)
         Assert.Contains("\"model\":\"qwen3:8b\"", json)
         // 官方座位：字段在，值是空串——Agent 侧一字不看它。
-        Assert.Equal("", LlmSeat.initial.BaseUrl)
+        Assert.Equal("", ModelProfile.initial.BaseUrl)
 
     [<Fact>]
     let ``baseUrl 是自由文本：填什么存什么，读不读得懂是 Agent 层的事`` () =
         // 开头空白、少了 scheme——都原样存着，不在这一层报错：
         // 判读写在 `endpoint.ts`（它才知道什么叫合法），错了会变成一句读得懂的 failure。
         for value in [ "http://127.0.0.1:1234/v1"; " localhost:11434 "; "" ] do
-            Assert.Equal({ config with BaseUrl = value }, LlmSeat.edit LlmField.BaseUrl value config)
+            Assert.Equal({ profile with BaseUrl = value }, ModelProfile.edit ProfileField.BaseUrl value profile)

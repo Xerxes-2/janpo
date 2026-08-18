@@ -104,6 +104,12 @@ function decideSequence(corpus, seed, seat) {
 
   return new Promise((done, fail) => {
     const child = spawn("dotnet", args, { cwd: repo });
+    // **两条流都先定成 utf8**：不定的话拿到的是 `Buffer`，而 `out += chunk` 是**逐块**
+    // 转字符串——一个汉字正好被切在两块之间时就会碎成「6\ufffd\ufffd」，
+    // 于是「label 里的『6』不是一个牌名」这种**假红**只在机器忙的时候偶尔出现一次
+    // （判据 16：并行跑批时看到红，先怀疑基础设施。2026-08-18 真撞上过一次）。
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     let out = "";
     let err = "";
     child.stdout.on("data", (chunk) => {

@@ -47,19 +47,8 @@ module ReplayTimelineTests =
         | Some timeline -> timeline
         | None -> failwith "回放这一刻该有一根时间轴"
 
-    /// 主持人那一页要的那份座位配置（`?table=1` 的默认值，一把 key 都不带）。
-    let private hostConfig: LlmSeat =
-        {
-            Provider = "deepseek"
-            Model = "deepseek-v4-flash"
-            BaseUrl = ""
-            ApiKey = ""
-            TimeoutMs = 30000
-            Thinking = Thinking.Off
-            Tier = ScaffoldTier.Bare
-            Persona = ""
-            Template = ""
-        }
+    /// 主持人那一页要的那份坐法（`?table=1` 的默认值：四家均匀随机，一把 key 都不带）。
+    let private hostSeating: SeatingPlan = SeatingPlan.initial Ruleset.yonma
 
     // ---- 第三个锚点：直接 fold 同一前缀 ----
 
@@ -369,7 +358,7 @@ module ReplayTimelineTests =
 
     [<Fact>]
     let ``Live 那一页的默认视角不动，也没有时间轴`` () =
-        let model, _ = TablePage.initial RulesetDraft.initial None hostConfig
+        let model, _ = TablePage.initial RulesetDraft.initial hostSeating
 
         Assert.Equal(Viewpoint.Seated Seat.first, model.Viewpoint)
         Assert.True(Option.isNone (TablePage.timeline model), "Live 里点历史某一手是票 76")

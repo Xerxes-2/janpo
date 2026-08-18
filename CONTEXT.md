@@ -144,6 +144,8 @@ _Avoid_: Position、席位；单独一个「家」字指座位时歧义太大
 
 **Player（选手）**：
 占据一个座位的**决策实现**——LLM 适配器、随机 bot、Mortal 客户端或本地真人坐席。四者对引擎完全同级：给定观测与合法动作集，返回一个动作。
+**LLM 类 Player 的配置 = 一份 ModelProfile（怎么问这个模型）+ 座位级的
+那三项**（ScaffoldTier / Persona / PromptTemplate）：同一份档案能被两席引用，而那两席各带各的信息量与风格。
 _Avoid_: 玩家、参与者、Actor。也不要用 Agent 指代 Player——**Agent 层**专指驱动 LLM 类 Player 的那层 TypeScript 代码，真人坐席不是 Agent。
 
 **Roster（配桌）**：
@@ -193,6 +195,17 @@ _Avoid_: 把三个维度并成一个「风格预设」枚举；模板引擎（�
 还让同一局面的对照多出一个变量。它与 ScaffoldTier 是两个维度（换风格不换给多少信息），
 与 PromptTemplate 的差别在于改的是哪一层：人格是这一席的一句话，模板是整套措辞。
 _Avoid_: 人设、角色扮演设定；也别拿它当强弱旋钮——它只换措辞，不换给多少信息
+
+**ModelProfile（模型档案）**：
+一份**命名的「怎么问这个模型」**：provider・模型・API key・baseUrl・超时・思考预算。
+座位**按名引用**它，因此一把 key 坐三席也只填一次（界面上 key 只出现在档案编辑处）。
+**它不含 ScaffoldTier / Persona / PromptTemplate**：那三样是**座位级**的——同一份档案
+能被两席引用而两席各带各的信息量与风格，那正是对照实验要的形态（自变量只许有一个）。
+**四个维度各占一格，谁也不缠进谁的枚举**：档案答「怎么问」，ScaffoldTier 答「给多少信息」，
+Persona 答「什么风格」，PromptTemplate 答「哪套措辞」。换档案不动 prompt 的一个字节，
+因此它不在**一局内不变**那条不变量里（那一条只管 Persona 与 PromptTemplate，且按座位各自成立）。
+**名字是本机的私人叫法**：它不进 Paifu（`names` 恒是 `provider/model`）、也不过界给 Agent 层。
+_Avoid_: 叫它「配置」「预设」「人设」；也不要把 key 之外的座位级那三项塞进来
 
 **Fallback（兜底）**：
 Player 输出非法、解析失败或超时且重试用尽后代他执行的动作：Bare 档为摸切，Assisted 档为不退 Shanten 的安全打。

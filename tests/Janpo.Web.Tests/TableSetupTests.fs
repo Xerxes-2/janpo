@@ -22,22 +22,10 @@ open Janpo.Web
 /// `web/scripts/verify-setup.mjs` 守着——那一趟把页面重新打开一次，看三项还在不在。
 module TableSetupTests =
 
-    let private config: LlmSeat =
-        {
-            Provider = "deepseek"
-            Model = "deepseek-v4-flash"
-            BaseUrl = ""
-            ApiKey = ""
-            TimeoutMs = 12000
-            Thinking = Thinking.Off
-            Tier = ScaffoldTier.Bare
-            Persona = ""
-            Template = ""
-        }
-
-    /// 四家自带 bot 的一桌（配桌那三项从外面给，与 `?table=1` 打开时同一条路）。
+    /// 四家自带 bot 的一桌（配桌那三项与坐法都从外面给，与 `?table=1` 打开时同一条路）。
     let private table (rules: RulesetDraft) : TableModel =
-        TablePage.initial rules None config |> fst
+        TablePage.initial rules (SeatingPlan.initial (RulesetDraft.ruleset rules))
+        |> fst
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 
@@ -253,4 +241,7 @@ module TableSetupTests =
     let ``超时默认值够开着思考预算的模型用：实测单手上界 180 秒`` () =
         // 30 秒是票 23 在没有思考预算的年代定的；DeepSeek medium 思考实测单手 17–180 秒
         // （DECISIONS 2026-08-16）。默认值低于那个上界，M2 的思考气泡必然大面积兜底。
-        Assert.True(LlmSeat.initial.TimeoutMs >= 180_000, $"超时默认 {LlmSeat.initial.TimeoutMs} ms，接不住实测单手 180 秒的思考")
+        Assert.True(
+            ModelProfile.initial.TimeoutMs >= 180_000,
+            $"超时默认 {ModelProfile.initial.TimeoutMs} ms，接不住实测单手 180 秒的思考"
+        )
