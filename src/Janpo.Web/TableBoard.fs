@@ -811,7 +811,8 @@ module TableBoard =
             let agent =
                 TableState.live model
                 |> Option.toList
-                |> List.map (fun live -> AgentLine.agentLine (TableState.reveals model) live table)
+                |> List.map (fun live ->
+                    AgentLine.agentLine (TableState.reveals model) (TableState.seatNames model) live table)
 
             Html.div [
                 prop.testId "table-board"
@@ -829,6 +830,9 @@ module TableBoard =
                     // “轮不轮到我”与“平台刚才替我过了什么”。没有真人时它一行都不画。
                     @ HumanLine.at model
                     @ agent
+                    // 强 AI 基线那一行（票 92）：接在 Agent 那一行后面——它说的是**资产**，
+                    // 不是那一席在想什么（它不会说话）。这一桌没选它时一行都不画。
+                    @ BaselineLine.at model
                     @ AgentLine.usageLine table
                     // 一条决策记录都没有的牌谱：**说一句为什么没有气泡**（票 76）。
                     @ ThinkingBubble.note model

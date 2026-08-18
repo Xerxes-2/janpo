@@ -81,6 +81,16 @@ type Demand =
     /// 真人因此与模型坐同一条路：**他构造不出一个非法动作**。
     /// 没有 `config`：真人不需要 provider、key 与超时（时限是票 89）。
     | Human of package: DecisionPackage
+    /// 要问**浏览器里那个 WASM 网络**（票 92；ADR-0006）：同样只给得出一份决策包。
+    ///
+    /// **三者差的只是“问谁”**：发一趟跨网请求 / 摆在页面上等一次点击 / 交给本机的
+    /// wasm 跑一次前向，拿回来的同样是一个 **id**。没有 `config`：它没有 provider、
+    /// 没有 key，而那份资产整桌只有一份（拉没拉到是 `BaselineStatus` 的事）。
+    ///
+    /// **它不是 `Ready`**：抨理本身只要 0.7 ms，但资产是异步拉的、wasm 是异步起的，
+    /// 而这一层要在 dotnet 上编得过（页面逻辑的用例跑在那边）——因此它走与 `Asked`
+    /// 逐字相同的那条缝：Elmish 的一条 Msg。
+    | Baseline of package: DecisionPackage
 
 /// 牌桌的构造与推进。**没有驱动循环**：一次调用推进一手，循环是 Elmish 的 update
 /// （ADR-0005 选 B 的理由之一——MVU 的 update 与引擎的 `step` 同构）。
@@ -200,7 +210,11 @@ module Table =
             | SeatPlayer.Llm config -> packaged (fun package -> Demand.Asked(package, config))
             // 真人坐席消费的就是同一份投影（术语表的 `Observation Projection`）：
             // 隐藏信息的保护因此在**结构上**成立，不靠渲染层的纪律。
-            | SeatPlayer.Human -> packaged Demand.Human)
+            | SeatPlayer.Human -> packaged Demand.Human
+            // 强 AI 基线消费的也是同一份投影（票 92）：它看得见的东西与模型席、真人席
+            // 一字不差——**强度参照系必须与被参照的那几席看同一张牌桌**，
+            // 否则它强在哪里就说不清了。
+            | SeatPlayer.Baseline -> packaged Demand.Baseline)
 
     /// 问待答头一家要一个动作（`decideFor` 的头一家特例，纯 bot 那条路还在走它）。
     let decide (roster: Roster) (table: Table) : Demand option =
@@ -270,7 +284,9 @@ module Table =
         | None
         | Some(Demand.Asked _)
         // 真人那一手同样推不动（票 87）：它要等一次点击，而那条路在 Elmish 的 update 里。
-        | Some(Demand.Human _) -> table
+        | Some(Demand.Human _)
+        // 强 AI 基线同理（票 92）：它要等 wasm 跑完那一次前向。
+        | Some(Demand.Baseline _) -> table
         | Some(Demand.Ready(action, players)) -> apply action { table with Players = players }
 
     /// 开下一局。这一局还没终、或局数序列已经走完，都原样返回。

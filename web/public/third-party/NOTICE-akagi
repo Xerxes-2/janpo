@@ -1,0 +1,123 @@
+Akagi v3
+Copyright 2026 Shinkuan
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+Third-Party Software
+================================================================================
+
+This product includes software developed by the following projects.
+Their original copyright notices and license terms are reproduced below.
+
+--------------------------------------------------------------------------------
+mahjong-helper
+  https://github.com/EndlessCheng/mahjong-helper
+  Licensed under the MIT License.
+
+  Used in: src/analysis/
+  Notes:   Portions of src/analysis/ are a Rust port of the Go util/ package.
+
+  MIT License
+
+  Copyright (c) EndlessCheng
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+RiichiEnv (riichienv-core)
+  https://github.com/smly/RiichiEnv
+  Licensed under the Apache License, Version 2.0.
+
+  Used in: Cargo.toml (riichienv-core dependency), src/analysis/, src/game_state/
+  Notes:   Linked as a Cargo dependency. Provides tile / hand / shanten / yaku /
+           score primitives and the game-state model that the analysis engine
+           and game tracker are built on.
+
+  Copyright (c) smly
+
+  See http://www.apache.org/licenses/LICENSE-2.0 for the full license text.
+
+--------------------------------------------------------------------------------
+mahgen
+  https://github.com/eric200203/mahgen
+  Licensed under the MIT License.
+
+  Used in: src/game_state/mahgen_view.rs, frontend <mah-gen> custom element
+  Notes:   Provides the DSL syntax used to pre-encode hand / meld / river
+           strings backend-side and the <mah-gen> Web Component used by the
+           frontend.
+
+  MIT License
+
+  Copyright (c) eric200203
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+
+================================================================================
+References (no code copied — wire format / spec / convention only)
+================================================================================
+
+The following projects influenced Akagi v3 by their public protocols, wire
+formats, or conventions, but no source code was copied from them. They are
+listed here for credit only.
+
+--------------------------------------------------------------------------------
+MajsoulMax-rs
+  https://github.com/Xerxes-2/MajsoulMax-rs
+  Licensed under GPL-3.0.
+
+  Used as a reference for the 5-layer Majsoul WebSocket wire format
+  (type byte -> Wrapper -> inner message -> action protobuf) in
+  src/proxy/handler.rs, src/bridge/majsoul/parser.rs, and
+  src/bridge/majsoul/proto/liqi.proto. Wire format only; no code copied.
+
+--------------------------------------------------------------------------------
+mjai JSONL specification (Gimite)
+  https://gimite.net/pukiwiki/index.php?Mjai
+
+  Used to define the MjaiEvent enum and bot wire contract in src/schema/mjai/.
+  Specification only.
+
+--------------------------------------------------------------------------------
+mjai.app
+  https://github.com/smly/mjai.app
+
+  Subprocess convention reference (JSONL stdin/stdout, argv, env vars,
+  end-of-batch flush) in src/bot/ and mjai_bot/. Convention only.

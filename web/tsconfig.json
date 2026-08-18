@@ -24,5 +24,11 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/agent/**/*.ts", "src/demo/**/*.ts", "src/share/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "src/agent/**/*.ts",
+    "src/baseline/**/*.ts",
+    "src/demo/**/*.ts",
+    "src/share/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }

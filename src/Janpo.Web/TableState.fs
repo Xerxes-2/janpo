@@ -40,6 +40,31 @@ module Awaiting =
     /// 但那是另一次计时的事——这里报的是「最迟什么时候会有下一条消息」那个数。
     let limitSeconds (awaiting: Awaiting) : int = awaiting.Config.TimeoutMs / 1000
 
+/// 在等强 AI 基线那一手（票 92）。**它与 `Awaiting` 刻意是两个类型**：
+///
+/// - 没有 `Config`：它没有 provider / key / 超时预算，那几 MB 的资产整桌只有一份；
+/// - 没有 `WaitedSeconds`：单手 0.7 ms（ADR-0006 量出来的数），
+///   「已等 N 秒」对它恒是 0——写一个恒为 0 的计时器只会让人以为它在想。
+///
+/// 把它塞进 `Awaiting` 就得给它造一份假 `LlmSeat`，而那份假配置会从气泡、
+/// 状态线一直漏到牌谱里去——**这一席不会说话，就不该有一个能说话的表示**。
+type Consult = {
+    /// 这一次问话的票号（与 `Awaiting` 共用 `LiveTable.Ticket` 那一本账，因此跨席唯一）。
+    Ticket: int
+    /// 问的那一手的决策包。id 往回换动作与兵底都要它；**问的是哪一席也写在它身上**。
+    Package: DecisionPackage
+    /// 已经回来、还没轮到落的那份回执（同 `Awaiting.Answer`）：
+    /// 落子要沿引擎问答的正序走（`drain`）。
+    Answer: BaselineAnswer option
+}
+
+/// 在飞那几次问话的拆解。
+[<RequireQualifiedAccess>]
+module Consult =
+
+    /// 这一次问话问的是哪一席（就写在决策包上，不另存一份）。
+    let seat (consult: Consult) : Seat = DecisionPackage.seat consult.Package
+
 /// 这一局定型的那两格：**人格与 prompt 模板**（CONTEXT.md 的 `Persona` / `PromptTemplate`）。
 ///
 /// 术语表把 `Persona` 定成**一局内不变**：它俩都在可缓存前缀里，打到一半换等于把这一局攒下的
@@ -181,6 +206,20 @@ type LiveTable = {
     /// 在飞的那几次问话（票 74：响应阶段里待答的几席**一起问**，一席一份）。
     /// **还有在飞的就不续定时器**（否则牌桌会空转），但不再因为一席在飞就不问第二席。
     Awaiting: Awaiting list
+    /// **强 AI 基线那几 MB 资产此刻在哪一步**（票 92；ADR-0006）。
+    ///
+    /// **整桌只有一份**（不是每席一份）：四席都拨到它也只下载一次。
+    /// **它不在 `SeatingPlan` 里**：那一份是“人拨到哪儿”（落 localStorage），
+    /// 而这一格是“这一次打开页面拉到了没有”——存进 localStorage 只会让下次打开时
+    /// 页面写着「就绪」而内存里一个字节都没有。
+    Baseline: BaselineStatus
+    /// 强 AI 基线席在飞的那几次问话（票 92）；**与 `Awaiting` 平行而不合并**（见 `Consult`）。
+    Consulting: Consult list
+    /// 强 AI 基线交不出那一手、由兵底代打的那几次，**新的在前**（同 `Passed`）。
+    ///
+    /// **它不进牌谱**：那一席一条决策记录都不留（票面边界），因此兵底计数也只能
+    /// 记在这里——而「这一手不是它自己决的」不许静默替换（票 23 的那条规矩）。
+    BaselineTroubles: string list
     /// 这一桌至此刻真人**自己按「过」**的那几次，**新的在前**（票 87 开账、票 88 换了语义）。
     ///
     /// 票 87 时这里记的是「平台替他过掉了什么」（那时还没有按钮）；票 88 把按钮做了出来，
@@ -545,6 +584,13 @@ type TableMsg =
     /// 那一次问话又等过了一秒（票 74）。**它只让页面上「已等 N 秒」往前走**，
     /// 牌桌一根汗毛都不动；那一票已经落定/作废时它静默地停。
     | Waited of ticket: int
+    /// 强 AI 基线那几 MB 拉完了（票 92）。**它不会不来**：404、离线、超时、
+    /// 编不动与初始化失败在 TS 那侧都是值（`Error` 带着一句中文原因）
+    /// ——选了那一席的那桌因此永不卡在“正在拉”上。
+    | BaselineLoaded of loaded: Result<int, string>
+    /// 强 AI 基线那一手回来了（票 92）。**座位与票号**要与在飞的一份 `Consult` 对上，
+    /// 对不上（重开过一桌、开过下一局）就丢掉——与 `Answered` 逐字同一条规矩。
+    | BaselineDecided of seat: Seat * ticket: int * answer: BaselineAnswer
     /// **真人点了一下**（票 87）：他选的是这一包里第 `id` 条动作。
     ///
     /// **跨界回来的同样只有一个 id**（与 `Answered` 那条逆向入口逐字相同）：
@@ -723,10 +769,35 @@ module TableState =
     let private idled (live: LiveTable) : AgentStatus list =
         live.Seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
 
+
+    /// 强 AI 基线拉不动时那一席退回的自带 bot（票 92；ADR-0006 边界 2）。
+    ///
+    /// **取「有主见」而不是均匀随机**：退回一个能和就和、听牌就立直的选手，
+    /// 那一席才还像个对手；均匀随机会把整桌牌的手感改掉，而人只是没下载到一份资产。
+    let private baselineFallbackBot = Bot.Opinionated
+
+    /// 强 AI 基线拉不动时，把那几席换成自带 bot（ADR-0006 边界 2：**它是可选依赖，不是单点**）。
+    ///
+    /// **换在配桌这一层而不是“每手兵底”**：牌谱里那一列 `names` 因此说的是实话
+    /// ——真正把这几手打出来的就是 `opinionated`。写着 `baseline` 而实际在打的是 bot，
+    /// 就是把一份可分享物写成了假话（同 `SeatingPlan.nameplates` 那条判据）。
+    let private degraded (status: BaselineStatus) (player: SeatPlayer) : SeatPlayer =
+        match status, player with
+        | BaselineStatus.Unavailable _, SeatPlayer.Baseline -> SeatPlayer.Bot baselineFallbackBot
+        | _ -> player
+
     /// 这一桌的配桌：四席各自绑定的那个选手（票 73）。
     /// **推导出来而不存下来**：坐法只有 `SeatingPlan` 这一份，不会与第二份对不上。
+    ///
+    /// **强 AI 基线拉不动时就在这一步退回 bot**（票 92）：往下每一处读配桌的地方
+    /// （推进、导出牌谱、分享链接）因此一行都不必知道这件事。
     let private rosterFor (ruleset: Ruleset) (live: LiveTable) : Roster =
-        SeatingPlan.roster ruleset (effective live)
+        let roster = SeatingPlan.roster ruleset (effective live)
+
+        {
+            roster with
+                Seats = roster.Seats |> List.map (degraded live.Baseline)
+        }
 
     /// 此刻还有**待答而没问出去**的模型席吗（票 88）。
     ///
@@ -743,18 +814,46 @@ module TableState =
             let flying = live.Awaiting |> List.map Awaiting.seat
             let llm = Roster.llmSeats roster |> List.map fst
 
-            Table.pendings table
-            |> List.exists (fun choice -> List.contains choice.Seat llm && not (List.contains choice.Seat flying))
+            // 强 AI 基线席同理（票 92）：资产已经拉到、而那一席还没问出去，就不算干等。
+            // **还在拉的那段不算**：那时 `step` 什么也做不了，定时器只会空转
+            // ——把牌桌重新开动的是 `BaselineLoaded`。
+            let consulting = live.Consulting |> List.map Consult.seat
 
-    /// 这一桌此刻**只能干等**人（票 74 的回执、票 87 的那一下点击）。
+            let baseline =
+                match live.Baseline with
+                | BaselineStatus.Ready _ -> Roster.baselineSeats roster
+                | BaselineStatus.Absent
+                | BaselineStatus.Loading
+                | BaselineStatus.Unavailable _ -> []
+
+            Table.pendings table
+            |> List.exists (fun choice ->
+                (List.contains choice.Seat llm && not (List.contains choice.Seat flying))
+                || (List.contains choice.Seat baseline && not (List.contains choice.Seat consulting)))
+
+    /// 这一桌此刻**只能干等**人（票 74 的回执、票 87 的那一下点击、票 92 的那几 MB）。
     ///
-    /// **两种等待在这一处合成一条判据**：定时器不续、牌桌不再往下推。
+    /// **几种等待在这一处合成一条判据**：定时器不续、牌桌不再往下推。
     /// 不合在一处的话，「等真人」会漏掉其中一处而让牌桌在他头上空转。
     ///
     /// **还有没问出去的模型席就不算干等**（票 88）：那一记定时器还得转，
     /// 把该问的问出去（`step`）；问完下一记就停了，因此不会空转。
+    /// 轮到强 AI 基线，而那几 MB 还在路上（票 92）。**它也是干等**：定时器再转也
+    /// 无事可做，重新把牌桌开动的是 `BaselineLoaded`。
+    let private stalled (roster: Roster) (live: LiveTable) : bool =
+        match live.Baseline, live.Table with
+        | BaselineStatus.Loading, Ok table ->
+            let seats = Roster.baselineSeats roster
+
+            Table.pendings table
+            |> List.exists (fun choice -> List.contains choice.Seat seats)
+        | _ -> false
+
     let private waiting (roster: Roster) (live: LiveTable) : bool =
-        (not (List.isEmpty live.Awaiting) || Option.isSome (handOf live))
+        (not (List.isEmpty live.Awaiting)
+         || not (List.isEmpty live.Consulting)
+         || Option.isSome (handOf live)
+         || stalled roster live)
         && not (unasked roster live)
 
     /// 续一记定时器——**除非这一桌只能干等**（在飞的回执，或者正等真人点那一下）。
@@ -787,7 +886,8 @@ module TableState =
             match Roster.playerAt seat roster with
             | SeatPlayer.Llm config -> Some config
             | SeatPlayer.Bot _
-            | SeatPlayer.Human -> None)
+            | SeatPlayer.Human
+            | SeatPlayer.Baseline -> None)
 
     /// 名牌上那一句「这一席是谁在打」（票 82），按座位升序；没话可说的那几席是空表。
     ///
@@ -800,9 +900,48 @@ module TableState =
     /// 名牌上那两样（交给谁、哪一档）不在定型里——拨一下当场就该变。
     ///
     /// **公开的**：牌桌上那行与用例读同一个推导。
+    /// 各席**在牌谱里那个名字**（`Roster.names` 那一份），按座位升序；回放那一侧是空表。
+    ///
+    /// **它读的是配桌而不是坐法**（票 92）：强 AI 基线拉不动时那一席已经退回自带 bot
+    /// （`degraded`），而牌谱里写的就是**真正把这几手打出来的那一个**。
+    /// 页面上那几处 `data-*` 因此与导出的牌谱是同一份真源——两份写法只会漂。
+    let seatNames (model: TableModel) : string list =
+        rosterOf model |> Option.map Roster.names |> Option.defaultValue []
+
+    /// 强 AI 基线那几 MB 此刻在哪一步（票 92）；回放那一侧恒是 `Absent`（那一页没有配桌）。
+    ///
+    /// **公开的**：状态线、面板上那枚按钮旁的那句话与页面逻辑的用例读的都是它。
+    let baseline (model: TableModel) : BaselineStatus =
+        live model
+        |> Option.map (fun live -> live.Baseline)
+        |> Option.defaultValue BaselineStatus.Absent
+
+    /// 强 AI 基线被兵底代打的那几手（新的在前，票 92）；没有那一席时是空表。
+    let baselineTroubles (model: TableModel) : string list =
+        live model
+        |> Option.map (fun live -> live.BaselineTroubles)
+        |> Option.defaultValue []
+
     let nameplates (model: TableModel) : string list =
         match model.Source with
-        | Source.Live live -> SeatingPlan.nameplates live.Seating
+        // 强 AI 基线拉不动时名牌要说实话（票 92，与「引的那份档案被删了」同一条判据）：
+        // 写着强 AI 而实际在打的是自带 bot，那就是句假话。
+        | Source.Live live ->
+            let plates = SeatingPlan.nameplates live.Seating
+
+            match live.Baseline with
+            | BaselineStatus.Unavailable _ ->
+                let fallen = SeatingPlan.baselineSeats live.Seating |> List.map Seat.index
+
+                plates
+                |> List.mapi (fun index plate ->
+                    if List.contains index fallen then
+                        Bot.toDisplay baselineFallbackBot
+                    else
+                        plate)
+            | BaselineStatus.Absent
+            | BaselineStatus.Loading
+            | BaselineStatus.Ready _ -> plates
         | Source.Replay(ReplayTable.Ready(_, _, names)) -> names
         // 还在拉 / 拉不动那两段根本没有牌桌，也就没有名牌。
         | Source.Replay _ -> []
@@ -889,6 +1028,48 @@ module TableState =
 
             (Agent.ask request).``then`` answered |> ignore)
 
+    /// 去拉强 AI 基线那几 MB（票 92；ADR-0006 边界 1）。
+    ///
+    /// **它只从三处发得出去**：页面初次打开时坐法里就有那一席（`initial`）、
+    /// 人把某一席拨到它（`SeatBound`）、以及驱动循环发现轮到它而还没开始拉（`step`）。
+    /// 首页与普通对局因此**一个字节都不拉**——那条边界的执行者就是这三个调用点。
+    let private baselineCmd: Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let loaded (result: Result<int, string>) = dispatch (BaselineLoaded result)
+            (Baseline.load ()).``then`` loaded |> ignore)
+
+    /// 问强 AI 基线这一手打什么（票 92）。与 `askCmd` 同形：效果体只在浏览器里执行，
+    /// dotnet 侧只把它编出来、不跑。回执带上**座位与票号**，错位的丢。
+    let private consultCmd (seat: Seat) (ticket: int) (package: DecisionPackage) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let decided (answer: BaselineAnswer) =
+                dispatch (BaselineDecided(seat, ticket, answer))
+
+            (Baseline.ask package).``then`` decided |> ignore)
+
+    /// 这一桌里真有强 AI 基线席时去拉那几 MB（票 92；ADR-0006 边界 1 的执行者）。
+    ///
+    /// **没有那一席就一个字节都不拉**：首页根本没有 `LiveTable`，普通对局这一表是空的
+    /// ——两种情形都停在 `Absent`，而闸门量的正是它（网络请求计数为 0）。
+    ///
+    /// **已经在拉 / 已经拉到的不重拉**：整桌共用一份资产，四席都拨到它也只下一次。
+    /// **拉不动那一档重拉**：人重新拨一下那枚按钮就是「再试一次」，
+    /// 而自动重试不在这里（`step` 只从 `Absent` 进得去，因此不会变成重试风暴）。
+    let private started (live: LiveTable) : LiveTable * Cmd<TableMsg> =
+        if List.isEmpty (SeatingPlan.baselineSeats live.Seating) then
+            live, Cmd.none
+        else
+            match live.Baseline with
+            | BaselineStatus.Loading
+            | BaselineStatus.Ready _ -> live, Cmd.none
+            | BaselineStatus.Absent
+            | BaselineStatus.Unavailable _ ->
+                {
+                    live with
+                        Baseline = BaselineStatus.Loading
+                },
+                baselineCmd
+
     /// 「已等一秒」的钟（票 74）：一秒后发一条 `Waited`，那一票还在飞就再续一记。
     /// **一票一条链**：回执落定（或整桌重开）之后 `Waited` 找不到那一票，链就自己断了，
     /// 不会像 `setInterval` 那样越积越多。
@@ -955,6 +1136,42 @@ module TableState =
         | None -> played, AgentStatus.Spoke(answer.Reason, answer.LatencyMs)
         | Some reason -> played, AgentStatus.Troubled reason
 
+    /// 这一份问话还对得上此刻的局面吗（票 92）。
+    ///
+    /// **判据是「引擎此刻给这一席的合法动作集与包里那一列逐条相同」**：包里的 id 就是
+    /// 合法动作集的下标（`DecisionPackage.forSeat`），动作集变了同一个 id 就是另一条动作。
+    /// 拿「座位还在不在待答之列」当判据是不够的——响应阶段散了又因为别的缘故轮回到它，
+    /// 那时它在待答之列，而包里的号早已不是这一份。
+    let private stillCurrent (table: Table) (package: DecisionPackage) : bool =
+        Table.pendings table
+        |> List.tryFind (fun choice -> choice.Seat = DecisionPackage.seat package)
+        |> Option.map (fun choice -> choice.Actions = (DecisionPackage.options package |> List.map ActionOption.action))
+        |> Option.defaultValue false
+
+    /// 强 AI 基线的回执 → 落子（票 92）。**不留决策记录**（走 `Table.apply` 而不是
+    /// `applyRecorded`）：它没有可审计的推理——没有 thinking、没有一句话理由、
+    /// 没有 token 账单。于是气泡（`bubbles` 读 `Table.Decisions`）与账单行（`Table.usage`）
+    /// **在结构上就不会为它长出一行**——不是显示一个空气泡或者「0 tok」（票 92 的要害）。
+    ///
+    /// **牌谱格式因此一个字段都不必加**：它在牌谱里就是 `names` 里那一个 `baseline`。
+    ///
+    /// 交不出来那一手（id 不在包里、翻译不动、wasm 抛了）就由 `Fallback.action` 代打，
+    /// 并把原因记在 `BaselineTroubles` 上：**兵底不许静默替换**（票 23 那条规矩）。
+    let private settleBaseline (consult: Consult) (answer: BaselineAnswer) (table: Table) : Table * string option =
+        match
+            answer.ActionId
+            |> Option.bind (fun id -> DecisionPackage.tryAction id consult.Package)
+        with
+        | Some action -> Table.apply action table, None
+        | None ->
+            let reason =
+                answer.Failure
+                |> Option.defaultValue $"强 AI 基线给回的动作 id 不在这一包里（{answer.ActionId}）"
+
+            // 裸奔档的兵底（摸切 / 「过」）：它没有脚手架档位，而 Assisted 档那一套是给
+            // 「看不懂牌的模型」准备的——替一个强 AI 代打时宁可取最保守的那一手。
+            Table.apply (Fallback.action ScaffoldTier.Bare consult.Package) table, Some reason
+
     /// 已经答上来的回执，按引擎问答的正序落下去（票 74）。
     ///
     /// **落子顺序是引擎待答的头一家，不是回执到达的先后**：回放重建响应阶段就是按
@@ -973,12 +1190,22 @@ module TableState =
     /// **“停下来等他”不写进状态**（`handOf` 现问这一刻的局面就知道轮到他了，
     /// 于是 `waiting` / `step` 都停住），而他真按下去的那一下走 `HumanPlayed`。
     let rec private drain (roster: Roster) (live: LiveTable) : LiveTable =
-        if List.isEmpty live.Awaiting then
+        if List.isEmpty live.Awaiting && List.isEmpty live.Consulting then
             live
         else
             match live.Table with
             | Error _ -> live
             | Ok table ->
+                // **先把过期的那几份问话剪掉**（票 92）：响应阶段可能在别席答完之后当场散掉
+                // （有人碰了），于是那一席的待答整条消失。留着它有两个下场：
+                // 它的 id 是按**旧**的合法动作集编的号，等这一席下次被问到时拿旧包落子，
+                // 引擎当场拒；而在那之前 `waiting` 一直为真，牌桌就停在那儿不动。
+                // 判据是「合法动作集逐条相同」——**动作集变了，同一个 id 就是另一条动作**。
+                let live = {
+                    live with
+                        Consulting = live.Consulting |> List.filter (fun each -> stillCurrent table each.Package)
+                }
+
                 match Table.pending table with
                 // 走不到：在飞的都是这一轮的待答席，收齐之前引擎不会翻篇。真走到就停下。
                 | None -> live
@@ -1004,6 +1231,23 @@ module TableState =
                                 live with
                                     Table = Ok(Table.apply action { table with Players = players })
                             }
+                        // 头一家是强 AI 基线（票 92）：回执回来了就落下去，还在飞就停在这里。
+                        // **与模型席逐字同一条规矩**：落子沿引擎问答的正序，不按到达先后。
+                        | Some(Demand.Baseline _) ->
+                            match live.Consulting |> List.tryFind (fun each -> Consult.seat each = choice.Seat) with
+                            | Some({ Answer = Some answer } as entry) ->
+                                let played, trouble = settleBaseline entry answer table
+
+                                drain roster {
+                                    live with
+                                        Table = Ok played
+                                        Consulting =
+                                            live.Consulting |> List.filter (fun each -> each.Ticket <> entry.Ticket)
+                                        BaselineTroubles = Option.toList trouble @ live.BaselineTroubles
+                                }
+                            // 回执还在飞，或者还没问出去（`step` 会把它问出去）：停在这里。
+                            | Some _
+                            | None -> live
                         // 头一家是真人（票 87/88）：**停在这里等那一下点击**。
                         // 后面那几席已经答上来的回执就在 `Awaiting` 里躺着，
                         // 他一点完这一句接着把它们按引擎的顺序落下去——**谁先答不改裁决**。
@@ -1025,7 +1269,14 @@ module TableState =
         | Error _ -> live, Cmd.none
         | Ok table ->
             let roster = rosterFor ruleset live
-            let flying = live.Awaiting |> List.map Awaiting.seat
+
+            // 已经问出去、还没答上来的那几席（模型席与强 AI 基线席各一本账，但**同一张表**）：
+            // **同一席在飞时绝不问第二次**（票 23 那条用例钉着模型席这一半）。
+            // 漏掉强 AI 基线那一半的下场是：同一手被问两次、两份回执各落一个动作，
+            // 第二个当场被引擎拒（「现在没有可响应的牌」）——票 92 真踩到过。
+            let flying =
+                (live.Awaiting |> List.map Awaiting.seat)
+                @ (live.Consulting |> List.map Consult.seat)
 
             let asked, cmds =
                 ((live, []), Table.pendings table)
@@ -1034,6 +1285,40 @@ module TableState =
                         live, cmds
                     else
                         match Table.decideFor choice.Seat roster table with
+                        // 强 AI 基线席（票 92）：与模型席同一趟问出去——同一轮响应里它们各答各的，
+                        // 引擎收齐才按优先级裁决（`drain`）。
+                        | Some(Demand.Baseline package) ->
+                            match live.Baseline with
+                            | BaselineStatus.Ready _ ->
+                                let ticket = live.Ticket + 1
+
+                                {
+                                    live with
+                                        Ticket = ticket
+                                        Consulting =
+                                            live.Consulting
+                                            @ [
+                                                {
+                                                    Ticket = ticket
+                                                    Package = package
+                                                    Answer = None
+                                                }
+                                            ]
+                                },
+                                consultCmd choice.Seat ticket package :: cmds
+                            // 走不到（`initial` / `SeatBound` 都已经把它推到 `Loading`）；真走到了就当场去拉，
+                            // **而不是在这里干等一个永远不来的资产**。`Absent` 只进得一次 `Loading`，
+                            // 因此它不会变成一条重试风暴。
+                            | BaselineStatus.Absent ->
+                                {
+                                    live with
+                                        Baseline = BaselineStatus.Loading
+                                },
+                                baselineCmd :: cmds
+                            // 还在路上：什么都不做（`waiting` 把定时器停了，`BaselineLoaded` 重新开动）。
+                            // 拉不动那一档走不到：配桌那一层已经把这一席换成自带 bot 了（`degraded`）。
+                            | BaselineStatus.Loading
+                            | BaselineStatus.Unavailable _ -> live, cmds
                         | Some(Demand.Asked(package, config)) ->
                             let ticket = live.Ticket + 1
                             let seat = choice.Seat
@@ -1071,7 +1356,7 @@ module TableState =
                         | Some(Demand.Human _)
                         | None -> live, cmds)
 
-            if List.isEmpty asked.Awaiting then
+            if List.isEmpty asked.Awaiting && List.isEmpty asked.Consulting then
                 // 没有在飞的问话：与从前一样一步落一手（不许一步把整轮乃至整局跑完）。
                 match Table.decide roster table with
                 | Some(Demand.Ready(action, players)) ->
@@ -1085,8 +1370,10 @@ module TableState =
                 // **但上面那一趟照旧跑完了**：同一轮里待答的模型席已经问出去了
                 // （票 88 的并发要求：真人在想时让模型席先答）。
                 | Some(Demand.Human _) -> asked, Cmd.none
-                // 走不到（待答的模型席在上面那趟已经问出去了）；这一局已终也落在这里。
+                // 走不到（待答的模型席与强 AI 基线席在上面那趟已经问出去了）；
+                // 这一局已终、以及资产还在路上那段也落在这里。
                 | Some(Demand.Asked _)
+                | Some(Demand.Baseline _)
                 | None -> asked, Cmd.none
             else
                 drain roster asked, Cmd.batch cmds
@@ -1636,27 +1923,36 @@ module TableState =
         // 绑定的条数对齐到座位数：它从 localStorage 来，什么长度都可能。
         let seating = SeatingPlan.fit ruleset seating
 
+        let live: LiveTable = {
+            SeedText = seedText
+            Rules = rules
+            Table = openTable (SeatingPlan.roster ruleset seating) seedText
+            Seating = seating
+            // 档案库非空时开着头一份；空库时这个 0 就是越界（编辑处不摆）。
+            Editing = 0
+            Notice = None
+            // 还没问过话：四席的人格与模板都还改得动（票 46）。
+            Pinned = seating.Seats |> List.map (fun _ -> None)
+            Awaiting = []
+            // **一个字节都还没拉**（票 92；ADR-0006 边界 1）：下面那一行 `started`
+            // 只在坐法里真有强 AI 基线席时才把它推到 `Loading`。
+            Baseline = BaselineStatus.Absent
+            Consulting = []
+            BaselineTroubles = []
+            // 他还没按过一次「过」（票 88）。「轮不轮到他」没有存储：现问局面（`handOf`）。
+            Passed = []
+            Ticket = 0
+            Agent = seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
+            // 还没点过「复制分享链接」（票 78）。
+            Shared = None
+        }
+
+        // 上一次就把某一席拨给了强 AI 基线（localStorage 里存着）：那就现在开始拉。
+        let live, loading = started live
+
         {
             Ruleset = ruleset
-            Source =
-                Source.Live {
-                    SeedText = seedText
-                    Rules = rules
-                    Table = openTable (SeatingPlan.roster ruleset seating) seedText
-                    Seating = seating
-                    // 档案库非空时开着头一份；空库时这个 0 就是越界（编辑处不摆）。
-                    Editing = 0
-                    Notice = None
-                    // 还没问过话：四席的人格与模板都还改得动（票 46）。
-                    Pinned = seating.Seats |> List.map (fun _ -> None)
-                    Awaiting = []
-                    // 他还没按过一次「过」（票 88）。「轮不轮到他」没有存储：现问局面（`handOf`）。
-                    Passed = []
-                    Ticket = 0
-                    Agent = seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
-                    // 还没点过「复制分享链接」（票 78）。
-                    Shared = None
-                }
+            Source = Source.Live live
             // **默认暂停**（`Playback.initial`）：`?table=1` 是最安静的一页，
             // 要点、要读牌桌的那几道无头闸门全靠这一条。
             Playback = Playback.initial
@@ -1674,7 +1970,7 @@ module TableState =
             // 导入入口不在这一页（票 78），这一格恒为 None。
             ImportFault = None
         },
-        Cmd.none
+        loading
 
     /// 首页（`/`）初次摆的那一屏：一份还没拉回来的 Demo 回放（票 71；ADR-0003）。
     ///
@@ -1747,7 +2043,10 @@ module TableState =
         | SharedLoaded _
         | ImportLoaded _
         | Answered _ -> true
-        | HumanPlayed _ -> true
+        | HumanPlayed _
+        // 强 AI 基线那一手同样把牌桌挪了一下（票 92）；拉完那一刻也会接着推（`resume`）。
+        | BaselineDecided _
+        | BaselineLoaded _ -> true
         | SeedEdited _
         | SpeedPicked _
         | Ticked _
@@ -1793,25 +2092,32 @@ module TableState =
                 let ruleset = RulesetDraft.ruleset live.Rules
 
                 // 在飞的那几次问话作废：它们的 id 是按旧那桌的决策包编的号。
+                //
+                // **那几 MB 不重拉**（票 92）：资产与哪一桌无关，拉过一次就摆在那儿；
+                // 上一桌拉不动那一档倒是要再试一次（`started`）——重开就是人在说「再来一次」。
+                let restarted, loading =
+                    started {
+                        live with
+                            Table = openTable (rosterFor ruleset live) live.SeedText
+                            // 重开一桌就是回到第一局：四席的人格与模板一起松开（票 46/73）。
+                            Pinned = loosened live
+                            Awaiting = []
+                            Consulting = []
+                            BaselineTroubles = []
+                            // 「你按了几次过」是旧那桌的事（票 87/88）。
+                            Passed = []
+                            Agent = idled live
+                            // 旧桌的分享回执也撤下来：那句话说的是已经不存在的一桌（票 78）。
+                            Shared = None
+                    }
+
                 {
                     model with
                         Ruleset = ruleset
-                        Source =
-                            Source.Live {
-                                live with
-                                    Table = openTable (rosterFor ruleset live) live.SeedText
-                                    // 重开一桌就是回到第一局：四席的人格与模板一起松开（票 46/73）。
-                                    Pinned = loosened live
-                                    Awaiting = []
-                                    // 「你按了几次过」是旧那桌的事（票 87/88）。
-                                    Passed = []
-                                    Agent = idled live
-                                    // 旧桌的分享回执也撤下来：那句话说的是已经不存在的一桌（票 78）。
-                                    Shared = None
-                            }
+                        Source = Source.Live restarted
                         Playback = Playback.pause model.Playback
                 },
-                Cmd.none
+                loading
         | Advanced ->
             {
                 model with
@@ -1894,6 +2200,8 @@ module TableState =
                         // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
                         Pinned = loosened live
                         Awaiting = []
+                        // 强 AI 基线在飞的那几次同理作废（票 92）；它的兵底计数同样跨局累计。
+                        Consulting = []
                         // 「替你过了几次」跨局累计（同 `Table.fallbacks`），因此开下一局时不清。
                         // 在飞的问话作废（票号从此对不上），别让「在想」挂成孤儿；
                         // 说过话 / 兜底那两态**粘着不掉**（那是上一局末手的事实，人还想看）。
@@ -1911,14 +2219,19 @@ module TableState =
             |> onLive (fun _ live ->
                 let seating = live.Seating |> SeatingPlan.bind seat choice
 
-                {
-                    live with
-                        Seating = seating
-                        // 只把换了人的这一席归零：别席的状态是别席的事实（票 74 按座位各一份）。
-                        Agent = live.Agent |> Seat.mapAt seat (fun _ -> AgentStatus.Idle)
-                        Notice = None
-                },
-                save (fun () -> Store.writeSeating seating))
+                // 拨到强 AI 基线的那一下就是去拉那几 MB（票 92；ADR-0006 边界 1）：
+                // **不预取、不按重开才拉**——人拨完下一步就是开桌，那 208 ms（本机）
+                // 藏得进那一次点击的等待里。
+                let bound, loading =
+                    started {
+                        live with
+                            Seating = seating
+                            // 只把换了人的这一席归零：别席的状态是别席的事实（票 74 按座位各一份）。
+                            Agent = live.Agent |> Seat.mapAt seat (fun _ -> AgentStatus.Idle)
+                            Notice = None
+                    }
+
+                bound, Cmd.batch [ save (fun () -> Store.writeSeating seating); loading ])
         | SeatEdited(seat, field, value) ->
             model
             |> onLive (fun _ live ->
@@ -2049,6 +2362,53 @@ module TableState =
                         |> resume Cmd.none
                 // 不轮到他（或者牌桌开不起来）：同上，没有事情发生。
                 | _, _ -> model, Cmd.none
+        // 那几 MB 拉完了（票 92）。**两种下场都要把牌桌重新开动**（`resume`）：
+        // 拉到了就接着问它这一手，拉不动则那一席已经退回自带 bot（`rosterFor` 里的 `degraded`）
+        // ——**其余席照常打完一局**（ADR-0006 边界 2：它是可选依赖，不是单点）。
+        | BaselineLoaded loaded ->
+            match model.Source with
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                let status =
+                    match loaded with
+                    | Ok bytes -> BaselineStatus.Ready bytes
+                    | Error reason -> BaselineStatus.Unavailable reason
+
+                {
+                    model with
+                        Source = Source.Live { live with Baseline = status }
+                }
+                |> resume Cmd.none
+        // 强 AI 基线那一手回来了（票 92）。**与 `Answered` 逐字同一条路**：先把回执记在
+        // 那一票上，再按引擎的顺序落（`drain`）——谁先答不改裁决。
+        | BaselineDecided(seat, ticket, answer) ->
+            match model.Source with
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                let expected =
+                    live.Consulting
+                    |> List.exists (fun each -> each.Ticket = ticket && Consult.seat each = seat)
+
+                if not expected then
+                    // 过期或错位的回执（重开过一桌、开过下一局）：丢掉。
+                    model, Cmd.none
+                else
+                    let noted = {
+                        live with
+                            Consulting =
+                                live.Consulting
+                                |> List.map (fun each ->
+                                    if each.Ticket = ticket then
+                                        { each with Answer = Some answer }
+                                    else
+                                        each)
+                    }
+
+                    {
+                        model with
+                            Source = Source.Live(drain (rosterFor model.Ruleset noted) noted)
+                    }
+                    |> resume Cmd.none
         | Waited ticket ->
             model
             |> onLive (fun _ live ->

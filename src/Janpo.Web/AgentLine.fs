@@ -78,7 +78,7 @@ module AgentLine =
     /// 没有模型坐席时那一句要说清楚**是哪一种自带 bot**（票 42 之后就不只一种了）：
     /// 杆子拨到「有主见」时牌桌上会出立直与供托，而行里还写着「四家都是随机选手」就是句错话。
     /// 措辞只有一份真源（`SeatingPlan.botsToDisplay`，它又只读 `Bot.toDisplay`，与面板上那些控件同字）。
-    let internal agentLine (reveals: Seat -> bool) (live: LiveTable) (table: Table) =
+    let internal agentLine (reveals: Seat -> bool) (names: string list) (live: LiveTable) (table: Table) =
         // 在飞的那几席：一句合说（同一轮里它们是一起被问出去的，秒数取最久的那一席）。
         // **先按视角分两堆**：看得见的进那句话，看不见的只计数（下面那句提示读它）。
         let flying, flyingHushed =
@@ -145,7 +145,7 @@ module AgentLine =
             prop.custom ("data-agent", state)
             // 四席坐着谁（票 44 的 `data-bot`，票 73 扩成四席）：上面那句中文给人看，
             // 这一条给闸门看——逗号隔开的四个名字，与牌谱里那一列 `names` 同一份真源。
-            prop.custom ("data-seats", SeatingPlan.names live.Seating |> String.concat ",")
+            prop.custom ("data-seats", names |> String.concat ",")
             prop.custom ("data-fallbacks", string fallbacks)
             // 被视角挡下的席数（票 81）：人读的是上面那句中文，闸门读这一条。
             prop.custom ("data-hushed", string hushed)

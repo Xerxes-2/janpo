@@ -43,7 +43,8 @@ type ProfileField =
     | TimeoutMs
     | Thinking
 
-/// 一个座位交给谁（票 73，票 87 加上真人）：自带 bot 的两档、本地真人，或者某份档案。
+/// 一个座位交给谁（票 73，票 87 加上真人，票 92 加上强 AI 基线）：
+/// 自带 bot 的两档、本地真人、强 AI 基线，或者某份档案。
 ///
 /// **档案按名字引用**：名字是人在面板上认的东西，删掉那份档案时引用它的座位
 /// 由 `SeatingPlan.removeProfile` 明确退回 bot（并让页面把这件事说出来），
@@ -62,6 +63,14 @@ type SeatChoice =
     ///
     /// **一桌只坐得下一席**（`SeatingPlan.soloHuman`）：本地就一个人一副眼睛。
     | Human
+    /// **强 AI 基线**（票 92；ADR-0006）：浏览器内 WASM 推理的那个网络。
+    ///
+    /// **它同样不引用任何东西**（同 `Human`）：没有档案、没有 key；
+    /// 坐位级那三项（脚手架 / 人格 / 模板）对它也不生效——它不走 prompt。
+    ///
+    /// **但它不限一席**（与 `Human` 的差别）：四席都拨到它也行——
+    /// 那几 MB 的资产整桌只拉一份，而它每一手只要 0.7 ms（ADR-0006 的数）。
+    | Baseline
 
 /// 座位级那三项里在面板上编辑的部分。**它们不在档案里**（术语表的分工：
 /// 档案答「怎么问」，这三样答「给多少信息 / 什么风格 / 哪套措辞」）。
@@ -265,6 +274,7 @@ module SeatChoice =
         | SeatChoice.Bot kind -> Bot.toWire kind
         | SeatChoice.Profile name -> profilePrefix + name
         | SeatChoice.Human -> Roster.humanName
+        | SeatChoice.Baseline -> Roster.baselineName
 
     /// wire 名回到绑定。认不出来的是 None——配置从 localStorage 读，什么都可能。
     let ofWire (wire: string) : SeatChoice option =
@@ -272,6 +282,8 @@ module SeatChoice =
             Some(SeatChoice.Profile(wire.Substring profilePrefix.Length))
         elif wire = Roster.humanName then
             Some SeatChoice.Human
+        elif wire = Roster.baselineName then
+            Some SeatChoice.Baseline
         else
             Bot.all
             |> List.tryFind (fun kind -> Bot.toWire kind = wire)
@@ -410,6 +422,7 @@ module SeatingPlan =
         match binding.Choice with
         | SeatChoice.Bot kind -> SeatPlayer.Bot kind
         | SeatChoice.Human -> SeatPlayer.Human
+        | SeatChoice.Baseline -> SeatPlayer.Baseline
         | SeatChoice.Profile name ->
             match tryProfile name seating with
             | Some profile -> SeatPlayer.Llm(SeatBinding.config profile binding)
@@ -437,6 +450,22 @@ module SeatingPlan =
             match playerOf seating binding with
             | SeatPlayer.Llm _ -> Some seat
             | SeatPlayer.Bot _
+            | SeatPlayer.Human
+            | SeatPlayer.Baseline -> None)
+
+    /// 坐着强 AI 基线的那几席（票 92）。**不限一席**（与 `humanSeats` 的差别）：
+    /// 四席怎么混都行，而那几 MB 的资产整桌只拉一份。
+    ///
+    /// **拉不拉那份资产的判据就是它空不空**（ADR-0006 边界 1 的执行者）：
+    /// 首页根本没有 `SeatingPlan`，普通对局的这一表是空的——两种情形都一个字节不拉。
+    let baselineSeats (seating: SeatingPlan) : Seat list =
+        seating.Seats
+        |> Seat.indexed
+        |> List.choose (fun (seat, binding) ->
+            match playerOf seating binding with
+            | SeatPlayer.Baseline -> Some seat
+            | SeatPlayer.Bot _
+            | SeatPlayer.Llm _
             | SeatPlayer.Human -> None)
 
     /// 真人坐着的那几席（票 87）。**形状仍是一个表**（同 `llmSeats`），
@@ -449,7 +478,8 @@ module SeatingPlan =
             match playerOf seating binding with
             | SeatPlayer.Human -> Some seat
             | SeatPlayer.Bot _
-            | SeatPlayer.Llm _ -> None)
+            | SeatPlayer.Llm _
+            | SeatPlayer.Baseline -> None)
 
     /// 引用了这份档案的那几席。删档案时要靠它把话说清楚。
     let references (name: string) (seating: SeatingPlan) : Seat list =
@@ -467,6 +497,13 @@ module SeatingPlan =
     /// **不写昵称**：平台不知道你叫什么，也不该问（牌谱里那一列恒是 `human`）。
     let humanToDisplay: string = "我自己"
 
+    /// 强 AI 基线给人看的那一半（票 92）。**只有这一份**：面板上那枚按钮、
+    /// 牌桌上的名牌、状态线上那句话读的都是它。
+    ///
+    /// **写通名**（ADR-0006 边界 5，主人第九次术语授权）：具体是哪一个网络
+    /// 只写在 NOTICE、报告与页脚里。
+    let baselineToDisplay: string = "强 AI 基线"
+
     /// 牌桌上每家名牌上那一句「这一席是谁在打」（票 82），按座位升序。
     ///
     /// **模型席写的是档案名 + 脚手架档位**：两席引同一份档案而档位不同是对照实验的常态
@@ -481,6 +518,7 @@ module SeatingPlan =
             match binding.Choice with
             | SeatChoice.Bot kind -> Bot.toDisplay kind
             | SeatChoice.Human -> humanToDisplay
+            | SeatChoice.Baseline -> baselineToDisplay
             | SeatChoice.Profile name ->
                 match tryProfile name seating with
                 | Some profile -> $"{profile.Name}・{ScaffoldTier.toDisplay binding.Tier}"
@@ -498,6 +536,7 @@ module SeatingPlan =
                 match binding.Choice with
                 | SeatChoice.Bot kind -> Bot.toDisplay kind
                 | SeatChoice.Human -> humanToDisplay
+                | SeatChoice.Baseline -> baselineToDisplay
                 | SeatChoice.Profile name -> name)
 
         match List.distinct kinds with
@@ -524,6 +563,7 @@ module SeatingPlan =
                     Seats = seating.Seats |> List.map vacated
               }
             | SeatChoice.Bot _
+            | SeatChoice.Baseline
             | SeatChoice.Profile _ -> seating
 
         vacant |> withBinding seat (fun binding -> { binding with Choice = choice })

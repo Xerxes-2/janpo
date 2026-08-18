@@ -536,7 +536,7 @@ module TablePanel =
     /// - **展开一席不把另外三席顶出屏外**：敲开之后它独占本行的下一行（CSS 里的
     ///   `.seat-detail[open]`），只长高一排文本框的高度，不把四席拆成两屏。
     ///   闸门量的就是这一条（`verify-seats`：展开座位 0 之后四行仍在同一屏里）。
-    let private seatRow (live: LiveTable) (seat: Seat) (dispatch: TableMsg -> unit) =
+    let private seatRow (names: string list) (live: LiveTable) (seat: Seat) (dispatch: TableMsg -> unit) =
         let index = Seat.index seat
         let binding = SeatingPlan.bindingAt seat live.Seating
 
@@ -559,6 +559,18 @@ module TablePanel =
                 (binding.Choice = SeatChoice.Human)
                 SeatingPlan.humanToDisplay
                 (SeatBound(seat, SeatChoice.Human))
+                dispatch
+
+        // 「强 AI 基线」（票 92；ADR-0006）：**第四种选手，与另外三种并排**——
+        // 四席怎么混都行（三模型 + 一强 AI、真人 + 强 AI……）。
+        // **拨上它的那一下就是去拉那几 MB**（`TableState.started`）：
+        // 首页与不选它的对局一个字节都不拉（边界 1）。
+        let baseline =
+            picker
+                $"table-seat-{index}-baseline"
+                (binding.Choice = SeatChoice.Baseline)
+                SeatingPlan.baselineToDisplay
+                (SeatBound(seat, SeatChoice.Baseline))
                 dispatch
 
         let profiles =
@@ -641,14 +653,11 @@ module TablePanel =
             // 这一席拨到了哪儿（给闸门看；人看的是哪一枚按钮亮着）。
             prop.custom ("data-seat-choice", SeatChoice.toWire binding.Choice)
             // 这一席在牌谱里叫什么（`Roster.names` 那一份）：**档案的名字不在里面**。
-            prop.custom (
-                "data-seat-name",
-                SeatingPlan.names live.Seating |> List.tryItem index |> Option.defaultValue ""
-            )
+            prop.custom ("data-seat-name", names |> List.tryItem index |> Option.defaultValue "")
             prop.children (
                 (Html.span [ prop.key "seat-label"; prop.className "label"; prop.text $"座位 {index}" ]
                  :: bots)
-                @ [ human ]
+                @ [ human; baseline ]
                 @ profiles
                 @ [
                     // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。
@@ -845,7 +854,11 @@ module TablePanel =
                     prop.testId "table-seating"
                     prop.children [
                         heading "seating-title" "谁坐哪一席：选手·档位·（人格·模板）"
-                        yield! Seat.all model.Ruleset |> List.map (fun seat -> seatRow live seat dispatch)
+                        let names = TableState.seatNames model
+
+                        yield!
+                            Seat.all model.Ruleset
+                            |> List.map (fun seat -> seatRow names live seat dispatch)
                     ]
                 ]
                 Html.div [

@@ -75,6 +75,12 @@ module TablePage =
     /// 这一桌坐着真人的是哪一席（票 87）。实现与理由见 `TableState.humanSeat`。
     let humanSeat (model: TableModel) : Seat option = TableState.humanSeat model
 
+    /// 强 AI 基线那几 MB 此刻在哪一步（票 92）。实现与理由见 `TableState.baseline`。
+    let baseline (model: TableModel) : BaselineStatus = TableState.baseline model
+
+    /// 强 AI 基线被兵底代打的那几手（票 92）。实现与理由见 `TableState.baselineTroubles`。
+    let baselineTroubles (model: TableModel) : string list = TableState.baselineTroubles model
+
     /// 此刻视角锁在哪一席上（票 87）。实现与理由见 `TableState.lockedSeat`。
     let lockedSeat (model: TableModel) : Seat option = TableState.lockedSeat model
 

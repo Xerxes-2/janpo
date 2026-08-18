@@ -19,7 +19,7 @@ type Bot =
 /// 给定观测与合法动作集，返回一个动作。差别只在「返回得同步还是要等」——
 /// 而那件事在 `Table.decide` 那道缝上分岔，引擎一无所知。
 ///
-/// M1 只有两种，票 87 加上真人坐席。Mortal 是票 91–92 的 case，加在这里。
+/// M1 只有两种，票 87 加上真人坐席，票 92 加上强 AI 基线（强 AI 与真人坐席是 M3 的 case）。
 ///
 /// **它与 `SeatChoice` 是两层**（票 73）：页面上人选的是「均匀随机 / 有主见 / 我自己 / 某份档案」
 /// （`SeatChoice`，按名字引用档案），推导到这一层时档案已经展开成一份 `LlmSeat`。
@@ -35,6 +35,15 @@ type SeatPlayer =
     /// **它不带任何配置**：真人没有 provider、没有 key、没有超时（时限是票 89）；
     /// 脚手架档位（新手辅助轮，术语表说它复用同一类型）也是票 89 的事。
     | Human
+    /// **强 AI 基线**（票 92，ADR-0006）：浏览器内 WASM 推理的那个网络。
+    ///
+    /// **它与 `Llm` 一样是异步的、与 `Human` 一样不带配置**：决策包过界（`Baseline.ask`），
+    /// 回来的同样只有一个动作 id（ADR-0005）。没有 provider、没有 key、没有超时预算
+    /// ——那几 MB 的资产**整桌只有一份**，拉不拉得动是 `BaselineStatus` 的事，不是座位的事。
+    ///
+    /// **它不会说话**：没有 thinking、没有一句话理由、没有 token 账单，因此它一条
+    /// `DecisionRecord` 都不留（与 bot 席同级）——牌谱里认得出它的只有 `names`。
+    | Baseline
 
 /// 自带 bot 的实现与两种渲染。
 [<RequireQualifiedAccess>]
@@ -106,6 +115,14 @@ module Roster =
         Seat.tryItem seat roster.Seats
         |> Option.defaultValue (SeatPlayer.Bot Bot.Uniform)
 
+    /// 强 AI 基线在牌谱里那个名字（票 92）。**通名，不写具体是谁**（ADR-0006 边界 5：
+    /// 具体是哪一个网络只写在 NOTICE、报告与页脚里）——牌谱是可分享物，
+    /// 而「上游是谁、哪一版权重」是站点的署名义务，不是这一行数据的内容。
+    ///
+    /// **与另外三种分得开**：模型席恒带一道斜杠（`provider/model`），
+    /// bot 叫 `random` / `opinionated`，真人叫 `human`，都不撞。
+    let baselineName: string = "baseline"
+
     /// 真人坐席在牌谱里那个名字（票 87）。**只有这一份**，奇权在它身上：
     ///
     /// - **与模型席分得开**：模型席恒带一道斜杠（`provider/model`），它没有；
@@ -124,6 +141,7 @@ module Roster =
         | SeatPlayer.Bot kind -> Bot.toWire kind
         | SeatPlayer.Llm config -> $"{config.Provider}/{config.Model}"
         | SeatPlayer.Human -> humanName
+        | SeatPlayer.Baseline -> baselineName
 
     /// 各家的名字，按座位升序——mjai `start_game` 的 `names`，也就是牌谱第一条事件里的那一列。
     ///
@@ -140,4 +158,17 @@ module Roster =
             match player with
             | SeatPlayer.Llm config -> Some(seat, config)
             | SeatPlayer.Bot _
+            | SeatPlayer.Human
+            | SeatPlayer.Baseline -> None)
+
+    /// 坐着强 AI 基线的那些座位（票 92）。**形状是一个表**：四席怎么混都行
+    /// （三模型 + 一强 AI、真人 + 强 AI……），而那几 MB 的资产整桌共用一份。
+    let baselineSeats (roster: Roster) : Seat list =
+        roster.Seats
+        |> Seat.indexed
+        |> List.choose (fun (seat, player) ->
+            match player with
+            | SeatPlayer.Baseline -> Some seat
+            | SeatPlayer.Bot _
+            | SeatPlayer.Llm _
             | SeatPlayer.Human -> None)

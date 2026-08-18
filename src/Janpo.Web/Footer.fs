@@ -1,5 +1,6 @@
 module Janpo.Web.Footer
 
+open Fable.Core
 open Feliz
 
 /// 仓库地址在页面侧**只写在这一处**，仓库改名时只改这一行。
@@ -18,6 +19,28 @@ let private copyright = "© 2026 Xerxes-2"
 /// `blob/HEAD/` 而不是 `blob/main/`：HEAD 由 GitHub 解析成当前默认分支，
 /// 哪天默认分支改了名（main/master/trunk）这条链接也不会烂。
 let private licenseUrl = $"{repoUrl}/blob/HEAD/LICENSE"
+
+/// **第三方组件那一条**（票 92；ADR-0006 边界 4，Apache-2.0 §4 的分发义务）。
+///
+/// 强 AI 基线那份 `.wasm` 里静态链着第三方的 Apache-2.0 代码与内嵌权重，
+/// 因此站点上必须带上那份 `LICENSE` 与 `NOTICE`（§4(a)/(d)），
+/// 并在人看得见的地方给出归属。三份文件都在 `web/public/third-party/`，
+/// 清单逐条写在 `probe/akagi-wasm/NOTICE-upstream.md`。
+///
+/// **它不挂在「选了那一席才显示」后面**：署名义务是分发件的义务，
+/// 而那份产物随站点一起发出去——藏到一个条件后面就等于没有（同页脚那条判断 1）。
+///
+/// **按 `document.baseURI` 解析**（同 `web/src/demo/paifu.ts`）：
+/// 站点部署在子路径下（GitHub Pages 是 `/janpo/`），写死斜杠开头在那里会 404。
+let private thirdPartyFile = "third-party/README.md"
+
+/// 那份声明在站点里的完整地址。`web/public/` 下的东西 Vite 原样拷进 `dist/`。
+/// **是一个函数而不是一个值**：模块初始化时算的话，这一行在 dotnet 那侧（只当类型
+/// 检查用）会在加载模块那一刻就抛。
+[<Emit("new URL($0, document.baseURI).toString()")>]
+let private resolveFromBase (_file: string) : string = jsNative
+
+let private thirdPartyUrl () : string = resolveFromBase thirdPartyFile
 
 /// 页脚里的一条外链。**另开一个标签页**：这个平台没有后端也不存档，
 /// 正在看的那一局只活在当前页面的内存里（README「没有实时观战」那节说的就是这件事），
@@ -51,6 +74,8 @@ let Bar () =
             link repoUrl "GitHub 上的 Xerxes-2/janpo"
             Html.span "。按 "
             link licenseUrl "MIT 许可"
-            Html.span $"放出。{copyright}"
+            Html.span $"放出。{copyright}。强 AI 基线那份产物含第三方 Apache-2.0 代码与内嵌权重，归属与许可见 "
+            link (thirdPartyUrl ()) "第三方组件声明"
+            Html.span "。"
         ]
     ]

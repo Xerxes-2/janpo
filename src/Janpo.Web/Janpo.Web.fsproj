@@ -14,11 +14,15 @@
 
   <!-- 引擎调用与 MVU。加页面放这里。
        `Agent.fs` 是 F#/TS 的那道边界（票 23）：它 `import` 的 `web/src/agent/decide.ts`
-       是**整个工程里 F# 唯一调 TS 的地方**（ADR-0005）。
+       是 F# 调 TS 的头一处（ADR-0005：**只有这一个方向，且只传字符串**；
+       另外三处是 `Share.fs` / `Demo.fs` / `Baseline.fs`）。
        `Golden.fs` 不在页面里，它是无头闸门（票 21）在浏览器里 `import` 的那个入口；
        `PaifuCheck.fs` 同理（票 26：下下来的牌谱回放得回去吗）。 -->
   <ItemGroup>
     <Compile Include="Agent.fs" />
+    <!-- 强 AI 基线那道边界（票 92；ADR-0006）：F# 调 TS 的第四处，同样只传字符串。
+         排在 `Roster.fs` 前面（`SeatPlayer.Baseline` 不依赖它，但 `TableState` 要 `BaselineStatus`）。 -->
+    <Compile Include="Baseline.fs" />
     <Compile Include="Roster.fs" />
     <!-- 真人坐席（票 87）：把一份决策包拆成“能点哪几张 / 「过」是哪一条”。
          排在 `TableState.fs` 前面（`LiveTable` 带着 `AutoPass`），不依赖页面侧任何东西。 -->
@@ -53,6 +57,9 @@
     <!-- 真人坐席那一行（票 87）：轮不轮到你、替你自动过了什么。与 `AgentLine` 同一个形状：
          只画一行字，判据在 `TableState` 那几个取值器里。 -->
     <Compile Include="HumanLine.fs" />
+    <!-- 强 AI 基线那一行（票 92）：那几 MB 拉没拉、拉不动退回了什么。
+         与 `AgentLine` / `HumanLine` 同形：只画一行字，判据在 `TableState` 那几个取值器里。 -->
+    <Compile Include="BaselineLine.fs" />
     <!-- 思考气泡与它点开之后那一屏（票 76）：只画，判据在 `TableState` 那个取值器里。
          排在 `TableBoard` 前面——牌桌把气泡挂在座位面板上。 -->
     <Compile Include="ThinkingBubble.fs" />
