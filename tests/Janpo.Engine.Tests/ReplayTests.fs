@@ -178,3 +178,71 @@ module ReplayTests =
         match Replay.game Ruleset.yonma [ StartGame [ "p0"; "p1"; "p2"; "p3" ] ] with
         | Ok _ -> failwith "没有一局的事件流不该回放出一场对局"
         | Error error -> Assert.Equal(ReplayError.NoKyoku, error)
+
+    // ---- 逐手轨迹（票 71） ----
+
+    let private traced (ruleset: Ruleset) (events: Event list) : ReplayKyoku list =
+        match Replay.trace ruleset events with
+        | Ok kyokus -> kyokus
+        | Error error -> failwith $"这份事件流应当走得出轨迹，却得到「{ReplayError.toDisplay error}」"
+
+    [<Fact>]
+    let ``逐手轨迹交回引擎，走出的事件流与 fold 出来的那一份逐条相同`` () =
+        // `trace` 是 fold 的**旁白**，不是第二条路：照着它一条条 `step`，
+        // 得到的必须与 `Replay.game` 那一份逐条相同。页面把牌谱摆成逐帧牌桌靠的就是这一条。
+        for seed in [ 2088; 1177; 4242 ] do
+            let events = Game.events (played seed)
+
+            let walked =
+                traced Ruleset.yonma events
+                |> List.collect (fun kyoku ->
+                    let ended = kyoku.Actions |> List.fold stepped kyoku.Opening
+                    GameState.events ended @ [ EndKyoku ])
+
+            // `Game.events` 在末尾多一条 `end_game`（它不属于任何一局）。
+            Assert.Equal<Event list>(events, walked @ [ EndGame ])
+
+    [<Fact>]
+    let ``轨迹一局一段，段数与 fold 出来的局数相同`` () =
+        let hanchan = Ruleset.yonma |> Ruleset.withLength Hanchan
+
+        let original =
+            match Game.runRandom hanchan (Rng.ofSeed 7) with
+            | Ok(game, _) -> game
+            | Error error -> failwith $"这一场应当打得完，却得到「{KyokuError.toDisplay error}」"
+
+        let kyokus = traced hanchan (Game.events original)
+
+        Assert.Equal(List.length (Game.played original), List.length kyokus)
+        // **「过」也在轨迹里**：它不产出事件，因此段里的动作数必然多于这一局的事件数之类的
+        // 粗略换算都不成立——这一条只钉「每一段都真有动作」。
+        Assert.All(kyokus, fun kyoku -> Assert.NotEmpty kyoku.Actions)
+
+    [<Fact>]
+    let ``轨迹的开局局面就是这一局的开头那几条事件`` () =
+        // 回放的开局不走随机流（牌山由事件流重建）。每一段的 `Opening` 必须是
+        // 「这一局还没人出手」那一刻：它的事件流是整局事件流的**前缀**，且局还没终。
+        let events = Game.events (played 2088)
+
+        for kyoku in traced Ruleset.yonma events do
+            Assert.False(GameState.isEnded kyoku.Opening)
+
+            let opening = GameState.events kyoku.Opening
+            let ended = kyoku.Actions |> List.fold stepped kyoku.Opening
+
+            Assert.NotEmpty opening
+            Assert.Equal<Event list>(opening, GameState.events ended |> List.truncate (List.length opening))
+
+    [<Fact>]
+    let ``轨迹与 fold 共用同一条路：中间某局没走完，两个出口报同一个错`` () =
+        // 两个出口都从 `folded` 出来，因此这份自相矛盾的事件流在两边都该红，且红在同一处。
+        let full = Game.events (played 2088)
+
+        // 把第一局的末尾几手削掉，后面几局照旧：中间那一局因此走不完。
+        let boundary = full |> List.findIndex ((=) EndKyoku)
+
+        let broken = List.truncate (boundary - 2) full @ List.skip boundary full
+
+        match Replay.game Ruleset.yonma broken, Replay.trace Ruleset.yonma broken with
+        | Error one, Error other -> Assert.Equal(one, other)
+        | one, other -> failwith $"这份事件流两个出口都该红，却得到 {one} / {other}"

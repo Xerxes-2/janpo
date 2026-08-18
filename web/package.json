@@ -20,6 +20,7 @@
     "verify": "node scripts/verify-tracer.mjs",
     "verify:browser": "node scripts/verify-browser.mjs",
     "verify:golden": "node scripts/verify-golden.mjs",
+    "verify:home": "node scripts/verify-home.mjs",
     "verify:invariants": "node scripts/verify-invariants.mjs",
     "verify:export": "node scripts/verify-export.mjs",
     "verify:redaction": "node scripts/verify-redaction.mjs",

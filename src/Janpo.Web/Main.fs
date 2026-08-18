@@ -3,13 +3,6 @@ module Janpo.Web.Main
 open Browser.Dom
 open Feliz
 
-/// 开发向内容的开关：地址里带 `?dev=1` 才把它们挂出来。
-///
-/// **访客看到的只该是牌桌**（票 35）——README 那条「单纯面向用户」的标准同样管页面本身。
-/// 判据只有这一处，加新的开发向部件时挂到它后面即可。
-let private devSurfaceRequested () : bool =
-    window.location.search.TrimStart('?').Split('&') |> Array.contains "dev=1"
-
 /// 页面外壳：**牌桌永远在，19 票的曳光弹只在 `?dev=1` 时跟在下面**。
 ///
 /// 曳光弹删不掉也不能做成标签页——`web/scripts/verify-tracer.mjs` 打开页面就直接按 testId
@@ -18,14 +11,17 @@ let private devSurfaceRequested () : bool =
 /// 牌桌自己的种子输入框另有一个 testId（`table-seed`），两边不打架。
 ///
 /// 页脚（票 37）在**开关之外**：它是给访客的那条回仓库的路，任何视图下都该在，
-/// 因此排在最后一行而不是跟着 `devSurfaceRequested ()` 走。
+/// 因此排在最后一行而不是跟着 `Route.devSurfaceRequested ()` 走。
+///
+/// **开关的判据搬去了 `Route`**（票 71）：页面侧认地址的地方只该有一处——
+/// `?dev=1`、`?table=1` 与 hash 三者正交，三份解析写在三处只会各自漂。行为一字未改。
 [<ReactComponent>]
 let Shell () =
     Html.div [
         prop.className "shell"
         prop.children [
             TablePage.Page()
-            if devSurfaceRequested () then
+            if Route.devSurfaceRequested () then
                 Html.hr []
                 App.TracerPage()
             Footer.Bar()

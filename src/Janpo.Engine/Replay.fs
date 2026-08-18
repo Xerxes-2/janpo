@@ -30,6 +30,26 @@ type Replayed =
         Current: GameState option
     }
 
+/// 一局回放的**逐手轨迹**（票 71）：开局那一刻的局面，与之后按事件流逐条交回引擎的那些动作。
+///
+/// **它是 fold 的旁白，不是第二条路**：`Replay.game` 与 `Replay.trace` 走的是同一段 fold，
+/// 因此照着 `Actions` 一条条 `GameState.step` 出来的局面与 `Replayed` 里那一份必然相同。
+///
+/// **为什么要它**：回放要一帧一帧摆上牌桌（首页的 Demo Paifu 自动播），而牌桌那一层要在
+/// **宣言那一刻**捞得下役种（`GameState.horaOf`）、跟得上各座位的掩蔽流。
+/// 只给它一份 `Replayed`（末尾那一刻）答不了这两件事，而把它们搬进引擎就多一份实现
+/// ——交出动作序列之后，牌桌那一层用的是它与 Live **逐字同一条**的落子路径。
+type ReplayKyoku =
+    {
+        /// 这一局开局那一刻的局面（牌山由事件流重建，不走随机流）。
+        Opening: GameState
+        /// 之后逐条交回引擎的动作，按提交顺序。
+        ///
+        /// **「过」（`Action.None`）也在里面**：它不产出事件，因此事件流里看不见，
+        /// 而牌桌那一层的一手就是一次提交（Live 那边同理）——两边的「一手」因此是同一个粒度。
+        Actions: Action list
+    }
+
 /// 回放产物的拆解。
 [<RequireQualifiedAccess>]
 module Replayed =
@@ -224,8 +244,16 @@ module Replay =
 
     // ---- 重放 ----
 
-    /// 重放过程中的游标：局面与还没喂进去的事件。
-    type private Driving = { State: GameState; Queue: Event list }
+    /// 重放过程中的游标：局面、还没喂进去的事件，与**已经交回去的那几个动作**（倒序）。
+    ///
+    /// `Played` 是票 71 加的一项**输出**：回放本来就逐条在提交动作，只是从前提完就丢。
+    /// 倒序累加是为了每手 O(1)（一局百来手，`@` 会变成 O(n²)），出口处再 `List.rev`。
+    type private Driving =
+        {
+            State: GameState
+            Queue: Event list
+            Played: Action list
+        }
 
     /// 引擎自己产出的事件，不必提交：摸牌、翻宝牌、立直成立与三条 game / kyoku 级事件。
     let private isEngineProduced (event: Event) : bool =
@@ -259,7 +287,12 @@ module Replay =
     /// 把一个动作交给引擎。被拒绝就是回放到此为止——事件是既成事实，引擎不该拒绝它。
     let private submit (kyoku: int) (action: Action) (driving: Driving) : Result<Driving, ReplayError> =
         match GameState.step driving.State action with
-        | Ok(next, _) -> Ok { driving with State = next }
+        | Ok(next, _) ->
+            Ok
+                { driving with
+                    State = next
+                    Played = action :: driving.Played
+                }
         | Error illegal -> Error(ReplayError.Rejected(kyoku, illegal))
 
     /// 这条事件是不是对当前这一轮响应的宣言。
@@ -399,15 +432,15 @@ module Replay =
             | EndKyoku
             | EndGame -> Error(ReplayError.Stranded(kyoku, "引擎自己产出的事件混进了要提交的队列"))
 
-    let rec private drive (kyoku: int) (driving: Driving) : Result<GameState, ReplayError> =
+    let rec private drive (kyoku: int) (driving: Driving) : Result<Driving, ReplayError> =
         // 要喂的事件喂完了：**回放就是对前缀做 fold**（ADR-0002），停在这里不是错误。
         // 取得出来的就是那一刻的局面（分享一场还没打完的对局走的就是这条路）。
         if List.isEmpty (pendingMoves driving.Queue) then
-            Ok driving.State
+            Ok driving
         else
             match GameState.phase driving.State with
             // 一局已终：队列里剩下的（`end_kyoku` 之类）不必再喂。
-            | Ended _ -> Ok driving.State
+            | Ended _ -> Ok driving
             | AwaitingResponse waiting -> stepResponse kyoku waiting driving |> Result.bind (drive kyoku)
             | AwaitingDahai waiting -> stepDahai kyoku waiting driving |> Result.bind (drive kyoku)
 
@@ -425,37 +458,51 @@ module Replay =
             Scores = start.Scores
         }
 
-    /// 重放一局：按事件流摆回牌山、开局、把动作原样交回引擎。
+    /// 重放一局：按事件流摆回牌山、开局、把动作原样交回引擎。给出开局那一刻与 fold 完的游标。
     let private kyoku
         (ruleset: Ruleset)
         (index: int)
         (start: StartKyoku)
         (moves: Event list)
-        : Result<GameState, ReplayError> =
+        : Result<GameState * Driving, ReplayError> =
         buildWall ruleset start moves
         |> Result.mapError (fun detail -> ReplayError.CannotBuildWall(index, detail))
         |> Result.bind (fun wall ->
             GameState.startFrom ruleset (contextOf start) wall
             |> Result.mapError (fun error -> ReplayError.CannotStart(index, error)))
-        |> Result.bind (fun opening -> drive index { State = opening; Queue = moves })
-
-    /// 把 fold 完的一局收进这一场。还没打完的只允许是**最后一局**（事件流到此为止）；
-    /// 中间某一局没走完说明这份事件流本身不自洽。
-    let private collect
-        (index: int)
-        (isLast: bool)
-        (state: GameState)
-        (replayed: Replayed)
-        : Result<Replayed, ReplayError> =
-        if GameState.isEnded state then
-            Ok
-                { replayed with
-                    Game = Game.advance state replayed.Game
+        |> Result.bind (fun opening ->
+            drive
+                index
+                {
+                    State = opening
+                    Queue = moves
+                    Played = []
                 }
-        elif isLast then
-            Ok { replayed with Current = Some state }
-        else
-            Error(ReplayError.Stranded(index, "这一局的事件流没走完，后面却还有别的局"))
+            |> Result.map (fun driving -> opening, driving))
+
+    /// 一局一局 fold 回去，每一局给出「开局那一刻」与「fold 完的游标」。
+    ///
+    /// **两个出口都从这里走**（`game` 与 `trace`）：一份事件流只有一条 fold 路径，
+    /// 因此两边不可能对不上，报错也必然报在同一处。
+    ///
+    /// 还没打完的局只允许是**最后一局**（事件流到此为止）；中间某一局没走完
+    /// 说明这份事件流本身不自洽。
+    let private folded (ruleset: Ruleset) (events: Event list) : Result<(GameState * Driving) list, ReplayError> =
+        match kyokus events with
+        | [] -> Error ReplayError.NoKyoku
+        | segments ->
+            let last = List.length segments - 1
+
+            (Ok [], List.indexed segments)
+            ||> List.fold (fun replayed (index, (start, moves)) ->
+                replayed
+                |> Result.bind (fun before ->
+                    kyoku ruleset index start moves
+                    |> Result.bind (fun (opening, driving) ->
+                        if index <> last && not (GameState.isEnded driving.State) then
+                            Error(ReplayError.Stranded(index, "这一局的事件流没走完，后面却还有别的局"))
+                        else
+                            Ok(before @ [ opening, driving ]))))
 
     /// **事件流 → 一场对局**：一局一局 fold 回去，连庄、结转与终局精算全由 `Game` 重算。
     ///
@@ -463,22 +510,40 @@ module Replay =
     /// 乃至 `Replayed.events` 逐条相同。「回放出同一个终局」这件事因此不是靠对齐两份实现，
     /// 而是**只有一份实现**。
     let game (ruleset: Ruleset) (events: Event list) : Result<Replayed, ReplayError> =
-        match kyokus events with
-        | [] -> Error ReplayError.NoKyoku
-        | segments ->
-            let last = List.length segments - 1
+        folded ruleset events
+        |> Result.map (fun segments ->
+            (({
+                Game = Game.start ruleset
+                Current = None
+             }),
+             segments)
+            ||> List.fold (fun replayed (_, driving) ->
+                if GameState.isEnded driving.State then
+                    { replayed with
+                        Game = Game.advance driving.State replayed.Game
+                    }
+                else
+                    { replayed with
+                        Current = Some driving.State
+                    }))
 
-            (Ok
+    /// **事件流 → 逐手轨迹**（票 71）：一局一段，每段是开局局面加那一局逐条提交的动作。
+    ///
+    /// **只多一项输出，一条规则也不自己判**：它与 `game` 共用 `folded`，拿到的就是
+    /// fold 本来就在做的那几次 `GameState.step`。页面拿它把一份牌谱摆成逐帧的牌桌
+    /// （`Janpo.Web` 的 `Table.replay`），因此回放与 Live 用的是同一条落子路径。
+    let trace (ruleset: Ruleset) (events: Event list) : Result<ReplayKyoku list, ReplayError> =
+        folded ruleset events
+        |> Result.map (
+            List.map (fun (opening, driving) ->
                 {
-                    Game = Game.start ruleset
-                    Current = None
-                },
-             List.indexed segments)
-            ||> List.fold (fun replayed (index, (start, moves)) ->
-                replayed
-                |> Result.bind (fun replayed ->
-                    kyoku ruleset index start moves
-                    |> Result.bind (fun state -> collect index (index = last) state replayed)))
+                    Opening = opening
+                    Actions = List.rev driving.Played
+                })
+        )
 
     /// 一份牌谱 → 它记的那一场对局。规则集也取自牌谱：回放照的是**这一场**的规则。
     let ofPaifu (paifu: Paifu) : Result<Replayed, ReplayError> = game paifu.Ruleset paifu.Events
+
+    /// 一份牌谱 → 它的逐手轨迹（票 71）。与 `ofPaifu` 同一份规则集、同一条 fold。
+    let traceOfPaifu (paifu: Paifu) : Result<ReplayKyoku list, ReplayError> = trace paifu.Ruleset paifu.Events

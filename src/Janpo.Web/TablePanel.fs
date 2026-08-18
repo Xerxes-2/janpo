@@ -43,44 +43,75 @@ module TablePanel =
             prop.text label
         ]
 
-    let internal controls (model: TableModel) (dispatch: TableMsg -> unit) =
+    /// 倍速那一排。**两种来源共用**：回放与 Live 的「一手」是同一个粒度（一次提交）。
+    let private speeds (model: TableModel) (dispatch: TableMsg -> unit) =
+        Speed.all
+        |> List.map (fun speed ->
+            picker
+                $"table-speed-{Speed.toDisplay speed}"
+                (model.Playback.Speed = speed)
+                (Speed.toDisplay speed)
+                (SpeedPicked speed)
+                dispatch)
+
+    /// 播 / 暂停那一枚。两种来源共用（testId 也同一个）。
+    let private playButton (model: TableModel) (dispatch: TableMsg -> unit) =
+        button
+            "table-play"
+            (not (TableState.canAdvance model))
+            (if model.Playback.Playing then "暂停" else "播放")
+            PlayToggled
+            dispatch
+
+    /// 主持人那一页的控制条（`?table=1`）：单步 / 下一局 / 导出牌谱都只属于 Live。
+    let private hostControls (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         let running = TableState.canAdvance model
 
         let ended =
-            match model.Table with
+            match live.Table with
             | Ok table -> Table.isKyokuEnded table && (Table.result table |> Option.isNone)
             | Error _ -> false
-
-        let speeds =
-            Speed.all
-            |> List.map (fun speed ->
-                picker
-                    $"table-speed-{Speed.toDisplay speed}"
-                    (model.Playback.Speed = speed)
-                    (Speed.toDisplay speed)
-                    (SpeedPicked speed)
-                    dispatch)
 
         Html.div [
             prop.className "controls"
             prop.children (
                 [
-                    button
-                        "table-play"
-                        (not running)
-                        (if model.Playback.Playing then "暂停" else "播放")
-                        PlayToggled
-                        dispatch
+                    playButton model dispatch
                     button "table-step" (not running) "单步" Advanced dispatch
                     button "table-next" (not ended) "下一局" KyokuAdvanced dispatch
                     // 牌谱随时导得出来，不必等终局：打到一半的事件流同样 fold 得回去。
-                    button "table-export" (Result.isError model.Table) "导出牌谱" Exported dispatch
+                    button "table-export" (Result.isError live.Table) "导出牌谱" Exported dispatch
                     Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
                 ]
-                @ speeds
+                @ speeds model dispatch
             )
         ]
 
+    /// 首页回放的控制条（票 71）：只有播 / 暂停、「从头再放」与倍速。
+    ///
+    /// **没有单步**：时间轴（拖动与逐事件步进）是票 75 的活，本票的回放只顺着播。
+    /// **没有「下一局」**：局间那一步就写在牌谱里，回放自己走过去。
+    let private replayControls (model: TableModel) (dispatch: TableMsg -> unit) =
+        Html.div [
+            prop.className "controls"
+            prop.children (
+                [
+                    playButton model dispatch
+                    button "table-restart" false "从头再放" Restarted dispatch
+                    Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
+                ]
+                @ speeds model dispatch
+            )
+        ]
+
+    /// 控制条。**牌从哪来决定摆哪几个按钮**（票 71），而播放本身两边共用一份实现。
+    let internal controls (model: TableModel) (dispatch: TableMsg -> unit) =
+        match TableState.live model with
+        | Some live -> hostControls model live dispatch
+        | None -> replayControls model dispatch
+
+    /// 视角那一排。**两种来源共用**（回放里视角照旧切得动）；
+    /// 种子与「重开」只属于 Live——回放的牌是**录下来的**，没有种子可换。
     let internal viewpoints (model: TableModel) (dispatch: TableMsg -> unit) =
         let seats =
             Seat.all model.Ruleset
@@ -91,6 +122,20 @@ module TablePanel =
                     $"座位 {Seat.index seat}"
                     (ViewpointPicked(Viewpoint.Seated seat))
                     dispatch)
+
+        let seeding =
+            match TableState.live model with
+            | None -> []
+            | Some live -> [
+                Html.span [ prop.key "seed-label"; prop.className "label"; prop.text "种子" ]
+                Html.input [
+                    prop.key "seed-input"
+                    prop.testId "table-seed"
+                    prop.value live.SeedText
+                    prop.onChange (SeedEdited >> dispatch)
+                ]
+                button "table-restart" false "重开" Restarted dispatch
+              ]
 
         Html.div [
             prop.className "controls"
@@ -106,15 +151,8 @@ module TablePanel =
                         dispatch
                     // 危险度（票 25）：围观者想看就拨开，**默认关**。
                     picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch
-                    Html.span [ prop.key "seed-label"; prop.className "label"; prop.text "种子" ]
-                    Html.input [
-                        prop.key "seed-input"
-                        prop.testId "table-seed"
-                        prop.value model.SeedText
-                        prop.onChange (SeedEdited >> dispatch)
-                    ]
-                    button "table-restart" false "重开" Restarted dispatch
                 ]
+                @ seeding
             )
         ]
 
@@ -126,7 +164,7 @@ module TablePanel =
         (kind: string)
         (label: string)
         (which: LlmField)
-        (model: TableModel)
+        (live: LiveTable)
         (dispatch: TableMsg -> unit)
         =
         Html.label [
@@ -137,7 +175,7 @@ module TablePanel =
                 Html.input [
                     prop.testId testId
                     prop.type' kind
-                    prop.value (LlmSeat.field which model.Llm)
+                    prop.value (LlmSeat.field which live.Llm)
                     prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
                 ]
             ]
@@ -150,7 +188,7 @@ module TablePanel =
         (label: string)
         (hint: string)
         (which: LlmField)
-        (model: TableModel)
+        (live: LiveTable)
         (dispatch: TableMsg -> unit)
         =
         Html.label [
@@ -162,7 +200,7 @@ module TablePanel =
                     prop.testId testId
                     prop.rows 3
                     prop.placeholder hint
-                    prop.value (LlmSeat.field which model.Llm)
+                    prop.value (LlmSeat.field which live.Llm)
                     prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
                 ]
             ]
@@ -177,7 +215,7 @@ module TablePanel =
         (label: string)
         (which: LlmField)
         (options: (string * string * bool) list)
-        (model: TableModel)
+        (live: LiveTable)
         (dispatch: TableMsg -> unit)
         =
         Html.label [
@@ -187,7 +225,7 @@ module TablePanel =
                 Html.span [ prop.className "label"; prop.text label ]
                 Html.select [
                     prop.testId testId
-                    prop.value (LlmSeat.field which model.Llm)
+                    prop.value (LlmSeat.field which live.Llm)
                     prop.onChange (fun (value: string) -> dispatch (LlmEdited(which, value)))
                     prop.children [
                         for value, display, enabled in options ->
@@ -209,11 +247,11 @@ module TablePanel =
     /// （票 43：后一截让「改了排版的代码」也看得出来），两截都在 Agent 层算
     /// （`web/src/agent/render-version.ts`），F# 这边再算一份就是第二份权威。
     /// 因此这行说的是**真发出去过的那一份**，不是推测。`data-*` 给无头验收读。
-    let private renderingLine (model: TableModel) =
+    let private renderingLine (model: TableModel) (live: LiveTable) =
         // 空串也当「还没有」：没填 key 那几手连 prompt 都没渲染过（记录仍然留一条，
         // 内容就是那句原因），印一个空版本号比不印更难读。
         let version =
-            match model.Table with
+            match live.Table with
             | Ok table ->
                 table.Decisions
                 |> List.tryLast
@@ -247,14 +285,14 @@ module TablePanel =
     ///
     /// **baseUrl 那一格只在选了自定义端点时出现**（票 30）：官方八家根本不看它，
     /// 摆在那里只会让人以为能把 DeepSeek 改道。
-    let internal llmPanel (model: TableModel) (dispatch: TableMsg -> unit) =
+    let internal llmPanel (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         let seats =
-            picker "table-llm-none" (Option.isNone model.LlmAt) "无" (LlmSeatPicked None) dispatch
+            picker "table-llm-none" (Option.isNone live.LlmAt) "无" (LlmSeatPicked None) dispatch
             :: [
                 for seat in Seat.all model.Ruleset ->
                     picker
                         $"table-llm-{Seat.index seat}"
-                        (model.LlmAt = Some seat)
+                        (live.LlmAt = Some seat)
                         $"座位 {Seat.index seat}"
                         (LlmSeatPicked(Some seat))
                         dispatch
@@ -265,7 +303,7 @@ module TablePanel =
         let bots =
             Bot.all
             |> List.map (fun kind ->
-                picker $"table-bot-{Bot.toWire kind}" (model.Bot = kind) (Bot.toDisplay kind) (BotPicked kind) dispatch)
+                picker $"table-bot-{Bot.toWire kind}" (live.Bot = kind) (Bot.toDisplay kind) (BotPicked kind) dispatch)
 
         Html.section [
             prop.className "llm-panel"
@@ -291,22 +329,22 @@ module TablePanel =
                             LlmField.Provider
                             (LlmSeat.providers
                              |> List.map (fun name -> name, LlmSeat.providerToDisplay name, true))
-                            model
+                            live
                             dispatch
                         // 模型名一直是自由文本：本地模型叫 `qwen3:8b` 的叫 `gpt-oss-20b@q4` 的都有，
                         // 下拉框只会挡路。
-                        textField "table-llm-model" "text" "模型" LlmField.Model model dispatch
-                        if LlmSeat.isCustom model.Llm then
-                            textField "table-llm-base-url" "text" "baseUrl" LlmField.BaseUrl model dispatch
-                        textField "table-llm-key" "password" "API key" LlmField.ApiKey model dispatch
-                        textField "table-llm-timeout" "number" "超时 (ms)" LlmField.TimeoutMs model dispatch
+                        textField "table-llm-model" "text" "模型" LlmField.Model live dispatch
+                        if LlmSeat.isCustom live.Llm then
+                            textField "table-llm-base-url" "text" "baseUrl" LlmField.BaseUrl live dispatch
+                        textField "table-llm-key" "password" "API key" LlmField.ApiKey live dispatch
+                        textField "table-llm-timeout" "number" "超时 (ms)" LlmField.TimeoutMs live dispatch
                         selectField
                             "table-llm-thinking"
                             "思考预算"
                             LlmField.Thinking
                             (Thinking.all
                              |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level, true))
-                            model
+                            live
                             dispatch
                         // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。
                         // 工具搜索档是 M3 的，灰着；它真被选上也不会坏事（prompt 与兜底都退回 Bare）。
@@ -317,7 +355,7 @@ module TablePanel =
                             (ScaffoldTier.all
                              |> List.map (fun tier ->
                                  ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, tier <> ScaffoldTier.ToolSearch))
-                            model
+                            live
                             dispatch
                     ]
                 ]
@@ -332,18 +370,18 @@ module TablePanel =
                             "人格（一局内不变）"
                             "留空就没有人格。例：你是一位以防守见长的雀士，宁可少和一把，也不点炮。"
                             LlmField.Persona
-                            model
+                            live
                             dispatch
                         areaField
                             "table-llm-template"
                             "prompt 模板（一局内不变）"
                             "留空就用默认模板。一段 JSON，给几项换几项：{\"id\":\"我的模板\",\"labels\":{\"history\":\"【战况回放】\"}}"
                             LlmField.Template
-                            model
+                            live
                             dispatch
                     ]
                 ]
-                renderingLine model
+                renderingLine model live
                 Html.p [
                     prop.key "note"
                     prop.className "intro"
@@ -352,7 +390,7 @@ module TablePanel =
                 ]
                 // 自定义端点那段话只在选中它时出现：两个坑（CORS、mixed content）说清楚要一整段，
                 // 而它们与官方八家无关。完整配法在 `docs/host/custom-endpoint.md`。
-                if LlmSeat.isCustom model.Llm then
+                if LlmSeat.isCustom live.Llm then
                     Html.p [
                         prop.key "custom-note"
                         prop.className "intro"

@@ -4,10 +4,17 @@
 // 一局（janpo kyoku）与一整场（janpo game）的终局点数与顺位。
 //
 // **地址带 `?dev=1`**（票 35）：曳光弹是开发向的自检页，默认访客看不到它，
-// 只有这个开关能把它摆回牌桌下面（判据在 `src/Janpo.Web/Main.fs`）。
+// 只有这个开关能把它摆回牌桌下面（判据在 `src/Janpo.Web/Route.fs`）。
+//
+// **这一道一共开三次地址**（票 71），三次各量一件事：
+//
+//   `/`         首页：里面不得有开发向内容，且页脚那条回仓库的路必须在（票 35 / 37）
+//   `?table=1`  主持人那一页：副露看得出被鸣的那张与来源（票 38）
+//               ——它要填种子、要一手一手点单步，而那两个控件只在这一页上
+//   `?dev=1`    曳光弹：与 dotnet 侧逐项对拍（票 19）
 //
 // 跑法：`cd web && pnpm run build && pnpm run verify [-- --seed 1177]`
-// 它也是 `verify-browser.mjs` 里的一道（九道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { execFileSync } from "node:child_process";
@@ -16,6 +23,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
+import { hostPage } from "./serve.mjs";
 import { stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -71,7 +79,7 @@ function summaryLines(text) {
 
 // ---- 浏览器侧 ----
 
-/** 曳光弹那一块的开关（票 35）。页面侧认它的地方只有 `Main.devSurfaceRequested` 一处。 */
+/** 曳光弹那一块的开关（票 35）。页面侧认它的地方只有 `Route.devSurfaceRequested` 一处。 */
 const DEV_QUERY = "?dev=1";
 
 /** 曳光弹在页面上的钩子。带开关时它们都在，不带时一个都不该在。 */
@@ -102,7 +110,12 @@ const NAKI_TURNS = 90;
  *
  * 头一条是防空转的：一组鸣来的副露都没走出来的话，下面全部断言都会空着全绿。
  */
-async function checkNaki(page) {
+async function checkNaki(page, url) {
+  // **开主持人那一页**（票 71）：这段要填种子、要一手一手点单步，
+  // 而那两个控件只在 `?table=1` 上；首页是自动播的回放，没有种子可换。
+  // 断言一条没改：验的仍然是同一颗种子、同一批副露、同四条性质。
+  await page.goto(hostPage(url), { waitUntil: "load" });
+  await page.getByTestId("table-board").waitFor();
   await page.getByTestId("table-seed").fill(String(NAKI_SEED));
   await page.getByTestId("table-restart").click();
   // 一手一手点「单步」，等牌桌真的走动了再点下一手（驱动在 `table-drive.mjs`）。
@@ -135,6 +148,7 @@ async function checkDefaultView(page, url) {
   const missing = [];
   await page.goto(`${url}/`, { waitUntil: "load" });
   // 牌桌本人必须在：否则「什么都没渲染出来」也能让下面几条断言全部通过。
+  // 首页的牌桌要等那份 Demo 牌谱 `fetch` 回来才摆得出来（票 71）。
   await page.getByTestId("table-board").waitFor();
 
   for (const testId of DEV_TEST_IDS) {
@@ -154,8 +168,9 @@ async function checkDefaultView(page, url) {
   if (footerLinks === 0) missing.push("默认视图的页脚里没有一条指回仓库的外链（票 37）");
   if (!text.includes("MIT")) missing.push("默认视图的正文里没提许可（MIT）（票 37）");
 
-  // 票 38：副露的来源与被鸣的那张。开局那一帧一组副露也没有，得先把牌局走起来。
-  const naki = await checkNaki(page);
+  // 票 38：副露的来源与被鸣的那张。开局那一帧一组副露也没有，得先把牌局走起来
+  // ——它因此另开 `?table=1`（票 71），上面那几条仍旧量的是 `/`。
+  const naki = await checkNaki(page, url);
 
   return { leaks, missing: missing.concat(naki.missing), naki: naki.seen };
 }

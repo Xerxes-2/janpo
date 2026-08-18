@@ -57,11 +57,24 @@ module Playback =
 
     // ---- 构造 ----
 
-    /// 初始：暂停着，1×。**第一版不自动播放**——首页自动播放 Demo Paifu 是 M2 的事，
-    /// 而一进页面就自己跑起来会让无头验收读到一个动着的牌桌。
+    /// 初始：暂停着，1×。**主持人那一页（`?table=1`）一直以它开头**：
+    /// 一进页面就自己跑起来会让无头验收读到一个动着的牌桌，而要点、要读牌桌的
+    /// 那几道闸门全靠这一条（票 71 把它们一并迁到了 `?table=1`）。
+    ///
+    /// **首页的 Demo 回放另走 `playing`**（票 71）：那一页的卖点就是自动播。
     let initial: Playback = {
         Playing = false
         Speed = Speed.X1
+        Generation = 0
+    }
+
+    /// 自动播：从这一档速度开始，当场就跑（首页的 Demo 回放，票 71）。
+    ///
+    /// **不是 `toggle initial`**：那条的意思是「人按了一下」，而这里是初始值本身。
+    /// 世代号仍从 0 起：这一刻一记定时器都还没发出去。
+    let playing (speed: Speed) : Playback = {
+        Playing = true
+        Speed = speed
         Generation = 0
     }
 

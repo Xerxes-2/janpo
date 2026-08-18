@@ -10,18 +10,26 @@
 // 那笔残债：它原来写死 4190、`strictPort: true`，两个工作区同时跑就撞）。
 // 想钉死一个端口就 `JANPO_PORT=4190 node scripts/shoot-table.mjs`。
 //
+// **两张图，两个地址**（票 71）：
+//
+//   `docs/images/table.png` 拍的是主持人那一页（`?table=1`）——README 里那张图说的
+//   就是「自带 key 把一席交给模型」那件事，它得带着配桌面板；
+//   `docs/images/home.png` 拍的是首页（`/`）——访客的第一眼，产品门面。
+//   首页是**自动播**的 Demo 回放，因此 `--home` 那一档不点单步，只等手数走到位。
+//
 // 跑法：
-//   cd web && pnpm run fable && node scripts/shoot-table.mjs        # README 里那张：种子 1177、走 52 手
+//   cd web && pnpm run fable && node scripts/shoot-table.mjs        # README 里那张：`?table=1`、种子 1177、走 52 手
+//   cd web && pnpm run fable && node scripts/shoot-table.mjs --home # 首页那张：`/`、Demo 自动播到第 52 手
 //   node scripts/shoot-table.mjs --scan 8 --seed 340 --turns 44     # 挑种子：印出各种子在目标手数时的副露与河
 //
-// 选项：--seed N、--turns N（先走几手）、--out <路径>、--scan N（试 N 个种子后退出）。
+// 选项：--seed N、--turns N（先走几手）、--out <路径>、--scan N（试 N 个种子后退出）、--home。
 
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
-import { pageUrl, startDevServer } from "./serve.mjs";
+import { hostPage, pageUrl, startDevServer } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,10 +39,15 @@ const flag = (name, fallback) => {
   return index < 0 ? fallback : argv[index + 1];
 };
 
+const home = argv.includes("--home");
 const seed = Number.parseInt(flag("--seed", "1177"), 10);
 const turns = Number.parseInt(flag("--turns", "52"), 10);
 const scan = Number.parseInt(flag("--scan", "0"), 10);
-const out = resolve(webRoot, "..", flag("--out", "docs/images/table.png"));
+const out = resolve(
+  webRoot,
+  "..",
+  flag("--out", home ? "docs/images/home.png" : "docs/images/table.png"),
+);
 
 const executablePath = chromeExecutable();
 if (!executablePath) {
@@ -88,9 +101,27 @@ async function shape(page) {
 }
 
 async function open(page, withSeed) {
-  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
+  await page.goto(hostPage(pageUrl(server)), { waitUntil: "load" });
   await page.getByTestId("table-seed").fill(String(withSeed));
   await page.getByTestId("table-restart").click();
+}
+
+/**
+ * 首页（`/`）：不填种子、不点单步——那两个控件只在 `?table=1` 上。
+ * Demo 回放自己在跑，等它走到目标手数就拍。
+ */
+async function openHome(page, count) {
+  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
+  await page.getByTestId("table-board").waitFor();
+  await page.waitForFunction(
+    (want) => {
+      const text = document.querySelector('[data-testid="seat-0-kawa"] .row-label')?.textContent;
+      const kawa = text?.match(/河 (\d+)/);
+      return kawa !== null && kawa !== undefined && Number.parseInt(kawa[1], 10) >= want;
+    },
+    Math.max(1, Math.floor(count / 8)),
+    { timeout: 60000 },
+  );
 }
 
 try {
@@ -111,6 +142,20 @@ try {
             .join("　"),
       );
     }
+  } else if (home) {
+    await openHome(page, turns);
+    console.log(`首页（Demo 自动播）`);
+
+    for (const view of await shape(page)) {
+      console.log(
+        `  座位 ${view.seat}　河 ${view.kawa}　副露 ${view.naki || "无"}　标记 ${view.marks || "无"}`,
+      );
+    }
+    console.log(`上一手：${(await page.getByTestId("table-latest").textContent()).trim()}`);
+
+    mkdirSync(dirname(out), { recursive: true });
+    await page.locator(".page.table-page").screenshot({ path: out });
+    console.log(`截图：${out}`);
   } else {
     await open(page, seed);
     const walked = await step(page, turns);

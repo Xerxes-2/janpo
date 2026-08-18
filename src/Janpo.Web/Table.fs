@@ -288,3 +288,79 @@ module Table =
     /// **局面不在里面**：它是对事件流 fold 出来的（`Replay.ofPaifu`），不存第二份。
     let paifu (roster: Roster) (table: Table) : Paifu =
         Paifu.create (Game.ruleset table.Game) (events roster table) table.Decisions table.Prompting
+
+    // ---- 回放（票 71） ----
+
+    /// 把一局的**开局局面**摆上这张牌桌（回放专用）。
+    ///
+    /// **不走 `nextKyoku`**：那一条从随机流开局，而回放的牌山是从事件流重建的
+    /// （`Replay.trace`）。除了局面本身，重置的三样与 `nextKyoku` 逐字相同：
+    /// 各座位的掩蔽流、这一局的读法、上一手。
+    let private opened (ruleset: Ruleset) (state: GameState) (table: Table) : Table = {
+        table with
+            State = state
+            Views = viewsOf ruleset state
+            Readings = []
+            Latest = None
+    }
+
+    /// 一份牌谱 → **逐帧的牌桌**（ADR-0002：回放就是对事件前缀做 fold）。
+    ///
+    /// 一帧就是「这一手落定之后的那一桌」，头一帧是第一局的开局；每开一局多一帧开局。
+    /// 页面拿它当胶片放（`TableState` 的 `Source.Replay`），**手里只拿一个帧号**。
+    ///
+    /// **推进用的是 `apply`，与 Live 逐字同一条路**：役种在宣言那一刻捞下来（`Readings`，
+    /// `GameState.horaOf` 只有那一刻答得出来）、掩蔽流跟着引擎吐出来的事件长（`Views`）、
+    /// 上一手写在 `Latest` 上——三样都不是回放这一侧另写一份，因此也漂不了。
+    ///
+    /// **它不问牌谱里那几个 `names` 是谁**：回放不需要配桌（没人要出手），
+    /// `Players` 那一格因此只是个占位的发生器——`decide` 在回放里一次也不会被调到。
+    let replay (paifu: Paifu) : Result<Table list, string> =
+        let ruleset = paifu.Ruleset
+
+        // 到这一手为止的决策记录（票 26：`Turn` 是跨局累计的手序）。
+        // **不把整份牌谱的记录摆到每一帧上**：那样第 0 帧就能看到末手的思考，
+        // 而牌桌上那几行（账单、兜底计数）读的就是它。
+        let recordedBy (turns: int) : DecisionRecord list =
+            paifu.Decisions |> List.filter (fun record -> record.Turn < turns)
+
+        let played (table: Table) (action: Action) : Table =
+            let next = apply action table
+
+            {
+                next with
+                    Decisions = recordedBy next.Turns
+            }
+
+        let kyoku (frames: Table list, table: Table) (each: ReplayKyoku) : Table list * Table =
+            let start = opened ruleset each.Opening table
+
+            ((start :: frames, start), each.Actions)
+            ||> List.fold (fun (frames, table) action ->
+                let next = played table action
+                next :: frames, next)
+
+        Replay.traceOfPaifu paifu
+        |> Result.mapError ReplayError.toDisplay
+        |> Result.bind (fun kyokus ->
+            match kyokus with
+            // 走不到：`Replay.trace` 已经拿 `ReplayError.NoKyoku` 拦住了空事件流。
+            | [] -> Error "这份牌谱里一局都没有"
+            | first :: _ ->
+                // 摆一张空桌当 fold 的起点：第一局的 `opened` 会把同一份局面再盖一遍（幂等）。
+                let blank: Table = {
+                    Game = Game.start ruleset
+                    State = first.Opening
+                    // 回放里没有选手（没人要出手），这一格只是占位。
+                    Players = Rng.ofSeed 0
+                    Views = viewsOf ruleset first.Opening
+                    Readings = []
+                    Latest = None
+                    Turns = 0
+                    Decisions = []
+                    Prompting = paifu.Prompting
+                    Fault = None
+                }
+
+                let frames, _ = (([], blank), kyokus) ||> List.fold kyoku
+                Ok(List.rev frames))

@@ -29,7 +29,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
-import { retryOnReload } from "./serve.mjs";
+import { hostPage, retryOnReload } from "./serve.mjs";
 
 /**
  * 拌进牌谱的那把 key（票 34 那把的同族）。**它是假的，且看一眼就知道是假的**——
@@ -200,7 +200,7 @@ export async function verifyShare(lane, options = {}) {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    await page.goto(`${url}/`, { waitUntil: "load" });
+    await page.goto(hostPage(url), { waitUntil: "load" });
 
     const runs = [];
     for (const [label, lengthWire] of [

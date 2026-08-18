@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { preview } from "vite";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
+import { hostPage } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -170,7 +171,7 @@ async function runTable(plan) {
     console.log(
       `模式 ${mode}：页面 ${pageOrigin}　端点 ${baseUrl}　CORS ${plan.cors ? `放行 ${pageOrigin}` : "不放行"}`,
     );
-    await page.goto(`${pageOrigin}/`, { waitUntil: "load" });
+    await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
 
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
     const readAttr = async (testId, name) => await page.getByTestId(testId).getAttribute(name);

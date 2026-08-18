@@ -25,6 +25,11 @@ let private usage =
                                  --uniform 均匀随机、--covering 跑批用的覆盖型偏好、
                                  --opinionated 有主见的那个（能和就和、听牌就立直、有役才鸣）。
                                  一个开关也不写时牌山与选手共用同一条随机流（黄金用例认的那一种）
+  janpo paifu <种子> [--no-akadora] [--hanchan] [--uniform] [--covering] [--opinionated]
+                                 与 `janpo game` 跑同一场对局，但打出一份**牌谱 JSON**
+                                 （规则集 + 事件流，无决策记录），与页面上「导出牌谱」同一个编码器。
+                                 首页那份 Demo Paifu（ADR-0003）就是它加一颗种子产出的：
+                                 换资产 = 重跑一次这条命令，不是手点导出一份神秘 JSON
   janpo decide <种子> [--seat N] [--steps N] [--no-akadora] [--god] [--sequence] [--opinionated]
                                  用给定种子开一局、让随机选手先走 --steps 手（默认 0），
                                  再把那一手的**决策包 JSON** 打出来：某座位的合法观测
@@ -89,6 +94,7 @@ yaku 的选项:
   janpo game 42 --hanchan
   janpo game 42 --covering
   janpo game 42 --opinionated
+  janpo paifu 2088 --opinionated > web/public/demo-paifu.json
   janpo golden check tests/fixtures/golden/dual-target.json
   janpo golden write tests/fixtures/golden/dual-target.json
   janpo soak 1 60
@@ -288,6 +294,57 @@ let private runGame (arguments: string list) : int =
                 printfn "juni: %s" (result.Juni |> List.map string |> String.concat " ")
                 printfn "display: %s（%s）" (GameResult.toDisplay result) (GameLength.toDisplay length)
             | None -> ()
+
+            0
+
+/// `janpo paifu <种子> [同 game 的开关]`：同一场对局，换一种输出——一份**牌谱 JSON**。
+///
+/// **首页那份 Demo Paifu 靠它可复现**（ADR-0003：Demo Paifu 是产品资产）：
+/// 换资产就是重跑一次这条命令，而不是从浏览器里手点导出一份没人说得清来历的文件。
+///
+/// **与页面导出同一个编码器**（`Paifu.encoder`），不另拼一份 JSON；
+/// 决策记录与 prompt 前置是空的——自带 bot 没有可审计的推理（票 26）。
+/// 名字照 `Bot.toWire` 那一套（`random` / `opinionated`），与页面导出的牌谱一致。
+let private runPaifu (arguments: string list) : int =
+    match parseGameArguments arguments with
+    | Error token ->
+        eprintfn
+            "paifu 只认一个整数种子与可选的 --no-akadora / --hanchan / --tonpuusen / --uniform / --covering / --opinionated，不认「%s」"
+            token
+
+        2
+    | Ok(None, _, _, _) ->
+        eprintfn "paifu 需要一个整数种子，例如: janpo paifu 2088 --opinionated"
+        2
+    | Ok(Some seed, akadora, length, bot) ->
+        let ruleset = rulesetOf akadora |> Ruleset.withLength length
+
+        let name =
+            match bot with
+            | None
+            | Some BotChoice.Uniform -> "random"
+            | Some BotChoice.Covering -> "covering"
+            | Some BotChoice.Opinionated -> "opinionated"
+
+        let played =
+            match bot with
+            | None -> Game.runRandom ruleset (Rng.ofSeed seed) |> Result.map fst
+            | Some bot ->
+                Game.run (BotChoice.player bot) (Soak.playerRng seed) (Rng.ofSeed seed) (Game.start ruleset)
+                |> Result.map (fun (game, _, _) -> game)
+
+        match played with
+        | Error error ->
+            eprintfn "%s" (KyokuError.toDisplay error)
+            1
+        | Ok game ->
+            let events =
+                StartGame(Seat.all ruleset |> List.map (fun _ -> name)) :: Game.events game
+
+            Paifu.create ruleset events [] Prompting.empty
+            |> Paifu.encoder
+            |> Encode.toString 0
+            |> printfn "%s"
 
             0
 
@@ -910,6 +967,7 @@ let main argv =
     | "deal" :: arguments -> runDeal arguments
     | "kyoku" :: arguments -> runKyoku arguments
     | "game" :: arguments -> runGame arguments
+    | "paifu" :: arguments -> runPaifu arguments
     | "decide" :: arguments -> runDecide arguments
     | "soak" :: arguments -> runSoak arguments
     | "golden" :: arguments -> runGolden arguments

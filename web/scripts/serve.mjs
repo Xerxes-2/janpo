@@ -56,6 +56,20 @@ export function pageUrl(server) {
   return local.replace(/\/$/, "");
 }
 
+/**
+ * **主持人那一页**（票 71）。`origin` 是 `pageUrl(server)` 或 `lane.previewUrl()`。
+ *
+ * `/` 从此是首页：Demo Paifu **自动播**，且没有配桌与模型面板。
+ * 因此**要点、要读牌桌的闸门一律开这一页**：它默认暂停（`Playback.initial`），
+ * 是最安静的一页；留在 `/` 上会被自动播放与资产拉取干扰。
+ *
+ * 只有两道例外，各有各的理由：`verify-tracer` 开 `/`（它量的就是「首页里没有
+ * 开发向内容」）与 `verify-home`（它量的就是首页本身）。
+ */
+export function hostPage(origin) {
+  return `${origin}/?table=1`;
+}
+
 /** `vite preview`：托管打包后的 `dist/`（曳光弹与 LLM 座位那两道走它）。 */
 export async function startPreview(root, options = {}) {
   const port = wantedPort();

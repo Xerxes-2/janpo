@@ -6,14 +6,14 @@
 // 因此「这边红那边绿」只可能是 Fable 与 dotnet 编出来的语义不一样。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:golden [-- <用例文件>]`
-// 它也是 `verify-browser.mjs` 里的一道（九道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
-import { retryOnReload } from "./serve.mjs";
+import { hostPage, retryOnReload } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
@@ -38,7 +38,7 @@ async function runInBrowser(lane, casesText) {
       if (message.type() === "error") problems.push(`[console.error] ${message.text()}`);
     });
 
-    await page.goto(`${url}/`, { waitUntil: "load" });
+    await page.goto(hostPage(url), { waitUntil: "load" });
 
     const payload = await retryOnReload(() =>
       page.evaluate(async (text) => {

@@ -15,7 +15,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
-import { pageUrl, startPreview } from "./serve.mjs";
+import { hostPage, pageUrl, startPreview } from "./serve.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -86,7 +86,7 @@ try {
     [seat, model, apiKey, tier],
   );
 
-  await page.goto(`${pageUrl(server)}/`, { waitUntil: "load" });
+  await page.goto(hostPage(pageUrl(server)), { waitUntil: "load" });
 
   if (seed !== null) {
     await page.getByTestId("table-seed").fill(String(seed));

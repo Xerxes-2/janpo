@@ -38,12 +38,17 @@ cd web
 pnpm install
 pnpm run dev       # Fable watch + Vite dev server（HMR），改 .fs 约 6s 后页面更新
 pnpm run build     # Fable 编译 + Vite 打包 → web/dist（可静态托管）
-pnpm run verify:browser # 浏览器里那七趟（CI 跑的就是它）：共用一个浏览器与一台服务器，红了会告诉你单跑哪一趟
+pnpm run verify:browser # 浏览器里那十趟（CI 跑的就是它）：共用一个浏览器与一台服务器，红了会告诉你单跑哪一趟
 pnpm run verify    # 无头验收：浏览器内跑同种子的一局 / 一整场，与 CLI 逐项对照
+pnpm run verify:home    # 无头验收：首页（`/`）就是一局回放——牌桌在动、没有配桌控件、有一条去 `?table=1` 的路
 pnpm run verify:golden  # 无头验收：浏览器内跑黄金用例，与 tests/fixtures/golden/ 逐字段逐行对照
 pnpm run verify:export  # 无头验收：浏览器内导出牌谱，把下下来的字节 fold 回去对照
+pnpm run verify:share   # 无头验收：URL 分享的载荷往返、逐位置腐蚀、审计三样一个都不上路
 pnpm run verify:invariants  # prompt 的语义不变量：本机扫一批真实对局，零网络请求
 pnpm run verify:redaction   # 无头验收：会回显 key 的本机假端点跑一手，牌谱里仍然没有它
+
+除 `verify:home` 与 `verify`（它开三个地址）之外，浏览器闸门开的都是 `?table=1`——
+**首页从此自动播** Demo 回放，而要点、要读牌桌的闸门靠的是「默认暂停」那一页（票 71）。
 pnpm run check     # Biome（TS/JS 的格式 + lint）
 pnpm run typecheck # tsc --noEmit：只管 Agent 层与它的用例（Fable 的输出不在 include 里）
 pnpm run test      # Agent 层的确定性用例（node --test，回放录制的响应，**不调真实 API**）
@@ -84,12 +89,24 @@ node scripts/verify-custom-endpoint.mjs --mode blocked        # 不放行：页�
 
 结论与排错表在 [`host/custom-endpoint.md`](host/custom-endpoint.md)。
 
-README 里那张牌桌截图由 `web/scripts/shoot-table.mjs` 重跑得出（它**不进 CI**）：
+README 里那两张截图由 `web/scripts/shoot-table.mjs` 重跑得出（它**不进 CI**）。
+**两张图两个地址**（票 71）：牌桌那张拍的是主持人那一页（`?table=1`，带配桌面板），
+首页那张拍的是 `/`（Demo 回放，自动播）：
 
 ```sh
-cd web && pnpm run fable && node scripts/shoot-table.mjs   # → docs/images/table.png
+cd web && pnpm run fable && node scripts/shoot-table.mjs          # → docs/images/table.png（?table=1）
+cd web && pnpm run fable && node scripts/shoot-table.mjs --home   # → docs/images/home.png（/）
 node scripts/shoot-table.mjs --scan 8 --seed 340 --turns 44   # 挑种子：看各种子在那一手的河与副露
 ```
+
+首页那份 Demo 牌谱（`web/public/demo-paifu.json`，ADR-0003 的**产品资产**）由 CLI 产出，
+**一条命令加一颗种子**就复现得出来，换资产就是重跑它：
+
+```sh
+dotnet run --project src/Janpo.Cli -c Release -- paifu 3 --opinionated > web/public/demo-paifu.json
+```
+
+它得过 `HomePageTests` 那四条验收（东风战、有立直有副露、以和了终、体积在预算内）。
 
 无头脚本都需要一个 Chrome/Chromium：优先 `$JANPO_CHROME`，其次 playwright 自带的，
 最后 `/usr/bin/google-chrome-stable` 一类系统路径。

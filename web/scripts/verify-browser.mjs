@@ -1,16 +1,22 @@
-// 浏览器里那**九趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 九趟各开自己的 page / context。
+// 十趟各开自己的 page / context。
 //
-//   1 曳光弹对拍（顺带默认视图与副露来源，票 19/35/37/38）
-//   2 牌桌上人看得见的八项 + 副露的位置就是来源（票 44/51）
-//   3 浏览器内黄金用例（票 21）
-//   4 牌谱导出走 40 手（票 26/34）
-//   5 牌谱导出打完一整场（票 39）
-//   6 **反向自证**：拌了 key 的导出物必须让第 4 趟那条断言当场红（票 34）
-//   7 回显 key 的自建网关：报错原文进牌谱前必须已打码（票 36）
-//   8 URL 分享的载荷：真往返 + 逐位置腐蚀 + 审计三样一个都不上路（票 77）
-//   9 **反向自证**：抹不干净的载荷必须让第 8 趟那条断言当场红（票 77）
+//   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
+//   2 首页就是一局回放：牌桌在动、没有配桌控件、有一条去 `?table=1` 的路（票 71）
+//   3 牌桌上人看得见的八项 + 副露的位置就是来源（票 44/51）
+//   4 浏览器内黄金用例（票 21）
+//   5 牌谱导出走 40 手（票 26/34）
+//   6 牌谱导出打完一整场（票 39）
+//   7 **反向自证**：拌了 key 的导出物必须让第 5 趟那条断言当场红（票 34）
+//   8 回显 key 的自建网关：报错原文进牌谱前必须已打码（票 36）
+//   9 URL 分享的载荷：真往返 + 逐位置腐蚀 + 审计三样一个都不上路（票 77）
+//  10 **反向自证**：抹不干净的载荷必须让第 9 趟那条断言当场红（票 77）
+//
+// **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
+// 其余八趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
+// 理由写在它自己的文件头上。
 //
 // **一趟都没少、一条断言都没拆**：每一趟调的就是 `verify-*.mjs` 里那个同名函数，
 // 单跑（`pnpm run verify:board` 等）与合并跑跑的是**同一段代码**，只是跑道不同。
@@ -23,6 +29,7 @@ import { failure, openLane, printFailures } from "./browser-lane.mjs";
 import { verifyBoard } from "./verify-board.mjs";
 import { verifyExport } from "./verify-export.mjs";
 import { verifyGolden } from "./verify-golden.mjs";
+import { verifyHome } from "./verify-home.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
 import { verifyShare } from "./verify-share.mjs";
 import { verifyTracer } from "./verify-tracer.mjs";
@@ -65,12 +72,21 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 九趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
-    name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验默认视图：没有曳光弹、有回仓库那一行、副露看得出来源）",
+    name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
     how: "node scripts/verify-tracer.mjs",
     run: (lane) => verifyTracer(lane),
+  },
+  // 票 71：访客打开 `/` 什么都不用配，第一眼就是一桌牌在走（ADR-0003 的 Demo Paifu）。
+  // 四条断言：牌桌在动（隔一会儿采两次，手数不同）、没有配桌控件、
+  // 有一条去 `?table=1` 的路（真点过去，且那一页默认暂停）、页脚照旧（票 37）。
+  // 它顺带是「资产用 fetch 拉、不打进 bundle」那条路径的唯一无头证据。
+  {
+    name: "首页就是一局回放：牌桌在动、没有配桌控件、有一条去 `?table=1` 的路",
+    how: "node scripts/verify-home.mjs",
+    run: (lane) => verifyHome(lane),
   },
   // 票 44：牌桌上**人能看见的八项**各一条断言，外加方位（切了视角布局要跟着转）。
   // 它把其余座位换成「有主见」那一档（票 42）才走得到立直与供托：均匀随机几乎不立直。
@@ -104,7 +120,7 @@ const gates = [
     how: "node scripts/verify-export.mjs --to-end --seed 447",
     run: (lane) => verifyExport(lane, { toEnd: true, seed: "447" }),
   },
-  // 票 34 的反向自证：拿同一份导出物拌一把 key 进去，上面那条断言**必须**当场红。
+  // 票 34 的反向自证（前一趟是第 5 趟）：拿同一份导出物拌一把 key 进去，上面那条断言**必须**当场红。
   // 没这一趟的话，「代码里有那行断言」与「那行断言真的拦得住东西」就又分不开了
   // （立这张票的起因就是上一次只核到了前者）。手数压到 12：它只需要导出得成。
   {
@@ -129,7 +145,7 @@ const gates = [
     how: "node scripts/verify-share.mjs",
     run: (lane) => verifyShare(lane),
   },
-  // 票 77 的反向自证：把「载荷里没有审计那三样」按红一次。理由与第 6 趟逐字相同——
+  // 票 77 的反向自证：把「载荷里没有审计那三样」按红一次。理由与第 7 趟逐字相同——
   // 「代码里有那三行断言」与「那三行断言真的拦得住东西」是两件事。
   {
     name: "反向自证：抹不干净的载荷必须让那道闸门变红",
@@ -155,7 +171,7 @@ try {
 }
 
 console.log("");
-console.log("九趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

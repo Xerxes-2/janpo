@@ -17,9 +17,20 @@
     <Compile Include="PlaybackTests.fs" />
     <Compile Include="TableTests.fs" />
     <Compile Include="BoardTests.fs" />
+    <!-- 一份牌谱摆成逐帧的牌桌（票 71）：首页 Demo 回放的地基。 -->
+    <Compile Include="ReplayTableTests.fs" />
     <Compile Include="AgentTests.fs" />
     <Compile Include="TablePageTests.fs" />
+    <!-- 首页那一屏（票 71）：那份资产够不够格当门面，以及拉 / 播 / 停 / 再放那个状态机。 -->
+    <Compile Include="HomePageTests.fs" />
     <Compile Include="PaifuExportTests.fs" />
+  </ItemGroup>
+
+  <!-- 首页那份 Demo Paifu（ADR-0003 的**产品资产**，不是测试固件）。拷进输出目录是为了
+       `HomePageTests` 能对它验收：票 79 换成真的四席对局时，不合格当场红。
+       产出它的命令写在 CLI 的 usage 里（`janpo paifu`）与报告 71 里。 -->
+  <ItemGroup>
+    <Content Include="../../web/public/demo-paifu.json" Link="demo-paifu.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

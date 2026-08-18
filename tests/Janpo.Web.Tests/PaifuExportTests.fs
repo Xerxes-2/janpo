@@ -37,8 +37,14 @@ module PaifuExportTests =
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 
+    /// 这一桌的 Live 那一半（票 71）：导出牌谱只属于 `?table=1` 那一页。
+    let private liveOf (model: TableModel) : LiveTable =
+        match TablePage.live model with
+        | Some live -> live
+        | None -> failwith "这几条用例跑的是 `?table=1` 那一页，它必然是 Live"
+
     let private tableOf (model: TableModel) : Table =
-        match model.Table with
+        match (liveOf model).Table with
         | Ok table -> table
         | Error error -> failwith $"这一桌应当开得起来，却得到「{error}」"
 
@@ -91,7 +97,7 @@ module PaifuExportTests =
             if left <= 0 then
                 failwith "这一场在预算内没打完"
             else
-                match model.Awaiting with
+                match (liveOf model).Awaiting with
                 | Some awaiting -> loop (left - 1) (model |> step (Answered(awaiting.Ticket, answer)))
                 | None ->
                     let table = tableOf model
@@ -106,7 +112,9 @@ module PaifuExportTests =
         loop 4000 model
 
     let private paifuOf (model: TableModel) : Paifu =
-        Table.paifu (TablePage.rosterOf model) (tableOf model)
+        match TablePage.rosterOf model with
+        | Some roster -> Table.paifu roster (tableOf model)
+        | None -> failwith "Live 那一桌必然有配桌"
 
     let private roundTrip (paifu: Paifu) : Paifu =
         match Paifu.encoder paifu |> Encode.toString 0 |> Decode.fromString Paifu.decoder with
@@ -166,7 +174,7 @@ module PaifuExportTests =
             if left <= 0 then
                 checked'
             else
-                match model.Awaiting with
+                match (liveOf model).Awaiting with
                 | None -> loop (left - 1) checked' (model |> step Advanced)
                 | Some awaiting ->
                     let played = model |> step (Answered(awaiting.Ticket, spoke))
@@ -188,7 +196,7 @@ module PaifuExportTests =
         let asked = llmTable () |> step Advanced |> step Advanced
 
         let awaiting =
-            match asked.Awaiting with
+            match (liveOf asked).Awaiting with
             | Some awaiting -> awaiting
             | None -> failwith "座位 1 这一手应当在等回执"
 
@@ -251,7 +259,7 @@ module PaifuExportTests =
             if left <= 0 then
                 model
             else
-                match model.Awaiting with
+                match (liveOf model).Awaiting with
                 | Some awaiting -> advance (left - 1) (model |> step (Answered(awaiting.Ticket, spoke)))
                 | None -> advance (left - 1) (model |> step Advanced)
 

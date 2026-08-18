@@ -6,8 +6,13 @@ open Janpo
 /// Agent 层那两行状态线（票 70 从 `TablePage.fs` 拆出来的第四块）：
 /// 此刻在等谁回话、这一桌兜底代打了几手、累计的 token 账单。
 ///
-/// **它与 `AgentStatus` 那个类型是两头**：类型在 `TableState`（模型的一格），
+/// **它与 `AgentStatus` 那个类型是两头**：类型在 `TableState`（`LiveTable` 的一格），
 /// 这里只是把它渲染成牌桌顶上那两行。牌桌本体在 `TableBoard`，那边把这两行接在最前面。
+///
+/// **头一行只属于 Live**（票 71）：回放里没有在飞的问话，写一句「四家都是……选手」
+/// 就是句错话——那一局的选手是**当时**坐那一桌的人，写在牌谱里。
+/// 因此它收的是 `LiveTable` 而不是 `TableModel`：类型就拦住了这件事。
+/// 后一行（token 账单）两种来源共用：它数的是牌谱里的决策记录，回放一份 LLM 牌谱时同样算得出来。
 [<RequireQualifiedAccess>]
 module AgentLine =
 
@@ -27,10 +32,10 @@ module AgentLine =
     /// 没有模型坐席时那一句要说清楚**是哪一种自带 bot**（票 42 之后就不只一种了）：
     /// 杆子拨到「有主见」时牌桌上会出立直与供托，而行里还写着「四家都是随机选手」就是句错话。
     /// 措辞只有一份真源（`Bot.toDisplay`，与面板上那个控件同字）。
-    let internal agentLine (model: TableModel) (table: Table) =
+    let internal agentLine (live: LiveTable) (table: Table) =
         let state, text =
-            match model.Agent with
-            | AgentStatus.Idle when Option.isNone model.LlmAt -> "idle", $"四家都是{Bot.toDisplay model.Bot}的选手"
+            match live.Agent with
+            | AgentStatus.Idle when Option.isNone live.LlmAt -> "idle", $"四家都是{Bot.toDisplay live.Bot}的选手"
             | AgentStatus.Idle -> "idle", "模型座位已就位，还没轮到它"
             | AgentStatus.Asking seat -> "asking", $"正在等座位 {Seat.index seat} 的模型回话……"
             | AgentStatus.Spoke(seat, reason, latency) ->
@@ -52,7 +57,7 @@ module AgentLine =
             prop.testId "table-agent"
             prop.custom ("data-agent", state)
             // 坐着的是哪种自带 bot（票 44）：上面那句中文给人看，这一条给闸门看。
-            prop.custom ("data-bot", Bot.toWire model.Bot)
+            prop.custom ("data-bot", Bot.toWire live.Bot)
             prop.custom ("data-fallbacks", string fallbacks)
             prop.text (text + tally)
         ]

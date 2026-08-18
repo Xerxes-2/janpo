@@ -64,27 +64,22 @@ type AgentStatus =
     /// 上一次是兜底代打的。**粘着不掉**，直到模型又能好好说话为止。
     | Troubled of seat: Seat * reason: string
 
-/// 牌桌页面的全部状态。**没有第二份牌局状态**（ADR-0002）：牌局在 `Table` 里，
-/// 而 `Table` 里的局面是引擎的那一份；页面自己只多种子输入框的文本、播放控制、
-/// 看哪一份投影，以及配桌与 Agent 层的那几样。
-type TableModel = {
-    /// 这一桌的规则集。M1 只跑四麻默认预设，配桌是后面的票。
-    Ruleset: Ruleset
+/// **Live**：主持人自己开的那一桌（`?table=1`）——种子、配桌与 Agent 层全在这里。
+///
+/// **没有第二份牌局状态**（ADR-0002）：牌局在 `Table` 里，而 `Table` 里的局面是引擎的那一份；
+/// 这里只多种子输入框的文本、配桌与 Agent 层的那几样。
+///
+/// 播放控制、视角与危险度**不在这里**（票 71）：它们与「牌从哪来」无关，
+/// 两种来源共用同一份实现，因此留在 `TableModel` 上。
+type LiveTable = {
     /// 输入框里的文本。**没解析过**——解析在「重开」那一步做，因此打字不会重开一桌。
     SeedText: string
     /// 牌桌；开不了局时是中文错误文案。
     Table: Result<Table, string>
-    /// 播放控制。
-    Playback: Playback
-    /// 看哪一份投影。
-    Viewpoint: Viewpoint
-    /// 牌桌上要不要把危险度排序显示出来（票 25）。**默认关**：
-    /// 它是围观者想看的东西，不是牌桌本来就该摆着的。
-    ShowDanger: bool
     /// 哪个座位交给 LLM；None = 四家都是自带 bot。
     LlmAt: Seat option
     /// 不是 LLM 的那几家由哪种自带 bot 坐（票 42）。**默认均匀随机**：
-    /// 默认视图上那几道闸门（曳光弹对拍、牌谱导出、副露来源）量的都是它跑出来的那几局。
+    /// `?table=1` 上那几道闸门（牌桌八项、牌谱导出、副露来源）量的都是它跑出来的那几局。
     Bot: Bot
     /// 那个座位的配置（也就是配置面板里填的那份，同时落在 localStorage）。
     ///
@@ -103,6 +98,61 @@ type TableModel = {
     Ticket: int
     /// Agent 层的状态线。
     Agent: AgentStatus
+}
+
+/// **回放**（CONTEXT.md 的 `Replay`）：一份牌谱 fold 出来的逐帧牌桌，加「播到第几帧」。
+///
+/// **三段各是一个 case**：页面上要说得出「在拉」「拉不动（原因）」「在播」，
+/// 混成一个带 option 的记录就分不清了（判据 12：拒绝理由各有各的 case）。
+///
+/// **逐帧一次 fold 好**而不是边播边算：回放就是对前缀做 fold（ADR-0002），
+/// 帧是值之后「播一手」就是 `cursor + 1`（纯的、测得了的），
+/// 「从头再放」就是 `cursor := 0`。
+[<RequireQualifiedAccess>]
+type ReplayTable =
+    /// 还在拉那份牌谱（首页刚打开那一瞬）。
+    | Loading
+    /// 拉不动 / 读不动 / 回放不动：一句中文原因。**不许白屏**。
+    | Failed of reason: string
+    /// fold 好了：逐帧的牌桌与播到第几帧。
+    | Ready of frames: Table list * cursor: int
+
+/// **这一桌的牌从哪来**（票 71）。地址上的两页就是这两个 case（`Route.Landing`）。
+///
+/// **播放控制、视角、危险度与牌桌和结算的渲染都在联合之外**：两种来源共用一份实现。
+/// 写成两个 Model 各带一套播放与视角就是做错了——那两套会各自漂。
+[<RequireQualifiedAccess>]
+type Source =
+    /// `?table=1`：主持人在自己浏览器里推的那一桌（ADR-0003：只有他推得动对局）。
+    | Live of live: LiveTable
+    /// `/`：随应用分发的 Demo Paifu 回放（ADR-0003：访客的第一眼）。
+    | Replay of replay: ReplayTable
+
+/// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**，因此牌桌与结算的渲染只有一份。
+[<RequireQualifiedAccess>]
+type Shown =
+    /// 还在拉那份 Demo 牌谱（只可能出现在首页）。
+    | Loading
+    /// 开不了局 / 牌谱拉不动：一句中文。
+    | Fault of reason: string
+    /// 这一桌。
+    | Board of table: Table
+
+/// 牌桌页面的全部状态。**一页一 Model，模式是联合类型**（票 71）：
+/// 「牌从哪来」在 `Source` 里分岔，其余四格两种来源共用。
+type TableModel = {
+    /// 这一桌的规则集。Live 取默认预设，回放**取牌谱自带的那一份**
+    /// （ADR-0004：规则集是一等输入，回放照的是**这一场**的规则）。
+    Ruleset: Ruleset
+    /// 牌从哪来。
+    Source: Source
+    /// 播放控制。
+    Playback: Playback
+    /// 看哪一份投影。
+    Viewpoint: Viewpoint
+    /// 牌桌上要不要把危险度排序显示出来（票 25）。**默认关**：
+    /// 它是围观者想看的东西，不是牌桌本来就该摆着的。
+    ShowDanger: bool
 }
 
 /// 牌桌上能发生的事。**一步一 Msg**：`Advanced` 与 `Ticked` 各推进一手，
@@ -134,6 +184,9 @@ type TableMsg =
     | LlmEdited of field: LlmField * value: string
     /// 把这一桌到此刻为止的牌谱存成一个 JSON 文件（票 26）。
     | Exported
+    /// 首页那份 Demo Paifu 拉回来了（票 71）。**它不会不来**：拉不动也是一个值
+    /// （`Error` 带着一句中文原因）——首页因此永不白屏。
+    | DemoLoaded of paifu: Result<Paifu, string>
     /// Agent 层的回执回来了。`ticket` 不是在等的那一张就丢掉（见 `Awaiting`）。
     ///
     /// **它不会不来**：超时与 provider 报错在 Agent 层都是值，最后也会变成一条回执
@@ -152,13 +205,20 @@ module TableState =
 
     // ---- MVU ----
 
-    /// 页面初次打开时摆的那一桌。挑它两个理由：东 1 局里既有碰吃也有杠（副露的形态看得到），
+    /// `?table=1` 初次打开时摆的那一桌。挑它两个理由：东 1 局里既有碰吃也有杠（副露的形态看得到），
     /// 且以和了终（结算面板才有役种与番符可看）。挑种子的探针见报告 22。
     ///
     /// **刻意不用曳光弹那个种子**：`?dev=1` 把曳光弹挂出来时，它把原始 mjai 事件
     /// 打在同一张文档里，而 `start_kyoku` 带着四家配牌——两边同种子的话，
     /// 牌桌遮起来的那几家手牌就在下面躺着。
     let private defaultSeed = 2088
+
+    /// 首页那份 Demo 回放**自动播的档速**（票 71）。
+    ///
+    /// **不是 1×**：现在那份资产是 256 帧（东风战四局、252 手），
+    /// `Speed.X1` 的 600ms 一手要播 **2 分 34 秒**，2× 是 **1 分 17 秒**
+    /// ——后者既跟得上，也不至于让访客等到不耐烦。人一按倍速就照他的走。
+    let private demoSpeed = Speed.X2
 
     let private parseSeed (text: string) : Result<int, string> =
         match System.Int32.TryParse(text.Trim()) with
@@ -184,37 +244,96 @@ module TableState =
     /// 副作用一律由 Cmd 发——顺带让页面逻辑的用例在 dotnet 上跑得起来（那边没有 localStorage）。
     let private save (write: unit -> unit) : Cmd<TableMsg> = Cmd.ofEffect (fun _ -> write ())
 
+    // ---- 两种来源共用的拆解 ----
+
+    /// 这一桌是 Live 吗；回放时是 None。**只有这一处从联合里取 Live**，
+    /// 视图与页面逻辑的用例读的都是它。
+    let live (model: TableModel) : LiveTable option =
+        match model.Source with
+        | Source.Live live -> Some live
+        | Source.Replay _ -> None
+
+    /// 只对 Live 那一半起作用的一条消息。**回放那一侧原样返回**：
+    /// 没有事情发生，不是错误（回放页上根本没有那几个按钮）。
+    let private onLive (change: Ruleset -> LiveTable -> LiveTable * Cmd<TableMsg>) (model: TableModel) =
+        match model.Source with
+        | Source.Replay _ -> model, Cmd.none
+        | Source.Live live ->
+            let next, cmd = change model.Ruleset live
+            { model with Source = Source.Live next }, cmd
+
+    /// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**（票 71）：
+    /// 回放取的是第 `cursor` 帧，Live 取的是正在打的那一桌，往下的渲染只有一份。
+    let shown (model: TableModel) : Shown =
+        match model.Source with
+        | Source.Live live ->
+            match live.Table with
+            | Ok table -> Shown.Board table
+            | Error message -> Shown.Fault message
+        | Source.Replay ReplayTable.Loading -> Shown.Loading
+        | Source.Replay(ReplayTable.Failed reason) -> Shown.Fault reason
+        | Source.Replay(ReplayTable.Ready(frames, cursor)) ->
+            match List.tryItem cursor frames with
+            | Some table -> Shown.Board table
+            // 走不到：帧号只由 `replayTick` 与「从头再放」动，两处都夹在 [0, 末帧] 之间。
+            | None -> Shown.Fault $"回放的第 {cursor} 帧不在这份牌谱里（共 {List.length frames} 帧）"
+
+    /// 还推得动吗。Live 是「这一局没终、也没出错」，回放是「还有没播到的帧」。
+    /// 播放与单步那两个按钮灰不灰读的就是它。
+    ///
+    /// **公开的**：视图与页面逻辑的用例读同一个判据（同 `renderingPending`）。
+    let canAdvance (model: TableModel) : bool =
+        match model.Source with
+        | Source.Live live ->
+            match live.Table with
+            | Ok table -> Table.pending table |> Option.isSome
+            | Error _ -> false
+        | Source.Replay(ReplayTable.Ready(frames, cursor)) -> cursor < List.length frames - 1
+        | Source.Replay ReplayTable.Loading
+        | Source.Replay(ReplayTable.Failed _) -> false
+
+    // ---- Live ----
+
     /// 续一记定时器——**除非正在等回执**。等着的时候定时器只会把牌桌空转一遍；
     /// 那一手由 `Answered` 接着开动。
     let private tick (model: TableModel) (playback: Playback) : Cmd<TableMsg> =
-        if Option.isSome model.Awaiting then
-            Cmd.none
-        else
-            schedule playback
+        match live model |> Option.bind (fun live -> live.Awaiting) with
+        | Some _ -> Cmd.none
+        | None -> schedule playback
 
     /// 这一手真正发出去的那份座位配置（票 46）：人格与模板取**本局定型的那一版**，
     /// 其余字段取面板现在的值。还没定型（这一局一次都没问过）时就是面板上那份。
-    let private effective (model: TableModel) : LlmSeat =
-        match model.Pinned with
-        | None -> model.Llm
-        | Some pinned -> model.Llm |> Rendering.applyTo pinned
+    let private effective (live: LiveTable) : LlmSeat =
+        match live.Pinned with
+        | None -> live.Llm
+        | Some pinned -> live.Llm |> Rendering.applyTo pinned
 
     /// 这一桌的配桌：一席交给 LLM（选了的话），其余交给选中的那种自带 bot。
     /// **推导出来而不存下来**：配置只有 `Bot` / `LlmAt` / `Llm` 这一份，不会与第二份对不上。
+    let private rosterFor (ruleset: Ruleset) (live: LiveTable) : Roster =
+        Roster.withLlm ruleset live.Bot live.LlmAt (effective live)
+
+    /// 这一桌的配桌（谁坐哪里）；**回放没有配桌**，那时是 None。
+    ///
+    /// 回放里没人要出手（动作全在牌谱里），编一份配桌出来只会被人当真——
+    /// 牌谱开头那条 `start_kyoku` 前面的 `names` 是**录下来的**，不是这一桌推导出来的。
     ///
     /// **公开的**：页面逻辑的用例要问「这一桌到底谁坐哪里」，在用例里拄一份同样的推导
     /// 只会与这里漂（票 42 前它真的漂过一份，在 `PaifuExportTests`）。
-    let rosterOf (model: TableModel) : Roster =
-        Roster.withLlm model.Ruleset model.Bot model.LlmAt (effective model)
+    let rosterOf (model: TableModel) : Roster option =
+        live model |> Option.map (rosterFor model.Ruleset)
 
     /// 面板上那两格改过了、但要等下一局才发得出去吗（票 46）。
     ///
     /// **它就是页面上那句「下一局生效」的判据**：不锁那两格，但也绝不静默地半局换掉。
     /// **公开的**：视图与页面逻辑的用例读同一个判据，拄一份同样的推导只会漂。
     let renderingPending (model: TableModel) : bool =
-        match model.Pinned with
+        match live model with
         | None -> false
-        | Some pinned -> pinned <> Rendering.ofSeat model.Llm
+        | Some live ->
+            match live.Pinned with
+            | None -> false
+            | Some pinned -> pinned <> Rendering.ofSeat live.Llm
 
     /// 导出文件的名字。**种子只有解析得出来才进文件名**：输入框里是人随手填的文本，
     /// 原样拼进文件名会把斜杠之类的东西带进去。
@@ -243,25 +362,25 @@ module TableState =
 
     /// 推进一手。**这就是驱动循环的一步**：问该出手那家要一个动作。
     /// 随机座位当场落子；LLM 座位发一个请求出去，这一手到 `Answered` 才落子。
-    let private step (model: TableModel) : TableModel * Cmd<TableMsg> =
-        match model.Awaiting, model.Table with
+    let private step (ruleset: Ruleset) (live: LiveTable) : LiveTable * Cmd<TableMsg> =
+        match live.Awaiting, live.Table with
         // 上一次问话还没回来：不再问第二次（同一手会有两个请求在飞，而只有一个算数）。
-        | Some _, _ -> model, Cmd.none
-        | None, Error _ -> model, Cmd.none
+        | Some _, _ -> live, Cmd.none
+        | None, Error _ -> live, Cmd.none
         | None, Ok table ->
-            match Table.decide (rosterOf model) table with
-            | None -> model, Cmd.none
+            match Table.decide (rosterFor ruleset live) table with
+            | None -> live, Cmd.none
             | Some(Demand.Ready(action, players)) ->
                 {
-                    model with
+                    live with
                         Table = Ok(Table.apply action { table with Players = players })
                 },
                 Cmd.none
             | Some(Demand.Asked(package, config)) ->
-                let ticket = model.Ticket + 1
+                let ticket = live.Ticket + 1
 
                 {
-                    model with
+                    live with
                         Ticket = ticket
                         // 这一局的头一次问话把人格与模板定住（票 46）：之后再改只落到面板，
                         // 本局发出去的字节不再变。已经定型的局里重盖同一份，无影响。
@@ -280,22 +399,15 @@ module TableState =
                     RetryLimit = Agent.retryLimit
                 }
 
-    /// 还推得动吗（这一局没终、也没出错）。
-    let internal canAdvance (model: TableModel) : bool =
-        match model.Table with
-        | Ok table -> Table.pending table |> Option.isSome
-        | Error _ -> false
-
     /// 落完一手之后：接着播还是停下来。
     ///
     /// **等回执的那段不续定时器**（但仍然是 `Playing`）：定时器只会把牌桌空转一遍，
     /// 真正把它接着开动的是那条 `Answered`。一局终了也停下来：结算面板正摆在那里。
     let private resume (cmd: Cmd<TableMsg>) (model: TableModel) : TableModel * Cmd<TableMsg> =
-        if Option.isSome model.Awaiting then
-            model, cmd
-        elif canAdvance model then
-            model, Cmd.batch [ cmd; schedule model.Playback ]
-        else
+        match live model |> Option.bind (fun live -> live.Awaiting) with
+        | Some _ -> model, cmd
+        | None when canAdvance model -> model, Cmd.batch [ cmd; schedule model.Playback ]
+        | None ->
             {
                 model with
                     Playback = Playback.pause model.Playback
@@ -362,7 +474,74 @@ module TableState =
         | None -> played, AgentStatus.Spoke(seat, answer.Reason, answer.LatencyMs)
         | Some reason -> played, AgentStatus.Troubled(seat, reason)
 
-    /// 初次摆的那一桌，**配置从外面给**。拆出来是为了它是纯的：
+    // ---- 回放（票 71） ----
+
+    /// 播一帧：帧号 +1，**播到末帧就停在那儿**（结算面板与终局精算正摆在上面）。
+    ///
+    /// **它不 fold、不判规则**：帧早在 `DemoLoaded` 那一刻一次 fold 好了（`Table.replay`），
+    /// 这里只动一个整数。时间轴（拖动与逐事件步进）是票 75 的活，本票只顺着播。
+    let private replayTick (frames: Table list) (cursor: int) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        let last = List.length frames - 1
+
+        if cursor >= last then
+            {
+                model with
+                    Playback = Playback.pause model.Playback
+            },
+            Cmd.none
+        else
+            let played = {
+                model with
+                    Source = Source.Replay(ReplayTable.Ready(frames, cursor + 1))
+            }
+
+            if cursor + 1 >= last then
+                {
+                    played with
+                        Playback = Playback.pause played.Playback
+                },
+                Cmd.none
+            else
+                played, schedule played.Playback
+
+    /// 那份 Demo 牌谱拉回来之后：fold 成逐帧的牌桌，换上牌谱自己的规则集，**当场开播**。
+    ///
+    /// 拉不动、读不动、回放不动三种失法各留一句中文（`ReplayTable.Failed`）：
+    /// 首页不许白屏，人得知道是站点的资产没部署全还是那份牌谱太新／太旧。
+    let private demoLoaded (paifu: Result<Paifu, string>) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        let failed (reason: string) =
+            {
+                model with
+                    Source = Source.Replay(ReplayTable.Failed reason)
+            },
+            Cmd.none
+
+        match paifu with
+        | Error reason -> failed reason
+        | Ok paifu ->
+            match Table.replay paifu with
+            | Error reason -> failed $"Demo 牌谱回放不动：{reason}"
+            | Ok frames ->
+                let playback = Playback.playing demoSpeed
+
+                {
+                    model with
+                        Ruleset = paifu.Ruleset
+                        Source = Source.Replay(ReplayTable.Ready(frames, 0))
+                        Playback = playback
+                },
+                schedule playback
+
+    /// 去拉那份 Demo 牌谱。**副作用一律由 Cmd 发**（同 `askCmd`）：
+    /// 效果体只在浏览器里执行，dotnet 侧只把它编出来、不跑。
+    let private demoCmd: Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let loaded (paifu: Result<Paifu, string>) = dispatch (DemoLoaded paifu)
+            (Demo.paifu ()).``then`` loaded |> ignore)
+
+    // ---- 入口 ----
+
+    /// `?table=1` 初次摆的那一桌，**配置从外面给**。拆出来是为了它是纯的：
     /// 读 localStorage 在 `init` 那一层，因此页面逻辑的用例（dotnet 侧）用得上这个入口。
     let initial (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> =
         let ruleset = Ruleset.yonma
@@ -370,49 +549,91 @@ module TableState =
 
         {
             Ruleset = ruleset
-            SeedText = seedText
-            Table = openTable (Roster.withLlm ruleset Bot.Uniform llmAt config) seedText
+            Source =
+                Source.Live {
+                    SeedText = seedText
+                    Table = openTable (Roster.withLlm ruleset Bot.Uniform llmAt config) seedText
+                    // 自带 bot 默认均匀随机（票 42）：它是黄金用例与闸门的基准。
+                    Bot = Bot.Uniform
+                    LlmAt = llmAt
+                    Llm = config
+                    // 还没问过话：这一局的人格与模板还改得动（票 46）。
+                    Pinned = None
+                    Awaiting = None
+                    Ticket = 0
+                    Agent = AgentStatus.Idle
+                }
+            // **默认暂停**（`Playback.initial`）：`?table=1` 是最安静的一页，
+            // 要点、要读牌桌的那几道无头闸门全靠这一条。
             Playback = Playback.initial
             Viewpoint = Viewpoint.Seated Seat.first
             // 危险度默认关（票 25）。
             ShowDanger = false
-            // 自带 bot 默认均匀随机（票 42）：它是黄金用例与闸门的基准。
-            Bot = Bot.Uniform
-            LlmAt = llmAt
-            Llm = config
-            // 还没问过话：这一局的人格与模板还改得动（票 46）。
-            Pinned = None
-            Awaiting = None
-            Ticket = 0
-            Agent = AgentStatus.Idle
         },
         Cmd.none
 
-    /// 页面初次打开。上一次填的配置（含 key）从 localStorage 里读回来。
+    /// 首页（`/`）初次摆的那一屏：一份还没拉回来的 Demo 回放（票 71；ADR-0003）。
+    ///
+    /// **规则集先摆默认那一份**：拉回牌谱之后换成它自带的那一份（`demoLoaded`）。
+    /// 这一刻页面上只有一句「正在取那份牌谱」，牌桌还没有。
+    let home () : TableModel * Cmd<TableMsg> =
+        {
+            Ruleset = Ruleset.yonma
+            Source = Source.Replay ReplayTable.Loading
+            // 还没开播：牌谱拉回来那一刻才 `Playback.playing`（否则定时器空转）。
+            Playback = Playback.initial
+            Viewpoint = Viewpoint.Seated Seat.first
+            ShowDanger = false
+        },
+        demoCmd
+
+    /// 页面初次打开。**地址说了算**（票 71 的 `Route.landing`）：
+    /// `/` 是首页的 Demo 回放，`?table=1` 是主持人自己开的一桌（上一次填的配置从
+    /// localStorage 里读回来）。**hash 不当路由用**：带 hash 打开退回首页 Demo，
+    /// 解码它是票 78 的活。
     let init () : TableModel * Cmd<TableMsg> =
-        initial (Store.readSeat Ruleset.yonma) (Store.readSeatConfig ())
+        match Route.landing () with
+        | Landing.Home -> home ()
+        | Landing.Table -> initial (Store.readSeat Ruleset.yonma) (Store.readSeatConfig ())
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match message with
-        | SeedEdited seed -> { model with SeedText = seed }, Cmd.none
+        | SeedEdited seed -> model |> onLive (fun _ live -> { live with SeedText = seed }, Cmd.none)
         | Restarted ->
-            // 在飞的那一次问话作废：它的 id 是按旧那桌的决策包编的号。
-            {
-                model with
-                    Table = openTable (rosterOf model) model.SeedText
-                    Playback = Playback.pause model.Playback
-                    // 重开一桌就是回到第一局：人格与模板跟着松开（票 46）。
-                    Pinned = None
-                    Awaiting = None
-                    Agent = AgentStatus.Idle
-            },
-            Cmd.none
+            match model.Source with
+            // 回放的「从头再放」：回到第 0 帧，接着自动播。**帧不必重算**——它们是值。
+            | Source.Replay(ReplayTable.Ready(frames, _)) ->
+                let playback = Playback.playing model.Playback.Speed
+
+                {
+                    model with
+                        Source = Source.Replay(ReplayTable.Ready(frames, 0))
+                        Playback = playback
+                },
+                schedule playback
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                // 在飞的那一次问话作废：它的 id 是按旧那桌的决策包编的号。
+                {
+                    model with
+                        Source =
+                            Source.Live {
+                                live with
+                                    Table = openTable (rosterFor model.Ruleset live) live.SeedText
+                                    // 重开一桌就是回到第一局：人格与模板跟着松开（票 46）。
+                                    Pinned = None
+                                    Awaiting = None
+                                    Agent = AgentStatus.Idle
+                            }
+                        Playback = Playback.pause model.Playback
+                },
+                Cmd.none
         | Advanced ->
             {
                 model with
                     Playback = Playback.pause model.Playback
             }
-            |> step
+            |> onLive step
         | PlayToggled ->
             let playback = Playback.toggle model.Playback
             { model with Playback = playback }, tick model playback
@@ -421,8 +642,17 @@ module TableState =
             { model with Playback = playback }, tick model playback
         | Ticked generation when not (Playback.accepts generation model.Playback) -> model, Cmd.none
         | Ticked _ ->
-            let advanced, cmd = step model
-            resume cmd advanced
+            match model.Source with
+            | Source.Replay(ReplayTable.Ready(frames, cursor)) -> model |> replayTick frames cursor
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                let advanced, cmd = step model.Ruleset live
+
+                {
+                    model with
+                        Source = Source.Live advanced
+                }
+                |> resume cmd
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
         | DangerToggled ->
             {
@@ -430,43 +660,59 @@ module TableState =
                     ShowDanger = not model.ShowDanger
             },
             Cmd.none
+        | DemoLoaded paifu -> model |> demoLoaded paifu
         | Exported ->
-            match model.Table with
-            // 牌桌都开不起来时没有牌谱可导（按钮那时也是灰的）。
-            | Error _ -> model, Cmd.none
-            | Ok table -> model, exportCmd (rosterOf model) (exportName model.SeedText) table
+            model
+            |> onLive (fun ruleset live ->
+                match live.Table with
+                // 牌桌都开不起来时没有牌谱可导（按钮那时也是灰的）。
+                | Error _ -> live, Cmd.none
+                | Ok table -> live, exportCmd (rosterFor ruleset live) (exportName live.SeedText) table)
         | KyokuAdvanced ->
-            {
-                model with
-                    Table = Result.map Table.nextKyoku model.Table
-                    // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
-                    Pinned = None
-                    Awaiting = None
-            },
-            Cmd.none
-        | LlmSeatPicked seat ->
-            {
-                model with
-                    LlmAt = seat
-                    Agent = AgentStatus.Idle
-            },
-            save (fun () -> Store.writeSeat seat)
-        // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（与换模型坐席同一个做法）。
-        | BotPicked kind -> { model with Bot = kind }, Cmd.none
-        | LlmEdited(field, value) ->
-            let config = LlmSeat.edit field value model.Llm
-            { model with Llm = config }, save (fun () -> Store.writeSeatConfig config)
-        | Answered(ticket, answer) ->
-            match model.Awaiting, model.Table with
-            | Some awaiting, Ok table when awaiting.Ticket = ticket ->
-                let played, status = settle awaiting answer table
-
+            model
+            |> onLive (fun _ live ->
                 {
-                    model with
-                        Table = Ok played
+                    live with
+                        Table = Result.map Table.nextKyoku live.Table
+                        // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
+                        Pinned = None
                         Awaiting = None
-                        Agent = status
-                }
-                |> resume Cmd.none
-            // 过期的回执（重开过一桌、开过下一局，或者票号对不上）：丢掉。
-            | _ -> model, Cmd.none
+                },
+                Cmd.none)
+        | LlmSeatPicked seat ->
+            model
+            |> onLive (fun _ live ->
+                {
+                    live with
+                        LlmAt = seat
+                        Agent = AgentStatus.Idle
+                },
+                save (fun () -> Store.writeSeat seat))
+        // 不重开一桌：配桌是每推一手现推导的，换了从下一手起生效（与换模型坐席同一个做法）。
+        | BotPicked kind -> model |> onLive (fun _ live -> { live with Bot = kind }, Cmd.none)
+        | LlmEdited(field, value) ->
+            model
+            |> onLive (fun _ live ->
+                let config = LlmSeat.edit field value live.Llm
+                { live with Llm = config }, save (fun () -> Store.writeSeatConfig config))
+        | Answered(ticket, answer) ->
+            match model.Source with
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                match live.Awaiting, live.Table with
+                | Some awaiting, Ok table when awaiting.Ticket = ticket ->
+                    let played, status = settle awaiting answer table
+
+                    {
+                        model with
+                            Source =
+                                Source.Live {
+                                    live with
+                                        Table = Ok played
+                                        Awaiting = None
+                                        Agent = status
+                                }
+                    }
+                    |> resume Cmd.none
+                // 过期的回执（重开过一桌、开过下一局，或者票号对不上）：丢掉。
+                | _ -> model, Cmd.none

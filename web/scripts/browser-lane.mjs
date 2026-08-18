@@ -2,7 +2,7 @@
 //
 // 从前每道浏览器闸门各起一个 node 进程、一个 vite 服务器、一个 Chrome；
 // 现在 `verify-browser.mjs` 起**一条跑道**（一个 Chrome + 按需一个 preview 服务器
-// + 按需一个 dev 服务器），九道闸门各开自己的 page / context 跑在上面。
+// + 按需一个 dev 服务器），十道闸门各开自己的 page / context 跑在上面。
 //
 // **每道闸门仍然单独跑得起来**：每个 `verify-*.mjs` 都还有自己的入口
 // （`pnpm run verify:board` 等），那时它自己开一条只有它用的跑道——
@@ -21,7 +21,7 @@ const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /**
  * 开一条跑道：一个无头 Chrome，外加两台按需起的 vite 服务器。
  *
- * - `previewUrl()`：`vite preview` 托管 `dist/`（曳光弹与牌桌那两道跑的是**打包后的产物**）
+ * - `previewUrl()`：`vite preview` 托管 `dist/`（曳光弹、首页与牌桌那三道跑的是**打包后的产物**）
  * - `devUrl()`：`vite dev` 托管源码形态的 Fable 输出（黄金用例、牌谱导出、打码那几道
  *   要在页面里点名 `import` 某个模块，而 `dist/` 里文件名带哈希）
  */
@@ -79,7 +79,7 @@ export function isEntry(metaUrl) {
 
 /**
  * 单跑一道闸门：自己开一条跑道，跑完关掉，红了印出来并以 1 退出。
- * 合并跑的那个入口不走这里——它把九道跑在同一条跑道上。
+ * 合并跑的那个入口不走这里——它把十道跑在同一条跑道上。
  */
 export async function runStandalone(gate) {
   const lane = await openLane();

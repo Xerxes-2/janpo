@@ -11,32 +11,67 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出五个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// **这一层还转出八个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` /
-/// `init` / `update` / `rosterOf` / `renderingPending`。转出来之后**这个程序集的公开面
+/// `init` / `update` / `rosterOf` / `renderingPending` / `live` / `shown` / `canAdvance`。转出来之后**这个程序集的公开面
 /// 与拆之前逐字相同**：那四块里跨文件用的助手一律 `internal`，出不了 `Janpo.Web`。
+///
+/// **这一页现在有两个布局**（票 71）：`/` 是首页的 Demo 回放（自动播，没有配桌与模型面板），
+/// `?table=1` 是主持人自己开的一桌（今天那一页一字不少）。**牌桌与结算的渲染只有一份**
+/// （`board`），播放、视角与危险度那两排也只有一份——分岔只在「摆哪几个按钮」上。
 [<RequireQualifiedAccess>]
 module TablePage =
 
-    /// 初次摆的那一桌，配置从外面给。实现与理由见 `TableState.initial`。
+    /// `?table=1` 初次摆的那一桌，配置从外面给。实现与理由见 `TableState.initial`。
     let initial (llmAt: Seat option) (config: LlmSeat) : TableModel * Cmd<TableMsg> = TableState.initial llmAt config
 
-    /// 页面初次打开（上一次填的配置从 localStorage 读回来）。实现见 `TableState.init`。
+    /// 首页（`/`）初次摆的那一屏：一份还没拉回来的 Demo 回放。实现见 `TableState.home`。
+    let home () : TableModel * Cmd<TableMsg> = TableState.home ()
+
+    /// 页面初次打开（地址说了算）。实现见 `TableState.init`。
     let init () : TableModel * Cmd<TableMsg> = TableState.init ()
 
     /// 一条消息推一步。实现见 `TableState.update`。
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> = TableState.update message model
 
-    /// 这一桌的配桌（谁坐哪里）。实现与理由见 `TableState.rosterOf`。
-    let rosterOf (model: TableModel) : Roster = TableState.rosterOf model
+    /// 这一桌是 Live 吗（回放时是 None）。实现与理由见 `TableState.live`。
+    let live (model: TableModel) : LiveTable option = TableState.live model
+
+    /// 牌桌那一格里此刻该画什么。实现与理由见 `TableState.shown`。
+    let shown (model: TableModel) : Shown = TableState.shown model
+
+    /// 这一桌的配桌（谁坐哪里）；回放没有配桌。实现与理由见 `TableState.rosterOf`。
+    let rosterOf (model: TableModel) : Roster option = TableState.rosterOf model
 
     /// 人格与模板改过了、但要等下一局才发得出去吗。实现与理由见 `TableState.renderingPending`。
     let renderingPending (model: TableModel) : bool = TableState.renderingPending model
 
-    [<ReactComponent>]
-    let Page () =
-        let model, dispatch = React.useElmish (init, update, [||])
+    /// 还推得动吗（播放那一枚按钮灰不灰）。实现与理由见 `TableState.canAdvance`。
+    let canAdvance (model: TableModel) : bool = TableState.canAdvance model
 
+    // ---- 视图 ----
+
+    /// 牌桌那一格。**两种来源共用这一份**（票 71）：Live 画正在打的那一桌，
+    /// 回放画那份牌谱 fold 出来的第 N 帧，往下（`TableBoard`）一行都不分岔。
+    ///
+    /// 三种状态各有各的说法：还在拉、出了事、以及真有一桌。**白屏不在其列**——
+    /// 首页拉不到资产时人得看见一句原因。
+    let private board (model: TableModel) =
+        match TableState.shown model with
+        | Shown.Loading ->
+            Html.p [
+                prop.className "intro"
+                prop.testId "table-loading"
+                prop.text "正在取那一局录下来的对局……"
+            ]
+        | Shown.Fault reason -> Html.p [ prop.className "error"; prop.testId "table-error"; prop.text reason ]
+        | Shown.Board table -> TableBoard.tableBody model table
+
+    /// 首页（`/`）：**访客的第一眼是一桌牌在走**（spec 的 story 1，ADR-0003 由 Demo Paifu 兑现）。
+    ///
+    /// **没有配桌与模型面板**：第一眼不该是一张表单（票 35 的「默认视图只该有牌桌」同一条标准）。
+    /// 想自己开一桌的人走那条链接去 `?table=1`——Host 那一侧访客得摸得到。
+    let private homePage (model: TableModel) (dispatch: TableMsg -> unit) =
         Html.div [
             prop.className "page table-page"
             prop.children [
@@ -45,14 +80,48 @@ module TablePage =
                 Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场"
                 Html.p [
                     prop.className "intro"
+                    prop.testId "home-intro"
+                    prop.text
+                        "下面这一局是录下来的，正在自动回放——不用配置、不用 API key，打开就看得见牌怎么走。他家的手牌看不到牌面：模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
+                ]
+                Html.p [
+                    prop.className "intro"
+                    prop.children [
+                        Html.a [ prop.testId "home-host-link"; prop.href Route.tableHref; prop.text "自己开一桌 →" ]
+                        Html.span [ prop.text "　自带 API key，把一个座位交给模型，看它一手一手打。" ]
+                    ]
+                ]
+                TablePanel.controls model dispatch
+                TablePanel.viewpoints model dispatch
+                board model
+            ]
+        ]
+
+    /// 主持人那一页（`?table=1`）：配桌、模型面板、种子、单步 / 播放 / 倍速、导出、下一局、
+    /// 视角、危险度——**今天那一页一字不少**（票 71 只换了它的地址）。
+    ///
+    /// **默认暂停**（`Playback.initial`）：要点、要读牌桌的那几道无头闸门全靠这一条。
+    let private hostPage (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
+        Html.div [
+            prop.className "page table-page"
+            prop.children [
+                Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场"
+                Html.p [
+                    prop.className "intro"
                     prop.text
                         "默认四家自带选手（下面可切均匀随机 / 有主见）；挑一个座位交给模型，按「播放」看它一手一手打。他家的手牌看不到牌面——模型看到的和你一样多，别人的暗牌在页面拿到的数据里根本不存在；想复盘就按一下切到上帝视角。虚线的牌是摸切。"
                 ]
                 TablePanel.controls model dispatch
                 TablePanel.viewpoints model dispatch
-                TablePanel.llmPanel model dispatch
-                match model.Table with
-                | Error message -> Html.p [ prop.className "error"; prop.testId "table-error"; prop.text message ]
-                | Ok table -> TableBoard.tableBody model table
+                TablePanel.llmPanel model live dispatch
+                board model
             ]
         ]
+
+    [<ReactComponent>]
+    let Page () =
+        let model, dispatch = React.useElmish (init, update, [||])
+
+        match TableState.live model with
+        | Some live -> hostPage model live dispatch
+        | None -> homePage model dispatch

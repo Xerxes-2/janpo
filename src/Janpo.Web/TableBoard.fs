@@ -709,6 +709,13 @@ module TableBoard =
                 Oya = (GameState.context table.State).Oya
             }
 
+            // Agent 层那一行只属于 Live（票 71）：回放里没有在飞的问话，
+            // 而那一局的选手是当时坐那一桌的人。后一行（token 账单）两种来源共用。
+            let agent =
+                TableState.live model
+                |> Option.toList
+                |> List.map (fun live -> AgentLine.agentLine live table)
+
             Html.div [
                 prop.testId "table-board"
                 prop.children (
@@ -720,8 +727,8 @@ module TableBoard =
                             prop.custom ("data-fallback", AgentLine.fallenBack table.Latest)
                             prop.text latest
                         ]
-                        AgentLine.agentLine model table
                     ]
+                    @ agent
                     @ AgentLine.usageLine table
                     @ [
                         // 真牌桌（票 44）：四家围着中央坐。**DOM 仍然按座位升序**（`seat-N` 那几个

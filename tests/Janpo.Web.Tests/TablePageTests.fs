@@ -27,19 +27,29 @@ module TablePageTests =
     let private llmTable () : TableModel =
         TablePage.initial (Some Seat.first) config |> fst
 
+    /// 这一桌的 Live 那一半（票 71）。**这一整个模块跑的都是 `?table=1` 那一页**：
+    /// 配桌、模型座席与 Agent 层的驱动只属于 Live，回放那一侧根本没有它们。
+    let private liveOf (model: TableModel) : LiveTable =
+        match TablePage.live model with
+        | Some live -> live
+        | None -> failwith "这几条用例跑的是 `?table=1` 那一页，它必然是 Live"
+
     let private tableOf (model: TableModel) : Table =
-        match model.Table with
+        match (liveOf model).Table with
         | Ok table -> table
         | Error error -> failwith $"这一桌应当开得起来，却得到「{error}」"
 
     let private awaitingOf (model: TableModel) : Awaiting =
-        match model.Awaiting with
+        match (liveOf model).Awaiting with
         | Some awaiting -> awaiting
         | None -> failwith "这一手应当在等 Agent 层的回执"
 
     let private step (message: TableMsg) (model: TableModel) : TableModel = TablePage.update message model |> fst
 
-    let private rosterOf (model: TableModel) : Roster = TablePage.rosterOf model
+    let private rosterOf (model: TableModel) : Roster =
+        match TablePage.rosterOf model with
+        | Some roster -> roster
+        | None -> failwith "Live 那一桌必然有配桌"
 
     /// 这一桌那一席模型此刻**真正会用的**那份配置（配桌是每一手现推导的）。
     let private llmConfigOf (model: TableModel) : LlmSeat =
@@ -94,7 +104,7 @@ module TablePageTests =
     /// 把这一局打完：轮到模型就喂 `answer`，其余座位随机。
     let private playKyoku (answer: AgentAnswer) (model: TableModel) : TableModel =
         let rec loop (left: int) (model: TableModel) =
-            match model.Awaiting with
+            match (liveOf model).Awaiting with
             | Some awaiting when left > 0 -> loop (left - 1) (model |> step (Answered(awaiting.Ticket, answer)))
             | _ when left <= 0 -> failwith "这一局在预算内没打完"
             | _ ->
@@ -107,7 +117,7 @@ module TablePageTests =
     /// 推到模型被问到那一手，喂一条回执就停。
     let private askOnce (answer: AgentAnswer) (model: TableModel) : TableModel =
         let rec loop (left: int) (model: TableModel) =
-            match model.Awaiting with
+            match (liveOf model).Awaiting with
             | Some awaiting -> model |> step (Answered(awaiting.Ticket, answer))
             | None when left <= 0 -> failwith "这一段里模型应当被问到一次"
             | None -> loop (left - 1) (model |> step Advanced)
@@ -122,11 +132,11 @@ module TablePageTests =
         let llm = llmTable () |> step Advanced
 
         Assert.True((tableOf random).Latest |> Option.isSome)
-        Assert.True(Option.isNone random.Awaiting)
+        Assert.True(Option.isNone (liveOf random).Awaiting)
 
         // LLM 那一桌：这一手还没落，牌桌停在原地等回执。
         Assert.True((tableOf llm).Latest |> Option.isNone)
-        Assert.Equal(AgentStatus.Asking Seat.first, llm.Agent)
+        Assert.Equal(AgentStatus.Asking Seat.first, (liveOf llm).Agent)
         Assert.Equal(Seat.first, DecisionPackage.seat (awaitingOf llm).Package)
 
     [<Fact>]
@@ -134,7 +144,7 @@ module TablePageTests =
         let asked = llmTable () |> step Advanced
         let again = asked |> step Advanced |> step (Ticked asked.Playback.Generation)
 
-        Assert.Equal(asked.Ticket, again.Ticket)
+        Assert.Equal((liveOf asked).Ticket, (liveOf again).Ticket)
         Assert.Equal((awaitingOf asked).Ticket, (awaitingOf again).Ticket)
 
     // ---- 回执 → 落子 ----
@@ -152,8 +162,8 @@ module TablePageTests =
         // 自己决出来的一手不带兜底记号。
         Assert.Equal(None, table.Latest |> Option.bind (fun turn -> turn.Fallback))
         Assert.Equal(0, Table.fallbacks table)
-        Assert.True(Option.isNone played.Awaiting)
-        Assert.Equal(AgentStatus.Spoke(Seat.first, Some "就它了", 640), played.Agent)
+        Assert.True(Option.isNone (liveOf played).Awaiting)
+        Assert.Equal(AgentStatus.Spoke(Seat.first, Some "就它了", 640), (liveOf played).Agent)
 
     [<Fact>]
     let ``交不出来就兜底代打，而且牌桌上看得出来`` () =
@@ -167,7 +177,7 @@ module TablePageTests =
         Assert.Equal(Some expected, table.Latest |> Option.map (fun turn -> turn.Action))
         Assert.Equal(refused.Failure, table.Latest |> Option.bind (fun turn -> turn.Fallback))
         Assert.Equal(1, Table.fallbacks table)
-        Assert.Equal(AgentStatus.Troubled(Seat.first, "模型超时（重试 2 次仍无结果）"), played.Agent)
+        Assert.Equal(AgentStatus.Troubled(Seat.first, "模型超时（重试 2 次仍无结果）"), (liveOf played).Agent)
 
     [<Fact>]
     let ``兜底按座位自己那一档代打`` () =
@@ -218,7 +228,7 @@ module TablePageTests =
         let stale = asked |> step (Answered((awaitingOf asked).Ticket + 1, chose 0))
 
         Assert.True((tableOf stale).Latest |> Option.isNone)
-        Assert.True(Option.isSome stale.Awaiting)
+        Assert.True(Option.isSome (liveOf stale).Awaiting)
 
     [<Fact>]
     let ``重开一桌之后，旧回执落不进新牌桌`` () =
@@ -226,8 +236,8 @@ module TablePageTests =
         let awaiting = awaitingOf asked
         let restarted = asked |> step Restarted
 
-        Assert.True(Option.isNone restarted.Awaiting)
-        Assert.Equal(AgentStatus.Idle, restarted.Agent)
+        Assert.True(Option.isNone (liveOf restarted).Awaiting)
+        Assert.Equal(AgentStatus.Idle, (liveOf restarted).Agent)
 
         let late = restarted |> step (Answered(awaiting.Ticket, chose 0))
         Assert.True((tableOf late).Latest |> Option.isNone)
@@ -246,7 +256,7 @@ module TablePageTests =
         // 座位 0 的每一手都是兜底代打的，因此这个数必然大于 0。
         Assert.True(Table.fallbacks table > 0, "断电演习里必然有兜底代打的手")
 
-        match ended.Agent with
+        match (liveOf ended).Agent with
         | AgentStatus.Troubled(seat, _) -> Assert.Equal(Seat.first, seat)
         | other -> failwith $"全程兜底之后状态该是 Troubled，却是 {other}"
 
@@ -257,7 +267,7 @@ module TablePageTests =
         let asked = llmTable () |> step Advanced
         let edited = asked |> step (LlmEdited(LlmField.Model, "deepseek-v4"))
 
-        Assert.Equal("deepseek-v4", edited.Llm.Model)
+        Assert.Equal("deepseek-v4", (liveOf edited).Llm.Model)
         Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf edited).State)
 
     // ---- 人格与模板：一局内不变（票 46；术语表的 `Persona` 词条） ----
@@ -279,7 +289,7 @@ module TablePageTests =
         let edited = asked |> step (LlmEdited(LlmField.Persona, newPersona))
 
         // 面板上照收（localStorage 也照存）——这一条不是把那两格锁死。
-        Assert.Equal(newPersona, edited.Llm.Persona)
+        Assert.Equal(newPersona, (liveOf edited).Llm.Persona)
         // 但本局发出去的仍是定型那一版。
         Assert.Equal("", (llmConfigOf edited).Persona)
         Assert.Equal("", (awaitingOf edited).Config.Persona)
@@ -371,11 +381,11 @@ module TablePageTests =
         let toggled = asked |> step DangerToggled
 
         Assert.Equal<Event list>(GameState.events (tableOf asked).State, GameState.events (tableOf toggled).State)
-        Assert.Equal(asked.Ticket, toggled.Ticket)
+        Assert.Equal((liveOf asked).Ticket, (liveOf toggled).Ticket)
 
         Assert.Equal(
-            asked.Awaiting |> Option.map (fun awaiting -> awaiting.Ticket),
-            toggled.Awaiting |> Option.map (fun awaiting -> awaiting.Ticket)
+            (liveOf asked).Awaiting |> Option.map (fun awaiting -> awaiting.Ticket),
+            (liveOf toggled).Awaiting |> Option.map (fun awaiting -> awaiting.Ticket)
         )
 
     // ---- 自带 bot 的选择（票 42） ----
@@ -386,7 +396,7 @@ module TablePageTests =
         // （票 42 的边界：换默认值会让它们量到另一个选手）。
         let model = TablePage.initial None config |> fst
 
-        Assert.Equal(Bot.Uniform, model.Bot)
+        Assert.Equal(Bot.Uniform, (liveOf model).Bot)
         Assert.Equal<string list>([ "random"; "random"; "random"; "random" ], Roster.names (rosterOf model))
 
     [<Fact>]
@@ -394,7 +404,7 @@ module TablePageTests =
         let picked =
             TablePage.initial None config |> fst |> step (BotPicked Bot.Opinionated)
 
-        Assert.Equal(Bot.Opinionated, picked.Bot)
+        Assert.Equal(Bot.Opinionated, (liveOf picked).Bot)
 
         Assert.Equal<string list>(
             [ "opinionated"; "opinionated"; "opinionated"; "opinionated" ],

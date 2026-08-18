@@ -18,10 +18,11 @@
 // 全绿的闸门等于没有闸门（票 34 立的规矩）。
 //
 // 跑法：`cd web && pnpm run build && node scripts/verify-board.mjs`
-// 它也是 `verify-browser.mjs` 里的一道（九道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
 
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
+import { hostPage } from "./serve.mjs";
 import { stepOnce } from "./table-drive.mjs";
 
 /** 这一局走哪颗种子。挑它的过程见报告 44：`有主见` 档下它第 35 手就把八项全摆出来了。 */
@@ -543,7 +544,7 @@ export async function verifyBoard(lane) {
       if (message.type() === "error") pageProblems.push(`[console.error] ${message.text()}`);
     });
 
-    await page.goto(`${url}/`, { waitUntil: "load" });
+    await page.goto(hostPage(url), { waitUntil: "load" });
     await page.getByTestId("table-board").waitFor();
 
     // 其余座位换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），

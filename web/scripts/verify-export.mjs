@@ -32,7 +32,7 @@
 import { copyFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
-import { retryOnReload } from "./serve.mjs";
+import { hostPage, retryOnReload } from "./serve.mjs";
 import { stepTurns } from "./table-drive.mjs";
 
 /**
@@ -117,7 +117,7 @@ export async function verifyExport(lane, options = {}) {
       }, FAKE_KEY);
     }
 
-    await page.goto(`${url}/`, { waitUntil: "load" });
+    await page.goto(hostPage(url), { waitUntil: "load" });
 
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
 
