@@ -10,6 +10,24 @@
 
 **Status:** ready-for-agent
 
+## 前三波留给你的既成事实（70/71/72/75/77 已并入 `main`）
+
+- 页面已拆：`TableState.fs`（Model/Msg/MVU）、`TablePanel.fs`（控件：Live 侧 `setup` 与 `hostControls`、
+  回放侧 `replayControls`、模型面板 `llmPanel`）、`TableBoard.fs`、`AgentLine.fs`、`TablePage.fs`（转出外壳）。
+  **加公开入口要 `TableState` 定义 + `TablePage` 转出两处都加**。
+- **`TablePage.initial` 现在是三个参：`initial (rules: RulesetDraft) (llmAt: Seat option) (config: LlmSeat)`**。
+  你要把后两个换成「四席绑定 + 档案库」——**改它的签名会損到七处调用点（主要在 `tests/Janpo.Web.Tests`）**，
+  上一波就是这一处在集成时红的（见 `DECISIONS.md`「W3 集成」）。改完自己 `rg` 一遍全仓。
+- **localStorage 的现状**：模型席仍是 `janpo.llm.*`（单席）；配桌三项是 `janpo.rules.length|akadora|kuitan`，
+  入口 `Store.readRules () / writeRules`。你要做的迁移是 `janpo.llm.*` → 一份默认档案 + 座位 0 引用它。
+- **`*Draft` 约定（票 72 立的，72-1）**：面板上拨到、还没生效的那份值叫 `*Draft`，
+  与它成对的是「这一桌真在按的」；只有「重开」写得动生效值。档案库要是也长出这个形状，照这个命名。
+- 超时默认值已是 **240000 ms**（`LlmSeat.initial.TimeoutMs`，一条断言钉着 `>= 180_000`）。
+- **`verify-home.mjs` 里有一份「首页不该有的 testId」名单（13 个）**：你改模型面板的结构时要跟着核，
+  新增的配桌类控件都得进那份名单（否则“访客第一眼没有表单”这条就漏了）。
+- 闸门现在**十一趟**（`verify-setup` 是票 72 新增的）；新增一道要同时改 `verify-browser.mjs` 名单
+  与 `ci-web.sh` 趟数措辞。
+
 ## 术语表授权（第七次）
 
 **本票获准改 `CONTEXT.md`**，范围锁死在两处，别处一个字不许动：

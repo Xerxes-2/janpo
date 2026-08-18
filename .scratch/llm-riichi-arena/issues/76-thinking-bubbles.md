@@ -8,6 +8,29 @@
 
 **Status:** ready-for-agent
 
+## 前四泡留给你的接口事实（70/71/72/75/77 已并入 `main`）
+
+- **回放的帧已物化**：`ReplayTable = Ready of frames: Table list * cursor: int`；
+  `TableState.timeline : TableModel -> Timeline option`，`Timeline.Record : DecisionRecord option`
+  已经是「当前这一帧落定的那一手的记录」（判据：`table.Decisions` 最后一条且 `Turn = table.Turns - 1`，
+  `Latest = None` 时一律 None——**不问手序就会粘着不掉**，票 75 的红-7 证过）。
+- 回放控制条里那段决策记录（`table-replay-record`）是三样东西 `String.concat "\n"` 拼的应急形态，
+  票 75 明说**等你把它整个换掉**。
+- **Live 侧没有帧**（它是增量维护的一份 `Table`）。要做 story 5 的「点历史某一手给局面快照」，
+  现成的路是：把这一桌导成牌谱（`Table.paifu`，导出已用它）→ `Table.replay` 拿到逐帧 `Table` → 取那一帧。
+  实测一次 fold 46–74 ms（256 帧）/ 741 帧 ≈ 200 ms，**点一下算一次完全够**——不要在 Live 侧常驻一份帧数组。
+- 牌桌侧的座位格子在 `TableBoard.fs`（`data-seat-position` 跟着观测视角转）；**回放现在默认上帝视角**（71-8）。
+- Agent 层状态今天还是**单席**的（`AgentStatus`）；票 74 会把它换成按座位一份。
+  **所以「在想」那一态要做成「按座位取」的形状**（一个 `Seat -> 气泡状态` 的取值器），
+  里面先挂单席的那份；票 74 只换取值器的实现。
+- 闸门十一趟；`verify-home.mjs` 有一份「首页不该有的 testId」名单要跟着核。
+
+## 顺手做的一件（调度器裁，理由在 `DECISIONS.md` 的「71-8 的余波」）
+
+- [ ] **上帝视角在未结算时不摆里宝牌指示牌**。现在首页桌心「宝牌指示牌 7筒」下面紧跟一行
+      「里宝牌指示牌 赤5筒」，访客会以为这一局有两个宝牌在生效——**问题不是剧透而是误导**：
+      里宝牌只在有人立直和了的那一刻翻开、才算番。未结算不摆，**结算面板上照旧摆**。
+
 ## 已有的地基（不必重造）
 
 - `Table.Decisions` / `Paifu.Decisions` 就是气泡的数据源（`DecisionRecord`：thinking、一句话理由、
