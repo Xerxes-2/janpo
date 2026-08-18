@@ -34,7 +34,8 @@ node scan-corpus.mjs ../../tests/fixtures/paifu/mjai/*.mjson   # 扫语料：接
 ## 那一手是可以人工核对的
 
 `fixtures/tenpai-tsumogiri.jsonl` 只有三行：`start_game`、`start_kyoku`、一条 `tsumo`。
-座位 0 的配牌是 `1m1m 2m3m4m 5m6m7m 2p3p4p 5p6p`——**已经听牌**（4p/7p 两面），
+座位 0 的配牌是 `1m1m 2m3m4m 5m6m7m 2p3p4p 5p6p`——**已经听牌**：
+后半是 `23456p`，所以听的是 **1p/4p/7p 三面**（引擎复核：`scripts/fsi/wait-check.fsx`），
 摸进来的是孤张北。**唯一保持听牌的打法就是摸切北**，打任何别的牌都退回一向听。
 正确答案因此不需要强度判断：出 `dahai 北` 或 `reach + 北` 都算对，切别的就是错。
 
