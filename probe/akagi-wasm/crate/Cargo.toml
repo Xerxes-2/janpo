@@ -1,0 +1,34 @@
+[package]
+name = "akagi-wasm-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+# 探路件自身的代码是本仓库的一部分（MIT，见仓库根 LICENSE）。
+# 它链接进来的 native_bot / riichienv-core 是 Apache-2.0 的第三方代码，
+# 署名要求见 ../NOTICE-upstream.md。
+license = "MIT"
+
+[lib]
+# rlib 是给 `--bin parity` 用的：原生对拍要复用同一份 JSON 印法。
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# 上游 Akagi 的内置 bot（由 ../fetch-upstream.sh 克隆到 ../.upstream/）。
+native_bot = { path = "../.upstream/native_bot" }
+riichienv-core = "0.4.8"
+serde_json = "1"
+# 只为提供 custom 后端的钩子类型；见 .cargo/config.toml。
+getrandom = "0.4"
+anyhow = "1"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+# 换掉 std 自带的 dlmalloc：它的 free 路径不认 memalign 出来的大对齐分配，
+# candle/gemm 一做矩阵乘就 assert 崩（详见 ../README.md「踩到的坑」）。
+talc = "5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <title>janpo 探路件 · Akagi 内置 bot 的 WASM 版</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 60rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.6;
+      }
+      pre {
+        background: #f5f5f5;
+        padding: 0.75rem;
+        overflow-x: auto;
+        font-size: 0.85rem;
+      }
+      .hand {
+        font-size: 1.4rem;
+        letter-spacing: 0.1em;
+      }
+      .verdict-ok {
+        color: #0a7a0a;
+        font-weight: bold;
+      }
+      .verdict-bad {
+        color: #b00;
+        font-weight: bold;
+      }
+      table {
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        border: 1px solid #ccc;
+        padding: 0.25rem 0.6rem;
+        text-align: right;
+      }
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>探路件：Akagi v3 的内置 bot，编成 WASM，在浏览器里出一手</h1>
+    <p>
+      票 91。<strong>这不是牌桌</strong>——它不接选手抽象、不进首页、不进 CI 的常规趟，
+      只回答「这条路通不通、要多大、要多久」。接成选手是票 92。
+    </p>
+
+    <h2>局面（人工可核对）</h2>
+    <p class="hand">1m1m 2m3m4m 5m6m7m 2p3p4p 5p6p ＋ 摸 <strong>北</strong></p>
+    <p>
+      东1局，我是亲家（seat 0），无副露、无立直棒。这手已经<strong>听牌</strong>（4p/7p 两面），
+      摸进来的北是孤张客风。<strong>唯一保持听牌的打法就是摸切北</strong>：
+      打任何别的牌都退回一向听。所以正确答案不需要强度判断——
+      <code>dahai 北</code> 或 <code>reach + 北</code> 都算对，切别的就是错。
+    </p>
+
+    <h2>结果</h2>
+    <p id="verdict">跑起来了……</p>
+    <div id="summary"></div>
+    <h3>原始数据</h3>
+    <pre id="results">（等待）</pre>
+
+    <script type="module">
+      import { runScenarios } from "./probe.js";
+
+      const WASM_URL = "./dist/akagi_wasm_probe.wasm";
+      const REPS = Number(new URLSearchParams(location.search).get("reps") ?? 200);
+
+      const verdict = document.getElementById("verdict");
+      const summary = document.getElementById("summary");
+      const results = document.getElementById("results");
+
+      /** 那一手到底切了什么牌——立直与直接打牌都归结到同一个字段。 */
+      function discardedTile(action) {
+        if (action.type === "dahai") return action.pai;
+        if (action.type === "reach") return action.reach_dahai;
+        return null;
+      }
+
+      async function main() {
+        const t0 = performance.now();
+        const response = await fetch(WASM_URL, { cache: "no-store" });
+        const wasmBytes = await response.arrayBuffer();
+        const fetchMs = performance.now() - t0;
+
+        const [tsumogiriText, kyokuText] = await Promise.all([
+          fetch("./fixtures/tenpai-tsumogiri.jsonl").then((r) => r.text()),
+          fetch("./fixtures/kyoku-e1.jsonl").then((r) => r.text()),
+        ]);
+
+        const out = await runScenarios({
+          wasmBytes,
+          tsumogiriText,
+          kyokuText,
+          reps: REPS,
+          now: () => performance.now(),
+        });
+        out.fetchMs = fetchMs;
+        out.contentEncoding = response.headers.get("content-encoding");
+        // gzip 之后没有 content-length（chunked），所以传输量要问 Resource Timing：
+        // encodedBodySize 是线上真正走的字节数，decodedBodySize 是解开之后的 .wasm。
+        const entry = performance.getEntriesByType("resource").find((e) => e.name.endsWith("akagi_wasm_probe.wasm"));
+        out.transferBytes = entry?.transferSize ?? null;
+        out.encodedBytes = entry?.encodedBodySize ?? null;
+        out.decodedBytes = entry?.decodedBodySize ?? null;
+        out.coldLoadMs = fetchMs + out.instantiateMs + out.initMs;
+        // performance.memory 是 Chromium 专有、且只统计 JS 堆；wasm 线性内存单独报。
+        if (performance.memory) {
+          out.jsHeapUsedBytes = performance.memory.usedJSHeapSize;
+          out.jsHeapTotalBytes = performance.memory.totalJSHeapSize;
+        }
+        out.userAgent = navigator.userAgent;
+
+        const tile = discardedTile(out.decision?.decision?.action ?? {});
+        out.discardedTile = tile;
+        out.verdict = tile === "N" ? "ok" : "bad";
+
+        verdict.className = tile === "N" ? "verdict-ok" : "verdict-bad";
+        verdict.textContent =
+          tile === "N"
+            ? `✓ 它切了「北」（动作 ${out.decision.decision.action.type}）——与人工判断一致`
+            : `✗ 它切了「${tile}」——不是唯一保持听牌的那张`;
+
+        summary.innerHTML = `
+          <table>
+            <tr><th>量</th><th>值</th></tr>
+            <tr><td>wasm 产物（含内嵌权重）</td><td>${out.wasmBytes.toLocaleString()} B</td></tr>
+            <tr><td>线上传输（gzip，${out.contentEncoding ?? "identity"}）</td><td>${(out.encodedBytes ?? 0).toLocaleString()} B</td></tr>
+            <tr><td>其中 4 人权重 / 3 人权重</td><td>${out.weightBytes4p.toLocaleString()} / ${out.weightBytes3p.toLocaleString()} B</td></tr>
+            <tr><td>冷缓存 fetch</td><td>${out.fetchMs.toFixed(1)} ms</td></tr>
+            <tr><td>instantiate</td><td>${out.instantiateMs.toFixed(1)} ms</td></tr>
+            <tr><td>probe_init（读权重＋建模型）</td><td>${out.initMs.toFixed(1)} ms</td></tr>
+            <tr><td>首次可出手（三者之和）</td><td>${out.coldLoadMs.toFixed(1)} ms</td></tr>
+            <tr><td>单手推理 中位 / p95（同一决策点 ×${out.repeatedDecide.n}）</td><td>${out.repeatedDecide.median.toFixed(3)} / ${out.repeatedDecide.p95.toFixed(3)} ms</td></tr>
+            <tr><td>单手推理 中位 / p95（真实牌谱一整局的 ${out.kyokuDecide.n} 个决策点）</td><td>${out.kyokuDecide.median.toFixed(3)} / ${out.kyokuDecide.p95.toFixed(3)} ms</td></tr>
+            <tr><td>非决策点的空转</td><td>${out.kyokuIdle.median.toFixed(4)} ms</td></tr>
+            <tr><td>wasm 线性内存峰值</td><td>${out.wasmMemoryBytes.toLocaleString()} B</td></tr>
+          </table>`;
+        results.textContent = JSON.stringify(out, null, 2);
+        window.__probeResults = out;
+      }
+
+      main().catch((e) => {
+        verdict.className = "verdict-bad";
+        verdict.textContent = `✗ 崩了：${e.message}`;
+        results.textContent = String(e.stack ?? e);
+        window.__probeResults = { verdict: "error", error: String(e.message) };
+      });
+    </script>
+  </body>
+</html>

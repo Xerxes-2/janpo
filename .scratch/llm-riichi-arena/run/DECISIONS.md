@@ -5929,6 +5929,65 @@ M3 真人坐席落地时，那一席自然是 `Seated` + `unlocked` 生效，这
 其中一条判据是从 M2 三次集成撞车里长出来的：**并行两票只要都改同一个类型的构造形状，
 集成必红**——所以 M3 的派工单要点名到**函数与类型的构造点**，不是只说「别改对方的文件」。
 
+## 票 91（强 AI 探路：WASM）
+
+**头等交付物落地：它不是 Mortal。** Akagi v3 内置的是 Shinkuan 自己写的 `native_bot`——
+`Cargo.toml` 的 description 原话是「Built-in, **libriichi-free** mahjong bot for Akagi: shared
+obs/action codec, **BC-trained CNN inference (candle)**, and a training-data extractor」，
+注释补了一句「derives from **no copyleft source**」；规则底座是 riichienv-core（Apache-2.0，smly），
+不是 libriichi。上游自己也把这条线划得很清楚，根 README：「an AGPL-licensed bot
+(e.g. Mortal, which links libriichi) stays inside its own **process**」——**Mortal 在 v2 是个
+跑在独立进程里的可选 bot，v3 的 `mjai_bot/` 里已经完全没有它了**。
+⇒ **Apache-2.0 站得住，票 92 的许可闸门放行。**
+
+**一个容易翻车的地方记下来**：Akagi 的 GitHub 仓库描述至今仍写着「Comes with Mortal AI as a
+built-in example」。那说的是 v2 的 `mjai_bot/mortal`（进程外），**不是 `native_bot`**。
+只看仓库描述会得出完全相反的结论——这也正是当初「没确认」的由来。
+
+**没消掉的那条风险：权重的训练语料查不到名字。** 三处出处一致地说「人类天凤牌谱的行为克隆」
+（`native_bot/README.md`、`train/README.md`、`src/defaults.rs`），规模 4p 40k 局 / 6.0M 样本，
+**但具体是哪一份语料、什么条款，仓库里没有名字没有 URL 没有下载脚本，`weights/` 里也没有
+model card；仓库外（Releases / 官网 / DeepWiki）同样查不到。**
+**别拿「Apache-2.0 所以没事」糊过去**：那授权的是 Shinkuan 对代码与权重文件本身的权利，
+不代表天凤牌谱的权利人授权过什么。风险由主人那句「允许连权重一起公开分发」承担。
+要归零只有两条路：① 找上游作者确认；② 用我们说得清来源的牌谱重训（管线现成，上游说 5 分钟）。
+**倾向把 ② 记成票 92 之后的一张备选票**——它同时解决许可与「强度是否可控」。
+
+**spec 的 Out of Scope「Mortal 的 WASM 化明确不做」在事实层面已被推翻**：
+一个自足的 6.0 MB `.wasm`（不走 wasm-bindgen，import 对象为空），冷缓存起 208 ms，
+单手推理中位 **0.368 ms** / p95 **≤0.644 ms**（n=**17,260**，111 份真实天凤牌谱全场重放），
+常驻内存 10.94 MiB 且跑完 112,777 行不涨一个字节。一整场半庄 89 ms。
+翻案的 ADR 现在有事实可依了。
+
+**三件票 92 直接能用的结论**：
+
+1. **6 MB 里 4.8 MB 是权重**（4p 2.64 MB + 3p 2.16 MB，`include_bytes!` 编进二进制）。
+   gzip 只压到 4.79 MB，因为 f32 张量压缩比 93%（代码部分是 27%）。
+   **摘掉四麻用不上的三麻权重 ⇒ 传输量少 42%**，这是最便宜的一刀。
+   **成本 100% 在下载，不在计算**：instantiate + init 合计只有 4.8 ms。
+2. **输入侧就是 mjai，零差异**：111 份真实牌谱 112,777 行 + janpo 自己打的三条事件流 3,558 行，
+   **零拒绝**，16 种事件类型全覆盖。输出侧差三处（`actor` 系统性缺失、`hora` 缺 `pai`、
+   **立直的两步被融成一条 `{"type":"reach","reach_dahai":...}"`**），翻译层两百行、没有算法。
+3. **wasm 线性内存永不归还**：`probe_init` 调两次峰值从 10.94 顶到 13.56 MiB。
+   **换座位 / 重开局不要重建引擎。**
+
+**那一手是可核对的，而且做了原生对拍。** 局面是门清听牌（4p/7p 两面平和）摸进孤张北，
+**只有摸切北保住听牌**；它出的是立直打北（top-3 前两条都是打北，0.596 / 0.403）。
+另用 `--bin parity` 把**同一份上游源码**编成原生 x86_64 跑同一份 fixture，决策 JSON 逐字段相同
+（唯一差别是第三候选概率的末位，相对差 1e-9）——**这证的正是唯一值得怀疑的那件事：
+wasm 后端的浮点没把策略算歪。**「它出了一手」不算证据，这两条才算。
+
+**改名影响面清单**（`CONTEXT.md` 2 处、`spec.md` 约 20 处含 2 个节标题与 1 整节重写、F# 注释 3 处）
+在报告末节，**该改与不该改分开列**（`docs/research/shanten-vs-libriichi.md` 那一批说的就是 Mortal，
+事实正确，不追改）。**代码里没有任何叫 `Mortal` 的标识符，只有注释——改名不可能弄红 CI。**
+本票一个字都没改术语表 / ADR / spec，按硬约束 5 等主人授权。
+
+**上一个 agent 被看门狗砍掉的教训（进 `probe/akagi-wasm/README.md` 的踩坑节）**：
+`bench.mjs` 里那句 `await new Promise((r) => server.stdout.once("data", r))` 是个**没有下界的等待**——
+端口被上一轮残留的 `serve.mjs` 占着，新服务器报错退出、永不吐 stdout，于是无限等，45 分钟后整个
+agent 被砍。现在起服务器前先自己 `listen` 探一次端口，子进程的 `error` / `exit` 都接上，
+每个等待配 `setTimeout`，`finally` 里收尸。**规矩：`probe/` 里不许再出现没有超时的 `await`。**
+
 ## 票 95（两笔 prompt 债）
 
 **95-1：动作那一行改在 TS 侧渲，不改引擎的 `Action.toDisplay`。**

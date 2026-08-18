@@ -1,0 +1,3 @@
+{"type":"start_game","names":["janpo","kamicha","toimen","shimocha"]}
+{"type":"start_kyoku","bakaze":"E","dora_marker":"C","kyoku":1,"honba":0,"kyotaku":0,"oya":0,"scores":[25000,25000,25000,25000],"tehais":[["1m","1m","2m","3m","4m","5m","6m","7m","2p","3p","4p","5p","6p"],["1s","1s","2s","2s","3s","3s","4s","4s","5s","5s","6s","6s","7s"],["7s","7s","7s","8s","8s","8s","9s","9s","9s","E","E","E","S"],["S","S","W","W","W","W","P","P","P","P","F","F","F"]]}
+{"type":"tsumo","actor":0,"pai":"N"}

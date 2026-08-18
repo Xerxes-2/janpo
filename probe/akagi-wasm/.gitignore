@@ -1,0 +1,11 @@
+# 上游源码（由 fetch-upstream.sh 克隆，含 4.8 MB 权重）与构建产物都不入库。
+# 票 91 只是探路：仓库里留脚本与说明，产物随时可重建。
+.upstream/
+dist/
+target/
+
+# 仓库根的 `.gitignore` 有 `bin/`（给 .NET 的 obj/bin 用），它会**静默吞掉**
+# `crate/src/bin/parity.rs`——原生对拍那个 harness 是票 91 最硬的一条证据，
+# 掉了不会有任何人报错，只会在下次有人 clone 之后发现「对拍跑不起来」。所以显式捞回来。
+!crate/src/bin/
+!crate/src/bin/*.rs

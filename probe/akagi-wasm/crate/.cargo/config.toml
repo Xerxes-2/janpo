@@ -1,0 +1,6 @@
+# wasm32-unknown-unknown 上 getrandom 没有默认后端：不选就是 compile_error!。
+# 选 custom，钩子在 src/lib.rs 的 `getrandom_stub`（确定性桩，探路件不洗牌）。
+# 另一条路是 wasm_js 后端，但它会把 wasm-bindgen 胶水拖进来，
+# 那样产物就不再是一个自足的 .wasm 了。
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="custom"']
