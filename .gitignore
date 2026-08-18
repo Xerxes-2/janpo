@@ -1,6 +1,10 @@
-# dotnet
-bin/
-obj/
+# dotnet。**只挡 dotnet 工程目录下的 bin/obj**：光写 `bin/` 会静默吞掉任何叫 bin 的源码目录
+# ——票 91 就被吞掉过 `probe/akagi-wasm/crate/src/bin/parity.rs`（Rust 的 bin 目标就住在那儿），
+# 掉了没有任何人报错，只会在别人 clone 之后发现「对拍跑不起来」。
+src/*/bin/
+src/*/obj/
+tests/*/bin/
+tests/*/obj/
 *.user
 .dotnet-tools/
 TestResults/
