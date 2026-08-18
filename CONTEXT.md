@@ -1,6 +1,6 @@
 # janpo
 
-一个让多个 LLM、Mortal 与真人同桌打日本麻将的 Web 平台，每一手决策附带可读推理过程。本文件是**术语表**——只定义词，不含实现细节、不含规格。
+一个让多个 LLM、强 AI 基线与真人同桌打日本麻将的 Web 平台，每一手决策附带可读推理过程。本文件是**术语表**——只定义词，不含实现细节、不含规格。
 
 标识符一律用**罗马字日麻术语**（`Shanten`、`Furiten`、`Dahai`），中文只出现在文档、UI 与 prompt 里；见 [ADR-0001](./docs/adr/0001-mjai-notation-and-romaji-identifiers.md)。
 
@@ -143,7 +143,7 @@ _Avoid_: Red Five、把红宝牌当成第 35 种牌
 _Avoid_: Position、席位；单独一个「家」字指座位时歧义太大
 
 **Player（选手）**：
-占据一个座位的**决策实现**——LLM 适配器、随机 bot、Mortal 客户端或本地真人坐席。四者对引擎完全同级：给定观测与合法动作集，返回一个动作。
+占据一个座位的**决策实现**——LLM 适配器、随机 bot、强 AI 客户端或本地真人坐席。四者对引擎完全同级：给定观测与合法动作集，返回一个动作。
 **LLM 类 Player 的配置 = 一份 ModelProfile（怎么问这个模型）+ 座位级的
 那三项**（ScaffoldTier / Persona / PromptTemplate）：同一份档案能被两席引用，而那两席各带各的信息量与风格。
 _Avoid_: 玩家、参与者、Actor。也不要用 Agent 指代 Player——**Agent 层**专指驱动 LLM 类 Player 的那层 TypeScript 代码，真人坐席不是 Agent。
