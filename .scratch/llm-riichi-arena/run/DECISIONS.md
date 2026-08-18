@@ -5469,3 +5469,17 @@ no-bubbles 那句话的第一版改坏 sed 没匹配上（fantomas 换过行）�
 不做两套。③ 票面点明一个闸门陷阱：脚本靠 testId 找元素，挪位置本身不碍事，
 **但若把控件挪进默认收起的容器里，那些「先点某个按钮再断言」的路径会当场失手**——
 这类改动要跟着改脚本，断言一条不许放宽。
+
+**票 84 立票：浏览器侧的分配悬崖（主人验证了研究文档 §3.4 的前提）。**
+Fable 5.13.0 确实把 `int array` 编成 `Int32Array`——主人 grep 出四处，我复核了全量：引擎生成物 **11 处**
+（Shanten 4、Yaku 2、MentsuBreakdown/HandShape/Danger/AgariShape/AgariHand 各 1）。
+§3.3(a) 的悬崖因此成立：`new Int32Array(34)` 在 V8 上 0.8–1.4 µs，普通 `Array` 40 ns，复用缓冲 17 ns；
+按 §2.1 的 772 次分配/决策，**浏览器上光分配就 ≈0.7 ms/决策**。
+`ShantenScratch` 已经落地（生成物里有 `ShantenScratchModule_create`），这一票是它没走完的那一半。
+
+**票面写死的三条判据**：① **先量 `--typedArrays false` 这一个开关**（20× 分配 换 21% 下标读），
+拿不到 10% 就别承担那个惩罚；② **量具的 workload 必须是「建决策包」**——772 次/决策出自那条路，
+而四家 bot 的对局根本不建包，拿 `verify-export --to-end` 会量出一个漂亮但无关的数（**最容易做错的地方**）；
+③ 安全网是 `verify-golden`（浏览器内引擎与 dotnet 逐字段逐行对拍）——开关会连 `fable-library` 的
+`Random.js` 一起改，**牌山的可复现性压在那道闸门上**。全局可变缓存仍然禁止（研究文档方向 4 已否：
+属性测试 `Parallelism = 8` 会真的坏掉）。
