@@ -151,3 +151,110 @@ module ReplayTableTests =
             Paifu.create ruleset [ StartGame [ "p0"; "p1"; "p2"; "p3" ] ] [] Prompting.empty
 
         Assert.True(Table.replay empty |> Result.isError)
+
+    // ---- 末尾截断的牌谱（票 85） ----
+
+    /// 从手里拿掉一张（结构相等的头一张）。**只拿一张**：手里的是牌不是集合。
+    let private without (tile: Tile) (hand: Tile list) : Tile list =
+        match hand |> List.tryFindIndex (fun each -> each = tile) with
+        | Some index -> List.removeAt index hand
+        | None -> failwith $"事件流要从手里拿掉 {Tile.toDisplay tile}，可手里没有它"
+
+    /// 事件流的**每一个前缀**各自算出来的四家暗牌：第 k 项就是「前 k 条事件之后」那一刻。
+    ///
+    /// **只做加减法**（起手 + 摸 − 打 − 副露吃掉的）：不碰牌山、不读规则、
+    /// 与 `Replay` / `Table` 一行代码都不共享，**因此它造不出一张牌**
+    /// （判据 18；票 79 的教训是第三个锚点自己也会造数据，报告 79 §5）。
+    ///
+    /// `ReplayTimelineTests` 里有一份同形的（票 79 换锚点时加的）。**故意各存一份**：
+    /// 两条被测的路共用同一个参照物时，参照物一错就两边一起错。
+    let private handsAlong (events: Event list) : Tile list list list =
+        let apply (hands: Tile list list) (event: Event) : Tile list list =
+            let change (actor: Seat) (f: Tile list -> Tile list) =
+                hands
+                |> List.mapi (fun index hand -> if index = Seat.index actor then f hand else hand)
+
+            let drop (actor: Seat) (consumed: Tile list) =
+                change actor (fun hand -> consumed |> List.fold (fun rest tile -> without tile rest) hand)
+
+            match event with
+            | StartKyoku start -> start.Tehais
+            | Tsumo(actor, pai) -> change actor (fun hand -> pai :: hand)
+            | Dahai(actor, pai, _) -> change actor (without pai)
+            | Chi(actor, _, _, consumed)
+            | Pon(actor, _, _, consumed)
+            | Minkan(actor, _, _, consumed) -> drop actor consumed
+            | Ankan(actor, consumed) -> drop actor consumed
+            // 加杠：拿上去的只有 `pai` 一张，`consumed` 那三张在前面那条 `pon` 里已经出手了。
+            | Kakan(actor, pai, _) -> change actor (without pai)
+            | _ -> hands
+
+        events |> List.scan apply (List.replicate 4 []) |> List.map (List.map Tile.sort)
+
+    let private handsOf (table: Table) : Tile list list =
+        GameState.players table.State |> List.map (PlayerState.hand >> Tile.sort)
+
+    /// 这一场的头一局（到头一条 `end_kyoku` 为止）。逐切点扫一局就够：
+    /// 每一个切点都要 fold 一遍牌谱，整场（941 条）要 20 秒，一局 148 条只要 0.2 秒。
+    /// **整场那一份在引擎那边逐条扫**（`ReplayTests` 的「回放吐出来的事件都是前缀」）。
+    let private firstKyoku (events: Event list) : Event list =
+        match events |> List.tryFindIndex ((=) EndKyoku) with
+        | Some index -> List.truncate (index + 1) events
+        | None -> failwith "这一场应当至少打完一局"
+
+    [<Fact>]
+    let ``末尾截断的牌谱：末帧四家手里的每一张都在事件流里找得到出处`` () =
+        // 票 85：截断点落在「下一步该摸牌了」那种相位上时，引擎会从**推断出来的牌山**
+        // 替下一家摸一张牌谱里根本没有的牌（摸牌不是 `Action`）。判据因此只一条：
+        // **末帧的手牌必然是事件流某个前缀的加减法结果**——起手或某次自摸，没第三个出处。
+        let paifu, _ = hostPaifu seed
+        let events = firstKyoku paifu.Events
+        let along = handsAlong events
+        let total = List.length events
+
+        // 头两条是 `start_game` 与 `start_kyoku`：连 Oya 的第一次自摸都不在，因此一帧都摆不出来
+        // （开局那一张只能从推断的牌山里取）。宁可摆不出，也不摆一张假牌。
+        for cut in [ 1; 2 ] do
+            Assert.True(
+                Table.replay
+                    { paifu with
+                        Events = List.truncate cut events
+                    }
+                |> Result.isError,
+                $"截到第 {cut} 条时连开局那一刻都交代不出来，不该摆得出牌桌"
+            )
+
+        // 真截在「下一条就是自摸」那个位置上的切点数（判据 3：闸门要报它执行了几次）。
+        let beforeDraw =
+            [ 3..total ]
+            |> List.filter (fun cut ->
+                match List.tryItem cut events with
+                | Some(Tsumo _) -> true
+                | _ -> false)
+
+        Assert.True(List.length beforeDraw > 20, $"这一局只有 {List.length beforeDraw} 个切点截在自摸前，太少")
+
+        for cut in 3..total do
+            match
+                Table.replay
+                    { paifu with
+                        Events = List.truncate cut events
+                    }
+            with
+            | Error error -> failwith $"截到第 {cut} 条应当摆得出牌桌，却得到「{error}」"
+            | Ok frames ->
+                let framed = handsOf (lastOf frames)
+
+                Assert.True(
+                    along |> List.truncate (cut + 1) |> List.contains framed,
+                    $"截到第 {cut} 条：末帧的手牌不是事件流任何一个前缀算出来的（有一张牌谱里没有）：{framed}"
+                )
+
+        // 阳性对照：同一局**不截断**时末帧走到底（局已终、手牌正是事件流走到底那一份）。
+        // 没它的话上面那条拿「回放少走几步」当万能出口也能全绿。
+        match Table.replay { paifu with Events = events } with
+        | Error error -> failwith $"不截断的这一局应当摆得出牌桌，却得到「{error}」"
+        | Ok frames ->
+            let last = lastOf frames
+            Assert.True(GameState.isEnded last.State, "不截断的这一局应当走到终了")
+            Assert.Equal<Tile list list>(List.last along, handsOf last)

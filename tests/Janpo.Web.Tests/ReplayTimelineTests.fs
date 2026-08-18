@@ -51,6 +51,10 @@ module ReplayTimelineTests =
     /// 主持人那一页要的那份坐法（`?table=1` 的默认值：四家均匀随机，一把 key 都不带）。
     let private hostSeating: SeatingPlan = SeatingPlan.initial Ruleset.yonma
 
+    /// 只给 `Table.events` 用（它要一行 `start_game` 的名字）：**回放不问配桌是谁**，
+    /// 名字不进下面任何一条断言。
+    let private roster: Roster = Roster.allRandom Ruleset.yonma
+
     // ---- 第三个锚点：直接 fold 同一前缀 ----
 
     /// 一帧上**看得见的那几样**：四家的手牌、河、副露与点数，加上场上那两个数。
@@ -94,6 +98,9 @@ module ReplayTimelineTests =
     /// 截断点正好落在某家该摸牌的相位上时，那一张是凭空造的（旧 bot 语料的切点撞不上，
     /// 真语料五个切点撞上两个）。这一段**不需要牌山，因此造不出假牌**，
     /// 而且与 `Replay` / `Table` 一行代码都不共享（判据 18：两边对不上时引入第三个锚点）。
+    ///
+    /// **票 85 把那张假牌修掉了（回放不再越过事件流），而换锚点这件事仍然成立**：
+    /// 那条路与被测实现共用 `Replay` 那一族代码，一起错了也一起绳。
     let private handsFromEvents (events: Event list) : Tile list list =
         let apply (hands: Tile list list) (event: Event) : Tile list list =
             let change (actor: Seat) (f: Tile list -> Tile list) =
@@ -165,6 +172,10 @@ module ReplayTimelineTests =
         let total = List.length demo.Events
         let cuts = [ total / 8; total / 4; total / 2; total * 3 / 4; total - 1 ]
 
+        // `end_kyoku` / `end_game` 两边都摘掉：它们是 `Game.events` 按进程写出来的，不带牌，
+        // 而截在一局收尾那一条上时它们会被补上，条数对不齐。
+        let moves = List.filter (fun event -> event <> EndKyoku && event <> EndGame)
+
         for cut in cuts do
             let seats, kyotaku, _, cursor = refold cut
             let dragged = loaded () |> step (CursorMoved cursor)
@@ -173,35 +184,31 @@ module ReplayTimelineTests =
 
             Assert.Equal(cursor, (timelineOf dragged).Cursor)
 
-            // 手牌：**第四条路**（事件流加减法）。
+            // 手牌：**第四条路**（事件流加减法）。两步，两个不同的来源：
             //
-            // 帧那一侧可能比截断点**多摸一张**：摸牌不是 `Action`（引擎在没人能鸣时自动摸），
-            // 因此「多没多摸」由规则定、看事件类型看不出来——票 79 真跑时两个切点各占一种。
-            // 所以这里把两种可能都写成**精确**判据：要么停在截断点，要么多摸了事件流里**真的**那一张。
-            // 旧锚点（`Replay.game` 吃截断流）之所以要换掉，正因为它多摸的那张是从
-            // **推断出来的牌山**里取的假牌（报告 79 §5）——它连「在不在这两种可能里」都不成立。
-            let atCut = handsFromEvents (List.truncate cut demo.Events)
-
-            let withNextDraw =
-                // 从截断点往后跳过不动手牌的那几条（翻宝牌 / 立直宣言与成立），取紧接着的那一次自摸。
-                let rec nextDraw (index: int) =
-                    match List.tryItem index demo.Events with
-                    | Some(Tsumo _ as drawn) -> Some drawn
-                    | Some(Dora _ | Riichi _ | RiichiAccepted _) -> nextDraw (index + 1)
-                    | _ -> None
-
-                nextDraw cut
-                |> Option.map (fun drawn -> handsFromEvents (List.truncate cut demo.Events @ [ drawn ]))
-
+            // ① 帧走到了事件流的哪一条，**由帧自己报**（`Table.events` 就是这一桌至此的事件流）；
+            // ② 手牌拿那个条数去截**同一份事件流**、只做加减法算出来。
+            //
+            // 于是「走到哪里」与「手里是什么」各有各的来源，**帧要是自己造了一张牌就当场对不上**：
+            // 票 85 之前它正是从推断出来的牌山里摸一张假牌、同时在自己的事件流里补一条 `tsumo`
+            // （报告 79 §5），而加减法给出的是牌谱里**真的**那一张——两边差一张。
+            // 另一条是票 85 的上界：**帧不许走过截断点**（回放宁可少走一步，
+            // 也不产出牌谱交代不了的事件）。
+            let walked = List.length (moves (Table.events roster table))
             let sorted (hands: Tile list list) = hands |> List.map Tile.sort
             let got = atCursor |> List.map (fun seat -> Tile.sort seat.Hand)
 
             Assert.True(
-                got = sorted atCut || Some got = Option.map sorted withNextDraw,
-                $"cut={cut} cursor={cursor}：帧上的手牌既不是截断点那一刻，也不是「多摸了真的那一张」之后"
+                walked <= List.length (moves (List.truncate cut demo.Events)),
+                $"cut={cut} cursor={cursor}：帧走过了截断点（它自报走了 {walked} 条）——多出来的那条事件牌谱里没有"
             )
 
-            // 河 / 副露 / 点数 / 供托：截断 fold 那一侧仍然算得准（凭空摸的那一张只脏了手牌与可摸区）。
+            Assert.Equal<Tile list list>(sorted (handsFromEvents (moves demo.Events |> List.truncate walked)), got)
+
+            // 河 / 副露 / 点数 / 供托：与**另一次 fold**（`refold`：`Replay.game` 吃截断流）对拍。
+            // 票 85 之后那一侧不再凭空摸牌，两条路因此停在同一处；
+            // 但**手牌仍然不从它那里取**——它与被测的那条路共用 `Replay` 那一族代码，
+            // 只有上面那条加减法一行都不共享。
             Assert.Equal<(Tile list * Naki list * int) list>(
                 seats |> List.map (fun seat -> seat.Kawa, seat.Naki, seat.Score),
                 atCursor |> List.map (fun seat -> seat.Kawa, seat.Naki, seat.Score)

@@ -4,7 +4,8 @@ namespace Janpo
 /// `kyoku` 是事件流里的第几段（0 起），定位用。
 [<RequireQualifiedAccess>]
 type ReplayError =
-    /// 事件流里一局都没有（没有一条 `start_kyoku`）。
+    /// 事件流里一局都没有：没有一条 `start_kyoku`，或仅有的那一条后面连 Oya 的第一次自摸
+    /// 都不在（那样连开局那一刻都摆不出来，见本模块的 `kyoku`）。
     | NoKyoku
     /// 牌山重建不出来：事件流里露过面的牌凑不成这个规则集的一座山。
     | CannotBuildWall of kyoku: int * detail: string
@@ -54,8 +55,10 @@ type ReplayKyoku =
 [<RequireQualifiedAccess>]
 module Replayed =
 
-    /// 回放出来的事件流。**它与喂进去的那份逐条相同**（除了开头的 `start_game`
-    /// ——那条的 `names` 来自配桌，不属于任何一局）。
+    /// 回放出来的事件流。**它恒是喂进去那份的前缀**（除了开头的 `start_game`
+    /// ——那条的 `names` 来自配桌，不属于任何一局）：喂进去的那份完整时逐条相同，
+    /// 而末尾截断的那份可能短一截——回放宁可少走一步，也不产出牌谱交代不了的事件
+    /// （票 85，见 `Driving.Backing`）。
     let events (replayed: Replayed) : Event list =
         Game.events replayed.Game
         @ (replayed.Current |> Option.map GameState.events |> Option.defaultValue [])
@@ -87,6 +90,13 @@ module ReplayError =
 /// - 「过」（`Action.None`）不产出事件，因此没被宣言的座位一律交「过」；
 /// - 三家和了那三家的荣和宣言也不产出 `hora`（一家都没成立），宣言者记在
 ///   `ryukyoku` 的 `tenpais` 上（`Ryuukyoku.revealedBy`），照它交回去。
+///
+/// **反过来，事件流没交代的东西一样都不能造**（票 85）：末尾截断的事件流停在
+/// 「下一步该摸牌了」那种相位上时，引擎会从 `buildWall` 推断出来的牌山里自己摸一张
+/// （摸牌不是 `Action`）——那一张牌谱里根本没有。因此本模块记着一本账（`Driving.Backing`）：
+/// **引擎产出的事件一条都不允许超出事件流**，超出的那一步整步退掉。
+/// 于是回放交出来的局面恒是喂进去那份事件流某个**前缀**的 fold，
+/// 手里的每一张都在事件流里找得到出处（起手或某次自摸）。
 [<RequireQualifiedAccess>]
 module Replay =
 
@@ -253,6 +263,17 @@ module Replay =
             State: GameState
             Queue: Event list
             Played: Action list
+            /// 这一局的事件流**还能给引擎背书几条事件**（票 85）。
+            ///
+            /// 开局那一刻是「事件流交代的条数 − 引擎开局产出的条数」，此后每走一步减掉
+            /// `GameState.step` 这一步产出的条数。一份完整的牌谱里引擎产出的每一条都对得上
+            /// 事件流里的一条，因此这本账只会减到 0；**减到负数就是这一步越过了牌谱**。
+            ///
+            /// **为什么会越过**：摸牌不是 `Action`——没人能鸣的相位引擎自己就摸一张
+            /// （`applyDahai` → `afterDahai`，杠之后的岭上牌同理），而那一张取自
+            /// `buildWall` 推断出来的牌山。事件流在这种相位上截断时，那一张是余牌里
+            /// 凑数的一张，**牌谱里根本没有它**。
+            Backing: int
         }
 
     /// 引擎自己产出的事件，不必提交：摸牌、翻宝牌、立直成立与三条 game / kyoku 级事件。
@@ -285,13 +306,17 @@ module Replay =
         | None -> queue
 
     /// 把一个动作交给引擎。被拒绝就是回放到此为止——事件是既成事实，引擎不该拒绝它。
+    ///
+    /// **引擎这一步产出了几条事件就从账上减几条**（`Backing`）：那几条里可能夹着
+    /// 一次引擎自己摸的牌，而截断的事件流交代不了它。
     let private submit (kyoku: int) (action: Action) (driving: Driving) : Result<Driving, ReplayError> =
         match GameState.step driving.State action with
-        | Ok(next, _) ->
+        | Ok(next, produced) ->
             Ok
                 { driving with
                     State = next
                     Played = action :: driving.Played
+                    Backing = driving.Backing - List.length produced
                 }
         | Error illegal -> Error(ReplayError.Rejected(kyoku, illegal))
 
@@ -441,8 +466,20 @@ module Replay =
             match GameState.phase driving.State with
             // 一局已终：队列里剩下的（`end_kyoku` 之类）不必再喂。
             | Ended _ -> Ok driving
-            | AwaitingResponse waiting -> stepResponse kyoku waiting driving |> Result.bind (drive kyoku)
-            | AwaitingDahai waiting -> stepDahai kyoku waiting driving |> Result.bind (drive kyoku)
+            | AwaitingResponse waiting -> stepResponse kyoku waiting driving |> Result.bind (continuing kyoku driving)
+            | AwaitingDahai waiting -> stepDahai kyoku waiting driving |> Result.bind (continuing kyoku driving)
+
+    /// 接着往下走，**除非刚走的那一步越过了事件流**（票 85）。
+    ///
+    /// **透支了就回到步前那一刻收摊**：那一步里引擎自己摸了一张（或翻了一张指示牌），
+    /// 而截断的事件流里没有它——那一张只能从推断出来的牌山里取，是张假牌。
+    /// **摸牌与打牌在引擎里是同一步**（`applyDahai` 没人能响应时当场就摸），拆不开；
+    /// 因此这里把整一步退掉，宁可少一帧，也不给人看一张牌谱里不存在的牌。
+    ///
+    /// 于是回放交出来的局面恒是喂进去那份事件流的**某个前缀** fold 出来的：
+    /// 手里的每一张要么来自 `start_kyoku` 的起手，要么来自某条 `tsumo`。
+    and private continuing (kyoku: int) (before: Driving) (after: Driving) : Result<Driving, ReplayError> =
+        if after.Backing < 0 then Ok before else drive kyoku after
 
     // ---- 入口 ----
 
@@ -459,26 +496,36 @@ module Replay =
         }
 
     /// 重放一局：按事件流摆回牌山、开局、把动作原样交回引擎。给出开局那一刻与 fold 完的游标。
+    ///
+    /// **一帧都交不出来时是 None**：这一局只有 `start_kyoku` 那一条，连 Oya 的第一次自摸
+    /// 都没交代（引擎开局必摸那一张，而牌山是推断出来的，那就是张假牌）。
     let private kyoku
         (ruleset: Ruleset)
         (index: int)
         (start: StartKyoku)
         (moves: Event list)
-        : Result<GameState * Driving, ReplayError> =
+        : Result<(GameState * Driving) option, ReplayError> =
         buildWall ruleset start moves
         |> Result.mapError (fun detail -> ReplayError.CannotBuildWall(index, detail))
         |> Result.bind (fun wall ->
             GameState.startFrom ruleset (contextOf start) wall
             |> Result.mapError (fun error -> ReplayError.CannotStart(index, error)))
         |> Result.bind (fun opening ->
-            drive
-                index
-                {
-                    State = opening
-                    Queue = moves
-                    Played = []
-                }
-            |> Result.map (fun driving -> opening, driving))
+            // 事件流交代的是 `start_kyoku` 那一条加 `moves`；开局那一刻引擎已经花掉了其中几条。
+            let backing = 1 + List.length moves - List.length (GameState.events opening)
+
+            if backing < 0 then
+                Ok None
+            else
+                drive
+                    index
+                    {
+                        State = opening
+                        Queue = moves
+                        Played = []
+                        Backing = backing
+                    }
+                |> Result.map (fun driving -> Some(opening, driving)))
 
     /// 一局一局 fold 回去，每一局给出「开局那一刻」与「fold 完的游标」。
     ///
@@ -487,6 +534,21 @@ module Replay =
     ///
     /// 还没打完的局只允许是**最后一局**（事件流到此为止）；中间某一局没走完
     /// 说明这份事件流本身不自洽。
+    /// 一局 fold 完之后的取舍。**两种「没走完」都只允许出现在最后一局**（事件流到此为止）：
+    /// 局面停在半途，或连开局那一刻都交代不出来（`kyoku` 给 None）。
+    let private collected
+        (last: int)
+        (index: int)
+        (before: (GameState * Driving) list)
+        (opened: (GameState * Driving) option)
+        : Result<(GameState * Driving) list, ReplayError> =
+        match opened with
+        | Some(_, driving) when index <> last && not (GameState.isEnded driving.State) ->
+            Error(ReplayError.Stranded(index, "这一局的事件流没走完，后面却还有别的局"))
+        | Some segment -> Ok(before @ [ segment ])
+        | None when index = last -> Ok before
+        | None -> Error(ReplayError.Stranded(index, "这一局只有一条 start_kyoku，后面却还有别的局"))
+
     let private folded (ruleset: Ruleset) (events: Event list) : Result<(GameState * Driving) list, ReplayError> =
         match kyokus events with
         | [] -> Error ReplayError.NoKyoku
@@ -497,12 +559,13 @@ module Replay =
             ||> List.fold (fun replayed (index, (start, moves)) ->
                 replayed
                 |> Result.bind (fun before ->
-                    kyoku ruleset index start moves
-                    |> Result.bind (fun (opening, driving) ->
-                        if index <> last && not (GameState.isEnded driving.State) then
-                            Error(ReplayError.Stranded(index, "这一局的事件流没走完，后面却还有别的局"))
-                        else
-                            Ok(before @ [ opening, driving ]))))
+                    kyoku ruleset index start moves |> Result.bind (collected last index before)))
+            // 仅有的那一局连开局那一刻都交代不出来：与「一局都没有」同一个处境。
+            |> Result.bind (fun replayed ->
+                if List.isEmpty replayed then
+                    Error ReplayError.NoKyoku
+                else
+                    Ok replayed)
 
     /// **事件流 → 一场对局**：一局一局 fold 回去，连庄、结转与终局精算全由 `Game` 重算。
     ///
