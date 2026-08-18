@@ -111,6 +111,55 @@ module PaifuDifferentialTests =
         Assert.Equal(3, List.length OracleYaku.doraNames)
 
     [<Fact>]
+    let ``雀魂写法的别名解得开，且不抢天凤的写法`` () =
+        // 雀魂牌谱经 tensoul 转成天凤 JSON 后役名只差一处（id 49）：补到 `aliases` 里。
+        Assert.Equal(Some(OracleYaku.Yaku Yaku.KokushiJuusanmen), OracleYaku.parse "国士無双十三面待ち")
+
+        // 别名不得反过来影响天凤侧：`japanese` 写的那个串仍然解到同一个役。
+        Assert.Equal(Some(OracleYaku.Yaku Yaku.KokushiJuusanmen), OracleYaku.parse "国士無双１３面")
+
+        // 别名只能是 `japanese` 没写过的写法：撞上就说明表里有一条是多余的。
+        let canonical = OracleYaku.all |> List.map OracleYaku.japanese
+
+        let clashing =
+            OracleYaku.aliases
+            |> List.map fst
+            |> List.filter (fun name -> List.contains name canonical)
+            |> List.toArray
+
+        Assert.Equal<string array>([||], clashing)
+
+    [<Fact>]
+    let ``流局形态认雀魂那两种写法`` () =
+        // 四杠散了与三家和了在雀魂牌谱（经 tensoul 转成天凤 JSON）里写作 `四開槓` / `三家和`。
+        // 只读头与尾，因此一局只需这两项。
+        let json =
+            """{"rule":{"disp":"玉南喰赤"},"log":[
+                 [[0,0,0],["四開槓"]],
+                 [[1,0,0],["三家和"]],
+                 [[2,0,0],["流局",[1000,-1000,1000,-1000]]],
+                 [[3,0,0],["流局",[0,0,0,0]]]]}"""
+
+        match PaifuOracle.parse 4 "majsoul" json with
+        | Error message -> failwith $"这份 oracle 应当读得动，却得到「{message}」"
+        | Ok game ->
+            let ryuukyoku (index: int) : OracleRyuukyoku =
+                match game.Kyokus.[index].Result with
+                | OracleResult.Ryuukyoku each -> each
+                | OracleResult.Hora _ -> failwith "这一局该是流局"
+
+            Assert.Equal(Suukaikan, (ryuukyoku 0).Reason)
+            Assert.Equal(SanchaHora, (ryuukyoku 1).Reason)
+
+            // 荒牌流局的听牌仍然由钱流反推（那条独立锛点不变）。
+            Assert.Equal(Fanpai, (ryuukyoku 2).Reason)
+            Assert.Equal<bool list option>(Some [ true; false; true; false ], (ryuukyoku 2).Tenpais)
+
+            // **雀魂全听与全不听不给授受**：天凤会直说 `全員聴牌` / `全員不聴`，
+            // tensoul 只写全 0 的 `流局`，那时听牌反推不出来——这是 oracle 的一处退化，不是错。
+            Assert.Equal<bool list option>(None, (ryuukyoku 3).Tenpais)
+
+    [<Fact>]
     let ``重放产出的事件流与牌谱零差异`` () = assertNoDiff [ "重放"; "事件流" ]
 
     [<Fact>]

@@ -57,6 +57,14 @@ type Ruleset =
         /// Kiriage Mangan（切上满贯）：把 4 番 30 符 / 3 番 60 符（基本点 1920）上调为满贯。
         /// **默认关**——天凤与雀魂段位战都不采用（DECISIONS 提案 S-A）。
         KiriageMangan: bool
+        /// 双倍役满：国士无双十三面 / 四暗刻单骑 / 纯正九莲宝灯 / 大四喜**各自**算两倍役满。
+        /// **默认关**——天凤一律单倍；雀魂段位战算两倍：雀魂自己的 `fan` 表里正是这四个
+        /// （id 49 / 48 / 47 / 50）的 `yiman` 为 2，其余役满都是 1。
+        ///
+        /// **它只管单个役的倍数**：役满的复合（大三元 + 字一色）在任何规则集下都靠多个 `Yaku`
+        /// 各占自己的倍数相加，不由它控制。哪四个役算两倍写在 `Yaku` 那边
+        /// （`Yaku` 定义在本文件之后，规则集只留开关）。要它用 `Ruleset.withDoubleYakuman`。
+        DoubleYakuman: bool
         /// 连风牌雀头的符：雀头同时是场风与自风时算几符。**天凤是 4 符**；
         /// 只算 2 符的规则集把它改成 2。单独的场风 / 自风 / 三元牌雀头恒为 2 符，不可配。
         DoubleKazeJantouFu: int
@@ -112,6 +120,7 @@ module Ruleset =
             SanchaHoraRyuukyoku = true
             KyuushuKinds = 9
             KiriageMangan = false
+            DoubleYakuman = false
             DoubleKazeJantouFu = 4
             RinshanTsumoFu = true
             KokushiAnkanChankan = false
@@ -141,6 +150,10 @@ module Ruleset =
     /// 关着的形态就是各预设本身——天凤与雀魂段位战都不采用它。
     let withKiriageMangan (ruleset: Ruleset) : Ruleset = { ruleset with KiriageMangan = true }
 
+    /// 打开双倍役满（雀魂的做法）：国士无双十三面 / 四暗刻单骑 / 纯正九莲宝灯 / 大四喜各算两倍。
+    /// 关着的形态就是各预设本身——天凤一律单倍。
+    let withDoubleYakuman (ruleset: Ruleset) : Ruleset = { ruleset with DoubleYakuman = true }
+
     /// 允许国士无双抢暗杠（雀魂的做法）。关着的形态就是各预设本身——天凤禁止。
     let withKokushiAnkanChankan (ruleset: Ruleset) : Ruleset =
         { ruleset with
@@ -163,6 +176,24 @@ module Ruleset =
 
     /// 换对局长度（spec 的「对局长度」配置）。
     let withLength (length: GameLength) (ruleset: Ruleset) : Ruleset = { ruleset with Length = length }
+
+    /// 雀魂段位战四麻的规则集。**与 `yonma`（默认值对齐天凤）只差三处规则开关**：
+    ///
+    /// - 三家和了成立而不流局（ADR-0004 决定 3）；
+    /// - 国士无双能抢暗杠（提案 S-A）；
+    /// - 国士十三面 / 四暗刻单骑 / 纯正九莲宝灯 / 大四喜各算两倍役满（雀魂 `fan` 表的 `yiman` 为 2）。
+    ///
+    /// 其余逐字段与天凤相同，且都是查过的**同值**而非「还没查」：25000 起手 / 3000 听牌料 /
+    /// 300 一本场 / 1000 立直棒 / 赤 3 张 / 食断 / 连风牌雀头 4 符 / 岭上自摸加符 / 不切上满贯 /
+    /// 不头跳（双响成立）/ 大明杠岭上不包 / 立直后暗杠只禁送り杠。
+    ///
+    /// **长度照 `yonma` 取东风战**：段位战常打的南场用 `Ruleset.withLength Hanchan` 换——
+    /// 长度是另一根轴（金/玉/王座各有东南两种），不揉进规则口径的预设里。
+    let majsoul: Ruleset =
+        yonma
+        |> withoutSanchaHoraRyuukyoku
+        |> withKokushiAnkanChankan
+        |> withDoubleYakuman
 
     // ---- 拆解 ----
 
@@ -240,6 +271,7 @@ module Ruleset =
                     "sancha_hora_ryuukyoku", Encode.bool ruleset.SanchaHoraRyuukyoku
                     "kyuushu_kinds", Encode.int ruleset.KyuushuKinds
                     "kiriage_mangan", Encode.bool ruleset.KiriageMangan
+                    "double_yakuman", Encode.bool ruleset.DoubleYakuman
                     "double_kaze_jantou_fu", Encode.int ruleset.DoubleKazeJantouFu
                     "rinshan_tsumo_fu", Encode.bool ruleset.RinshanTsumoFu
                     "kokushi_ankan_chankan", Encode.bool ruleset.KokushiAnkanChankan
@@ -258,10 +290,10 @@ module Ruleset =
     /// 规则集的解码。**字段默认都是必需的**：缺一项就是读不动，而不是惄惄地用本机的默认值
     /// 把别人的牌谱回放成另一场对局。诊断文案用英文（ADR-0001）。
     ///
-    /// **例外只有后加的两个规则开关**：`minkan_rinshan_sekinin`（票 59）与
-    /// `riichi_ankan_mentsu_unchanged`（票 63）可缺省，缺省都是 false（天凤口径）——
-    /// 旧导出件里没有这两个字段，而那些对局就是按天凤口径打的，补 false 回放逐字相同；
-    /// 按 26 号的版本策略「加可缺省字段不涨牌谱版本」（票 65 裁定，两个开关同一种处理）。
+    /// **例外只有后加的那几个规则开关**：`minkan_rinshan_sekinin`（票 59）、
+    /// `riichi_ankan_mentsu_unchanged`（票 63）与 `double_yakuman` 可缺省，缺省都是 false
+    /// （天凤口径）——旧导出件里没有这些字段，而那些对局就是按天凤口径打的，补 false
+    /// 回放逐字相同；按 26 号的版本策略「加可缺省字段不涨牌谱版本」（票 65 裁定，同一种处理）。
     let decoder: Decoder<Ruleset> =
         Decode.object (fun get ->
             {
@@ -283,6 +315,7 @@ module Ruleset =
                 SanchaHoraRyuukyoku = get.Required.Field "sancha_hora_ryuukyoku" Decode.bool
                 KyuushuKinds = get.Required.Field "kyuushu_kinds" Decode.int
                 KiriageMangan = get.Required.Field "kiriage_mangan" Decode.bool
+                DoubleYakuman = get.Optional.Field "double_yakuman" Decode.bool |> Option.defaultValue false
                 DoubleKazeJantouFu = get.Required.Field "double_kaze_jantou_fu" Decode.int
                 RinshanTsumoFu = get.Required.Field "rinshan_tsumo_fu" Decode.bool
                 KokushiAnkanChankan = get.Required.Field "kokushi_ankan_chankan" Decode.bool

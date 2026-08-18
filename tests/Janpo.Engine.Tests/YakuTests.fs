@@ -484,6 +484,42 @@ module YakuTests =
         Assert.Equal(2, yakuman context daisuushii)
 
     [<Fact>]
+    let ``双倍役满只有雀魂那四个役，且由规则集控制`` () =
+        // 雀魂 `fan` 表里 `yiman` 为 2 的恰好四个：id 49 国士無双十三面待ち / 48 四暗刻単騎 /
+        // 47 純正九蓮宝燈 / 50 大四喜；其余役满两边都是单倍。天凤（`Ruleset.yonma`）一律单倍。
+        let multiplier (rules: Ruleset) (hand: AgariHand) : int =
+            match Yaku.detect rules context hand with
+            | Ok tally -> YakuTally.yakuman tally
+            | Error error -> failwith $"应当能和：{YakuError.toDisplay error}"
+
+        // 国士十三面：天凤 1 倍，雀魂 2 倍。
+        let juusanmen = tsumo [] "1m 9m 1p 9p 1s 9s 1z 2z 3z 4z 5z 6z 7z 7z" "7z"
+        Assert.Equal<Yaku list>([ Yaku.KokushiJuusanmen ], yaku context juusanmen)
+        Assert.Equal(1, multiplier Ruleset.yonma juusanmen)
+        Assert.Equal(2, multiplier Ruleset.majsoul juusanmen)
+
+        // 纯正九莲宝灯：同理。去掉和了牌后正是十三面待的 1112345678999。
+        let junsei = ron [] "1m 1m 1m 2m 3m 4m 5m 5m 6m 7m 8m 9m 9m 9m" "5m"
+        Assert.Equal<Yaku list>([ Yaku.JunseiChuuren ], yaku context junsei)
+        Assert.Equal(1, multiplier Ruleset.yonma junsei)
+        Assert.Equal(2, multiplier Ruleset.majsoul junsei)
+
+        // 复合时逐个翻倍：大四喜 + 四暗刻单骑天凤 1+1=2 倍，雀魂 2+2=4 倍。
+        let daisuushii = ron [] "1z 1z 1z 2z 2z 2z 3z 3z 3z 4z 4z 4z 5m 5m" "5m"
+        Assert.Equal(2, multiplier Ruleset.yonma daisuushii)
+        Assert.Equal(4, multiplier Ruleset.majsoul daisuushii)
+
+        // 不在那四个里的役满两边同值：大三元、四暗刻（非单骑）、九莲宝灯（非纯正）。
+        let daisangen = ron [] "5z 5z 5z 6z 6z 6z 7z 7z 7z 2m 3m 4m 9m 9m" "4m"
+        let suuankou = tsumo [] "1m 1m 1m 3p 3p 3p 7s 7s 7s 3z 3z 3z 9m 9m" "1m"
+        // 同一副牌换个和了牌就不是十三面待：只成九莲宝灯，两边都是单倍。
+        let chuuren = ron [] "1m 1m 1m 2m 3m 4m 5m 5m 6m 7m 8m 9m 9m 9m" "9m"
+
+        for hand in [ daisangen; suuankou; chuuren ] do
+            Assert.Equal(1, multiplier Ruleset.yonma hand)
+            Assert.Equal(1, multiplier Ruleset.majsoul hand)
+
+    [<Fact>]
     let ``字一色`` () =
         let hand =
             ron [ AgariFixture.pon (seat 1) "1z" "1z 1z" ] "2z 2z 2z 3z 3z 3z 5z 5z 5z 7z 7z" "7z"

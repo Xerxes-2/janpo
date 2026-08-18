@@ -106,6 +106,7 @@ module PaifuTests =
             |> Ruleset.withKiriageMangan
             |> Ruleset.withKokushiAnkanChankan
             |> Ruleset.withoutSanchaHoraRyuukyoku
+            |> Ruleset.withDoubleYakuman
 
         let sanma =
             { ruleset with
@@ -129,27 +130,31 @@ module PaifuTests =
             Assert.Equal(original, round)
 
     [<Fact>]
-    let ``两个规则开关字段可缺省，缺省都是天凤侧，其余字段仍是必需`` () =
+    let ``三个规则开关字段可缺省，缺省都是天凤侧，其余字段仍是必需`` () =
         // 票 65（调度器裁 63 的待裁三之三）：`minkan_rinshan_sekinin`（票 59）与
         // `riichi_ankan_mentsu_unchanged`（票 63）都是后加的规则开关，旧导出件里没有它们；
         // 而那些对局就是按天凤口径（false）打的，缺省补 false 回放逐字相同——
         // 按 26 号的版本策略「加可缺省字段不涨版本」，两个开关同一种处理。
+        // `double_yakuman`（雀魂的双倍役满）同理：旧导出件里没有它，那些对局也是天凤口径。
         let full = Ruleset.encoder Ruleset.yonma |> Encode.toString 0
 
         let missing =
             full
                 .Replace("\"minkan_rinshan_sekinin\":false,", "")
                 .Replace("\"riichi_ankan_mentsu_unchanged\":false,", "")
+                .Replace("\"double_yakuman\":false,", "")
 
         Assert.DoesNotContain("minkan_rinshan_sekinin", missing)
         Assert.DoesNotContain("riichi_ankan_mentsu_unchanged", missing)
+        Assert.DoesNotContain("double_yakuman", missing)
 
         match Decode.fromString Ruleset.decoder missing with
         | Ok decoded ->
             Assert.False(decoded.MinkanRinshanSekinin)
             Assert.False(decoded.RiichiAnkanMentsuUnchanged)
+            Assert.False(decoded.DoubleYakuman)
             Assert.Equal(Ruleset.yonma, decoded)
-        | Error message -> failwith $"缺了两个可缺省开关的规则集应当读得动，却得到「{message}」"
+        | Error message -> failwith $"缺了三个可缺省开关的规则集应当读得动，却得到「{message}」"
 
         // 写过 true 的导出件恒带字段（编码器逐字段写），读回来也是 true：往返那条已盖，
         // 这里只钉「可缺省 ≠ 被忽略」。
@@ -157,6 +162,7 @@ module PaifuTests =
             Ruleset.yonma
             |> Ruleset.withMinkanRinshanSekinin
             |> Ruleset.withRiichiAnkanMentsuUnchanged
+            |> Ruleset.withDoubleYakuman
 
         match
             Ruleset.encoder switched
@@ -166,9 +172,10 @@ module PaifuTests =
         | Ok decoded ->
             Assert.True(decoded.MinkanRinshanSekinin)
             Assert.True(decoded.RiichiAnkanMentsuUnchanged)
+            Assert.True(decoded.DoubleYakuman)
         | Error message -> failwith $"开着开关的规则集应当读得动，却得到「{message}」"
 
-        // 其余字段仍是必需的：可缺省只是这两个后加开关的例外，不是解码器的新设计。
+        // 其余字段仍是必需的：可缺省只是这几个后加开关的例外，不是解码器的新设计。
         let noKuitan = full.Replace("\"kuitan\":true,", "")
 
         match Decode.fromString Ruleset.decoder noKuitan with

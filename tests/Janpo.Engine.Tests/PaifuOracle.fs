@@ -20,6 +20,9 @@ type OracleYaku =
 /// 而我们的 `Yaku` 是 DU。**`japanese` 写成穷尽 match，因此「表漏了某个役」
 /// 由编译器保证不可能发生**（`Yaku` 加 case 时这里当面报错）；反向的 `parse`
 /// 由 `all` 列出的具体值倒推，两个方向不会漂移。
+///
+/// **`japanese` 只写天凤的那一种写法，其余写法进 `aliases`**：雀魂牌谱经 tensoul
+/// 转成天凤 JSON 后，役名几乎逐字对得上，只有一处不同。
 [<RequireQualifiedAccess>]
 module OracleYaku =
 
@@ -142,12 +145,29 @@ module OracleYaku =
         @ [ for kaze in Kaze.all -> Yaku.Bakaze kaze ]
         @ [ for kaze in Kaze.all -> Yaku.Jikaze kaze ]
 
-    /// 天凤的三种宝牌役行。它们不是 `Yaku`。
+    /// 天凤的三种宝牌役行。它们不是 `Yaku`。雀魂的 `name_jp` 这三个逐字相同。
     let doraNames: (string * OracleYaku) list =
         [ "ドラ", OracleYaku.Dora; "裏ドラ", OracleYaku.Uradora; "赤ドラ", OracleYaku.Akadora ]
 
+    /// 同一个役的别名：雀魂牌谱（经 tensoul 转成天凤 JSON）的写法与天凤不同的那几条。
+    ///
+    /// 雀魂 `fan` 表里四麻用得上的役名逐条对过，**只有 id 49 跟天凤不一样**：
+    /// 它的 `name_jp` 是 `国士無双十三面待ち`，天凤写 `国士無双１３面`（全角数字）。
+    /// 另两处本来也不一样，但 tensoul 自己已经改写成天凤写法，不必补：id 10 / 11
+    /// （`役牌:自風牌` / `役牌:場風牌`）已展开成 `自風 東` / `場風 東`，
+    /// id 18（`ダブル立直`）已改写成 `両立直`。
+    ///
+    /// **双倍役满在串里看不出来**：tensoul 把役满行一律写成 `(役満)`，雀魂那四个
+    /// `yiman = 2` 的役（`Ruleset.DoubleYakuman`）也不例外——倍数只能从点数看。
+    /// 真拿雀魂牌谱对拍得先处理这一条，否则 `Yakuman` 会少一倍。
+    let aliases: (string * OracleYaku) list =
+        [ "国士無双十三面待ち", OracleYaku.Yaku Yaku.KokushiJuusanmen ]
+
+    /// 天凤的写法排在前面：反向解析与 `japanese` 不会因为加了别名而漂移。
     let private table: (string * OracleYaku) list =
-        (all |> List.map (fun yaku -> japanese yaku, OracleYaku.Yaku yaku)) @ doraNames
+        (all |> List.map (fun yaku -> japanese yaku, OracleYaku.Yaku yaku))
+        @ doraNames
+        @ aliases
 
     /// 日文役名 → 役或宝牌；表里没有的返回 None（**样本因此被显式跳过并计数**）。
     let parse (name: string) : OracleYaku option =
@@ -413,6 +433,13 @@ module PaifuOracle =
             Some(deltas |> List.map (fun delta -> delta > 0))
 
     /// 一条流局：`["流局", deltas]` / `["全員聴牌"]` / `["九種九牌"]` …
+    ///
+    /// **两种写法同时认**：四杠散了与三家和了在雀魂牌谱（经 tensoul 转成天凤 JSON）里
+    /// 写作 `四開槓` / `三家和`，其余五种形态两边逐字相同。雀魂本身不会出三家和
+    /// （三响都成立，`Ruleset.majsoul` 就是这么配的），但字串还是认下来。
+    ///
+    /// **没有对应写法的是 `全員聴牌` / `全員不聴`**：雀魂全听与全不听时不给授受，
+    /// tensoul 只写 `["流局", [0,0,0,0]]`，那时听牌逆推不出来（`tenpaisFromDeltas` 给 None）。
     let private parseRyuukyoku (seatCount: int) (form: string) (rest: Cell list) : Result<OracleRyuukyoku, string> =
         let deltas =
             match rest with
@@ -431,9 +458,11 @@ module PaifuOracle =
         | "流し満貫" -> Ok(NagashiMangan, None)
         | "九種九牌" -> Ok(KyuushuKyuuhai, None)
         | "四風連打" -> Ok(SuufonRenda, None)
-        | "四槓散了" -> Ok(Suukaikan, None)
+        | "四槓散了"
+        | "四開槓" -> Ok(Suukaikan, None)
         | "四家立直" -> Ok(SuuchaRiichi, None)
-        | "三家和了" -> Ok(SanchaHora, None)
+        | "三家和了"
+        | "三家和" -> Ok(SanchaHora, None)
         | other -> Error $"看不懂的流局形态：{other}"
         |> Result.map (fun (reason, tenpais) ->
             {

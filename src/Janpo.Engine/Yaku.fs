@@ -116,7 +116,8 @@ type Yaku =
 type YakuValue =
     /// 番数。
     | Han of han: int
-    /// 役满倍数。本版恒为 1——役满的复合靠多个 `Yaku` 各占一倍，不做双倍役满。
+    /// 役满倍数。**役满的复合靠多个 `Yaku` 各占自己的倍数相加**；单个役就算两倍的
+    /// 只有雀魂的那四个（`Ruleset.DoubleYakuman`），天凤口径下恒为 1。
     | Yakuman of multiplier: int
 
 /// 役种判定要的、牌姿之外的上下文。由调用方填：04 填场风自风，09 填立直与一发，
@@ -190,9 +191,21 @@ module Yaku =
 
     // ---- 役的番数 ----
 
-    /// 一个役在门清 / 副露下的价值。副露降番（食い下がり）只影响这几个役：
+    /// 规则集把它们算两倍役满的那四个役（`Ruleset.DoubleYakuman`）。雀魂自己的 `fan` 表里
+    /// 正是这四个（id 49 国士無双十三面待ち / 48 四暗刻単騎 / 47 純正九蓮宝燈 / 50 大四喜）
+    /// 的 `yiman` 为 2，其余役满都是 1。
+    let private doubleYakumanYaku: Yaku list =
+        [
+            Yaku.KokushiJuusanmen
+            Yaku.SuuankouTanki
+            Yaku.JunseiChuuren
+            Yaku.Daisuushii
+        ]
+
+    /// 一个役在门清 / 副露下的基础价值，**不看规则集**：役满一律记一倍（天凤口径）。
+    /// 副露降番（食い下がり）只影响这几个役：
     /// 混全带幺九、三色同顺、一气通贯、混一色、纯全带幺九、清一色。
-    let value (menzen: bool) (yaku: Yaku) : YakuValue =
+    let private baseValue (menzen: bool) (yaku: Yaku) : YakuValue =
         let kuisagari (closed: int) (opened: int) =
             YakuValue.Han(if menzen then closed else opened)
 
@@ -241,9 +254,17 @@ module Yaku =
         | Yaku.Tenhou
         | Yaku.Chiihou -> YakuValue.Yakuman 1
 
-    /// 是不是役满。
+    /// 一个役在这套规则下的价值。规则集在这里只做一件事：开着双倍役满时把雀魂的那四个役
+    /// 翻倍（天凤口径下与 `baseValue` 逐项相同）。番数不受规则集影响。
+    let value (ruleset: Ruleset) (menzen: bool) (yaku: Yaku) : YakuValue =
+        match baseValue menzen yaku with
+        | YakuValue.Yakuman multiplier when ruleset.DoubleYakuman && List.contains yaku doubleYakumanYaku ->
+            YakuValue.Yakuman(multiplier * 2)
+        | value -> value
+
+    /// 是不是役满。**不看规则集**：双倍役满只改倍数，不改「是否役满」。
     let isYakuman (yaku: Yaku) : bool =
-        match value true yaku with
+        match baseValue true yaku with
         | YakuValue.Yakuman _ -> true
         | YakuValue.Han _ -> false
 
@@ -600,7 +621,7 @@ module Yaku =
         {
             Shape = shape
             Breakdown = breakdown
-            Yaku = yaku |> List.map (fun one -> one, value menzen one)
+            Yaku = yaku |> List.map (fun one -> one, value ruleset menzen one)
             Dora = Dora.count context.DoraMarkers tiles
             Uradora =
                 if context.Riichi = RiichiDeclaration.None then

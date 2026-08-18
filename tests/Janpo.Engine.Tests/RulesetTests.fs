@@ -70,6 +70,30 @@ module RulesetTests =
         Assert.Equal(300, Ruleset.yonma.HonbaPoints)
         Assert.Equal(1000, Ruleset.yonma.RiichiBou)
 
+        // 双倍役满 **默认关**：天凤一律单倍。
+        Assert.False(Ruleset.yonma.DoubleYakuman)
+        Assert.True((Ruleset.withDoubleYakuman Ruleset.yonma).DoubleYakuman)
+
+    [<Fact>]
+    let ``雀魂预设与天凤只差三处规则开关`` () =
+        // 三处：三家和了成立而不流局（ADR-0004 决定 3）、国士能抢暗杠（提案 S-A）、
+        // 四个役算双倍役满（雀魂 `fan` 表里这四个的 `yiman` 是 2）。
+        Assert.False(Ruleset.majsoul.SanchaHoraRyuukyoku)
+        Assert.True(Ruleset.majsoul.KokushiAnkanChankan)
+        Assert.True(Ruleset.majsoul.DoubleYakuman)
+
+        // 真正的验收是这一条：**逐字段**与天凤只差这三处，长度也不揉进来（段位战的南场
+        // 用 `withLength Hanchan` 换）——日后谁改天凤侧默认值，这条会当面抦下来。
+        let expected =
+            { Ruleset.yonma with
+                SanchaHoraRyuukyoku = false
+                KokushiAnkanChankan = true
+                DoubleYakuman = true
+            }
+
+        Assert.Equal(expected, Ruleset.majsoul)
+        Assert.Equal(Tonpuusen, Ruleset.majsoul.Length)
+
     [<Fact>]
     let ``配牌总张数由座位数与配牌张数算出`` () =
         Assert.Equal(52, Ruleset.haipaiTotal Ruleset.yonma)
