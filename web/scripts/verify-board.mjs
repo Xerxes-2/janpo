@@ -91,7 +91,7 @@ function readBoard(page) {
             label: text(hand.querySelector(".row-label")),
             faces: hand.querySelectorAll("[data-pai]").length,
             backs: hand.querySelectorAll(".tile.back").length,
-            // 牌背画得出来吗（票 32）：边框色与斜纹底缺一样就是一块看不见的牌。
+            // 牌背画得出来吗（票 32）：边框色与牌背图（票 80 起是 Back.svg，从前是斜纹底）缺一样就是一块看不见的牌。
             backInk: back === null ? null : getComputedStyle(back).borderTopColor,
             backPattern: back === null ? null : getComputedStyle(back).backgroundImage,
             // 刚摸那张的额外间距（票 22 定的记号）：摸切打的就是它，摆回手牌里就看不出来了。
@@ -121,9 +121,27 @@ function readBoard(page) {
 
     const field = (testId) => document.querySelector(`[data-testid="${testId}"]`);
     const dora = field("table-dora");
-    // 赤牌的红字（票 22 定的记号）：它与普通牌的颜色必须不同，否则赤 5 就是普通 5。
+    // 赤牌（票 22 定的记号；票 80 起牌面是 SVG）：牌面图与牌框色两个通道都读。
+    // 对照组不再是「随便哪张普通牌」，而是**同花色同数的普通五**（data-pai 去掉尾缀 r），
+    // 用一枚探针元素从同一份样式表里现取——「赤五与普通五一眼可分」对照的本来就该是那张牌。
     const aka = document.querySelector(".tile.aka");
-    const plain = document.querySelector(".tile:not(.aka):not(.back)");
+    const akaStyle = aka === null ? null : getComputedStyle(aka);
+    const plainOfAka = (() => {
+      const code = aka === null ? null : aka.getAttribute("data-pai");
+      if (code === null) return null;
+      const probe = document.createElement("span");
+      probe.className = "tile";
+      probe.setAttribute("data-pai", code.replace(/r$/, ""));
+      aka.parentElement.append(probe);
+      const style = getComputedStyle(probe);
+      const read = {
+        pai: probe.getAttribute("data-pai"),
+        border: style.borderTopColor,
+        image: style.backgroundImage,
+      };
+      probe.remove();
+      return read;
+    })();
 
     return {
       seats,
@@ -145,8 +163,10 @@ function readBoard(page) {
       },
       aka: {
         text: text(aka),
-        color: aka === null ? null : getComputedStyle(aka).color,
-        plain: plain === null ? null : getComputedStyle(plain).color,
+        pai: attr(aka, "data-pai"),
+        border: akaStyle === null ? null : akaStyle.borderTopColor,
+        image: akaStyle === null ? null : akaStyle.backgroundImage,
+        plain: plainOfAka,
       },
       bound: attr(field("table-agent"), "data-seats"),
       agent: text(field("table-agent")),
@@ -222,7 +242,7 @@ function checkHands(shot, problems) {
         if (invisible(seat.hand.backInk))
           problems.push(`${where}的牌背是透明的（边框色 ${seat.hand.backInk}）：画了等于没画`);
         if (seat.hand.backPattern === null || seat.hand.backPattern === "none")
-          problems.push(`${where}的牌背没有斜纹底：与明牌一眼分不开`);
+          problems.push(`${where}的牌背没有牌背图：与明牌一眼分不开`);
       }
     } else {
       if (seat.hand.faces !== count)
@@ -315,11 +335,36 @@ function checkCenter(shot, problems) {
     problems.push(`这一局有 ${accepted} 家立直成立，桌上的供托却是 ${kyotaku} 根`);
 }
 
-/** 赤牌的红字（票 22）：它与普通牌必须不是一个颜色。 */
+/**
+ * 赤牌（票 22 定的记号，票 80 把牌面换成 SVG 后判据跟着换）。
+ *
+ * 从前牌是文字，「一眼可分」= 字色不同（赤 rgb(192,57,43) vs 普通 rgb(0,0,0)）；
+ * 现在牌是图，同一条语义变成**两个通道**，一条没放宽反而多了一条：
+ * ① 牌面图必须与同花色的普通五不同（`-Dora` 变体），且两张都真贴了图；
+ * ② 牌框色必须与普通五不同（朱红框）。
+ */
 function checkAka(shot, problems) {
-  const { text, color, plain } = shot.aka;
-  if (text !== null && color === plain)
-    problems.push(`牌桌上的赤牌「${text}」与普通牌同色（${color}）：赤 5 看不出来是赤 5`);
+  const { text, pai, border, image, plain } = shot.aka;
+  if (text === null) return; // 没摆出赤牌时由防空转那条（coverage.aka）去红，不在这里重报。
+
+  if (plain === null) {
+    problems.push(`牌桌上的赤牌「${text}」没有 data-pai：找不到该拿哪张普通五来对照`);
+    return;
+  }
+
+  if (image === null || image === "none" || plain.image === "none")
+    problems.push(
+      `赤牌「${text}」（${pai}）或普通「${plain.pai}」没贴牌面图（赤 ${image}／普通 ${plain.image}）：牌不像牌了`,
+    );
+  else if (image === plain.image)
+    problems.push(
+      `赤牌「${text}」（${pai}）与普通「${plain.pai}」贴的是同一张牌面图：赤 5 看不出来是赤 5`,
+    );
+
+  if (border === plain.border)
+    problems.push(
+      `赤牌「${text}」的牌框与普通「${plain.pai}」同色（${border}）：一眼扫过去分不出赤 5`,
+    );
 }
 
 /** ⑥ 宝牌指示牌：至少一张，且写着几张就画出几张。 */
@@ -647,7 +692,7 @@ export async function verifyBoard(lane) {
   );
   console.log(`  立直状态 ✓（座位 ${riichi.join("、")} 立直，头上有标签）`);
   console.log(
-    `  （顺带）赤牌红字 ${shot.aka.text}=${shot.aka.color} ≠ 普通牌 ${shot.aka.plain}、` +
+    `  （顺带）赤牌 ${shot.aka.text}（${shot.aka.pai}）牌框 ${shot.aka.border} ≠ 普通 ${shot.aka.plain.pai} ${shot.aka.plain.border}、牌面图也不同、` +
       `刚摸那张的间距 ${shot.seats.find((seat) => seat.hand.drawnGap !== null).hand.drawnGap}px ✓`,
   );
   console.log(`  方位 ✓（${bottoms}）`);

@@ -254,18 +254,20 @@ module TableBoard =
             | HandView.Revealed _ -> "false"
             | HandView.Concealed _ -> "true"
 
+        // 立直与一发那两枚多一个 class（票 80）：配色分工里「朱红 = 立直」，
+        // 样式表才选得中它们——CSS 选不了文字内容。语义与文字一个都没动。
         let marks =
             [
                 if view.Seat = seating.Oya then
-                    "亲"
+                    "亲", "mark"
                 if Some view.Seat = seating.Viewer then
-                    "视角"
+                    "视角", "mark"
                 if RiichiState.isActive view.Riichi then
-                    RiichiState.toDisplay view.Riichi
+                    RiichiState.toDisplay view.Riichi, "mark riichi"
                 if view.Ippatsu then
-                    "一发"
+                    "一发", "mark riichi"
             ]
-            |> List.map (fun mark -> Html.span [ prop.key mark; prop.className "mark"; prop.text mark ])
+            |> List.map (fun (mark, className) -> Html.span [ prop.key mark; prop.className className; prop.text mark ])
 
         // 方位的文字只在**坐着看**时写：上帝视角根本没有观测者，写「自家」会指向一个不存在的人。
         // 那一档的参照系改由牌桌中央那一句话声明（`tableCenter`）。

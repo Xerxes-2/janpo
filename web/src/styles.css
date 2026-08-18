@@ -1,12 +1,62 @@
+/* 纸面牌谱（票 80）：围棋书·棋谱·研究室的气质——米白纸底、暖墨字、
+   朱红与靛青两个各司其职的强调色。不是雀魂绿毡，不是电竞暗色。
+
+   **配色只在 :root 一处定义**（主人看图终审，色值不合口味改这里就够）：
+     --paper      米白纸底（主人给的锚点 ≈#f6f1e7）
+     --ink        暖墨（≈#2e2a24）
+     --vermilion  朱红 = 赤牌牌框・立直・兜底与警示
+     --indigo     靛青 = 链接・选中・时间轴
+   正文与牌面字对比度按 WCAG AA 校过：ink/paper ≈ 12:1，vermilion/paper ≈ 5.2:1，
+   indigo/paper ≈ 7.9:1；次要文字的淡化一律 ≥0.72 的不透明度（0.6 那一档在纸底上只有
+   3.8:1，不到 AA 的 4.5）。
+
+   **只做静态**（主人裁决）：没有 transition / animation / @keyframes，
+   hover 与 focus 是即时变化；不做暗色，因此 color-scheme 钉在 light——
+   纸就是纸，跟着系统翻黑只会把「纸面」变成第二套没人审过的配色。
+
+   闸门读计算样式的那几处（改这份文件前先看一眼 web/scripts/）：
+   - verify-board：牌背的边框色不许透明、背景图不许是 none（票 32）；
+     摸切 dashed / 手切 solid；.tile.drawn 的 margin-left > 0；
+     赤五与同种普通五**牌面图与牌框色都不许相同**（票 80 起）；
+   - verify-bubbles：气泡与牌排、牌桌中央的矩形不许相交，且画在那一席的框里；
+   - naki-marks：副露槽位从左往右、加杠那张叠在横放那张上面、sr-only 那句看不见。 */
+
 :root {
-  color-scheme: light dark;
-  font-family: ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif;
-  --line: color-mix(in srgb, currentcolor 20%, transparent);
+  color-scheme: light;
+
+  /* —— 纸与墨 —— */
+  --paper: #f6f1e7;
+  --paper-raised: #fbf8f0; /* 摆在纸上的卡片：座位、结算、面板 */
+  --paper-shade: #efe8d8; /* 比纸凹一层：牌桌中央、气泡的批注底 */
+  --ink: #2e2a24;
+  --ink-soft: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  --line: color-mix(in srgb, var(--ink) 24%, transparent);
+  --line-strong: color-mix(in srgb, var(--ink) 45%, transparent);
+
+  /* —— 两个强调色 —— */
+  --vermilion: #b43a2c;
+  --vermilion-wash: color-mix(in srgb, var(--vermilion) 9%, var(--paper-raised));
+  --indigo: #2f4b6e;
+  --indigo-wash: color-mix(in srgb, var(--indigo) 12%, var(--paper-raised));
+
+  /* —— 牌 —— */
+  /* 高:宽 = 2.35:1.75 ≈ 4:3，与 SVG 的 viewBox（300×400）同比：contain 时不留怪边。
+     旋转 90° 的横放牌两侧各探出 (高−宽)/2 = 0.3rem，`.tile.taken` 的 margin 就是这个数。 */
+  --tile-w: 1.75rem;
+  --tile-h: 2.35rem;
+  --tile-face: #fdfaf3; /* 象牙白牌面 */
+  --tile-edge: #b6a98f;
+
+  font-family:
+    "Noto Serif CJK SC", "Source Han Serif SC", "Source Han Serif CN", "Songti SC", SimSun, Georgia,
+    "Times New Roman", serif;
 }
 
 body {
   margin: 0;
   padding: 2rem 1.5rem;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .page {
@@ -16,11 +66,57 @@ body {
 
 h1 {
   font-size: 1.4rem;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.5rem;
+}
+
+/* 靛青管链接（主人定的分工）。下划线留着：纸面上「可点」靠它说。 */
+a {
+  color: var(--indigo);
+  text-underline-offset: 0.2em;
 }
 
 .intro {
-  opacity: 0.75;
+  opacity: 0.8;
   line-height: 1.7;
+}
+
+/* —— 控件：纸上的按钮与输入框 ——
+   浏览器默认那套灰底蓝圈在纸面上像贴错的贴纸，统一成「纸底、墨线、小圆角」。
+   选中态（.picked）走靛青，警示走朱红，都不再各处散写颜色。 */
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--paper-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+button:hover:enabled {
+  border-color: var(--ink);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--paper-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.25rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
 }
 
 .controls {
@@ -33,13 +129,43 @@ h1 {
 .controls input {
   width: 8rem;
   padding: 0.35rem 0.5rem;
+}
+
+/* 导入牌谱那一格（票 78）：8rem 装不下文件名，原生的选择钮穿上与别的按钮同一件衣服。 */
+.controls input[type="file"] {
+  width: auto;
+  border: none;
+  background: none;
+}
+
+input[type="file"]::file-selector-button {
   font: inherit;
+  color: inherit;
+  padding: 0.25rem 0.75rem;
+  margin-right: 0.5rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.3rem;
+  cursor: pointer;
 }
 
 .controls button {
   padding: 0.35rem 1rem;
-  font: inherit;
-  cursor: pointer;
+}
+
+/* 选中 = 靛青（视角、倍速、局号、bot 档、档案页签共用这一件）。 */
+.controls button.picked {
+  border-color: var(--indigo);
+  background: var(--indigo-wash);
+  color: var(--indigo);
+  font-weight: 700;
+}
+
+/* 时间轴 = 靛青（票 75 那根滑块与它的兄弟们）。 */
+input[type="range"] {
+  accent-color: var(--indigo);
+  background: none;
+  border: none;
 }
 
 .cards {
@@ -52,6 +178,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   padding: 1rem 1.25rem;
+  background: var(--paper-raised);
 }
 
 .card h2 {
@@ -62,7 +189,7 @@ h1 {
 .command {
   font-family: ui-monospace, monospace;
   font-size: 0.85rem;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .row {
@@ -73,7 +200,7 @@ h1 {
 
 .label {
   min-width: 4.5rem;
-  opacity: 0.6;
+  opacity: 0.75;
   font-size: 0.85rem;
 }
 
@@ -112,11 +239,12 @@ h1 {
   line-height: 1.5;
 }
 
+/* 警示与出事的行一律朱红（.error / .agent.error / 兜底气泡同一个红）。 */
 .error {
-  color: #c0392b;
+  color: var(--vermilion);
 }
 
-/* 牌桌（22 票）。**能看清就行**：这一票的验收项是「看得完一个 Kyoku」，不是美术。 */
+/* —— 牌桌 —— */
 
 .shell {
   max-width: 68rem;
@@ -139,7 +267,7 @@ h1 {
 
 .latest {
   font-variant-numeric: tabular-nums;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 /* 真牌桌（票 44）：四家围着中央坐，**方位跟着观测视角转**——自家在下、下家在右、
@@ -175,7 +303,8 @@ h1 {
   grid-area: self;
 }
 
-/* 牌桌中央：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间。 */
+/* 牌桌中央：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间。
+   比纸面凹一层（--paper-shade）：它是桌心，不是又一张卡片。 */
 .table-center {
   grid-area: center;
   display: flex;
@@ -183,17 +312,18 @@ h1 {
   gap: 0.4rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 0.5rem;
   padding: 0.6rem 0.8rem;
   text-align: center;
+  background: var(--paper-shade);
 }
 
 /* 方位的参照系（M1 第六条：相对方位必须显式声明参照系）。小字、淡色：它是脚注不是场况。 */
 .table-anchor {
   margin: 0;
   font-size: 0.75rem;
-  opacity: 0.6;
+  opacity: 0.72;
 }
 
 /* 一家的三排牌**从外往内**摆：副露在最外、手牌居中、河贴着桌心。
@@ -206,6 +336,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
+  background: var(--paper-raised);
 }
 
 .seat[data-seat-position="self"] {
@@ -246,14 +377,21 @@ h1 {
 .seat-score,
 .seat-junme {
   font-variant-numeric: tabular-nums;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .mark {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 0.25rem;
   padding: 0 0.35rem;
   font-size: 0.75rem;
+}
+
+/* 立直（与一发）那两枚 = 朱红：真牌桌上它就是压在河边的那根红点棒。 */
+.mark.riichi {
+  color: var(--vermilion);
+  border-color: var(--vermilion);
+  background: var(--vermilion-wash);
 }
 
 .tiles {
@@ -270,7 +408,6 @@ h1 {
   display: grid;
   grid-template-columns: repeat(6, auto);
   justify-content: start;
-  opacity: 0.9;
 }
 
 /* 上下两家的三排居中摆（真牌桌上手牌就在自己正前方）。 */
@@ -279,58 +416,224 @@ h1 {
   justify-content: center;
 }
 
+/* —— 牌（票 80：牌看起来是牌）——
+   一张牌 = 象牙白圆角牌框（这里画）+ CC0 SVG 牌面（`web/src/tiles/`，按 `data-pai` 逐张贴）。
+   **牌面字符还在元素里**：机器（闸门读 textContent / data-pai）与读屏读的是它，
+   画面上由 SVG 说话，所以字用 `color: transparent` 藏起来——
+   票 32 的坑因此要躲一次：牌框的边框色**不许**吃 `currentcolor`（那会跟着透明），
+   一律走 --tile-edge / --vermilion 这样的实色。 */
 .tile {
   display: inline-block;
-  min-width: 1.5rem;
-  padding: 0.1rem 0.15rem;
-  border: 1px solid currentcolor;
-  border-radius: 0.2rem;
+  box-sizing: border-box;
+  width: var(--tile-w);
+  height: var(--tile-h);
+  padding: 0;
+  border: 1px solid var(--tile-edge);
+  border-radius: 0.25rem;
+  background-color: var(--tile-face);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  /* 牌的厚度：底边一道压深的边，纸上就立起来了（静态，不是动效）。 */
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--tile-edge) 45%, transparent);
+  overflow: hidden;
   text-align: center;
   font-size: 0.8rem;
   line-height: 1.3;
+  color: transparent;
 }
 
-/* 摸切：虚线加淡色。手切是实线——两者是公开信息，牌桌上必须分得出来。 */
+/* 牌面：mjai 记法（`Tile.toMjai`）→ FluffyStuff 的 `Regular/` 那一套。
+   花色顺序照 `Tile.kinds`：1m–9m、1p–9p、1s–9s、1z–7z（东南西北白发中），
+   赤五（5mr/5pr/5sr）用 `-Dora` 变体——它的五整张是红的，加上下面 `.tile.aka`
+   的朱红牌框，与普通五隔一张桌子也分得开。 */
+.tile[data-pai="1m"] {
+  background-image: url("./tiles/Man1.svg");
+}
+
+.tile[data-pai="2m"] {
+  background-image: url("./tiles/Man2.svg");
+}
+
+.tile[data-pai="3m"] {
+  background-image: url("./tiles/Man3.svg");
+}
+
+.tile[data-pai="4m"] {
+  background-image: url("./tiles/Man4.svg");
+}
+
+.tile[data-pai="5m"] {
+  background-image: url("./tiles/Man5.svg");
+}
+
+.tile[data-pai="5mr"] {
+  background-image: url("./tiles/Man5-Dora.svg");
+}
+
+.tile[data-pai="6m"] {
+  background-image: url("./tiles/Man6.svg");
+}
+
+.tile[data-pai="7m"] {
+  background-image: url("./tiles/Man7.svg");
+}
+
+.tile[data-pai="8m"] {
+  background-image: url("./tiles/Man8.svg");
+}
+
+.tile[data-pai="9m"] {
+  background-image: url("./tiles/Man9.svg");
+}
+
+.tile[data-pai="1p"] {
+  background-image: url("./tiles/Pin1.svg");
+}
+
+.tile[data-pai="2p"] {
+  background-image: url("./tiles/Pin2.svg");
+}
+
+.tile[data-pai="3p"] {
+  background-image: url("./tiles/Pin3.svg");
+}
+
+.tile[data-pai="4p"] {
+  background-image: url("./tiles/Pin4.svg");
+}
+
+.tile[data-pai="5p"] {
+  background-image: url("./tiles/Pin5.svg");
+}
+
+.tile[data-pai="5pr"] {
+  background-image: url("./tiles/Pin5-Dora.svg");
+}
+
+.tile[data-pai="6p"] {
+  background-image: url("./tiles/Pin6.svg");
+}
+
+.tile[data-pai="7p"] {
+  background-image: url("./tiles/Pin7.svg");
+}
+
+.tile[data-pai="8p"] {
+  background-image: url("./tiles/Pin8.svg");
+}
+
+.tile[data-pai="9p"] {
+  background-image: url("./tiles/Pin9.svg");
+}
+
+.tile[data-pai="1s"] {
+  background-image: url("./tiles/Sou1.svg");
+}
+
+.tile[data-pai="2s"] {
+  background-image: url("./tiles/Sou2.svg");
+}
+
+.tile[data-pai="3s"] {
+  background-image: url("./tiles/Sou3.svg");
+}
+
+.tile[data-pai="4s"] {
+  background-image: url("./tiles/Sou4.svg");
+}
+
+.tile[data-pai="5s"] {
+  background-image: url("./tiles/Sou5.svg");
+}
+
+.tile[data-pai="5sr"] {
+  background-image: url("./tiles/Sou5-Dora.svg");
+}
+
+.tile[data-pai="6s"] {
+  background-image: url("./tiles/Sou6.svg");
+}
+
+.tile[data-pai="7s"] {
+  background-image: url("./tiles/Sou7.svg");
+}
+
+.tile[data-pai="8s"] {
+  background-image: url("./tiles/Sou8.svg");
+}
+
+.tile[data-pai="9s"] {
+  background-image: url("./tiles/Sou9.svg");
+}
+
+.tile[data-pai="1z"] {
+  background-image: url("./tiles/Ton.svg");
+}
+
+.tile[data-pai="2z"] {
+  background-image: url("./tiles/Nan.svg");
+}
+
+.tile[data-pai="3z"] {
+  background-image: url("./tiles/Shaa.svg");
+}
+
+.tile[data-pai="4z"] {
+  background-image: url("./tiles/Pei.svg");
+}
+
+.tile[data-pai="5z"] {
+  background-image: url("./tiles/Haku.svg");
+}
+
+.tile[data-pai="6z"] {
+  background-image: url("./tiles/Hatsu.svg");
+}
+
+.tile[data-pai="7z"] {
+  background-image: url("./tiles/Chun.svg");
+}
+
+/* 摸切：虚线加淡色。手切是实线——两者是公开信息，牌桌上必须分得出来
+   （verify-board 读的就是 borderTopStyle 这两个值）。 */
 .tile.tsumogiri {
   border-style: dashed;
   opacity: 0.55;
 }
 
+/* 赤牌：`-Dora` 牌面（上面按 data-pai 已经贴上）+ 朱红牌框。
+   两个记号都留是有意的：牌面小到一眼扫过去时，红框先跳出来。 */
 .tile.aka {
-  color: #c0392b;
+  border-color: var(--vermilion);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--vermilion) 40%, transparent);
 }
 
-/* 刚摸进、还没打出去的那张，摆得离手牌远一点。 */
+/* 刚摸进、还没打出去的那张，摆得离手牌远一点（0.6rem = 9.6px，票 44 的闸门读它）。 */
 .tile.drawn {
   margin-left: 0.6rem;
 }
 
-/* 牌背：他家的暗牌。牌面字符**不许露出来**——围观视角下他家的牌面在数据层面就不存在，
-   元素里那个「背」字用 `color: transparent` 抹掉；但**牌本身必须看得见**，且一眼与明牌分得开：
-   明牌是空底加字，牌背是斜纹底加实线框。
-   坑（票 32）：牌背的墨色不能吃 `currentcolor`——上面那句 `color: transparent` 会把边框
-   （`.tile` 的 `1px solid currentcolor`）与底纹一起抹没。所以这里取 `canvastext`，
-   即页面正文色，跟着 `:root` 的 `color-scheme` 走。 */
+/* 牌背：他家的暗牌，用上游的 `Back.svg` 整张铺满。
+   「背」字与牌面字一样藏着（`.tile` 的 color: transparent），但**牌本身必须看得见**：
+   边框是实色（不吃 currentcolor，票 32），背景图不许是 none——两样闸门都读。
+   上游的背是高饱和的橙红，在米白纸底上比谁都响，而朱红这个色相是留给赤牌与立直的——
+   按票面「要调色走 CSS」把它压成旧书封皮那种旧红（静态 filter，不是动效）。 */
 .tile.back {
-  --back-ink: color-mix(in srgb, canvastext 55%, transparent);
-
   border-style: solid;
-  border-color: var(--back-ink);
-  background-color: color-mix(in srgb, canvastext 8%, transparent);
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--back-ink) 0 1.5px,
-    transparent 1.5px 5px
-  );
-  color: transparent;
+  border-color: #8a7f6a;
+  background-color: var(--paper-shade);
+  background-image: url("./tiles/Back.svg");
+  background-size: 100% 100%;
+  filter: saturate(0.45) brightness(1.04);
 }
 
 /* 被鸣的那张：**横放**（票 38）。牌谱上就是这个画法——一组里横着的那张是从别人那儿来的
    （加杠横着的是当初碰来的那张，后加上去的那张见 `.tile.added`）。
-   记号挑**朝向**而不是描边或换色：虚线加淡色是摸切、45° 斜纹是牌背、红字是赤牌、
+   记号挑**朝向**而不是描边或换色：虚线加淡色是摸切、橙背是牌背、朱红框是赤牌、
    额外间距是刚摸那张，四条都占了，转 90° 与它们一条也不撞。
-   `transform` 不占布局，邻牌因此不会被推走；两侧的 margin 是给转过来的那张腾地方，
-   行高（`.tiles.naki-row`）也相应抬高——不然它会压到上下两行。 */
+   `transform` 不占布局，邻牌因此不会被推走；两侧的 margin 恰是转过来后探出的那一截
+   （(--tile-h − --tile-w)/2 = 0.3rem），行高（`.naki`）也相应抬高。 */
 .tile.taken {
   transform: rotate(90deg);
   margin: 0 0.3rem;
@@ -341,7 +644,7 @@ h1 {
    没这枚记号就看不出谁是后添的那张。机器可读的那一半写在 `data-naki-added` 上。 */
 .naki-add {
   font-size: 0.75rem;
-  opacity: 0.7;
+  opacity: 0.72;
 }
 
 /* 副露里的一个**槽位**（票 51）：一格一张，只有加杠那一格是两张。
@@ -355,14 +658,14 @@ h1 {
   align-items: center;
 }
 
-/* 副露组比别处高：横放那张转完 90° 后占的是牌的**宽**度（「赤 5 万」三个字最宽），
-   高度不给够它就会顶出虚线框、压到手牌那一行上去。
+/* 副露组比别处高：横放那张转完 90° 后占的是牌的**高**度那么宽，
+   竖向只剩牌宽，高度不给够它就会顶出虚线框、压到手牌那一行上去。
    **抬的是副露组而不是副露那一行**：一家还门清时那一行是空的，空行不必跟着变高。 */
 .naki {
   display: inline-flex;
   gap: 0.1rem;
   align-items: center;
-  min-height: 2.4rem;
+  min-height: calc(var(--tile-h) + 0.3rem);
   margin-right: 0.6rem;
   padding: 0.1rem 0.25rem;
   border: 1px dashed var(--line);
@@ -371,7 +674,7 @@ h1 {
 
 .naki-kind {
   font-size: 0.7rem;
-  opacity: 0.7;
+  opacity: 0.72;
 }
 
 /* 只给读屏读的文字（票 51）：牌桌上看不见，但它**在无障碍树里**。
@@ -396,12 +699,13 @@ h1 {
   gap: 0.2rem;
 }
 
+/* 立直棒 = 朱红（配色分工里「立直」归它）。真物是白棒红点，纸面上一根红棒更省话。 */
 .bou {
   display: inline-block;
   width: 1.5rem;
   height: 0.35rem;
   border-radius: 0.2rem;
-  background: currentcolor;
+  background: var(--vermilion);
 }
 
 .settlement {
@@ -409,6 +713,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
+  background: var(--paper-raised);
 }
 
 .settlement h3 {
@@ -420,15 +725,10 @@ h1 {
   margin: 0.25rem 0;
 }
 
-.controls button.picked {
-  border-color: currentcolor;
-  font-weight: 700;
-}
-
 .row-label {
   min-width: 3.5rem;
   font-size: 0.75rem;
-  opacity: 0.6;
+  opacity: 0.72;
 }
 
 /* 河那一排是 6 列的方阵，标题独占头一行——免得它挤掉一张牌的位置。 */
@@ -436,13 +736,14 @@ h1 {
   grid-column: 1 / -1;
 }
 
-/* LLM 座位（23 票）。同样是「能看清就行」：配置面板不过夜。 */
+/* —— LLM 座位与配桌面板 —— */
 
 .llm-panel {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   padding: 0.25rem 1rem 0.75rem;
   margin: 1.5rem 0;
+  background: var(--paper-raised);
 }
 
 .llm-panel .controls {
@@ -458,12 +759,9 @@ h1 {
 .llm-panel select,
 .llm-panel textarea {
   padding: 0.3rem 0.4rem;
-  font: inherit;
 }
 
-/* 人格与模板那两格（31-C）：原来走浏览器默认，于是只有它俩是等宽小字。
-   归一只靠上面那条（同一份 `font` 与内边距），边框与配色仍然交给浏览器
-   ——旁边那几个 input / select 走的就是默认，单给 textarea 画一套才叫不一致。
+/* 人格与模板那两格（31-C）：与旁边的 input / select 同一份 font 与内边距。
    另加两样多行文本自己要的：宽度对齐那一行控件，只允许竖直拉
    （横向拉宽会把面板那一行挤断行）。 */
 .llm-panel textarea {
@@ -478,7 +776,7 @@ h1 {
   margin: 0 0 0.75rem;
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .llm-panel .rendering.pending {
@@ -500,20 +798,14 @@ h1 {
   margin: 0;
 }
 
-/* 站点页脚（37 票）：回仓库与许可的那一行。**不抢牌桌的注意力**——小字、淡色、
-   一条细线隔开，颜色全部跟着正文走（`var(--line)` 与 `inherit`），不引入新配色。 */
+/* 站点页脚（票 37）：回仓库与许可的那一行。**不抢牌桌的注意力**——小字、淡色、
+   一条细线隔开。链接跟着全站走靛青（票 80 的配色分工），下划线照旧。 */
 .site-footer {
   margin-top: 2rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--line);
   font-size: 0.8rem;
-  opacity: 0.7;
-}
-
-/* 链接仍然带下划线（一眼看得出可点），但**不上蓝色**：默认的链接色在这一行里比牌桌还抢眼。 */
-.site-footer a {
-  color: inherit;
-  text-underline-offset: 0.2em;
+  opacity: 0.8;
 }
 
 /* Agent 层的状态线。兜底代打时它红着——**不许静默替换**。 */
@@ -525,30 +817,6 @@ h1 {
 .agent.error {
   opacity: 1;
   font-weight: 600;
-}
-
-/* 窄视口（票 44）。**820px 仍然是真牌桌**（M1 验过那个宽度，这一票也验了）：
-   三列各约 240px，河那块 6 列方阵约 190px，放得下。
-   再窄就不强撑了：40rem 以下排成一列，顺序仍然是对家→上家→中央→下家→自家
-   （对家在最上、自家在最下这两条保住）。手机上左右两家叠成上下，但它们的方位文字
-   （`.seat-position`）还写在头上，读得出来。 */
-@media (max-width: 40rem) {
-  .seats-board {
-    grid-template-areas:
-      "toimen"
-      "kamicha"
-      "center"
-      "shimocha"
-      "self";
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .seat[data-seat-position="kamicha"] .kawa,
-  .seat[data-seat-position="kamicha"] .naki-row,
-  .seat[data-seat-position="shimocha"] .kawa,
-  .seat[data-seat-position="shimocha"] .naki-row {
-    align-self: flex-start;
-  }
 }
 
 /* 窄视口（票 44）：三列的真牌桌在约 40rem 以下会把每一列挤到放不下半排河，
@@ -602,9 +870,10 @@ h1 {
    因此是结构上的事实而不是纪律：它与三排牌各占各的行，压不到任何一张牌上
    （闸门另核两者的矩形不相交，`web/scripts/verify-bubbles.mjs`）。
 
-   三态一眼分得开靠三样：头上那两个字（在想 / 说 / 兜底）、画法（虚线 / 实线 / 红），
-   与 `data-bubble`（机器读的那一半）。thinking 是整段文字，因此**钉住高度、溢出剪掉**
-   ——全文在点开那一屏里，气泡本身不许把牌桌撑变形。 */
+   画法照批注（票 80 主人给的形态）：淡纸灰底、左手一道墨线——像页边上抄进去的一句话。
+   三态一眼分得开：在想 = 虚线淡着、说了什么 = 墨线批注、兜底 = 朱红。
+   thinking 是整段文字，因此**钉住高度、溢出剪掉**——全文在点开那一屏里，
+   气泡本身不许把牌桌撑变形。 */
 .bubble {
   display: block;
   width: 100%;
@@ -615,9 +884,9 @@ h1 {
   overflow: hidden;
   padding: 0.2rem 0.45rem;
   border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 0.35rem;
-  background: transparent;
+  border-left: 3px solid var(--ink-soft);
+  border-radius: 0 0.35rem 0.35rem 0;
+  background: var(--paper-shade);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -630,23 +899,27 @@ h1 {
   align-self: center;
 }
 
-/* 在想：还没有记录，点不开（`prop.disabled`），因此也不摆手型。 */
+/* 在想：还没有记录，点不开（`prop.disabled`），因此也不摆手型。
+   已等秒数（票 74）是一对会跳的数字，tabular-nums 让它跳的时候不抖。 */
 .bubble[data-bubble="thinking"] {
   border-style: dashed;
-  opacity: 0.7;
+  border-left-style: solid;
+  opacity: 0.75;
   cursor: default;
+  font-variant-numeric: tabular-nums;
 }
 
-/* 兜底代打：与页面上其余「出事了」同一个红（`.error` / `.agent.error`）。 */
+/* 兜底代打：与页面上其余「出事了」同一个朱红（.error / .agent.error）。 */
 .bubble[data-bubble="troubled"] {
-  border-left-color: #c0392b;
-  color: #c0392b;
+  border-left-color: var(--vermilion);
+  color: var(--vermilion);
+  background: var(--vermilion-wash);
 }
 
 .bubble-who {
   margin-right: 0.4rem;
   font-size: 0.7rem;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .bubble-said {
@@ -681,6 +954,4 @@ h1 {
 
 .bubble-head button {
   padding: 0.2rem 0.9rem;
-  font: inherit;
-  cursor: pointer;
 }
