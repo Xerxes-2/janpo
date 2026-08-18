@@ -7,7 +7,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 ## 怎么拆
 
@@ -23,23 +23,29 @@
 具体几个文件、叫什么名字由你定（`Janpo.Web.fsproj` 的 `<Compile>` 顺序是编译顺序，F# 只往前看）。
 **判据是：拆完之后上表那四行分别落在不同文件里。**
 
-- [ ] 拆完 `TablePage.fs` 不再超过 ~400 行（或者干脆只剩一个 `Page ()` 外壳）
-- [ ] 公开签名不减：`TablePage.initial` / `rosterOf` / `renderingPending` 是 dotnet 侧用例的入口
+- [x] 拆完 `TablePage.fs` 不再超过 ~400 行（或者干脆只剩一个 `Page ()` 外壳）
+      —— **58 行**：五个转出入口 + `Page ()`
+- [x] 公开签名不减：`TablePage.initial` / `rosterOf` / `renderingPending` 是 dotnet 侧用例的入口
       （`tests/Janpo.Web.Tests`），一个都不许变私有或改名
-- [ ] `prop.testId` 与 `data-*` 的**全集逐字不变**（拆前拆后各 `grep -o` 一遍排序对照，贴进报告）
+      —— 连 `init` / `update` / `Page` 一共五个原样在；跨文件的助手一律 `internal`，**程序集的公开面一个符号不多**
+- [x] `prop.testId` 与 `data-*` 的**全集逐字不变**（拆前拆后各 `grep -o` 一遍排序对照，贴进报告）
+      —— 三组 grep（testId / `data-*` / `table-*`・`seat-*` 字面量）的 diff 全空，报告 §3
 
 ## 验收
 
-- [ ] `./scripts/ci.sh` 全绿，**web 那七趟一道都没改**（`web/scripts/*.mjs` 在 `jj diff` 里不出现）
-- [ ] `jj diff --stat` 只有文件搬家、`namespace`/`open`/`<Compile>` 的必要调整，**没有一行逻辑改动**；
+- [x] `./scripts/ci.sh` 全绿，**web 那七趟一道都没改**（`web/scripts/*.mjs` 在 `jj diff` 里不出现）
+      —— 37.2s 全绿；`jj diff --summary` 只有 `src/Janpo.Web/` 那六个文件
+- [x] `jj diff --stat` 只有文件搬家、`namespace`/`open`/`<Compile>` 的必要调整，**没有一行逻辑改动**；
       报告里逐条说明每一处「不是纯搬家」的改动为什么必须
-- [ ] 截图不必重出（渲染结果按定义未变）；真要变了就是这一票做错了
+      —— 拆前拆后逐行对照：**只少了 18 行**（8 处 `private`→`internal` + 9 处调用点加模块名 + 1 行旧模块注释），报告 §4
+- [x] 截图不必重出（渲染结果按定义未变）；真要变了就是这一票做错了
+      —— 未重出；另拿 **Fable 生成的 JS** 对照了一遍（归一化后只多那五个转出包装，报告 §5）
 
 ## 边界
 
-- [ ] 不碰 `src/Janpo.Engine/**`、不碰 `web/src/agent/**`、不碰 `web/scripts/**`、不碰 `web/src/styles.css`
-- [ ] 不顺手改任何行为、不顺手改文案、不顺手「优化」——这一票的价值全在「diff 里没有惊喜」
-- [ ] `App.fs`（曳光弹）与 `Main.fs`（外壳）不动；地址与路由是票 71 的事
+- [x] 不碰 `src/Janpo.Engine/**`、不碰 `web/src/agent/**`、不碰 `web/scripts/**`、不碰 `web/src/styles.css`
+- [x] 不顺手改任何行为、不顺手改文案、不顺手「优化」——这一票的价值全在「diff 里没有惊喜」
+- [x] `App.fs`（曳光弹）与 `Main.fs`（外壳）不动；地址与路由是票 71 的事
 
 ## 为什么先做它
 

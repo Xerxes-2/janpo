@@ -29,6 +29,16 @@
     <Compile Include="Golden.fs" />
     <Compile Include="PaifuCheck.fs" />
     <Compile Include="App.fs" />
+    <!-- 牌桌页（票 70 把 1647 行的 `TablePage.fs` 拆成五个）。**这五行的先后就是编译顺序**，
+         F# 只往前看，所以按依赖排：状态与 MVU（`TableState`）→ Agent 层那两行状态（`AgentLine`）
+         → 牌桌与结算的视图（`TableBoard`，它把上一行接在最前面）→ 配桌与模型面板（`TablePanel`）
+         → 把四块装回一屏的外壳（`TablePage`，`Main.fs` 与 dotnet 侧用例认的仍是这个名字）。
+         拆的判据是「哪张票会改它」：改状态与消息的进 `TableState`，改面板的进 `TablePanel`，
+         改牌桌与结算的进 `TableBoard`。 -->
+    <Compile Include="TableState.fs" />
+    <Compile Include="AgentLine.fs" />
+    <Compile Include="TableBoard.fs" />
+    <Compile Include="TablePanel.fs" />
     <Compile Include="TablePage.fs" />
     <!-- 页脚（票 37）：仓库与许可地址的唯一真源，只被 `Main.fs` 的页面外壳用。 -->
     <Compile Include="Footer.fs" />

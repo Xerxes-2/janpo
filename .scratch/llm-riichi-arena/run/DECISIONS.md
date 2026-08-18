@@ -4899,3 +4899,31 @@ spec 的 M2 一行落成**十张票 70–79**，波次见 `M2-SCHEDULE.md`。切
 - **prompt 三条债**（记法混三套 / 没告诉模型顺位比点数重要 / 采样参数与多轮上下文）：
   前两条等票 79 跑出真实语料再单开票（当初记的理由就是「那时有基准线可比」），后两条维持 M1 的否决。
   超时默认值不等——它已经进票 72（30 秒对开着思考的模型必然不够）。
+
+## 70 — 拆 `TablePage.fs`：三条约束逼出「外壳 + 转出」这个形状
+
+**裁决**：1647 行按票面那张表拆成五个文件，`<Compile>` 顺序
+`TableState → AgentLine → TableBoard → TablePanel → TablePage`（外壳）。
+四个落点分别落在四个文件里；`AgentLine` 排在 `TableBoard` 前面，因为 `tableBody` 要把那两行接在牌桌最前面。
+
+**`TablePage` 只剩 58 行的转出层，不是设计偏好而是三条约束的唯一交点**：
+`Main.fs` 调 `TablePage.Page`（票面明令不动）+ 用例调 `TablePage.initial` / `init` / `update` /
+`rosterOf` / `renderingPending`（不许改名）+ **F# 不许一个模块分在两个文件里**
+（当场试出 `error FS0248`）。于是真实现在 `TableState`，`TablePage` 原样转出五个入口。
+被否决：把 `Page ()` 挪进 `Main.fs`（票面禁止，且外壳与页面是两回事）；
+MVU 直接叫 `module TablePage` 排最前、外壳另起名字（要改 `Main.fs` 的调用点）。
+
+**跨文件的助手用 `internal` 而不是公开**：`internal` 只到程序集边界，
+`tests/Janpo.Web.Tests` 看不见——于是「公开签名不减」的同时公开面也**一个符号没多**
+（八处 `private` → `internal`：`canAdvance` / `fallenBack` / `agentLine` / `usageLine` /
+`tableBody` / `controls` / `viewpoints` / `llmPanel`）。
+
+**函数一个都没改名**（`AgentLine.agentLine` 明知有点重复）：改名会让「这是纯搬家」
+再也没法用一次 diff 证明。同理原文注释一行没删——包括拆完之后与模块文档重复的那两处分节标记。
+被否决：顺手改名、顺手删冗余注释、顺手把 744 行的 `TableBoard` 再切一刀（那要具体需求当判据，
+留给票 76）。
+
+**「没有惊喜」证了三遍**：钩子全集三组 grep diff 全空；源码按行排序对照**只少 18 行**（逐条列在报告 §4）；
+**Fable 生成的 JS** 归一化后只多出那五个转出包装、零删除零修改（报告 §5）。
+第三条是临时把工作区还原成拆前状态重跑一次 `pnpm run fable` 对出来的——
+截图按票面不必重出，这一条比截图硬。

@@ -1,0 +1,744 @@
+namespace Janpo.Web
+
+open Feliz
+open Janpo
+
+/// 画一家牌时要的那点桌面上下文（票 44）。**四样东西总是一起出现**，
+/// 收成一个记录是为了 `seatPanel` 不用收五个位置参数。
+///
+/// **它不是第二份牌局状态**（ADR-0002）：四个字段全是 `Table` 与 `BoardView` 里现有的那份，
+/// 只在渲染那一瞬拼在一起。
+type Seating = {
+    /// 这一桌的规则集：方位与副露来源的座位算术都要它。
+    Ruleset: Ruleset
+    /// 观测者；上帝视角没有（那枚「视角」标签与方位文字读的就是它）。
+    Viewer: Seat option
+    /// 方位的**参照系**（`Board.anchor` 算好的：坐着看是观测者，上帝视角是起家）。
+    Anchor: Seat
+    /// 亲：那枚「亲」标签。
+    Oya: Seat
+}
+
+/// 牌桌与结算的视图（票 70 从 `TablePage.fs` 拆出来的第三块）：一家的三排牌、牌桌中央、
+/// 结算与终局精算、危险度面板，以及把它们摆成一屏的 `tableBody`。
+///
+/// **只画不判**：这里读的全是 `Board` 算好的投影与引擎给的值（ADR-0002 的那份局面），
+/// 页面自己的状态在 `TableState`，配桌与模型面板在 `TablePanel`。
+[<RequireQualifiedAccess>]
+module TableBoard =
+
+    // ---- 视图：牌 ----
+
+    /// 一张亮着的牌。**人类可读形式只在这里出现**（ADR-0001）；`data-pai` 上仍是 mjai 记法，
+    /// 无头验收数「这一家的牌露没露出来」靠的就是它。
+    /// `extras` 给河那边添摸切标记，其余处传空表。
+    let private paiSpan (key: int) (extra: string) (extras: IReactProperty list) (pai: Tile) =
+        let akadora = if Tile.isAkadora pai then " aka" else ""
+
+        Html.span (
+            [
+                prop.key key
+                prop.className $"tile{extra}{akadora}"
+                prop.custom ("data-pai", Tile.toMjai pai)
+            ]
+            @ extras
+            @ [ prop.text (Tile.toDisplay pai) ]
+        )
+
+    let private face (key: int) (extra: string) (pai: Tile) = paiSpan key extra [] pai
+
+    /// 一张扣着的牌。**它没有 `data-pai`**——投影里压根没有那张牌，渲染层无从写起。
+    let private back (key: int) =
+        Html.span [ prop.key key; prop.className "tile back"; prop.text "背" ]
+
+    let private faces (extra: string) (tiles: Tile list) =
+        tiles |> List.mapi (fun index pai -> face index extra pai)
+
+    // ---- 视图：一家 ----
+
+    /// 暗牌摆成「手里的 + 刚摸进的那张单独摆在右边」。刚摸进那张**本来就在手牌里**
+    /// （`RevealedSeat.Hand` 含它），这里只是把它拎出来摆开——摸切打的就是它。
+    let private handTiles (hand: HandView) =
+        match hand with
+        | HandView.Concealed count -> [ for index in 1..count -> back index ]
+        | HandView.Revealed(tiles, drawn) ->
+            match drawn |> Option.bind (fun pai -> tiles |> List.tryFindIndex ((=) pai)) with
+            | None -> faces "" tiles
+            | Some index ->
+                let held = List.take index tiles @ List.skip (index + 1) tiles
+                faces "" held @ [ face (List.length held) " drawn" (List.item index tiles) ]
+
+    /// 河。**手切与摸切画得不一样**（`tsumogiri` 那一位是公开信息），
+    /// 摸切那几张画成虚线加淡色，`data-tsumogiri` 上也写着，无头验收读得到。
+    let private kawaTiles (kawa: KawaEntry list) =
+        kawa
+        |> List.mapi (fun index entry ->
+            let marks = [
+                prop.custom ("data-tsumogiri", (if entry.Tsumogiri then "true" else "false"))
+                prop.title (if entry.Tsumogiri then "摸切" else "手切")
+            ]
+
+            paiSpan index (if entry.Tsumogiri then " tsumogiri" else "") marks entry.Pai)
+
+    /// 副露的来源怎么称呼：**相对副露方**的中文说法（CONTEXT.md 的 Shimocha / Toimen / Kamicha）。
+    /// 措辞与 prompt 尾部那头同一套词（`web/src/agent/wording.ts` 的 `relative`），
+    /// 形状照 `Threat.who`：座位数不是 4 时没有对家，那时按座位号说。
+    let private nakiFrom (view: NakiView) : string option =
+        match view.Relative, view.Target with
+        | Some 1, _ -> Some "下家"
+        | Some 2, _ -> Some "对家"
+        | Some 3, _ -> Some "上家"
+        | Some _, Some target -> Some $"座位 {Seat.index target}"
+        | _, _ -> None
+
+    /// 副露里的一张。**横放的那张是从他家那儿来的**（`NakiTileView.FromOther`）：
+    /// 碰 / 吃 / 大明杠是被鸣的那张，加杠是当初碰来的那张，暗杠一张也没有。
+    /// 记号挑**朝向**而不是描边或换色：虚线加淡色是摸切、45° 斜纹是牌背、红字是赤牌、
+    /// 额外间距是刚摸那张——四条都占了，而横放又正是牌谱的标准画法。
+    ///
+    /// 加杠**加上去的那张**出自自家手里，不是鸣来的，所以**不横放**（真牌桌上它也是侧着的，
+    /// 但那样一来「横放 = 从他家来的」这条记号就得重定义，票 38 占的那一维不动）；
+    /// 它前面摆一枚「＋」（牌谱文字记法里的 `中中中＋中`），并且**叠在横放那张上**（见 `nakiSlot`）。
+    /// `data-naki-taken` / `data-naki-added` 给无头闸门读（票 38）。
+    let private nakiTile (takenTitle: string) (key: int) (tile: NakiTileView) : ReactElement list =
+        match tile.Pai with
+        | None -> [ back key ]
+        | Some pai ->
+            let marks = [
+                if tile.FromOther then
+                    prop.custom ("data-naki-taken", "true")
+                    prop.title takenTitle
+                if tile.Added then
+                    prop.custom ("data-naki-added", "true")
+                    prop.title "加杠加上去的那张（自家手里的第四张）"
+            ]
+
+            let extra =
+                (if tile.FromOther then " taken" else "")
+                + (if tile.Added then " added" else "")
+
+            let plus = [
+                if tile.Added then
+                    Html.span [
+                        prop.key $"add-{key}"
+                        prop.className "naki-add"
+                        prop.title "加杠加上去的那张（自家手里的第四张）"
+                        prop.text "＋"
+                    ]
+            ]
+
+            plus @ [ paiSpan key extra marks pai ]
+
+    /// 副露里的一个**槽位**（票 51）：一格一张，只有加杠那一格是两张。
+    ///
+    /// DOM 里是**从下往上**（先写底下那张），样式拿 `column-reverse` 把它竖起来——
+    /// 于是「当初碰来的那张」仍在底下且仍在它当初那一格，加上去的那张在上面。
+    let private nakiSlot (takenTitle: string) (key: int) (slot: NakiSlot) =
+        Html.span [
+            prop.key key
+            prop.className "naki-slot"
+            prop.children (slot |> List.mapi (nakiTile takenTitle) |> List.concat)
+        ]
+
+    /// 一组副露。三件事要看得出来：**种类**、**被鸣的是哪一张**（横放）、**来自谁**。
+    /// 杠仍看得出形态：四张一组，暗杠两端扣着（牌桌上就是这个摆法）且**没有来源**
+    /// ——它不是鸣来的。
+    ///
+    /// **来源走位置编码**（票 51）：横放那张落在第几格就是它来自谁，牌桌上因此
+    /// **不再写那行「来自X」**（票 38 当初否决位置编码的理由是「四家是竖排面板、方位无锚」，
+    /// 票 44 把牌桌改成四家围坐之后那条理由就没了）。但那句中文**仍然写给读屏用户**
+    /// （`sr-only`），`data-naki-from` 也原样留着——两道闸门读的就是它。
+    let private nakiGroup (ruleset: Ruleset) (owner: Seat) (key: int) (naki: Naki) =
+        let view = Board.nakiView ruleset owner naki
+        let kind = NakiKind.toDisplay view.Kind
+        let from = nakiFrom view
+
+        let takenTitle =
+            let who =
+                from |> Option.map (fun each -> $"来自{each}") |> Option.defaultValue "从他家鸣来"
+
+            if view.Kind = NakiKind.Kakan then
+                $"当初碰来的那张（{who}）"
+            else
+                $"被鸣的那张（{who}）"
+
+        // 来源那枚标签与它的 `data-`：暗杠一样都没有。绝对座位另写一份（`data-naki-from-seat`），
+        // 闸门拿它与副露方的座位号对得上才算数——参照系要是漂到观测者那边，这一条当场就红。
+        let sourceMarks =
+            match from, view.Target with
+            | Some who, Some target -> [
+                prop.custom ("data-naki-from", who)
+                prop.custom ("data-naki-from-seat", Seat.index target)
+              ]
+            | _, _ -> []
+
+        // 来源那句话在牌桌上**看不见了**（主人裁定：位置为主、文字不留），但它仍然写在 DOM 里
+        // 给**读屏用户**：位置读屏读不出来，删干净就是把来源对他们藏了。
+        // `sr-only` 是那一半的画法；闸门两头都核：文字必须在、且必须看不见。
+        let sourceLabel =
+            match from, view.Target with
+            | Some who, Some target -> [
+                Html.span [
+                    prop.key "from"
+                    prop.className "naki-from sr-only"
+                    prop.title $"这一组是从座位 {Seat.index target} 那儿鸣来的"
+                    prop.text $"来自{who}"
+                ]
+              ]
+            | _, _ -> []
+
+        Html.span (
+            [ prop.key key; prop.className "naki"; prop.custom ("data-naki", kind) ]
+            @ sourceMarks
+            @ [
+                prop.children (
+                    Html.span [ prop.key "kind"; prop.className "naki-kind"; prop.text kind ]
+                    :: sourceLabel
+                    @ (view.Slots |> List.mapi (nakiSlot takenTitle))
+                )
+            ]
+        )
+
+    /// 一排牌：小标题加那几张。**张数写在标题里**——「各家手牌数」那条验收看的就是它，
+    /// 而他家的张数来自投影（`MaskedSeat.HandCount`），不是渲染层拿副露数推的。
+    ///
+    /// `marks` 是这一排的 `data-`（票 44）：标题里的那个数字是给人看的，它们是同一件事
+    /// 给机器看的那一半——闸门拿两者与真画出来的张数三头对。
+    let private tileRow
+        (testId: string)
+        (extra: string)
+        (marks: IReactProperty list)
+        (label: string)
+        (tiles: ReactElement list)
+        =
+        Html.div (
+            [ prop.key testId; prop.className $"tiles {extra}"; prop.testId testId ]
+            @ marks
+            @ [
+                prop.children (
+                    Html.span [ prop.key "label"; prop.className "row-label"; prop.text label ]
+                    :: tiles
+                )
+            ]
+        )
+
+    /// 立直状态给机器看的那一半（票 44）。人看的是头上那枚「立直」标签
+    /// （`RiichiState.toDisplay`）；两者对不上时闸门报错。
+    /// **宣言与成立是两步**（`RiichiState` 那段注释），因此不能只写一个布尔：
+    /// 供托里那一根只跟着**成立**的那几家走。
+    let private riichiWire (state: RiichiState) : string =
+        if RiichiState.isAccepted state then "accepted"
+        elif RiichiState.isDeclared state then "declared"
+        else "none"
+
+    /// 一家的牌与标记。
+    ///
+    /// **三排牌从外往内摆**：副露、手牌、河——真牌桌上就是这个顺序（副露在身侧最外，
+    /// 河摆在桌心）。四个方位各自把这三排**朝中心那一边翻**，翻法全在 `styles.css`（按
+    /// `data-seat-position` 选），这一层只负责把顺序摆对。
+    ///
+    /// `data-seat-position` 是方位给机器看的那一半，**样式读的也是它**：
+    /// 属性写着下家却画在左边这种事因此不存在（闸门仍然两样都核：
+    /// 属性对不对、以及画出来的坐标对不对）。
+    let private seatPanel (seating: Seating) (view: SeatView) =
+        let index = Seat.index view.Seat
+        let position = Board.position seating.Ruleset seating.Anchor view.Seat
+
+        let handCount =
+            match view.Hand with
+            | HandView.Revealed(hand, _) -> List.length hand
+            | HandView.Concealed count -> count
+
+        let hidden =
+            match view.Hand with
+            | HandView.Revealed _ -> "false"
+            | HandView.Concealed _ -> "true"
+
+        let marks =
+            [
+                if view.Seat = seating.Oya then
+                    "亲"
+                if Some view.Seat = seating.Viewer then
+                    "视角"
+                if RiichiState.isActive view.Riichi then
+                    RiichiState.toDisplay view.Riichi
+                if view.Ippatsu then
+                    "一发"
+            ]
+            |> List.map (fun mark -> Html.span [ prop.key mark; prop.className "mark"; prop.text mark ])
+
+        // 方位的文字只在**坐着看**时写：上帝视角根本没有观测者，写「自家」会指向一个不存在的人。
+        // 那一档的参照系改由牌桌中央那一句话声明（`tableCenter`）。
+        let positionLabel = [
+            if Option.isSome seating.Viewer then
+                Html.span [
+                    prop.key "position"
+                    prop.className "seat-position"
+                    prop.text (Position.toDisplay position)
+                ]
+        ]
+
+        Html.section [
+            prop.key index
+            prop.className "seat"
+            prop.testId $"seat-{index}"
+            prop.custom ("data-seat", index)
+            prop.custom ("data-seat-position", Position.toWire position)
+            prop.custom ("data-riichi", riichiWire view.Riichi)
+            prop.children [
+                Html.div [
+                    prop.className "seat-head"
+                    prop.children (
+                        [
+                            Html.span [
+                                prop.key "name"
+                                prop.className "seat-name"
+                                prop.text $"座位 {index}・{Kaze.toDisplay view.Jikaze}家"
+                            ]
+                        ]
+                        @ positionLabel
+                        @ [
+                            Html.span [
+                                prop.key "score"
+                                prop.className "seat-score"
+                                prop.testId $"seat-{index}-score"
+                                prop.custom ("data-score", view.Score)
+                                prop.text (string view.Score)
+                            ]
+                            Html.span [
+                                prop.key "junme"
+                                prop.className "seat-junme"
+                                prop.testId $"seat-{index}-junme"
+                                prop.custom ("data-junme", view.Junme)
+                                prop.text $"第 {view.Junme} 巡"
+                            ]
+                        ]
+                        @ marks
+                    )
+                ]
+                tileRow
+                    $"seat-{index}-naki"
+                    "naki-row"
+                    [ prop.custom ("data-naki-count", List.length view.Naki) ]
+                    "副露"
+                    (view.Naki |> List.mapi (nakiGroup seating.Ruleset view.Seat))
+                tileRow
+                    $"seat-{index}-hand"
+                    "hand"
+                    [
+                        prop.custom ("data-hand-count", handCount)
+                        // 他家的手牌是扣着的——**这不是渲染纪律而是投影的形状**（`HandView.Concealed`
+                        // 里根本没有牌面）。写出来是让闸门能拿它与“画出来几张牌背”对得上。
+                        prop.custom ("data-hand-hidden", hidden)
+                    ]
+                    $"手牌 {handCount}"
+                    (handTiles view.Hand)
+                tileRow
+                    $"seat-{index}-kawa"
+                    "kawa"
+                    [ prop.custom ("data-kawa-count", List.length view.Kawa) ]
+                    $"河 {List.length view.Kawa}"
+                    (kawaTiles view.Kawa)
+            ]
+        ]
+
+    // ---- 视图：场况与结算 ----
+
+    /// 场况里的一项。`marks` 是它给机器看的那一半（票 44），挂在带 testId 的那个元素上：
+    /// 人读的是「东1局 2 本场」这句中文，闸门读的是 `data-honba`，两者对不上就报错。
+    let private field (marks: IReactProperty list) (testId: string) (label: string) (value: string) =
+        Html.span [
+            prop.key testId
+            prop.className "field"
+            prop.children [
+                Html.span [ prop.className "label"; prop.text label ]
+                Html.span ([ prop.className "values"; prop.testId testId ] @ marks @ [ prop.text value ])
+            ]
+        ]
+
+    /// 一排牌，带标题与钩子。宝牌与里宝牌指示牌都是它。
+    let private tileField (testId: string) (label: string) (tiles: Tile list) =
+        Html.span [
+            prop.key testId
+            prop.className "field"
+            prop.children [
+                Html.span [ prop.className "label"; prop.text label ]
+                Html.span [
+                    prop.className "tiles"
+                    prop.testId testId
+                    prop.custom ("data-tile-count", List.length tiles)
+                    prop.children (faces "" tiles)
+                ]
+            ]
+        ]
+
+    /// 牌桌中央（票 44）：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间，
+    /// 四家围着它坐。里宝牌只有上帝视角有。
+    ///
+    /// **方位的参照系写在这里**（M1 传下来的第六条：相对方位必须显式声明参照系）：
+    /// 牌桌上写着「下家」的那家到底是谁的下家，读者不必自己猜。
+    let private tableCenter (board: BoardView) =
+        // 立直棒是「供托 N 根」那个数字的实物画法，一根都没时**整个字段不画**（同下面的里宝牌）：
+        // 否则只剩一枚「立直棒」标签后面空着，看着像掉了东西（票 32 扫同类隐形时收的）。
+        let bou =
+            if board.Kyotaku = 0 then
+                []
+            else
+                [
+                    Html.span [
+                        prop.key "bou"
+                        prop.className "field"
+                        prop.children [
+                            Html.span [ prop.className "label"; prop.text "立直棒" ]
+                            Html.span [
+                                prop.className "bou-row"
+                                prop.testId "table-bou"
+                                prop.children [
+                                    for index in 1 .. board.Kyotaku ->
+                                        Html.span [ prop.key index; prop.className "bou" ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+
+        // 里宝牌只有上帝视角有（坐着看时投影里就是空表）。
+        let ura =
+            if List.isEmpty board.UraMarkers then
+                []
+            else
+                [ tileField "table-uradora" "里宝牌指示牌" board.UraMarkers ]
+
+        // 参照系那一句。`data-anchor` 是它给机器看的那一半：闸门拿它与四家真画在哪个格子里对。
+        let anchor = Board.anchor board
+
+        // 副露那一行的参照系（票 51）。它与上面那句不是同一个参照系，因此必须各说各的：
+        // 牌桌布局以**看牌桌的那个人**为准，副露里的左中右以**副露方自己**为准。
+        // M1 传下来的第六条（相对方位必须显式声明参照系）在这里就是这一句——
+        // 牌桌上不再写「来自X」之后，读者靠它才知道横放那张的位置该怎么读。
+        let nakiLegend = "副露：横放那张的位置就是来源，按副露方自己的左右算——最左＝上家、中间＝对家、最右＝下家（暗杠无源）"
+
+        let frame =
+            match board.Viewer with
+            | Some seat -> $"坐在座位 {Seat.index seat}：自家在下、下家在右、对家在上、上家在左"
+            | None -> $"上帝视角：以起家（座位 {Seat.index anchor}）为下方"
+
+        Html.div [
+            prop.className "table-center"
+            prop.testId "table-center"
+            prop.custom ("data-anchor", Seat.index anchor)
+            prop.children (
+                [
+                    field
+                        [
+                            prop.custom ("data-bakaze", Kaze.toDisplay board.Bakaze)
+                            prop.custom ("data-kyoku", board.Kyoku)
+                            prop.custom ("data-honba", board.Honba)
+                        ]
+                        "table-kyoku"
+                        "场况"
+                        $"{Kaze.toDisplay board.Bakaze}{board.Kyoku}局 {board.Honba} 本场"
+                    field [ prop.custom ("data-kyotaku", board.Kyotaku) ] "table-kyotaku" "供托" $"{board.Kyotaku} 根"
+                    field
+                        [ prop.custom ("data-wall", board.WallRemaining) ]
+                        "table-wall"
+                        "剩余摸牌"
+                        $"{board.WallRemaining} 张"
+                    tileField "table-dora" "宝牌指示牌" board.DoraMarkers
+                ]
+                @ ura
+                @ bou
+                @ [
+                    Html.p [
+                        prop.key "anchor"
+                        prop.className "table-anchor"
+                        prop.testId "table-anchor"
+                        prop.text frame
+                    ]
+                    Html.p [
+                        prop.key "naki-legend"
+                        prop.className "table-anchor"
+                        prop.testId "table-naki-legend"
+                        prop.text nakiLegend
+                    ]
+                ]
+            )
+        ]
+
+    /// 点数授受一行：按座位升序的增减。
+    let private deltas (values: int list) =
+        values
+        |> Seat.indexed
+        |> List.map (fun (seat, delta) ->
+            let sign = if delta > 0 then "+" else ""
+            $"座位 {Seat.index seat} {sign}{delta}")
+        |> String.concat "　"
+
+    let private horaLines (hora: HoraView) =
+        let yaku =
+            hora.Yaku
+            |> List.map (fun (yaku, value) ->
+                match value with
+                | YakuValue.Han han -> $"{Yaku.toDisplay yaku} {han} 番"
+                | YakuValue.Yakuman multiplier -> $"{Yaku.toDisplay yaku} 役满×{multiplier}")
+
+        let dora = [
+            if hora.Dora > 0 then
+                $"宝牌 {hora.Dora} 番"
+            if hora.Uradora > 0 then
+                $"里宝牌 {hora.Uradora} 番"
+            if hora.Akadora > 0 then
+                $"红宝牌 {hora.Akadora} 番"
+        ]
+
+        let limit =
+            match Limit.toDisplay hora.Limit with
+            | "" -> ""
+            | level -> $"（{level}）"
+
+        [
+            if hora.Actor = hora.Target then
+                $"座位 {Seat.index hora.Actor} 自摸 {Tile.toDisplay hora.Pai}"
+            else
+                $"座位 {Seat.index hora.Actor} 荣和 座位 {Seat.index hora.Target} 打出的 {Tile.toDisplay hora.Pai}"
+            "役：" + (yaku @ dora |> String.concat "、")
+            $"{hora.Fu} 符 {hora.Fan} 番 {hora.HoraPoints} 点{limit}"
+            "点数授受：" + deltas hora.Deltas
+        ]
+
+    let private ryuukyokuLines (ryuukyoku: Ryuukyoku) =
+        let tenpai =
+            ryuukyoku.Tenpais
+            |> Seat.indexed
+            |> List.filter snd
+            |> List.map (fun (seat, _) -> $"座位 {Seat.index seat}")
+
+        // 听牌家一家都没有也要写出来（途中流局就是这样），空白一行分不出「没人听」与「没画」。
+        let tenpaiText =
+            if List.isEmpty tenpai then
+                "无"
+            else
+                String.concat "、" tenpai
+
+        [
+            RyuukyokuReason.toDisplay ryuukyoku.Reason
+            "听牌：" + tenpaiText
+            "点数授受：" + deltas ryuukyoku.Deltas
+        ]
+
+    let private settlementPanel (settlement: Settlement) =
+        let lines =
+            match settlement.Outcome with
+            | Outcome.Hora horas -> horas |> List.collect horaLines
+            | Outcome.Ryuukyoku ryuukyoku -> ryuukyokuLines ryuukyoku
+
+        let title =
+            match settlement.Outcome with
+            | Outcome.Hora _ -> "和了"
+            | Outcome.Ryuukyoku _ -> "流局"
+
+        // 这一局之后往哪走。**末局不该邀人「进下一局」**：局数序列走完就终局，
+        // 连庄也不延长，因此终局那一行压过连庄与否（票 39）。
+        // `data-progress` 给无头验收读，不必去分析中文。
+        let progress, text =
+            match settlement.Ended, settlement.Renchan with
+            | true, _ -> "ended", "终局：这一场到此打完，下面是终局精算"
+            | false, true -> "renchan", "亲连庄"
+            | false, false -> "next", "亲流局，进下一局"
+
+        Html.section [
+            prop.key "settlement"
+            prop.className "settlement"
+            prop.testId "table-settlement"
+            prop.children (
+                [ Html.h3 [ prop.key "title"; prop.text title ] ]
+                @ (lines |> List.mapi (fun index line -> Html.p [ prop.key index; prop.text line ]))
+                @ [
+                    Html.p [
+                        prop.key "renchan"
+                        prop.testId "table-renchan"
+                        prop.custom ("data-progress", progress)
+                        prop.text text
+                    ]
+                ]
+            )
+        ]
+
+    /// 终局精算。**座位卡读的是同一份数**（`Board.ofTable` 在终局那一刻换成精算后的点数），
+    /// 因此这一屏上只有一种说法。供托那几根去了哪要写出来：场况行已经归零、
+    /// 桌上那根立直棒也收走了，不说一句就成了「凭空不见」。
+    let private resultPanel (final: FinalView) =
+        let kyotaku =
+            if final.Kyotaku = 0 then
+                []
+            else
+                [
+                    Html.p [
+                        prop.key "kyotaku"
+                        prop.testId "table-result-kyotaku"
+                        prop.text $"场上剩下的供托 {final.Kyotaku} 根（{final.KyotakuScore} 点）已归 1 位"
+                    ]
+                ]
+
+        Html.section [
+            prop.key "result"
+            prop.className "settlement"
+            prop.testId "table-result"
+            prop.children (
+                [
+                    Html.h3 [ prop.key "title"; prop.text "终局精算" ]
+                    Html.p [
+                        prop.key "ranking"
+                        prop.testId "table-result-ranking"
+                        prop.text (GameResult.toDisplay final.Result)
+                    ]
+                ]
+                @ kyotaku
+            )
+        ]
+
+    // ---- 视图：危险度（票 25） ----
+
+    /// 这一手能把谁的危险度摆出来：**只摆手牌本来就看得见的那家**。
+    ///
+    /// 危险度的候选牌就是那家的手牌，因此坐在座位上看时只显示自己那一手（显示别家的
+    /// 等于把他的暗牌摊开）；上帝视角本来就全亮着，正在被问的那家都显示得了。
+    let private dangerSeats (viewer: Seat option) (state: GameState) : Seat list =
+        let asked = GameState.legalActions state |> List.map (fun choice -> choice.Seat)
+
+        match viewer with
+        | Some seat -> asked |> List.filter (fun other -> other = seat)
+        | None -> asked
+
+    /// 一家的危险度排序。**一个判据也不在这里算**：档位、名次与理由全是引擎的
+    /// `Danger` 算好的，这里只排行（与 prompt 那一节同一份数）。
+    let private dangerPanel (seat: Seat) (state: GameState) =
+        let scaffold =
+            DecisionPackage.forSeat seat state |> Option.bind DecisionPackage.scaffold
+
+        match scaffold with
+        | None -> []
+        | Some scaffold ->
+            let ranked =
+                scaffold.Dahai
+                |> List.choose (fun trial -> trial.Danger)
+                |> List.sortBy (fun danger -> danger.Rank)
+
+            if List.isEmpty ranked then
+                []
+            else
+                let threats = scaffold.Threats |> List.map Threat.toDisplay |> String.concat "、"
+
+                [
+                    Html.section [
+                        prop.key $"danger-{Seat.index seat}"
+                        prop.className "settlement"
+                        prop.testId $"table-danger-{Seat.index seat}"
+                        prop.children [
+                            Html.h3 $"座位 {Seat.index seat} 的危险度（有威胁的家：{threats}）"
+                            Html.p [
+                                prop.key "note"
+                                prop.className "intro"
+                                prop.text "现物 / 筋 / 壁 / 宝牌周边四条规则算出来的启发式，不是概率；排在前面的更安全，同级并列。"
+                            ]
+                            Html.div [
+                                prop.key "ranking"
+                                prop.children [
+                                    for danger in ranked ->
+                                        Html.p [
+                                            prop.key (Tile.toMjai danger.Pai)
+                                            prop.text $"第{danger.Rank}位 {Danger.toDisplay danger}"
+                                        ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+
+    /// 牌桌上的危险度：**默认关**，没人立直也没人副露时开了也没东西看
+    /// （那时引擎本来就不给排序）。
+    let private dangerPanels (model: TableModel) (table: Table) (viewer: Seat option) =
+        if model.ShowDanger then
+            dangerSeats viewer table.State
+            |> List.collect (fun seat -> dangerPanel seat table.State)
+        else
+            []
+
+    // ---- 视图：整页 ----
+
+    let internal tableBody (model: TableModel) (table: Table) =
+        match Board.ofTable model.Viewpoint table with
+        | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
+        | Some board ->
+            // 兜底代打的那一手要看得出来（票 23）：不许静默替换。
+            // `data-fallback` 给无头验收读（断电演习数的就是它）。
+            let latest =
+                match table.Latest with
+                | None -> "还没走一手"
+                | Some turn ->
+                    let who = Action.actor turn.Action |> Seat.index
+
+                    let mark =
+                        match turn.Fallback with
+                        | Some reason -> $"（兜底：{reason}）"
+                        | None -> ""
+
+                    $"上一手：座位 {who} {Action.toDisplay turn.Action}{mark}"
+
+            let fault =
+                table.Fault
+                |> Option.toList
+                |> List.map (fun message ->
+                    Html.p [
+                        prop.key "fault"
+                        prop.className "error"
+                        prop.testId "table-fault"
+                        prop.text message
+                    ])
+
+            let settlement = Board.settlement table |> Option.toList |> List.map settlementPanel
+
+            let result = Board.final table |> Option.toList |> List.map resultPanel
+
+            let danger = dangerPanels model table board.Viewer
+
+            let seating: Seating = {
+                Ruleset = GameState.ruleset table.State
+                Viewer = board.Viewer
+                Anchor = Board.anchor board
+                Oya = (GameState.context table.State).Oya
+            }
+
+            Html.div [
+                prop.testId "table-board"
+                prop.children (
+                    [
+                        Html.p [
+                            prop.key "latest"
+                            prop.className "latest"
+                            prop.testId "table-latest"
+                            prop.custom ("data-fallback", AgentLine.fallenBack table.Latest)
+                            prop.text latest
+                        ]
+                        AgentLine.agentLine model table
+                    ]
+                    @ AgentLine.usageLine table
+                    @ [
+                        // 真牌桌（票 44）：四家围着中央坐。**DOM 仍然按座位升序**（`seat-N` 那几个
+                        // 钩子与既有闸门因此稳定），画到哪个方位由 `data-seat-position` 定——
+                        // 它跟着观测视角转，而不是跟着座位号走。
+                        Html.div [
+                            prop.key "seats"
+                            prop.className "seats-board"
+                            prop.testId "table-seats"
+                            prop.children (
+                                [ for view in board.Seats -> seatPanel seating view ] @ [ tableCenter board ]
+                            )
+                        ]
+                    ]
+                    @ fault
+                    @ danger
+                    @ settlement
+                    @ result
+                )
+            ]
