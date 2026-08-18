@@ -281,10 +281,14 @@ module Shanten =
 
     // ---- 七对子 ----
 
-    /// 七对子的向听数。副露过就不成立（返回 None），牌种不足 7 种的规则集同理。
-    let chiitoitsu (kindSet: TileKindSet) (hand: HandShape) : Shanten option =
+    /// 「这一型在这副手牌上不成立」的哨兵值：比任何真向听数都大（上限是国士的 13），
+    /// 于是 `calculateIn` 三者取最小时它自动落选，不必拿 `Shanten option` 表达「没有」。
+    [<Literal>]
+    let private Unavailable = 99
+
+    let private chiitoitsuValue (kindSet: TileKindSet) (hand: HandShape) : int =
         if HandShape.nakiCount hand > 0 || TileKindSet.count kindSet < 7 then
-            None
+            Unavailable
         else
             let counts = HandShape.counts hand
 
@@ -293,7 +297,7 @@ module Shanten =
             let rec scan (index: int) (kinds: int) (pairs: int) =
                 if index >= Tile.KindCount then
                     // 牌种数不足 7 时，每缺一种就多要一次替换。
-                    Some(Shanten(6 - pairs + max 0 (7 - kinds)))
+                    6 - pairs + max 0 (7 - kinds)
                 else
                     let count = counts.[index]
 
@@ -301,44 +305,60 @@ module Shanten =
 
             scan 0 0 0
 
+    /// 七对子的向听数。副露过就不成立（返回 None），牌种不足 7 种的规则集同理。
+    let chiitoitsu (kindSet: TileKindSet) (hand: HandShape) : Shanten option =
+        match chiitoitsuValue kindSet hand with
+        | Unavailable -> None
+        | shanten -> Some(Shanten shanten)
+
     // ---- 国士无双 ----
 
     /// 幺九牌的牌种索引：1m 9m 1p 9p 1s 9s 与七种字牌。
     let private yaochuuIndexes = [| 0; 8; 9; 17; 18; 26; 27; 28; 29; 30; 31; 32; 33 |]
 
-    /// 国士无双的向听数。副露过就不成立（返回 None），规则集缺任一幺九牌种同理。
-    let kokushi (kindSet: TileKindSet) (hand: HandShape) : Shanten option =
+    let private kokushiValue (kindSet: TileKindSet) (hand: HandShape) : int =
         let legal = TileKindSet.legalFlags kindSet
 
         if
             HandShape.nakiCount hand > 0
             || yaochuuIndexes |> Array.exists (fun index -> not legal.[index])
         then
-            None
+            Unavailable
         else
             let counts = HandShape.counts hand
 
             // 幺九牌里有牌的牌种数与有没有对子，同样一遍扫描取齐（原来是 `sumBy` + `exists` 两遍）。
             let rec scan (position: int) (kinds: int) (hasPair: bool) =
                 if position >= Array.length yaochuuIndexes then
-                    Some(Shanten(13 - kinds - (if hasPair then 1 else 0)))
+                    13 - kinds - (if hasPair then 1 else 0)
                 else
                     let count = counts.[yaochuuIndexes.[position]]
                     scan (position + 1) (if count >= 1 then kinds + 1 else kinds) (hasPair || count >= 2)
 
             scan 0 0 false
 
+    /// 国士无双的向听数。副露过就不成立（返回 None），规则集缺任一幺九牌种同理。
+    let kokushi (kindSet: TileKindSet) (hand: HandShape) : Shanten option =
+        match kokushiValue kindSet hand with
+        | Unavailable -> None
+        | shanten -> Some(Shanten shanten)
+
     // ---- 三者取最小 ----
 
+    /// 三型取最小。**内部走 int 不走 `Shanten option`**：公开的 `chiitoitsu` / `kokushi`
+    /// 签名照旧，但它俩在这条路径上每手都要走一遍，拿 option 表达「不成立」
+    /// 就是每手两次装箱加旧 `lower` 的两次偏应用。
+    ///
+    /// 实测（5 万手随机手牌）：.NET 上 `calculateWith` 96 → 24 B/手；
+    /// **两个平台的时间都在噪声带内**（.NET 1.42–1.47 µs/手不变；node 26 / V8 上
+    /// `Ukeire.calculate` 改前 149.9–152.3、改后 149.0–152.8 µs/决策）。
+    /// 它省的是跑批的 GC 压力，不是时间——别拿它当快路径引。
     let private calculateIn (search: int array) (kindSet: TileKindSet) (hand: HandShape) : Shanten =
-        let lower (candidate: Shanten option) (best: Shanten) =
-            match candidate with
-            | Some shanten when value shanten < value best -> shanten
-            | _ -> best
-
         standardIn search kindSet hand
-        |> lower (chiitoitsu kindSet hand)
-        |> lower (kokushi kindSet hand)
+        |> value
+        |> min (chiitoitsuValue kindSet hand)
+        |> min (kokushiValue kindSet hand)
+        |> Shanten
 
     /// 手牌的向听数：一般型、七对子、国士三者的最小值。
     let calculate (kindSet: TileKindSet) (hand: HandShape) : Shanten =
