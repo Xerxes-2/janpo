@@ -1365,7 +1365,7 @@ module TableState =
             | Some opened -> opened.Origin
             | None ->
                 match model.Source with
-                | Source.Replay(ReplayTable.Ready(_, cursor)) ->
+                | Source.Replay(ReplayTable.Ready(_, cursor, _)) ->
                     Some {
                         Cursor = cursor
                         Playing = model.Playback.Playing
@@ -1411,9 +1411,10 @@ module TableState =
         let closed = { model with Opened = None }
 
         match originOf model, model.Source with
-        | Some origin, Source.Replay(ReplayTable.Ready(frames, _)) -> {
+        | Some origin, Source.Replay(ReplayTable.Ready(frames, _, names)) -> {
             closed with
-                Source = Source.Replay(ReplayTable.Ready(frames, origin.Cursor))
+                // 票 82 之后 `Ready` 多了第三格（回放的名字只有牌谱这一个真源）：原样带过去。
+                Source = Source.Replay(ReplayTable.Ready(frames, origin.Cursor, names))
           }
         | _ -> closed
 
