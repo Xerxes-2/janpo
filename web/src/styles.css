@@ -617,15 +617,34 @@ input[type="range"] {
 /* 牌背：他家的暗牌，用上游的 `Back.svg` 整张铺满。
    「背」字与牌面字一样藏着（`.tile` 的 color: transparent），但**牌本身必须看得见**：
    边框是实色（不吃 currentcolor，票 32），背景图不许是 none——两样闸门都读。
-   上游的背是高饱和的橙红，在米白纸底上比谁都响，而朱红这个色相是留给赤牌与立直的——
-   按票面「要调色走 CSS」把它压成旧书封皮那种旧红（静态 filter，不是动效）。 */
+   上游的背是高饱和的橙红，而朱红这个色相是留给赤牌与立直的——主人终审时裁（80-6）：
+   压成**深靛青**，整页只有纸·墨·朱·靛四个色相。做法是 luminosity 混合：
+   明度取 Back.svg 的（保留它的浮雕感），色相取底下的靛青实色；细纸色描边一圈提厚度。 */
 .tile.back {
   border-style: solid;
-  border-color: #8a7f6a;
-  background-color: var(--paper-shade);
+  border-color: #26374f;
+  background-color: var(--indigo);
   background-image: url("./tiles/Back.svg");
   background-size: 100% 100%;
-  filter: saturate(0.45) brightness(1.04);
+  background-blend-mode: luminosity;
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--paper) 55%, transparent),
+    inset 0 -2px 0 rgb(0 0 0 / 0.25);
+}
+
+/* 白板（5z）：真牌就是全白，但 26px 下会读成「掉了一张图」——主人终审时裁（80-5）：
+   照雀魂的惯例给它印一圈靛青细框。只动这一张，别的牌面仍由 SVG 说话。 */
+.tile[data-pai="5z"] {
+  position: relative;
+}
+
+.tile[data-pai="5z"]::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid var(--indigo);
+  border-radius: 2px;
+  pointer-events: none;
 }
 
 /* 被鸣的那张：**横放**（票 38）。牌谱上就是这个画法——一组里横着的那张是从别人那儿来的
