@@ -54,6 +54,21 @@
 
 三票都往 `DECISIONS.md` 末尾追加，集成时照旧走 `resolve-append-conflicts.py`。
 
+## W2 派工前的地盘裁定（调度器写，2026-08-19）
+
+88 与 94 看上去一个在牌桌、一个在 agent 层，**但它俩真有一处接触点**：
+`TableState.fs` 里把答案搭成 `DecisionRecord` 那一处构造（今天的 `Tools = answer.Tools`）。
+M2 三次撞车全是这个形状，所以点名到行：
+
+| # | 裁定 | 理由 |
+|---|---|---|
+| T-1 | **`src/Janpo.Web/Agent.fs` 与「答案 → `DecisionRecord`」那一处构造归 94 独占**；88 不许动 `Tools` 那一格 | 工具调用要往记录里写，那是 94 的可观测性本体 |
+| T-2 | **`src/Janpo.Web/**` 其余全归 88**（`Table.fs` / `TableState.fs` / `HumanSeat.fs` / `HumanLine.fs` / `TableBoard.fs` / `TablePanel.fs`）；94 若发现非动不可，**停下来写进简报**，不许自己扩边界 | 88 要往 `Demand.Human` / `handed` / 合法动作集那一排里加七八种响应动作 |
+| T-3 | **`scripts/ci-web.sh` / `web/scripts/verify-browser.mjs` / `web/package.json` 本波归 94 独占** | 88 只需扩已有的第十五趟 `verify-human.mjs`（已在列表里），根本不用碰闸门列表 |
+| T-4 | **88 不许新增对 `render_version` 值的断言** | 94 改 prompt 就必顶它（跑 `pnpm run render-digest`） |
+| T-5 | **96（引擎随机反例）暂不同波发**，等 91 回来再上 ws-d | 机器上已有 91 在跑 Rust/浏览器；四个 agent 同时跑 CI 撞过假红（判据 16） |
+| T-6 | 96 若查到根因落在 `src/Janpo.Engine/Shanten.fs`，**停下来报** | `janpo-human` 工作区里主人自己有未提交的 `Shanten.fs` 改动 |
+
 ## 起草时就点名的三处撞车风险
 
 1. **94 与 95 都碰 `web/src/agent/**`** —— 已排进不同波次。
