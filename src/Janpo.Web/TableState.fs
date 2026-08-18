@@ -101,6 +101,47 @@ type AgentStatus =
     /// 上一次是兜底代打的。**粘着不掉**，直到模型又能好好说话为止。
     | Troubled of reason: string
 
+/// 「复制分享链接」那一下的下场（票 78）。**三态刻意是三个 case**（判据 12）：
+/// 进了剪贴板、进了但载荷长过阈值（该勝人改用 JSON 文件）、剪贴板不让写。
+/// 前两态都带字符数：长度是人判断「发链接还是发文件」的依据，页面上要印出来。
+[<RequireQualifiedAccess>]
+type ShareOutcome =
+    /// 写进剪贴板了，载荷这么多字符。
+    | Copied of chars: int
+    /// 也写进剪贴板了，但载荷超了阈值——页面当场勝人改用「导出牌谱」的 JSON 文件。
+    /// **仍然复制**：链接在浏览器地址栏里照样能用（普遍收 32K 以上），会截断它的是
+    /// 聊天工具——拦着不给比复制了再勝一句更霸道。
+    | Oversized of chars: int
+    /// 剪贴板不让写（权限被拒、页面不在焦点上这类），附一句中文原因。
+    | Failed of reason: string
+
+/// 分享下场的阈值与两个渲染出口。
+[<RequireQualifiedAccess>]
+module ShareOutcome =
+
+    /// 载荷长过这个数就当场勝人改用 JSON 文件（单位：base64url 之后的字符数）。
+    ///
+    /// **8,000 是判断不是实测**（票 77 §9 的建议，裁决记在 DECISIONS 78 段）：
+    /// 票 77 实测一整场半庄 7,720 字符、东风战 4,842——阈值取在半庄之上一点，
+    /// 好让「一整场标准对局」永远够发；浏览器地址栏普遍收 32K 以上，先截断的是
+    /// 聊天工具，而哪一家在几千字符截没实测过。超过它的那种场（连庄爆长）本来就该走文件。
+    let threshold: int = 8000
+
+    /// 三态给机器看的那一半（`data-share`），闸门读它；人读的是 `toDisplay` 那句话。
+    let toWire (outcome: ShareOutcome) : string =
+        match outcome with
+        | ShareOutcome.Copied _ -> "copied"
+        | ShareOutcome.Oversized _ -> "oversized"
+        | ShareOutcome.Failed _ -> "failed"
+
+    /// 页面上那句话。超阈值那态把两个数都印出来：人要能自己核「超了多少」，
+    /// 而不是只听一句「太长了」。
+    let toDisplay (outcome: ShareOutcome) : string =
+        match outcome with
+        | ShareOutcome.Copied chars -> $"已复制（载荷 {chars} 字符）。"
+        | ShareOutcome.Oversized chars -> $"已复制，但载荷有 {chars} 字符（超过 {threshold}）——聊天工具常把太长的地址截断，这一场改用「导出牌谱」的 JSON 文件更稳。"
+        | ShareOutcome.Failed reason -> $"分享链接没写进剪贴板：{reason}"
+
 /// **Live**：主持人自己开的那一桌（`?table=1`）——种子、配桌与 Agent 层全在这里。
 ///
 /// **没有第二份牌局状态**（ADR-0002）：牌局在 `Table` 里，而 `Table` 里的局面是引擎的那一份；
@@ -144,6 +185,9 @@ type LiveTable = {
     Ticket: int
     /// Agent 层的状态线，**每席一项**（按座位升序，票 74）。
     Agent: AgentStatus list
+    /// 「复制分享链接」最近一次的下场（票 78）；一次都没点过、刚点下去还在编、
+    /// 或重开过一桌之后是 None。
+    Shared: ShareOutcome option
 }
 
 /// **回放**（CONTEXT.md 的 `Replay`）：一份牌谱 fold 出来的逐帧牌桌，加「播到第几帧」。
@@ -318,10 +362,20 @@ type TableModel = {
     /// 摊开的那一刻牌桌上摆的就是它（`shown`）：story 5 的「局面快照」不是另画一张牌桌，
     /// 而是把同一份渲染指到那一帧上。`None` = 没点开任何一手。
     Opened: Table option
+    /// 「导入牌谱 JSON」最近一次失败的原因（票 78）；没失败过、或后来导成了一次是 None。
+    ///
+    /// **不落进 `ReplayTable.Failed`**：导入失败不该把正在播的那份回放轰掉——
+    /// 人挑错文件是常事，原样播着、旁边说一句原因就够（`Failed` 是给「除它没有
+    /// 别的可摆」的首页 Demo 与分享链接留的）。导入入口只在回放那一页，Live 恒为 None。
+    ImportFault: string option
 }
 
 /// 牌桌上能发生的事。**一步一 Msg**：`Advanced` 与 `Ticked` 各推进一手，
 /// 驱动循环就是 Elmish 的 update，页面里没有第二个 loop。
+///
+/// `NoComparison` 是 `ImportPicked` 里那个 `File` 逼出来的（浏览器对象比不了大小）；
+/// 消息本来就没有谁在比较，结构相等照旧在（用例里的 `Assert.Equal` 读的是它）。
+[<NoComparison>]
 type TableMsg =
     /// 改种子输入框。
     | SeedEdited of seed: string
@@ -367,6 +421,24 @@ type TableMsg =
     | RulePicked of rule: RuleChoice
     /// 把这一桌到此刻为止的牌谱存成一个 JSON 文件（票 26）。
     | Exported
+    /// 把这一桌到此刻为止的**棋谱**装进一条分享链接并写进剪贴板（票 78）。
+    /// 推理不上 URL（`Share.toPayload` 里走 `Paifu.stripAudit`）；全量那条路是 `Exported`。
+    | Shared
+    /// 剪贴板那一趟回来了（票 78）：载荷多少字符，或者为什么没写上。
+    /// 超不超阈值在 update 里判（纯的，dotnet 侧的用例才够得着），Cmd 那侧只报字符数。
+    | ShareSettled of result: Result<int, string>
+    /// hash 里那段分享载荷解完了（票 78）。与 `DemoLoaded` 同形：**它不会不来**，
+    /// 读不动也是一个值（`Error` 带着「载荷读不动：」或「牌谱读不动：」打头的
+    /// 中文原因，票 77 分好的两层）——带载荷打开的那一屏因此永不白屏。
+    | SharedLoaded of paifu: Result<Paifu, string>
+    /// 人在「导入牌谱 JSON」处挑了一个文件（票 78）。读文件是异步的，
+    /// 结果由 `ImportLoaded` 带回。
+    | ImportPicked of file: Browser.Types.File
+    /// 挑中的那份牌谱读完了（票 78）。与 `DemoLoaded` / `SharedLoaded` 同形：
+    /// 三个来源都把「拿到一份牌谱或一句中文原因」交回同一张牌桌。
+    /// 解码在 Cmd 那侧（`Decode.fromString` 的 JS 后端只在浏览器里跑得动），
+    /// `Error` 的两种前缀：「这个文件读不进来：」与「牌谱读不动：」。
+    | ImportLoaded of paifu: Result<Paifu, string>
     /// 首页那份 Demo Paifu 拉回来了（票 71）。**它不会不来**：拉不动也是一个值
     /// （`Error` 带着一句中文原因）——首页因此永不白屏。
     | DemoLoaded of paifu: Result<Paifu, string>
@@ -430,6 +502,18 @@ module TableState =
     /// 把配置写进 localStorage。**走 Cmd 而不是在 update 里直接写**：MVU 的 update 是纯的，
     /// 副作用一律由 Cmd 发——顺带让页面逻辑的用例在 dotnet 上跑得起来（那边没有 localStorage）。
     let private save (write: unit -> unit) : Cmd<TableMsg> = Cmd.ofEffect (fun _ -> write ())
+
+    // ---- 浏览器 API 的两个小口（票 78）。与 `Download` 同一个理由用 Emit：
+    // 为一次调用引一个绑定包不值当；dotnet 侧编得过、跑不了（效果体只在浏览器里执行）。
+
+    /// 挑中的那个文件的正文。`File.text()` 是标准 API（Chrome 76+）。
+    [<Emit("$0.text()")>]
+    let private fileText (_file: Browser.Types.File) : JS.Promise<string> = jsNative
+
+    /// 把一段文本写进剪贴板。安全上下文（https 或 localhost）才有 `navigator.clipboard`；
+    /// 写不进去是 reject，调用点接住它变成一句中文。
+    [<Emit("navigator.clipboard.writeText($0)")>]
+    let private writeClipboard (_text: string) : JS.Promise<unit> = jsNative
 
     // ---- 两种来源共用的拆解 ----
 
@@ -590,6 +674,32 @@ module TableState =
             |> Paifu.encoder
             |> Encode.toString 0
             |> Download.json fileName)
+
+    /// 复制分享链接（票 78）：这一桌到此刻为止的**棋谱**（`Share.toPayload` 里走
+    /// `Paifu.stripAudit`）→ base64url 载荷 → 装进 hash（`Route.shareUrl`）→ 写剪贴板。
+    ///
+    /// **写完才算数**：两步都是异步的，哪一步砸了都经 `ShareSettled` 回一句中文——
+    /// 静静地没复制上，人会把一条不存在的链接发给别人。
+    let private shareCmd (roster: Roster) (table: Table) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let copied (payload: string) : unit =
+                (writeClipboard (Route.shareUrl payload))
+                    .``then``(fun () -> dispatch (ShareSettled(Ok payload.Length)))
+                    .catch (fun error -> dispatch (ShareSettled(Error $"浏览器不让写剪贴板（{error}）")))
+                |> ignore
+
+            (Table.paifu roster table |> Share.toPayload)
+                .``then``(copied)
+                .catch (fun error -> dispatch (ShareSettled(Error $"载荷编不出来（{error}）")))
+            |> ignore)
+
+    /// 剪贴板那一趟的回执 → 页面上那句话的三态（票 78）。**阈值判在这里**（纯的），
+    /// 因此「8,000 以内算复制成、超过就勝人换 JSON」这条在 dotnet 侧有用例钉着。
+    let private settledShare (result: Result<int, string>) : ShareOutcome =
+        match result with
+        | Error reason -> ShareOutcome.Failed reason
+        | Ok chars when chars > ShareOutcome.threshold -> ShareOutcome.Oversized chars
+        | Ok chars -> ShareOutcome.Copied chars
 
     /// 发一次问话。**不用 `Cmd.OfPromise`**：它整段包在 `#if FABLE_COMPILER` 里，
     /// 而这个文件要在 dotnet 上编得过（页面逻辑的用例跑在那边）。
@@ -832,26 +942,23 @@ module TableState =
             else
                 played, schedule played.Playback
 
-    /// 那份 Demo 牌谱拉回来之后：fold 成逐帧的牌桌，换上牌谱自己的规则集，**当场开播**。
+    /// 一份牌谱 fold 成逐帧并当场开播——**Demo、分享链接、导入 JSON 三个来源共用这一段**
+    /// （票 71/78）：fold 只有 `Table.replay` 一条路，三个来源只差「回放不动」那句话的前缀。
+    /// 规则集换成牌谱自带的那一份（ADR-0004），档速回到 Demo 那一档（新牌谱从默认节奏起播）。
     ///
-    /// 拉不动、读不动、回放不动三种失法各留一句中文（`ReplayTable.Failed`）：
-    /// 首页不许白屏，人得知道是站点的资产没部署全还是那份牌谱太新／太旧。
-    let private demoLoaded (paifu: Result<Paifu, string>) (model: TableModel) : TableModel * Cmd<TableMsg> =
-        let failed (reason: string) =
-            {
-                model with
-                    Source = Source.Replay(ReplayTable.Failed reason)
-            },
-            Cmd.none
+    /// **播放接着当前世代往下换**（`Playback.restart`）：导入发生在旧回放还在自动播的时候，
+    /// 世代号回到 0 会让在飞的那记定时器与新发的一起被认下——牌桌从此双倍速走。
+    let private replayStarted
+        (stuck: string -> string)
+        (paifu: Paifu)
+        (model: TableModel)
+        : Result<TableModel * Cmd<TableMsg>, string> =
+        match Table.replay paifu with
+        | Error reason -> Error(stuck reason)
+        | Ok frames ->
+            let playback = Playback.restart demoSpeed model.Playback
 
-        match paifu with
-        | Error reason -> failed reason
-        | Ok paifu ->
-            match Table.replay paifu with
-            | Error reason -> failed $"Demo 牌谱回放不动：{reason}"
-            | Ok frames ->
-                let playback = Playback.playing demoSpeed
-
+            Ok(
                 {
                     model with
                         Ruleset = paifu.Ruleset
@@ -859,6 +966,83 @@ module TableState =
                         Playback = playback
                 },
                 schedule playback
+            )
+
+    /// 那份 Demo 牌谱拉回来之后：fold 成逐帧的牌桌，换上牌谱自己的规则集，**当场开播**。
+    ///
+    /// 拉不动、读不动、回放不动三种失法各留一句中文（`ReplayTable.Failed`）：
+    /// 首页不许白屏，人得知道是站点的资产没部署全还是那份牌谱太新／太旧。
+    let private demoLoaded (paifu: Result<Paifu, string>) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        let started =
+            paifu
+            |> Result.bind (fun paifu -> replayStarted (fun reason -> $"Demo 牌谱回放不动：{reason}") paifu model)
+
+        match started with
+        | Ok next -> next
+        | Error reason ->
+            {
+                model with
+                    Source = Source.Replay(ReplayTable.Failed reason)
+            },
+            Cmd.none
+
+    /// 分享链接里那份牌谱解完之后（票 78）：与 Demo 同一条路。三层失法各有各的中文
+    /// （「载荷读不动：」「牌谱读不动：」是 `Share.ofPayload` 分好的两层，
+    /// 回放不动的第三层在这里接上），都落在 `ReplayTable.Failed`——带载荷打开的那一屏
+    /// 除这份牌谱没有别的可摆，但绝不白屏。
+    ///
+    /// **Live 那一侧一律无事发生**：过期的载荷回执不许把主持人正打着的一桌轰掉。
+    let private sharedLoaded (paifu: Result<Paifu, string>) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        match model.Source with
+        | Source.Live _ -> model, Cmd.none
+        | Source.Replay _ ->
+            let started =
+                paifu
+                |> Result.bind (fun paifu -> replayStarted (fun reason -> $"载荷里那份牌谱回放不动：{reason}") paifu model)
+
+            match started with
+            | Ok next -> next
+            | Error reason ->
+                {
+                    model with
+                        Source = Source.Replay(ReplayTable.Failed reason)
+                },
+                Cmd.none
+
+    /// 去读并解挑中的那个文件（票 78）。效果体只在浏览器里执行（同 `askCmd`）；
+    /// **解码也在这里而不在 update 里**：`Decode.fromString` 用的是 JS 后端，
+    /// 而 update 要在 dotnet 上跑页面逻辑的用例——wire 层的事一律留在边界上
+    /// （`Share.ofPayload` / `Demo.paifu` 同一个分工）。
+    /// 「牌谱读不动：」前缀照票 77 分好的那层，不另发明；不是 JSON、缺字段
+    /// 都落在它后面（引擎的英文诊断，ADR-0001）。
+    let private importCmd (file: Browser.Types.File) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let read (text: string) =
+                Decode.fromString Paifu.decoder text
+                |> Result.mapError (fun message -> $"牌谱读不动：{message}")
+                |> ImportLoaded
+                |> dispatch
+
+            let failed (error: obj) =
+                dispatch (ImportLoaded(Error $"这个文件读不进来：{error}"))
+
+            (fileText file).``then``(read).catch (failed) |> ignore)
+
+    /// 挑中的那份牌谱读完之后（票 78）。**失败不轰掉正在播的那份回放**：
+    /// 原因落在 `ImportFault`（页面旁边说一句），牌桌照旧。三种失法：文件读不进来 /
+    /// 牌谱读不动（两种都在 `importCmd` 那侧变成 `Error`）/ 回放推不下去（这里判）。
+    let private importLoaded (paifu: Result<Paifu, string>) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        match model.Source with
+        // 导入入口只在回放那一页上；这条消息到不了 Live，真到了也无事发生。
+        | Source.Live _ -> model, Cmd.none
+        | Source.Replay _ ->
+            let started =
+                paifu
+                |> Result.bind (fun paifu -> replayStarted (fun reason -> $"牌谱回放不动：{reason}") paifu model)
+
+            match started with
+            | Ok(next, cmd) -> { next with ImportFault = None }, cmd
+            | Error reason -> { model with ImportFault = Some reason }, Cmd.none
 
     /// 一帧是某一局的**开局**吗（票 75）。**判据就是 `Table.opened` 干的那件事**：
     /// 它把「上一手」清空，而落定的每一手都会写上一手（`Table.played`）。
@@ -1105,6 +1289,8 @@ module TableState =
                     Awaiting = []
                     Ticket = 0
                     Agent = seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
+                    // 还没点过「复制分享链接」（票 78）。
+                    Shared = None
                 }
             // **默认暂停**（`Playback.initial`）：`?table=1` 是最安静的一页，
             // 要点、要读牌桌的那几道无头闸门全靠这一条。
@@ -1114,6 +1300,8 @@ module TableState =
             ShowDanger = false
             // 还没点开任何一手的全文面板（票 76）。
             Opened = None
+            // 导入入口不在这一页（票 78），这一格恒为 None。
+            ImportFault = None
         },
         Cmd.none
 
@@ -1125,7 +1313,7 @@ module TableState =
         {
             Ruleset = Ruleset.yonma
             Source = Source.Replay ReplayTable.Loading
-            // 还没开播：牌谱拉回来那一刻才 `Playback.playing`（否则定时器空转）。
+            // 还没开播：牌谱拉回来那一刻才 `Playback.restart`（否则定时器空转）。
             Playback = Playback.initial
             // **回放默认上帝视角**（裁决 71-8，票 75 执行）：这份牌谱已经打完了，
             // 没有人还在对局，因此不存在「提前看到他家手牌」那件事（票 22 那条泄露挂账
@@ -1134,16 +1322,35 @@ module TableState =
             Viewpoint = Viewpoint.God
             ShowDanger = false
             Opened = None
+            // 还没导过任何东西（票 78）。
+            ImportFault = None
         },
         demoCmd
 
+    /// 打开带载荷的地址（票 78）：起步那一屏与首页同一个（还在解、暂停着、上帝视角），
+    /// 差别只在牌谱从 hash 里来（`Share.ofPayload`）而不是 fetch Demo 资产。
+    ///
+    /// **拿 `home ()` 的模型起步而不是另拼一份**：两屏若各拼各的，
+    /// 「回放默认上帝视角」这类默认就会各自漂。
+    let shared (payload: string) : TableModel * Cmd<TableMsg> =
+        let model, _ = home ()
+
+        model,
+        Cmd.ofEffect (fun dispatch ->
+            let loaded (paifu: Result<Paifu, string>) = dispatch (SharedLoaded paifu)
+            (Share.ofPayload payload).``then`` loaded |> ignore)
+
     /// 页面初次打开。**地址说了算**（票 71 的 `Route.landing`）：
     /// `/` 是首页的 Demo 回放，`?table=1` 是主持人自己开的一桌（上一次填的配置从
-    /// localStorage 里读回来）。**hash 不当路由用**：带 hash 打开退回首页 Demo，
-    /// 解码它是票 78 的活。
+    /// localStorage 里读回来）。**hash 只装载荷、不当路由**（35-1，票 78）：落在哪一页
+    /// 仍由 query 说了算，载荷只决定首页那一屏放的是哪一场；`?table=1` 上带着 hash
+    /// 照旧是主持人那一页（三者正交）。
     let init () : TableModel * Cmd<TableMsg> =
         match Route.landing () with
-        | Landing.Home -> home ()
+        | Landing.Home ->
+            match Route.payload () with
+            | Some payload -> shared payload
+            | None -> home ()
         | Landing.Table ->
             let rules = Store.readRules ()
             initial rules (Store.readSeating (RulesetDraft.ruleset rules))
@@ -1164,6 +1371,8 @@ module TableState =
         | CursorMoved _
         | KyokuAdvanced
         | DemoLoaded _
+        | SharedLoaded _
+        | ImportLoaded _
         | Answered _ -> true
         | SeedEdited _
         | SpeedPicked _
@@ -1179,7 +1388,10 @@ module TableState =
         | ProfileDeleted _
         | ProfileEdited _
         | RulePicked _
-        | Exported -> false
+        | Exported
+        | Shared
+        | ShareSettled _
+        | ImportPicked _ -> false
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         let model =
@@ -1193,8 +1405,10 @@ module TableState =
         | Restarted ->
             match model.Source with
             // 回放的「从头再放」：回到第 0 帧，接着自动播。**帧不必重算**——它们是值。
+            // `Playback.restart` 顺带换世代：正播着时再按，在飞的那记定时器必须作废，
+            // 否则它与新发的那记一起被认下，牌桌从此双倍速走（票 78 按红过一次）。
             | Source.Replay(ReplayTable.Ready(frames, _)) ->
-                let playback = Playback.playing model.Playback.Speed
+                let playback = Playback.restart model.Playback.Speed model.Playback
 
                 {
                     model with
@@ -1220,6 +1434,8 @@ module TableState =
                                     Pinned = loosened live
                                     Awaiting = []
                                     Agent = idled live
+                                    // 旧桌的分享回执也撤下来：那句话说的是已经不存在的一桌（票 78）。
+                                    Shared = None
                             }
                         Playback = Playback.pause model.Playback
                 },
@@ -1267,6 +1483,29 @@ module TableState =
             },
             Cmd.none
         | DemoLoaded paifu -> model |> demoLoaded paifu
+        | SharedLoaded paifu -> model |> sharedLoaded paifu
+        | ImportPicked file ->
+            (match model.Source with
+             // 导入入口只在回放那一页上（票 78）。
+             | Source.Live _ -> model, Cmd.none
+             | Source.Replay _ -> model, importCmd file)
+        | ImportLoaded paifu -> model |> importLoaded paifu
+        | Shared ->
+            model
+            |> onLive (fun ruleset live ->
+                match live.Table with
+                // 牌桌都开不起来时没有棋谱可装（按钮那时也是灰的）。
+                | Error _ -> live, Cmd.none
+                // 上一次的下场先撤下来：新的一次正在路上，旧话留着会两头打架。
+                | Ok table -> { live with Shared = None }, shareCmd (rosterFor ruleset live) table)
+        | ShareSettled result ->
+            model
+            |> onLive (fun _ live ->
+                {
+                    live with
+                        Shared = Some(settledShare result)
+                },
+                Cmd.none)
         | Exported ->
             model
             |> onLive (fun ruleset live ->

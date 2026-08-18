@@ -1,6 +1,6 @@
-// 浏览器里那**十三趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十四趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十三趟各开自己的 page / context。
+// 十四趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
 //   2 首页就是一局回放：牌桌在动、没有配桌控件、上帝视角、时间轴拖得动（票 71/75）
@@ -15,11 +15,13 @@
 //  11 配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变（票 72）
 //  12 四 LLM 同桌：一份档案坐两席（人格各不同）、坏 key 那一席只兜自己的底、老配置迁得过来（票 73）
 //  13 思考气泡：气泡里的字来自那一手的记录、bot 席没有、挡不住牌、点得开、兜底那一态（票 76）
+//  14 牌谱从外面进来的两条路：分享链接真往返（剪贴板）、导入 JSON（气泡有话）、坏输入三连（票 78）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
-// 其余十趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// 其余十一趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
 // 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
-// 理由写在它自己的文件头上。
+// 理由写在它自己的文件头上；第 14 趟两个地址都开（分享链接从 `?table=1` 复制、
+// 导入入口在 `/` 上），理由同样在它自己的文件头上。
 //
 // **一趟都没少、一条断言都没拆**：每一趟调的就是 `verify-*.mjs` 里那个同名函数，
 // 单跑（`pnpm run verify:board` 等）与合并跑跑的是**同一段代码**，只是跑道不同。
@@ -34,6 +36,7 @@ import { verifyBubbles } from "./verify-bubbles.mjs";
 import { verifyExport } from "./verify-export.mjs";
 import { verifyGolden } from "./verify-golden.mjs";
 import { verifyHome } from "./verify-home.mjs";
+import { verifyInbound } from "./verify-inbound.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
 import { verifySeats } from "./verify-seats.mjs";
 import { verifySetup } from "./verify-setup.mjs";
@@ -78,7 +81,7 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十三趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十四趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -193,6 +196,16 @@ const gates = [
     how: "node scripts/verify-bubbles.mjs",
     run: (lane) => verifyBubbles(lane),
   },
+  // 票 78：牌谱从外面进来的两条路。`?table=1` 真打几手 → 点「复制分享链接」→
+  // 读**真剪贴板** → 打开那条地址：事件流与导出件逐条相同、末帧点数与主持人那一桌一致、
+  // 自动播、没有配桌面板、那句「为什么没有气泡」指得回导入入口；把导出的那份 JSON
+  // 从首页导回去：末帧逐项一致，带决策记录的那份**气泡有话**（与分享链接的关键差别）；
+  // 坏链接与坏输入三连（不是 JSON / 缺字段 / 中间某局断掉）各有中文原因，页面活着。
+  {
+    name: "牌谱从外面进来的两条路：分享链接真往返、导入 JSON（气泡有话）、坏输入三连",
+    how: "node scripts/verify-inbound.mjs",
+    run: (lane) => verifyInbound(lane),
+  },
 ];
 
 const lane = await openLane();
@@ -212,7 +225,7 @@ try {
 }
 
 console.log("");
-console.log("十三趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十四趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

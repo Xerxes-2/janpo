@@ -68,16 +68,6 @@ module Playback =
         Generation = 0
     }
 
-    /// 自动播：从这一档速度开始，当场就跑（首页的 Demo 回放，票 71）。
-    ///
-    /// **不是 `toggle initial`**：那条的意思是「人按了一下」，而这里是初始值本身。
-    /// 世代号仍从 0 起：这一刻一记定时器都还没发出去。
-    let playing (speed: Speed) : Playback = {
-        Playing = true
-        Speed = speed
-        Generation = 0
-    }
-
     // ---- 迁移 ----
 
     /// 换一个世代。改播放状态与改倍速都经它，谁也别忘了 +1。
@@ -85,6 +75,20 @@ module Playback =
         change playback with
             Generation = playback.Generation + 1
     }
+
+    /// 从头自动播：这一档速度，**接着当前世代往下换**（牌谱拉回来、从头再放、
+    /// 换了一份牌谱导入进来，走的都是它）。
+    ///
+    /// **为什么不是一个「世代号从 0 起」的构造子**（票 78 改掉的旧形状）：那样的值只在
+    /// 「一记定时器都没发过」的初始时刻才安全——回放正在自动播时拿它接手，在飞的那记
+    /// 定时器与新发的一起被认下（世代号撞回同一个数），牌桌从此**双倍速**走。
+    /// 经 `reborn` 换世代，在飞的那一记必然作废。
+    let restart (speed: Speed) : Playback -> Playback =
+        reborn (fun playback -> {
+            playback with
+                Playing = true
+                Speed = speed
+        })
 
     /// 播 / 暂停。
     let toggle: Playback -> Playback =

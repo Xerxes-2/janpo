@@ -11,10 +11,10 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出十三个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
-/// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` /
-/// `init` / `update` / `rosterOf` / `seatConfigOf` / `renderingPending` / `rulesPending` / `live` /
-/// `shown` / `canAdvance` / `timeline` / `bubbles` / `detail` / `recordless`。转出来之后
+/// **这一层还转出十六个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` / `home` /
+/// `shared` / `init` / `update` / `rosterOf` / `seatConfigOf` / `renderingPending` / `rulesPending` /
+/// `live` / `shown` / `canAdvance` / `timeline` / `bubbles` / `detail` / `recordless`。转出来之后
 /// **这个程序集的公开面只多了这几个名字**：那几块里跨文件用的助手一律 `internal`，
 /// 出不了 `Janpo.Web`。
 ///
@@ -31,6 +31,10 @@ module TablePage =
 
     /// 首页（`/`）初次摆的那一屏：一份还没拉回来的 Demo 回放。实现见 `TableState.home`。
     let home () : TableModel * Cmd<TableMsg> = TableState.home ()
+
+    /// 打开带载荷的地址（票 78）：与首页同一屏起步，牌谱从 hash 里解。
+    /// 实现与理由见 `TableState.shared`。
+    let shared (payload: string) : TableModel * Cmd<TableMsg> = TableState.shared payload
 
     /// 页面初次打开（地址说了算）。实现见 `TableState.init`。
     let init () : TableModel * Cmd<TableMsg> = TableState.init ()

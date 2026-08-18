@@ -21,8 +21,8 @@ type Landing =
 ///   好让「认地址」这件事只有一处）。两个开关同时带也成立：`?table=1&dev=1`。
 /// - **hash** → 分享载荷（票 77 编解码、票 78 接地址栏）。**hash 不当路由用**：
 ///   票 35 当年把 dev 开关放在 query 上就是为这件事——`base` 可配（`JANPO_BASE`），
-///   而 hash 与将来的锚点抢同一根位置。**本票不解码 hash**：带 hash 打开退回首页 Demo，
-///   不许白屏。
+///   而 hash 与将来的锚点抢同一根位置。**hash 里只有载荷这一样东西**（票 78）：
+///   落在哪一页仍由 query 说了算，载荷只决定首页那一屏放的是哪一场。
 [<RequireQualifiedAccess>]
 module Route =
 
@@ -47,3 +47,21 @@ module Route =
     /// 「自己开一桌」那条路指向哪儿。**只写在这一处**：页面上的链接与
     /// 无头闸门读的是同一个字符串，改地址不必两头找。
     let tableHref: string = "?table=1"
+
+    /// hash 里那一段分享载荷；没有就是 None（票 78）。
+    ///
+    /// **`#` 后面直接就是 base64url 那一串**，没有 `p=` 这类键名（裁决 35-1：hash 只装载荷，
+    /// 不当路由）：键名是在暗示「hash 里还会有别人」，而这里永远只有这一样东西。
+    /// 载荷读不读得动不在这里判（那是 `Share.ofPayload` 的事）：这里只答「hash 里有没有东西」。
+    let payload () : string option =
+        match window.location.hash.TrimStart('#') with
+        | "" -> None
+        | payload -> Some payload
+
+    /// 一段载荷 → 分享链接（票 78）：当前页的地址去掉 query，hash 里只有载荷。
+    ///
+    /// **不带 `?table=1` 也不带 `?dev=1`**：分享链接是给访客看的回放，
+    /// 不该把配桌面板与曳光弹也摆出来。`pathname` 照抄当前页：站点部署在子路径下
+    /// （GitHub Pages 是 `/janpo/`）时，写死斜杠开头会把人指到别的站去。
+    let shareUrl (payload: string) : string =
+        window.location.origin + window.location.pathname + "#" + payload

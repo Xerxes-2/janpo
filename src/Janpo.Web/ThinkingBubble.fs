@@ -175,7 +175,10 @@ module ThinkingBubble =
                     prop.key "no-bubbles"
                     prop.className "intro"
                     prop.testId "table-no-bubbles"
-                    prop.text "这一局没有思考气泡：牌谱里一条决策记录都没有——要么四家都是自带 bot，要么这是一条只带棋谱的分享链接（推理不上 URL，完整版得让对方把 JSON 给你）。"
+                    // 后半句指向导入入口（票 78）：控制条上那一格的名字就叫「导入牌谱 JSON」，
+                    // 两头对不上时闸门会红（verify-inbound 核这句话里有那个名字）。
+                    prop.text
+                        "这一局没有思考气泡：牌谱里一条决策记录都没有——要么四家都是自带 bot，要么这是一条只带棋谱的分享链接（推理不上 URL）。想看完整推理：让对方用「导出牌谱」把 JSON 文件给你，再从上面控制条的「导入牌谱 JSON」挑那个文件。"
                 ]
             ]
         else

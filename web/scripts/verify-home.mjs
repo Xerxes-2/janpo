@@ -44,6 +44,8 @@ const HOST_TEST_IDS = [
   "table-step",
   "table-next",
   "table-export",
+  // 复制分享链接（票 78）：只属于主持人那一页——首页本身就是回放，没有可分享的新对局。
+  "table-share",
   // 四席绑定与模型档案库（票 73）：key 只出现在档案编辑处，座位那几行不重复填。
   "table-seat-0-random",
   "table-seat-0-opinionated",

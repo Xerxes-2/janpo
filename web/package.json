@@ -22,6 +22,7 @@
     "verify:bubbles": "node scripts/verify-bubbles.mjs",
     "verify:golden": "node scripts/verify-golden.mjs",
     "verify:home": "node scripts/verify-home.mjs",
+    "verify:inbound": "node scripts/verify-inbound.mjs",
     "verify:invariants": "node scripts/verify-invariants.mjs",
     "verify:export": "node scripts/verify-export.mjs",
     "verify:redaction": "node scripts/verify-redaction.mjs",

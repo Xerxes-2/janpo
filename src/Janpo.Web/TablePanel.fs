@@ -64,7 +64,38 @@ module TablePanel =
             PlayToggled
             dispatch
 
-    /// 主持人那一页的控制条（`?table=1`）：单步 / 下一局 / 导出牌谱都只属于 Live。
+    /// 分享链接那一行：分工说明永远在，点过之后追一句下场（票 78）。
+    ///
+    /// **「不含推理」要说在明处**（票面原话）：分享链接与「导出牌谱」的分工不写出来，
+    /// 拿到链接的人会以为那就是全部。`data-share` / `data-share-chars` 给无头闸门读，
+    /// 人读的是那句中文——两头对不上就是错。
+    let private shareLine (live: LiveTable) =
+        let chars =
+            match live.Shared with
+            | Some(ShareOutcome.Copied chars)
+            | Some(ShareOutcome.Oversized chars) -> string chars
+            | Some(ShareOutcome.Failed _)
+            | None -> ""
+
+        let said =
+            live.Shared
+            |> Option.map (fun outcome -> "　" + ShareOutcome.toDisplay outcome)
+            |> Option.defaultValue ""
+
+        Html.p [
+            prop.key "share-note"
+            prop.className "intro"
+            prop.testId "table-share-note"
+            prop.custom ("data-share", live.Shared |> Option.map ShareOutcome.toWire |> Option.defaultValue "")
+            prop.custom ("data-share-chars", chars)
+            prop.text (
+                "「复制分享链接」出的地址只带棋谱——模型的推理与 prompt 不上 URL；要给人完整推理，用「导出牌谱」的 JSON 文件（对方从首页的「导入牌谱 JSON」能看）。"
+                + said
+            )
+        ]
+
+    /// 主持人那一页的控制条（`?table=1`）：单步 / 下一局 / 导出牌谱 / 复制分享链接
+    /// 都只属于 Live。
     let private hostControls (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         let running = TableState.canAdvance model
 
@@ -74,18 +105,26 @@ module TablePanel =
             | Error _ -> false
 
         Html.div [
-            prop.className "controls"
-            prop.children (
-                [
-                    playButton model dispatch
-                    button "table-step" (not running) "单步" Advanced dispatch
-                    button "table-next" (not ended) "下一局" KyokuAdvanced dispatch
-                    // 牌谱随时导得出来，不必等终局：打到一半的事件流同样 fold 得回去。
-                    button "table-export" (Result.isError live.Table) "导出牌谱" Exported dispatch
-                    Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
+            prop.children [
+                Html.div [
+                    prop.key "host-row"
+                    prop.className "controls"
+                    prop.children (
+                        [
+                            playButton model dispatch
+                            button "table-step" (not running) "单步" Advanced dispatch
+                            button "table-next" (not ended) "下一局" KyokuAdvanced dispatch
+                            // 牌谱随时导得出来，不必等终局：打到一半的事件流同样 fold 得回去。
+                            button "table-export" (Result.isError live.Table) "导出牌谱" Exported dispatch
+                            // 导出与分享是一对（票 78）：一个带全量，一个只带棋谱进 hash。
+                            button "table-share" (Result.isError live.Table) "复制分享链接" Shared dispatch
+                            Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
+                        ]
+                        @ speeds model dispatch
+                    )
                 ]
-                @ speeds model dispatch
-            )
+                shareLine live
+            ]
         ]
 
     /// 时间轴那一根滑块（票 75）。**滑块的 `value` 就是游标**：拖到哪一帧牌桌就是那一帧
@@ -186,7 +225,45 @@ module TablePanel =
             // 而不是堆在控制条下面。`Timeline.Record` 还在（票 75 的用例钉着它）。
             | Some timeline -> [ timelineRow timeline dispatch; kyokuRow timeline dispatch ]
 
-        Html.div [ prop.className "replay-controls"; prop.children (playRow :: rails) ]
+        // 导入牌谱 JSON（票 78）：牌谱从外面进来的第二条路。**挂在回放这一页**——
+        // 导入的下场就是一份回放，而 `table-no-bubbles` 那句话指的就是这里。
+        // **Demo 拉不动、分享链接读不动时这一排也在**（rails 空着它不空）：
+        // 那正是人最需要换一份牌谱的时刻。
+        let importRow =
+            Html.div [
+                prop.key "import"
+                prop.className "controls"
+                prop.children (
+                    Html.label [
+                        prop.key "import-field"
+                        prop.className "field"
+                        prop.children [
+                            Html.span [ prop.className "label"; prop.text "导入牌谱 JSON" ]
+                            Html.input [
+                                prop.testId "table-import"
+                                prop.type' "file"
+                                prop.accept "application/json,.json"
+                                // 挑中就开读；读文件是异步的，结果由 `ImportLoaded` 带回。
+                                prop.onChange (ImportPicked >> dispatch)
+                            ]
+                        ]
+                    ]
+                    :: (model.ImportFault
+                        |> Option.toList
+                        |> List.map (fun reason ->
+                            Html.p [
+                                prop.key "import-fault"
+                                prop.className "error"
+                                prop.testId "table-import-fault"
+                                prop.text reason
+                            ]))
+                )
+            ]
+
+        Html.div [
+            prop.className "replay-controls"
+            prop.children ((playRow :: rails) @ [ importRow ])
+        ]
 
     /// 控制条。**牌从哪来决定摆哪几个按钮**（票 71），而播放本身两边共用一份实现。
     let internal controls (model: TableModel) (dispatch: TableMsg -> unit) =
