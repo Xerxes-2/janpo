@@ -9,7 +9,15 @@ TablePage.fs 里各加一个 Msg 分支都属于这一类）。做法是把 diff
 用法：resolve-append-conflicts.py <文件> [<文件>…]
 """
 
+import re
 import sys
+
+# jj 会把标记加长到 7 个以上，只要文件正文里出现过同形的标记（DECISIONS.md 里就拄过 7 字符的例子）。
+# 按定长前缀匹配会静静地「解了 0 处」——那比报错更坏。
+START = re.compile(r"^<{7,} conflict")
+END = re.compile(r"^>{7,} conflict")
+DIFF = re.compile(r"^%{7,} diff from")
+LITERAL = re.compile(r"^\+{7,} ")
 
 
 def resolve(path: str) -> int:
@@ -18,14 +26,14 @@ def resolve(path: str) -> int:
     i = 0
     n = 0
     while i < len(lines):
-        if not lines[i].startswith("<<<<<<< conflict"):
+        if not START.match(lines[i]):
             out.append(lines[i])
             i += 1
             continue
-        end = next(j for j in range(i, len(lines)) if lines[j].startswith(">>>>>>> conflict"))
+        end = next(j for j in range(i, len(lines)) if END.match(lines[j]))
         body = lines[i + 1 : end]
-        pct = next(k for k, l in enumerate(body) if l.startswith("%%%%%%% diff from"))
-        plus = next(k for k, l in enumerate(body) if l.startswith("+++++++ "))
+        pct = next(k for k, l in enumerate(body) if DIFF.match(l))
+        plus = next(k for k, l in enumerate(body) if LITERAL.match(l))
         if pct < plus:
             diff, literal = body[pct + 2 : plus], body[plus + 1 :]
         else:
