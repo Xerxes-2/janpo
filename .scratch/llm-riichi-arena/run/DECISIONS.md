@@ -5374,3 +5374,49 @@ no-bubbles 那句话的第一版改坏 sed 没匹配上（fantomas 换过行）�
 （`background-blend-mode: luminosity`——明度取 Back.svg 的浮雕感、色相取靛青实色），
 整页色谱收敛为纸·墨·朱·靛四个色相。两处都只是 CSS，闸门零改动、十四趟照旧全绿；
 截图重拍，我逐张看过：白板可读了，暗牌不再压纸底。
+
+## `Tile.parseMany` 换成预分配数组 + 尾递归；FsToolkit.ErrorHandling 评估后**不引**（2026-08-18，主人裁定写法，agent 实测）
+
+**结论。** `parseMany` 的最终写法：`Split(separators, RemoveEmptyEntries)` → `Array.zeroCreate`
+预分配 → 尾递归填充、首错即返 → `Array.toList`。比原版（`List.fold` + cons + `List.rev`）
+**快 ~1.8x、分配减半**；错误语义不变（报首错的 `TokenIndex`，过滤后下标）。
+过程中曾引入 **FsToolkit.ErrorHandling 5.2.0**（`sequenceResultM`/`traverseResultM` 两版都试了），
+横评后裁定**不值一个依赖**：包、`Directory.Packages.props`、fsproj、`ci.sh` 允许名单全部退回，
+引擎依然只依赖 `Thoth.Json.Core`。
+
+**依据：10 种写法 × 9 组输入横评**（`dotnet fsi --optimize+`，引 Release 版真 `Tile.parse`，
+交替 5 轮取最小值、两轮复跑一致；正确性含空串、纯分隔符、首尾分隔符、多错输入，全部对拍一致）。
+关键行（vs 原版耗时）：
+
+| 写法 | 14 张 | 136 张 | 早错 |
+|---|---|---|---|
+| 手写扫描器（不落 token 数组） | 0.51x | 0.56x | **0.04x** |
+| **预分配数组+尾递归（定的这版）** | 0.57x | **0.52x** | 0.38x |
+| `Seq.mapi + Seq.sequenceResultM`（FsToolkit） | 0.91x | 0.84x | 0.43x |
+| 原版 | 1.00x | 1.00x | 1.00x |
+| `List.indexed + List.traverseResultM`（FsToolkit） | 1.10x | 1.08x | 1.05x |
+| `Array.mapi + Array.sequenceResultM`（FsToolkit） | 1.51x | **5.42x** | 1.02x |
+
+没选全场最快的手写扫描器：多出 ~10 行两层 while，换来的优势集中在**错误路径**（构错输入的人不值得优化）。
+也没选 FsToolkit 的任何一版：最好的那版也只到 0.84x，**为 10-15% 引一个第三方依赖不划算**——
+何况实际调用形状是 14 张手牌，最慢最快差 340 ns，本决定实质是风格 + 依赖账，性能只是平手裁判。
+
+**入册的坑，四条（都是量出来的或读源码逮住的，看写法看不出来）：**
+1. **fold 里 `Seq.append` 追加单元素 = O(n²)。** 惰性包装逐层嵌套，代价推迟到 `toList` 才爆：
+   1,088 张时 8.3 ms / 38.5 MB（vs 原版 43 µs / 253 KB，**192x**），还有栈溢出风险。
+2. **FsToolkit 的 `Array.traverseResultM` 源码是 O(n²)**——每元素 `Array.skip 1` + `Array.append [|y|]`
+   两次全量拷贝（136 张实测 5.42x / 323 KB）；**同库同签名的 `Seq` 版却是 O(n)**（ResizeArray 累积）。
+3. **`List.indexed` 的每个元组是一次堆分配**（.NET 的 tuple 是引用类型），n 张牌 = n 个堆对象
+   外加一条新链表；这正是 `List.traverseResultM` 版反而比原版慢的主因。
+4. **`StringSplitOptions.RemoveEmptyEntries` 在 .NET 上孤立看比 `Split` + `Array.filter` 慢 ~10%**，
+   但在省掉 filter 中间数组的写法里净赚。（Fable 侧映射正确，编过。）
+
+**Fable 证据（真编了，不是「应该行」）：** 定稿写法 `pnpm run fable` 0 错误；
+生成的 JS 里尾递归 `fill` 被编成 `while(true) + continue`，**JS 侧无栈增长**；
+浏览器产物 A/B 字节相同（`index-CvU8oivg.js` 452.61 kB / gzip 145.58 kB）——
+今天浏览器侧没有路径调用 `parseMany`，整个被 tree-shake。**一旦有票让浏览器走到它
+（票 78 的导入/分享最可能），要重量一次 chunk。**
+
+**留给将来的一句：** FsToolkit.ErrorHandling 的 Fable 兼容性已核实（包内带 `fable/` 源码，
+`Seq.fs` 在其 fsproj 编译列表里）。将来若真要 `Result` 组合子再引不迟，
+但记得坑 2：**用 `Seq`/`List` 版，躲开 `Array` 版**。

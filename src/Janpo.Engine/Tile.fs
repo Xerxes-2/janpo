@@ -203,29 +203,31 @@ module Tile =
     /// 解析一串牌的记法，空白或逗号分隔；空串得空列表。
     /// 出错时报告第几个记法出的错。
     let parseMany (notations: string) : Result<Tile list, TileListParseError> =
-        let tokens =
-            if System.String.IsNullOrEmpty notations then
-                []
-            else
-                notations.Split(separators)
-                |> Array.filter (fun token -> token <> "")
-                |> Array.toList
+        if System.String.IsNullOrEmpty notations then
+            Ok []
+        else
+            let tokens =
+                notations.Split(separators, System.StringSplitOptions.RemoveEmptyEntries)
 
-        (Ok [], List.indexed tokens)
-        ||> List.fold (fun state (index, token) ->
-            match state with
-            | Error _ -> state
-            | Ok tiles ->
-                match parse token with
-                | Ok tile -> Ok(tile :: tiles)
-                | Error reason ->
-                    Error
-                        {
-                            TokenIndex = index
-                            Token = token
-                            Reason = reason
-                        })
-        |> Result.map List.rev
+            let out = Array.zeroCreate tokens.Length
+
+            let rec fill i =
+                if i >= tokens.Length then
+                    Ok(Array.toList out)
+                else
+                    match parse tokens[i] with
+                    | Ok tile ->
+                        out[i] <- tile
+                        fill (i + 1)
+                    | Error reason ->
+                        Error
+                            {
+                                TokenIndex = i
+                                Token = tokens[i]
+                                Reason = reason
+                            }
+
+            fill 0
 
     /// 记法列的规范形：mjai 记法、升序、单空格分隔。解析 + 规范化的唯一入口。
     let canonicalize (notations: string) : Result<string, TileListParseError> =
