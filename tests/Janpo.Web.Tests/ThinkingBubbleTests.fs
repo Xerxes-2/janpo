@@ -348,6 +348,18 @@ module ThinkingBubbleTests =
 
         loop 200 model
 
+    /// Live 那一桌真走几手（模型席每一手都好好答话），于是牌谱里真有几条决策记录可点。
+    let rec private playLive (left: int) (model: TableModel) : TableModel =
+        if left <= 0 then
+            model
+        else
+            let asked = model |> askedOnce
+
+            playLive
+                (left - 1)
+                (asked
+                 |> step (Answered(Awaiting.seat (awaitingOf asked), (awaitingOf asked).Ticket, chose)))
+
     [<Fact>]
     let ``在想那一态是按座位取的：正在等谁的回执，谁头上就是它`` () =
         // **得先切到上帝视角**（票 81）：`?table=1` 默认坐在座位 0 上，不切的话
@@ -549,10 +561,11 @@ module ThinkingBubbleTests =
         Assert.Equal(9, (shownTable opened).Turns)
         Assert.Equal(Some 8, (timelineOf opened).Record |> Option.map (fun record -> record.Turn))
 
-        // 收起来：面板没了，牌桌仍停在那一帧（收起不是「跳回去」）。
+        // 收起来：面板没了，**游标逐字回到点开之前那一处**（票 86 补上的回程；
+        // 票 76 那一版停在跳过去的地方，于是「读一条理由」变成了「时间轴被搬走」）。
         let closed = opened |> step (RecordOpened None)
         Assert.True(Option.isNone (TablePage.detail closed))
-        Assert.Equal(9, (timelineOf closed).Cursor)
+        Assert.Equal(11, (timelineOf closed).Cursor)
 
     [<Fact>]
     let ``拖一下时间轴就把全文面板收起来：牌桌走了，面板不许留在原地`` () =
@@ -567,18 +580,7 @@ module ThinkingBubbleTests =
     let ``Live 里点历史某一手：牌桌摆的是当时的快照，而这一桌一手都没退回去`` () =
         // story 5 在 Live 那一侧走的是「导成牌谱 → `Table.replay` → 取那一帧」这条现成路
         // （票面明令：**不要在 Live 侧常驻一份帧数组**）。
-        let rec play (left: int) (model: TableModel) =
-            if left <= 0 then
-                model
-            else
-                let asked = model |> askedOnce
-
-                play
-                    (left - 1)
-                    (asked
-                     |> step (Answered(Awaiting.seat (awaitingOf asked), (awaitingOf asked).Ticket, chose)))
-
-        let played = llmTable () |> play 3
+        let played = llmTable () |> playLive 3
         let live = shownTable played
         let record = List.head live.Decisions
 
@@ -608,3 +610,178 @@ module ThinkingBubbleTests =
         // 收起来就回到现在。
         let closed = opened |> step (RecordOpened None)
         Assert.Equal(live.Turns, (shownTable closed).Turns)
+
+    // ---- 回程：点开跳走了，关掉要跳回来（票 86） ----
+
+    /// 回放里在第 11 帧停着、且**正在自动播**的那一屏（首页那份牌谱拉回来就是自动播的）。
+    /// 这几条要的正是「点开之前那一刻」有点内容可回：游标不在 0，而且定时器在跑。
+    let private playingAtEleven () : TableModel =
+        loadedWith fourSeats |> atTurn 10 |> step PlayToggled
+
+    [<Fact>]
+    let ``关掉全文面板：游标与「在播不在播」一起回到点开之前那一处`` () =
+        // **闸门成对**（这一票的教训）：`openAt` 改了游标与播放状态两样，
+        // 因此这一条两头都验——「改过去」与「改回来」各一段。
+        let before = playingAtEleven ()
+        Assert.Equal(11, (timelineOf before).Cursor)
+        Assert.True(before.Playback.Playing, "点开之前这一屏该正在自动播")
+
+        // 改过去：游标真的挪到了那一手落定那一帧，面板真的开了，而且一点就暂停（票 76）。
+        let opened = before |> step (RecordOpened(Some 8))
+        Assert.Equal(9, (timelineOf opened).Cursor)
+        Assert.True(Option.isSome (TablePage.detail opened))
+        Assert.False(opened.Playback.Playing)
+
+        // 改回来：游标逐字回到 11，「在播」跟着回来，倍速一档不变。
+        let closed = opened |> step (RecordOpened None)
+        Assert.True(Option.isNone (TablePage.detail closed))
+        Assert.Equal(11, (timelineOf closed).Cursor)
+        Assert.True(closed.Playback.Playing, "点开之前在播，收起来就该接着播")
+        Assert.Equal(before.Playback.Speed, closed.Playback.Speed)
+
+        // **世代号不许把过期的那个放回去**（票 78 的「从头再放双倍速」同一个坑）：
+        // 点开之前那一记在飞的定时器回来时仍旧得作废，否则它与新发的那记一起被认下。
+        Assert.Equal(11, (timelineOf (closed |> step (Ticked before.Playback.Generation))).Cursor)
+
+        // 上一句的诊断面：回程接着**现在**那个世代往下换（`Playback.resumed` 走 `reborn`）。
+        Assert.True(
+            closed.Playback.Generation > opened.Playback.Generation,
+            $"回程该换一个新世代（点开之前 {before.Playback.Generation}、摊开时 {opened.Playback.Generation}、"
+            + $"收起来 {closed.Playback.Generation}）"
+        )
+
+        // 而**当前世代**的那一记推得动：收起来之后是真的接着播，不是挂着一个「在播」的空壳。
+        Assert.Equal(12, (timelineOf (closed |> step (Ticked closed.Playback.Generation))).Cursor)
+
+    [<Fact>]
+    let ``点开之前暂停着：收起来还是暂停着，游标照样回到原处`` () =
+        // 「一点就暂停」是票 76 的判据，回程不许把它改成「一收起就开播」。
+        let before = loadedWith fourSeats |> atTurn 10
+        Assert.False(before.Playback.Playing)
+
+        let closed = before |> step (RecordOpened(Some 8)) |> step (RecordOpened None)
+        Assert.Equal(11, (timelineOf closed).Cursor)
+        Assert.False(closed.Playback.Playing, "点开之前停着，收起来不该自己跑起来")
+
+    [<Fact>]
+    let ``面板摊着的时候拨倍速：收起来照人刚拨的那一档，不是点开那一刻的`` () =
+        // 拨倍速不推进牌桌（`moves` 里没有它），因此面板照旧摊着。
+        // 回程只把「在播不在播」还回去：把点开那一刻的倍速也塞回去，等于把人刚拨的那一下悄悄撤掉。
+        let before = playingAtEleven ()
+        Assert.Equal(Speed.X2, before.Playback.Speed)
+
+        let opened = before |> step (RecordOpened(Some 8)) |> step (SpeedPicked Speed.X8)
+        Assert.True(Option.isSome (TablePage.detail opened), "拨倍速不该把面板收起来")
+
+        let closed = opened |> step (RecordOpened None)
+        Assert.Equal(Speed.X8, closed.Playback.Speed)
+        Assert.Equal(11, (timelineOf closed).Cursor)
+        Assert.True(closed.Playback.Playing)
+
+    [<Fact>]
+    let ``按「播放」也算关：先回原处再往下播，不许从跳过去的地方接着播`` () =
+        // 今天任何推进牌桌的消息都会收起面板（`moves`），「播放」是其中一条。
+        let before = loadedWith fourSeats |> atTurn 10
+        let opened = before |> step (RecordOpened(Some 8))
+        Assert.Equal(9, (timelineOf opened).Cursor)
+
+        let played = opened |> step PlayToggled
+        Assert.True(Option.isNone (TablePage.detail played), "按播放同样把面板收起来（票 76）")
+        Assert.True(played.Playback.Playing, "人按的是「播放」，那就得播")
+        Assert.Equal(11, (timelineOf played).Cursor)
+
+        // 往下播的是**原处**的下一帧（第 12 帧），不是跳过去那一处的下一帧（第 10 帧）。
+        Assert.Equal(12, (timelineOf (played |> step (Ticked played.Playback.Generation))).Cursor)
+
+    [<Fact>]
+    let ``拖时间轴与从头再放：面板收起来，而回程不许把人刚拖到的那一帧顶掉`` () =
+        // 回程搬的是游标，而这两条消息自己就在搬游标——**它们说了算**。
+        let opened = loadedWith fourSeats |> atTurn 10 |> step (RecordOpened(Some 8))
+
+        let dragged = opened |> step (CursorMoved 40)
+        Assert.True(Option.isNone (TablePage.detail dragged))
+        Assert.Equal(40, (timelineOf dragged).Cursor)
+
+        let restarted = opened |> step Restarted
+        Assert.True(Option.isNone (TablePage.detail restarted))
+        Assert.Equal(0, (timelineOf restarted).Cursor)
+
+    [<Fact>]
+    let ``连点两家气泡再关：回到最初那一处，不是上一次跳之前那一处`` () =
+        let before = loadedWith fourSeats |> atTurn 10
+        Assert.Equal(11, (timelineOf before).Cursor)
+
+        // 第一下：跳到座位 1 那一手（第 9 帧）。
+        let first = before |> step (RecordOpened(Some 8))
+        Assert.Equal(9, (timelineOf first).Cursor)
+
+        // 第二下：从那儿再跳到座位 0 那一手（第 8 帧）。**原处仍是最初那一处**。
+        let second = first |> step (RecordOpened(Some 7))
+        Assert.Equal(8, (timelineOf second).Cursor)
+        Assert.Equal(Some 7, TablePage.detail second |> Option.map (fun detail -> detail.Record.Turn))
+
+        let closed = second |> step (RecordOpened None)
+        Assert.Equal(11, (timelineOf closed).Cursor)
+        // 同一条路走「按播放」：也回最初那一处。
+        Assert.Equal(11, (timelineOf (second |> step PlayToggled)).Cursor)
+
+    [<Fact>]
+    let ``Live 那一侧一字不变：点开与收起前后，这一桌、推进能力与播放状态逐项相同`` () =
+        // 那边没有游标（`openAt` 只摆快照、`live.Table` 不动），因此**没有可回的原处**：
+        // 收起来就只是收起来。这一条钉的是「回程没有顺手改了 Live 的行为」。
+        let played = llmTable () |> playLive 3
+        let live = shownTable played
+        let record = List.head live.Decisions
+
+        let advance = TablePage.canAdvance played
+        Assert.True(advance, "这一桌该还推得动（下面「逐项不变」才验得到东西）")
+
+        let opened = played |> step (RecordOpened(Some record.Turn))
+        Assert.True(Option.isSome (TablePage.detail opened))
+        Assert.Equal(advance, TablePage.canAdvance opened)
+
+        let closed = opened |> step (RecordOpened None)
+        Assert.True(Option.isNone (TablePage.detail closed))
+        Assert.Equal(advance, TablePage.canAdvance closed)
+
+        // `live.Table` 逐项不变：手数、事件流、决策记录三样在三个时刻上都一样。
+        for each in [ opened; closed ] do
+            match (liveOf each).Table with
+            | Error error -> failwith $"这一桌应当还开着，却得到「{error}」"
+            | Ok table ->
+                Assert.Equal(live.Turns, table.Turns)
+                Assert.Equal<Event list>(GameState.events live.State, GameState.events table.State)
+                Assert.Equal<DecisionRecord list>(live.Decisions, table.Decisions)
+
+        // 播放状态：那一页一直暂停着（`Playback.initial`），收起来也不许自己跑起来。
+        Assert.False(closed.Playback.Playing)
+        // 牌桌那一格回到「现在」（`shown` 两种来源共用一个出口）。
+        Assert.Equal(live.Turns, (shownTable closed).Turns)
+
+    [<Fact>]
+    let ``面板上说得出它把人搬到了哪儿：「正在看第 N 手」，回放里还说清收起会回去`` () =
+        // 从前只有 `data-bubble-turn` 给机器看：人点开一条理由，时间轴被搬走了却无人告知。
+        let opened = loadedWith fourSeats |> atTurn 10 |> step (RecordOpened(Some 8))
+
+        match TablePage.detail opened with
+        | None -> failwith "第 8 手该摊得开"
+        | Some detail ->
+            // 点开之前停在第 11 帧：**面板自己知道回得去哪儿**（收起来读的是同一份 `Origin`）。
+            Assert.Equal(Some 11, detail.Origin)
+            let line = BubbleDetail.toDisplay detail
+            Assert.StartsWith("正在看第 8 手", line)
+            Assert.Contains("时间轴", line)
+            Assert.Contains("收起", line)
+
+        // Live 那一侧没有游标，也没有时间轴（`timeline` 在那边恒是 None）：
+        // 那句话里不许提一个页面上根本不存在的东西。
+        let played = llmTable () |> playLive 3
+        let record = List.head (shownTable played).Decisions
+
+        match TablePage.detail (played |> step (RecordOpened(Some record.Turn))) with
+        | None -> failwith "Live 里点历史某一手该摊得开"
+        | Some detail ->
+            Assert.Equal(None, detail.Origin)
+            let line = BubbleDetail.toDisplay detail
+            Assert.StartsWith($"正在看第 {record.Turn} 手", line)
+            Assert.DoesNotContain("时间轴", line)

@@ -655,6 +655,76 @@ export async function verifyHome(lane) {
       );
     }
 
+    // ⑩ 点开跳走了，关掉要跳回来（票 86，主人试玩时报的那一条）。
+    // 回放里点气泡会把游标搬到那一手（票 76：轴只有一根，不另开第二根），
+    // 而票 76 只做了去程——于是「读一条理由」变成了「时间轴被搬走」。
+    // **两条路各走一遍**：按「收起」与按「播放」（后者今天同样会把面板收起来）。
+    // dotnet 那一侧钉的是 `RecordOpened` 的状态迁移，**这一条钉的是真点下去那一下**。
+    const originAt = await timelineAt(page);
+    // 现在停在末帧（⑧ 拖过去的），因此挑**手序最小那一席**的气泡：
+    // 它落定那一帧肯定不是末帧，下面「游标真的挪了」那一句才验得到东西。
+    let oldest = { seat: 0, turn: Number.POSITIVE_INFINITY };
+    for (const seat of [0, 1, 2, 3]) {
+      const turn = Number.parseInt(
+        (await page.getByTestId(`seat-${seat}-bubble`).getAttribute("data-bubble-turn")) ?? "-1",
+        10,
+      );
+      if (turn >= 0 && turn < oldest.turn) oldest = { seat, turn };
+    }
+
+    for (const how of ["bubble-close", "table-play"]) {
+      await page.getByTestId(`seat-${oldest.seat}-bubble`).click();
+      const opened = await settles(
+        page,
+        () => document.querySelector('[data-testid="table-bubble-detail"]') !== null,
+      );
+      const jumped = await timelineAt(page);
+      if (!opened) {
+        missing.push(`点了座位 ${oldest.seat} 的气泡却没摊开全文面板`);
+        break;
+      }
+      // 去程：游标真的被搬走了（没这一句的话，下面「回得去」那一条可以靠「压根儿没跳过」混过去）。
+      if (jumped.cursor >= originAt.cursor) {
+        missing.push(
+          `点开第 ${oldest.turn} 手之后游标停在 ${jumped.cursor}（点开之前是 ${originAt.cursor}）：它该往回跳才对`,
+        );
+      }
+      // 面板上要人读得到自己被搬到了哪一手（从前只有 `data-bubble-turn` 给机器看）。
+      // **不用 `locator.textContent()`**：那一句没画出来时它抛 `TimeoutError`，
+      // 而这一道闸门的契约是交一份失败清单（报错会把合并跑的那十四趟一起搞挂）。
+      const viewing = await page.evaluate(
+        () =>
+          document.querySelector('[data-testid="bubble-viewing"]')?.textContent?.trim() ??
+          "（面板上根本没有那一句）",
+      );
+      if (!viewing.startsWith(`正在看第 ${oldest.turn} 手`) || !viewing.includes("时间轴")) {
+        missing.push(
+          `回放里摊开的面板没说清它把人搬到了哪一手（该是第 ${oldest.turn} 手）：「${viewing}」`,
+        );
+      }
+
+      // 回程：按「收起」或按「播放」，两条路都得先回到原处。
+      //
+      // **不能拿「等到游标等于原处」当判据**（判据 3：一条永远等得到的断言等于没断言）：
+      // 没回程时按「播放」也会一帧一帧往前走，几百毫秒后同样路过原处——第一版就是这么维的。
+      // 改成：**面板一消失就当场读游标**（两件事在同一次 update 里，因此读到的就是落定值）。
+      // 原处正是末帧，因此按「播放」回去之后 `replayTick` 当场停下（`cursor >= last`），
+      // 游标恒等于原处，不必与定时器赛跑。
+      await page.getByTestId(how).click();
+      const closed = await settles(
+        page,
+        () => document.querySelector('[data-testid="table-bubble-detail"]') === null,
+      );
+      const now = await timelineAt(page);
+      if (!closed) missing.push(`按了 ${how} 之后全文面板还摊着`);
+      if (now.cursor !== originAt.cursor) {
+        missing.push(
+          `按 ${how} 关掉面板之后游标停在第 ${now.cursor} 帧，没回到点开之前那一处（第 ${originAt.cursor} 帧）：` +
+            "看完一条理由，时间轴不许被搬走（票 86）",
+        );
+      }
+    }
+
     // ③ 去 `?table=1` 的路：**真点过去**，落地那一页必须是主持人那一页。
     const link = page.getByTestId("home-host-link");
     if ((await link.count()) === 0) {
@@ -722,6 +792,10 @@ export async function verifyHome(lane) {
         "未结算不摆里宝牌、结算那一屏摆）",
     );
     console.log("视角是一道信息闸门 ✓（坐到四个座位上各只剩自家那一个气泡，切回上帝四家都回来）");
+    console.log(
+      "点开跳走了、关掉跳回来 ✓（按「收起」与按「播放」两条路各走一遍：" +
+        `游标 ${originAt.cursor} → 第 ${oldest.turn} 手那一帧 → ${originAt.cursor}）`,
+    );
     console.log("「自己开一桌」点过去就是 ?table=1，且那一页默认暂停 ✓");
     console.log(
       `操作控件贴着牌桌 ✓（首页隔 ${homeOps.board.top - homeOps.ops.bottom} px、` +

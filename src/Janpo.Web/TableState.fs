@@ -372,6 +372,48 @@ module Bubble =
 type BubbleDetail = {
     Record: DecisionRecord
     Snapshot: Table
+    /// 点开这一手**之前**游标停在第几帧（票 86）；Live 那一侧没有游标，是 None。
+    ///
+    /// **面板要说得出人被搬到了哪儿**：点开会把时间轴挪走（票 76：轴只有一根），
+    /// 而从前只有 `data-bubble-turn` 给机器看。这一格就是那句话的判据（`BubbleDetail.toDisplay`），
+    /// 也是「收起来回得去」这件事在面板上的证据。
+    Origin: int option
+}
+
+/// 全文面板上那句「正在看第 N 手」。
+[<RequireQualifiedAccess>]
+module BubbleDetail =
+
+    /// 面板头一句话（票 86）：**正在看的是第几手，以及收起来会怎么样**。
+    ///
+    /// 两种来源两句话，因为它们真的不是同一件事：回放里点开**把时间轴搬走了**（票 76），
+    /// 收起来要说清它会搬回来；Live 那一页根本没有时间轴（`timeline` 在那边恒是 None），
+    /// 说「时间轴跳到了这一手」就是在说一个页面上不存在的东西。
+    let toDisplay (detail: BubbleDetail) : string =
+        match detail.Origin with
+        | Some _ -> $"正在看第 {detail.Record.Turn} 手：时间轴跟着跳到了这一手，收起（或按「播放」）就回到点开之前那一处。"
+        | None -> $"正在看第 {detail.Record.Turn} 手：牌桌上摆的是那一刻的快照，这一桌照旧停在现在那一手。"
+
+/// 点开全文面板**之前**停在哪儿（票 86）。
+///
+/// **只有回放有**：那一侧点开会把游标搬到那一手（`openAt`，票 76 的「轴只有一根」），
+/// 因此非记下原处不可；Live 那一侧 `openAt` 只摆一张快照，游标与 `live.Table` 都没动过，
+/// 没有可回的地方（那一侧的 `Origin` 因此恒是 None）。
+///
+/// **不存整份 `Playback`**：那份值里的世代号在点开那一刻就已经过期（`openAt` 的 `pause` 换掉了它），
+/// 存着它就早晚有人原样放回去。回程要的只有「点开之前在播吗」这一个 bool（见 `Playback.resumed`）。
+type Origin = { Cursor: int; Playing: bool }
+
+/// 气泡点开的那一手：**摊开的那一帧**，加上**点开之前停在哪儿**（票 86）。
+///
+/// **两格在同一个记录里而不是模型上的两格**：有摊开的面板才有回得去的原处，
+/// 拆成两格就表示得出「有原处却没摊开」这种对不上的状态——而这一票治的正是
+/// 「状态被改了却没人管改回来」。
+type Opened = {
+    /// 那一手落定之后的那一帧。摊开的那一刻牌桌上摆的就是它（`shown`）。
+    Snapshot: Table
+    /// 点开之前停在哪儿；Live 那一侧没有可回的地方（见 `Origin`）。
+    Origin: Origin option
 }
 
 /// 牌桌那一格里此刻该画什么。**两种来源共用这一个出口**，因此牌桌与结算的渲染只有一份。
@@ -404,7 +446,10 @@ type TableModel = {
     ///
     /// 摊开的那一刻牌桌上摆的就是它（`shown`）：story 5 的「局面快照」不是另画一张牌桌，
     /// 而是把同一份渲染指到那一帧上。`None` = 没点开任何一手。
-    Opened: Table option
+    ///
+    /// **它同时抱着「点开之前停在哪儿」**（票 86 的 `Origin`）：回放里点开会把游标搬走，
+    /// 没人记下原处的话就只能停在跳过去那一处——主人试玩时报的就是它。
+    Opened: Opened option
     /// 「导入牌谱 JSON」最近一次失败的原因（票 78）；没失败过、或后来导成了一次是 None。
     ///
     /// **不落进 `ReplayTable.Failed`**：导入失败不该把正在播的那份回放轰掉——
@@ -598,7 +643,7 @@ module TableState =
     /// Live 里它是导成牌谱重 fold 出来的那一帧，**而 `live.Table` 一手都没退回去**（只读）。
     let shown (model: TableModel) : Shown =
         match model.Opened with
-        | Some snapshot -> Shown.Board snapshot
+        | Some opened -> Shown.Board opened.Snapshot
         | None -> board model.Source
 
     /// 还推得动吗。Live 是「这一局没终、也没出错」，回放是「还有没播到的帧」。
@@ -1309,7 +1354,26 @@ module TableState =
     ///
     /// **一点就暂停**：与「一拖就暂停」同一条判据——牌桌上摆着一张快照时定时器推得再快，
     /// 人也看不见。再按「播放」就把面板收了（`moves`）。
+    ///
+    /// **挑走的两样东西都记下来**（票 86 的 `Origin`）：游标停在哪一帧、那一刻在不在播。
+    /// 不记的话「读一条理由」就变成了「时间轴被永久搬走」——主人试玩时报的就是它。
     let private openAt (turn: int) (model: TableModel) : TableModel =
+        // **原处只记头一次**：连点两家气泡时，第二下是从「已经跳过去那一处」出发的；
+        // 把它当原处的话，关掉只回到上一次跳之前。人要回的是**最初**那一处。
+        let origin =
+            match model.Opened with
+            | Some opened -> opened.Origin
+            | None ->
+                match model.Source with
+                | Source.Replay(ReplayTable.Ready(_, cursor)) ->
+                    Some {
+                        Cursor = cursor
+                        Playing = model.Playback.Playing
+                    }
+                // Live 那一侧没有游标（下面那一段也不动它的 `Source`）：没有可回的地方。
+                | Source.Replay _
+                | Source.Live _ -> None
+
         let opened (frames: Table list) (frame: int) = {
             model with
                 Source =
@@ -1318,7 +1382,9 @@ module TableState =
                         Source.Replay(ReplayTable.Ready(frames, frame, names))
                     // Live 那一侧没有游标：牌桌那一桌原样留着。
                     | source -> source
-                Opened = List.tryItem frame frames
+                Opened =
+                    List.tryItem frame frames
+                    |> Option.map (fun snapshot -> { Snapshot = snapshot; Origin = origin })
                 Playback = Playback.pause model.Playback
         }
 
@@ -1333,6 +1399,38 @@ module TableState =
         | None -> model
         | Some frame -> opened frames frame
 
+    /// 点开之前停在哪儿（票 86）；没点开、或者 Live 那一侧（`openAt` 什么也没搬走）时是 None。
+    let private originOf (model: TableModel) : Origin option =
+        model.Opened |> Option.bind (fun opened -> opened.Origin)
+
+    /// 把游标搬回点开之前那一帧并把面板收了（票 86）。**只搬游标**：
+    /// 推进牌桌的那几条消息（`moves`）自己就在说播放该怎么样，后面那一步让它们说了算。
+    ///
+    /// 没点开、Live、帧还没 fold 好的那几种：只把面板收了（与票 86 之前一模一样）。
+    let private rewound (model: TableModel) : TableModel =
+        let closed = { model with Opened = None }
+
+        match originOf model, model.Source with
+        | Some origin, Source.Replay(ReplayTable.Ready(frames, _)) -> {
+            closed with
+                Source = Source.Replay(ReplayTable.Ready(frames, origin.Cursor))
+          }
+        | _ -> closed
+
+    /// 收起面板（`bubble-close`）：**游标与播放状态一起回到点开之前那一刻**（票 86）。
+    ///
+    /// 点开那一下改了两样（游标 + 一点就暂停），回程就要把两样都还回去；
+    /// 只还一样的话，看完一条理由回来会发现牌桌自己停了。
+    /// **在播就得真推得动**：恢复成「在播」却不续上一记定时器，那只是一个写着「在播」的空壳。
+    let private returned (model: TableModel) : TableModel * Cmd<TableMsg> =
+        match originOf model with
+        // Live 那一侧没有可回的地方（`openAt` 什么也没搬走）：收起来就只是收起来。
+        | None -> { model with Opened = None }, Cmd.none
+        | Some origin ->
+            let back = rewound model
+            let playback = back.Playback |> Playback.resumed origin.Playing
+            { back with Playback = playback }, schedule playback
+
     /// 全文面板此刻摊开的那一手（票 76）；没点开时是 None。
     ///
     /// **公开的**：视图与页面逻辑的用例读同一处推导（同 `timeline` / `canAdvance`）。
@@ -1343,9 +1441,14 @@ module TableState =
     /// **同一个 `reveals`**。不是第二处判据：判据仍只有 `reveals` 那一份，这里只是多一个消费点。
     let detail (model: TableModel) : BubbleDetail option =
         model.Opened
-        |> Option.bind (fun snapshot ->
-            recordOf snapshot
-            |> Option.map (fun record -> { Record = record; Snapshot = snapshot }))
+        |> Option.bind (fun opened ->
+            recordOf opened.Snapshot
+            |> Option.map (fun record -> {
+                Record = record
+                Snapshot = opened.Snapshot
+                // 点开之前停在第几帧（票 86）：面板上那句「正在看第 N 手」读的就是它在不在。
+                Origin = opened.Origin |> Option.map (fun origin -> origin.Cursor)
+            }))
         |> Option.filter (fun detail -> reveals model detail.Record.Seat)
 
     /// 去拉那份 Demo 牌谱。**副作用一律由 Cmd 发**（同 `askCmd`）：
@@ -1461,6 +1564,8 @@ module TableState =
 
     /// 这条消息会不会把牌桌挪一挪（票 76）。**全文面板摊开时牌桌上摆的是那一手的快照**，
     /// 因此凡是挪动牌桌的消息都先把它收起来——否则牌局在走而画面冻着，人会以为卡住了。
+    /// **收起来之前先把游标搬回原处**（票 86 的 `rewound`）：否则按一下「播放」
+    /// 就从跳过去那一处接着往下走，时间轴就永久被搬走了。
     ///
     /// **`PlayToggled` 也算**：一点开就暂停（`openAt`），而重新按播放就是「接着看牌」。
     /// 于是面板摊着的时候不可能有被接受的 `Ticked`，那一条因此不必列在这里
@@ -1498,11 +1603,7 @@ module TableState =
         | ImportPicked _ -> false
 
     let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
-        let model =
-            if moves message then
-                { model with Opened = None }
-            else
-                model
+        let model = if moves message then rewound model else model
 
         match message with
         | SeedEdited seed -> model |> onLive (fun _ live -> { live with SeedText = seed }, Cmd.none)
@@ -1577,8 +1678,8 @@ module TableState =
             | Source.Replay _
             | Source.Live _ -> model, Cmd.none
         | ViewpointPicked viewpoint -> { model with Viewpoint = viewpoint }, Cmd.none
-        // 收起那一句上面已经做完了（`moves` 不管它，而 `model.Opened` 在这里重新置）。
-        | RecordOpened None -> { model with Opened = None }, Cmd.none
+        // 收起来：游标与播放状态一起回到点开之前那一刻（票 86；`moves` 不管 `RecordOpened`）。
+        | RecordOpened None -> returned model
         | RecordOpened(Some turn) -> openAt turn model, Cmd.none
         | DangerToggled ->
             {

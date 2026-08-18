@@ -233,6 +233,12 @@ async function detailOf(page) {
       turn: panel.getAttribute("data-bubble-turn"),
       seat: panel.getAttribute("data-bubble-seat"),
       head: at("bubble-at"),
+      // 「正在看第 N 手」那一句（票 86）：人看得见自己被搬到了哪一手。
+      viewing: at("bubble-viewing"),
+      origin:
+        document
+          .querySelector('[data-testid="bubble-viewing"]')
+          ?.getAttribute("data-bubble-origin") ?? null,
       applied: at("bubble-applied"),
       fallback: at("bubble-fallback"),
       reason: at("bubble-reason"),
@@ -515,6 +521,7 @@ async function fourSeatsLane(lane, pageOrigin, options) {
 
     console.log("");
     console.log(`点开座位 0 之后：${detail?.head}`);
+    console.log(`  面板说的那一句：${detail?.viewing}`);
     console.log(`  最终落定：${detail?.applied}`);
     console.log(`  一句话理由：${detail?.reason}`);
     console.log(`  动作 id 集：${detail?.actions}`);
@@ -530,6 +537,28 @@ async function fourSeatsLane(lane, pageOrigin, options) {
       }
       if (String(detail.seat) !== "0") {
         missing.push(`摊开的那一手写着座位 ${detail.seat}，该是座位 0`);
+      }
+      // **面板上说得出人被搬到了哪儿**（票 86）：从前只有 `data-bubble-turn` 给机器看。
+      // 这一页是 Live（`?table=1`）：那边没有游标也没有时间轴，
+      // 因此 `data-bubble-origin` 必须是空的，那句话里也不允许提一根不存在的轴。
+      if (
+        detail.viewing !==
+        `正在看第 ${detail.turn} 手：牌桌上摆的是那一刻的快照，这一桌照旧停在现在那一手。`
+      ) {
+        missing.push(
+          `面板上那句「正在看第 N 手」与它摊开的那一手（第 ${detail.turn} 手）对不上：「${detail.viewing}」`,
+        );
+      }
+      if (detail.origin === null) {
+        missing.push(
+          '面板上根本没有「正在看第 N 手」那一句（[data-testid="bubble-viewing"]）：' +
+            "人因此看不见自己正在看哪一手（票 86）",
+        );
+      } else if (detail.origin !== "") {
+        missing.push(
+          `Live 那一页的面板写着一个原处（data-bubble-origin=「${detail.origin}」）：` +
+            "那边根本没有游标，`openAt` 也什么都没搬走（票 86）",
+        );
       }
       // 九样：一样都不许是空的（缺哪一样在这里各报各的话）。
       const fields = [

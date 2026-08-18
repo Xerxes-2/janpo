@@ -105,6 +105,18 @@ module Playback =
     let setSpeed (speed: Speed) : Playback -> Playback =
         reborn (fun playback -> { playback with Speed = speed })
 
+    /// 回到点开全文面板之前那个「在播不在播」（票 86 的回程）。
+    ///
+    /// **只收一个 bool 而不是整份旧 `Playback`**：那份旧值里的世代号已经**过期**
+    /// （点开那一下的 `pause` 把它换掉了），收进来就会有人把它原样放回去——
+    /// 而那正是票 78 按红过的那个坑（在飞的那记定时器被重新认下，牌桌从此双倍速走）。
+    /// 收不进来就放不回去：这里经 `reborn` 接着**现在**那个世代往下换。
+    ///
+    /// **倍速不在回程里**：面板摊着的时候倍速仍拨得动（`SpeedPicked` 不推进牌桌），
+    /// 把点开那一刻的倍速一并塞回去等于把人刚拨的那一下悄悄撤掉。
+    let resumed (playing: bool) : Playback -> Playback =
+        reborn (fun playback -> { playback with Playing = playing })
+
     // ---- 判定 ----
 
     /// 这一记定时器还算数吗：现在在播，且它是当前世代发出的。

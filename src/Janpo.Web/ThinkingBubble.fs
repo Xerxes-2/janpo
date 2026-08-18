@@ -118,6 +118,9 @@ module ThinkingBubble =
     ///
     /// **牌桌上摆的就是这一手落定那一刻**（`TableState.shown`）：story 5 的「局面快照」不是
     /// 另画一张牌桌，而是把同一份渲染指到那一帧上。因此这里只用说一句「你正在看哪一刻」。
+    ///
+    /// 那句话就是 `bubble-viewing`（票 86）：**回放里点开会把时间轴搬走**，人得看得见
+    /// 自己被搬到了哪一手、收起来会回去（两种来源两句话的判据在 `BubbleDetail.toDisplay`）。
     let internal detail (model: TableModel) (dispatch: TableMsg -> unit) : ReactElement list =
         match TableState.detail model with
         | None -> []
@@ -167,6 +170,19 @@ module ThinkingBubble =
                                     prop.text "收起"
                                 ]
                             ]
+                        ]
+                        Html.p [
+                            prop.key "viewing"
+                            // 与下面那句同一种画法（`intro`）：**没有为它新起一条 CSS 规则**
+                            // ——一条谁也不用的类名是句空话，而这一句本来就该长得像旁边那句。
+                            prop.className "intro"
+                            prop.testId "bubble-viewing"
+                            // 点开之前停在第几帧：人读的是那句话，闸门读的是它（两头对不上就是错）。
+                            prop.custom (
+                                "data-bubble-origin",
+                                detail.Origin |> Option.map string |> Option.defaultValue ""
+                            )
+                            prop.text (BubbleDetail.toDisplay detail)
                         ]
                         Html.p [
                             prop.key "snapshot"
