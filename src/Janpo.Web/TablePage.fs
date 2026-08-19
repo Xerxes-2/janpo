@@ -156,6 +156,9 @@ module TablePage =
                 (Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场" :: intro)
                 @ setup
                 @ [ TablePanel.ops model dispatch; board model dispatch ]
+                // 复盘那一块（票 90）：**只在终局后出现**，判据在 `Review.shown` 里。
+                // 摆在牌桌**下面**：点一条标注就是把牌桌摆回那一手，两件东西要在同一屏上（票 83 同一条标准）。
+                @ ReviewPanel.at model dispatch
             )
         ]
 

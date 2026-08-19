@@ -1784,7 +1784,10 @@ module TableState =
     ///
     /// **Live 侧不常驻一份帧数组**（票面明令）：点一下算一次。实测一次 fold，256 帧 46–74 ms、
     /// 741 帧约 200 ms（报告 75/76）——而帧数常驻着就得每落一手重算一遍。
-    let private liveFrames (model: TableModel) : Table list =
+    ///
+    /// **`internal` 而不是 `private`**（票 90）：复盘（`Review`）要的是同一份帧，
+    /// 而它的判据「这一场打完了没有」与这里逐字同源。再写一份「导成牌谱再 fold」就是第二条算路。
+    let internal liveFrames (model: TableModel) : Table list =
         match live model, rosterOf model with
         | Some { Table = Ok table }, Some roster ->
             match Table.paifu roster table |> Table.replay with

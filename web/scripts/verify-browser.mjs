@@ -1,6 +1,6 @@
-// 浏览器里那**十六趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那**十七趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十六趟各开自己的 page / context。
+// 十七趟各开自己的 page / context。
 //
 //   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
 //   2 首页就是一局回放：牌桌在动、没有配桌控件、上帝视角、时间轴拖得动（票 71/75）
@@ -18,6 +18,7 @@
 //  14 牌谱从外面进来的两条路：分享链接真往返（剪贴板）、导入 JSON（气泡有话）、坏输入三连（票 78）
 //  15 真人坐下把一局打完：视角按钮不在 DOM 里、整页 HTML 不泄他家手牌、?dev=1 不给开（票 87）
 //  16 ToolSearch 档：真的一条 `what_if` tool call 走完来回、到上限就停、账单是几倍（票 94）
+//  17 复盘：对局中一条标注都没有，终局后每一手都有，那几个数与引擎逐字相同（票 90）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
 // 其余十三趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
@@ -41,6 +42,7 @@ import { verifyHome } from "./verify-home.mjs";
 import { verifyHuman } from "./verify-human.mjs";
 import { verifyInbound } from "./verify-inbound.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
+import { verifyReview } from "./verify-review.mjs";
 import { verifySeats } from "./verify-seats.mjs";
 import { verifySetup } from "./verify-setup.mjs";
 import { verifyShare } from "./verify-share.mjs";
@@ -85,7 +87,7 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十六趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/** 十七趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
 const gates = [
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
@@ -231,6 +233,18 @@ const gates = [
     how: "node scripts/verify-toolsearch.mjs",
     run: (lane) => verifyToolSearch(lane),
   },
+  // 票 90：**复盘的逐手对照标注**。第一程真人坐一席打完一整场：对局中复盘那一块
+  // **整个不在 DOM 里**（阴性对照——对局中给出「换打会怎样」就是作弊，那是票 89 的事），
+  // 终局之后**每一手都有一条**，而那几个数（向听 / 有效牌 / 危险度）与**引擎另一条路**
+  // 算出来的逐字相同（`ReviewCheck`：`Replay` + `GameState.step`，页面那侧走的是 `Table.replay`）。
+  // 「更好的候选」那一栏由闸门照**规则**自己推一遍（帕累托占优）。第二程在首页那份 Demo 上：
+  // 上帝视角没有主语、坐到某一席就有（**模型席也能看**）、点某一手游标真的跳过去、
+  // 按「回到原处」回得来（票 86 的回程），而强 AI 那一行今天一个占位都没有（票 93）。
+  {
+    name: "复盘：对局中一条都没有，终局后每一手都有，那几个数与引擎逐字相同",
+    how: "node scripts/verify-review.mjs",
+    run: (lane) => verifyReview(lane),
+  },
 ];
 
 const lane = await openLane();
@@ -250,7 +264,7 @@ try {
 }
 
 console.log("");
-console.log("十六趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log("十七趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
 for (const { gate, failures, ms } of results) {
   console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }

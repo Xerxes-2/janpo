@@ -1342,3 +1342,45 @@ input[type="range"] {
     font-size: 0.82em;
   }
 }
+
+/* —— 复盘：逐手对照标注（票 90）——
+   一条标注三行：第几手（一枚按钮，点了牌桌就摆出那一刻）、引擎当时算的那几个数、
+   以及更好的候选。**列表标记去掉**：每一行头上已经写着「第 N 手」，
+   再摆一个列表序号就是同一件事的第二套编号（票 86 记过同一族的一条：
+   同一帧两个数会让人分不清哪个是哪个）。
+   **抬头那一枚按钮长得像一行字而不像按钮**：一屏上百条，百来个方框会盖过牌谱本身；
+   悬停与 :focus-visible 时它才显出可点（键盘走得到这一条因此没丢）。 */
+
+.review-notes {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-note {
+  margin: 0.45rem 0;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--line);
+}
+
+.review-note[data-review-open="1"] {
+  border-left-color: var(--indigo);
+  background: var(--indigo-wash);
+}
+
+.review-jump {
+  padding: 0 0.15rem;
+  border-color: transparent;
+  background: none;
+  text-align: left;
+}
+
+.review-figures,
+.review-advice {
+  margin: 0.1rem 0 0.1rem 0.9rem;
+  font-size: 0.92em;
+}
+
+.review-advice {
+  color: var(--ink-soft);
+}

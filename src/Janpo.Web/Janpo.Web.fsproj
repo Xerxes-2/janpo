@@ -42,6 +42,10 @@
     <Compile Include="Tracer.fs" />
     <Compile Include="Golden.fs" />
     <Compile Include="PaifuCheck.fs" />
+    <!-- 复盘那几个数的无头锦点（票 90）：与 `Golden.fs` / `PaifuCheck.fs` 同一种东西
+         ——它不在页面里，只给 `web/scripts/verify-review.mjs` 在浏览器里 `import`。
+         排在 `HumanSeat.fs` 后面（要 `HumanSeat.kind`）、页面那几块前面（它不用它们）。 -->
+    <Compile Include="ReviewCheck.fs" />
     <Compile Include="Share.fs" />
     <!-- 首页那份 Demo Paifu（票 71）：F# 调 TS 的第三处（ADR-0005），只传字符串。 -->
     <Compile Include="Demo.fs" />
@@ -60,6 +64,11 @@
     <!-- 强 AI 基线那一行（票 92）：那几 MB 拉没拉、拉不动退回了什么。
          与 `AgentLine` / `HumanLine` 同形：只画一行字，判据在 `TableState` 那几个取值器里。 -->
     <Compile Include="BaselineLine.fs" />
+    <!-- 复盘：逐手对照标注（票 90）。排在 `TableState.fs` 后面（它读 `TableModel` 与那两个取值器），
+         **一条都是现算的**：`Paifu` / `DecisionRecord` / `LiveTable` 的形状一个字节都没动。
+         判据在 `Review`，画在 `ReviewPanel`（与 `HumanSeat` / `HumanLine` 同一种分法）。 -->
+    <Compile Include="Review.fs" />
+    <Compile Include="ReviewPanel.fs" />
     <!-- 思考气泡与它点开之后那一屏（票 76）：只画，判据在 `TableState` 那个取值器里。
          排在 `TableBoard` 前面——牌桌把气泡挂在座位面板上。 -->
     <Compile Include="ThinkingBubble.fs" />
