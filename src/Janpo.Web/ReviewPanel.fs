@@ -89,6 +89,12 @@ module ReviewPanel =
         let baseline =
             strong
             |> Option.map (fun strong ->
+                // 候选那几格（票 103）：三串空格分隔的值逐位对齐（id / 概率 / 那一条叫什么）。
+                // **概率搬的是完整的那一串**（`probabilityToWire`）：闸门要拿它与 wasm 直接印出来的
+                // 那一串逐位对拍，而页面上那句中文里是两位小数——**两者各有各的用处，不能合成一份**。
+                let joined (pick: ReviewChoice -> string) =
+                    strong.Candidates |> List.map pick |> String.concat " "
+
                 Html.p [
                     prop.key "strong"
                     prop.className "review-strong"
@@ -97,6 +103,28 @@ module ReviewPanel =
                     prop.custom ("data-review-strong", strong.Key)
                     prop.custom ("data-review-strong-id", strong.ActionId)
                     prop.custom ("data-review-strong-diff", if strong.Differs then "1" else "")
+                    prop.custom ("data-review-strong-ids", joined (fun choice -> string choice.ActionId))
+                    prop.custom (
+                        "data-review-strong-ps",
+                        joined (fun choice -> ReviewStrong.probabilityToWire choice.P)
+                    )
+                    prop.custom ("data-review-strong-keys", joined (fun choice -> choice.Key))
+                    // 上游一共给了几条（**不是上面那几串的长度**）：两者不相等就是「我们又扔了一条」。
+                    prop.custom ("data-review-strong-total", strong.CandidatesTotal)
+                    // 你那一手在它的候选里排第几、多少；**不在里面时两格都是空串**
+                    // （写 0 的话就把「没抬到它」读成了「它给了零」）。
+                    prop.custom (
+                        "data-review-strong-rank",
+                        strong.Yours
+                        |> Option.map (fun choice -> string choice.Rank)
+                        |> Option.defaultValue ""
+                    )
+                    prop.custom (
+                        "data-review-strong-yours-p",
+                        strong.Yours
+                        |> Option.map (fun choice -> ReviewStrong.probabilityToWire choice.P)
+                        |> Option.defaultValue ""
+                    )
                     prop.text (ReviewStrong.toDisplay strong)
                 ])
             |> Option.toList
@@ -211,7 +239,9 @@ module ReviewPanel =
                     "cost"
                     ($"强 AI 逐手看过了：{List.length rows} 手里有 {Review.disagreements rows} 手与你不同。"
                      + $"（{Baseline.bytesToDisplay bytes}，取它 {loadMs} ms、逐手重建局面并推理 {askMs} ms）")
-                said "what" "它不是裁判：不同只是不同，它也说不出自己为什么那么打。"
+                // **多出来的那半句只交代那几个数是什么**（票 103 的硬边界：概率不是理由）：
+                // 「它只给前几条」这一句是必要的——不写的话，读者会把 0.62+0.21+0.11 不足 1 当成漏算。
+                said "what" "它不是裁判：不同只是不同，它也说不出自己为什么那么打。每一行后面那几个数是它那一次前向给这几条候选的概率，照抄：它只给前几条，因此和不必是 1。"
               ]
             | Consulted.Unavailable reason -> [ said "why" reason; button "再试一次" ]
 
@@ -330,7 +360,7 @@ module ReviewPanel =
                             |> List.choose (fun (turn, answer) ->
                                 notes
                                 |> List.tryFind (fun note -> note.Turn = turn)
-                                |> Option.bind (fun note -> Review.strongOf note answer.ActionId answer.LatencyMs)
+                                |> Option.bind (fun note -> Review.strongOf note answer)
                                 |> Option.map (fun row -> row.Turn, row))
 
                         setConsulted (Consulted.Ready(Map.ofList rows, review.Bytes, review.LoadMs, review.AskMs))

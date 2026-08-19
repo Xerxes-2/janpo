@@ -27,11 +27,27 @@ type BaselineStatus =
     /// （ADR-0006 边界 2：它是可选依赖，不是单点）。
     | Unavailable of reason: string
 
-/// 强 AI 基线的一次出手。**跨界回来的东西只有它**：一个动作 id（或者一句「我交不出来」）。
+/// 它那一次前向给出的**一条候选**（票 103）：这一包里的哪一条，上游给了它多少。
+///
+/// **只有一个 id 与一个数**（ADR-0005）：动作本身不过界，那一条叫什么由引擎的
+/// `ActionOption.label` 说了算。**这个 `P` 是上游那一次前向印出来的那个数本人**：
+/// 没有重归一化、没有四舍五入、没有任何我们自己的加工。
+type BaselineChoice = {
+    /// 这一条在那一包里的 id。
+    ActionId: int
+    /// 上游给它的概率（top-3 切片里的一个，**和不必是 1**，见报告 103）。
+    P: float
+}
+
+/// 强 AI 基线的一次出手。**跨界回来的东西只有它**：一个动作 id（或者一句「我交不出来」），
+/// 加上**同一次前向里那几条候选与它们的概率**（票 103）。
 ///
 /// **它比 `AgentAnswer` 短得多，而这正是这一席的性质**（票 92 的要害）：
 /// 没有 thinking、没有一句话理由、没有 token 账单、没有 prompt 尾部与 preamble
 /// ——那几样它一样都给不出，因此这里一格都不留。**别为它编一句**（票面原话）。
+///
+/// **概率不是理由**（票 103 的硬边界）：多出来的这两格只是上游那几个数，
+/// 它们不说明任何事——把 `0.95` 读成「它很确定」是我们替一个不会说话的网络编话。
 type BaselineAnswer = {
     /// 它选定的动作在这一包里的 id；交不出来时是 None。
     ActionId: int option
@@ -40,6 +56,14 @@ type BaselineAnswer = {
     /// 端到端毫秒（喂事件流 + 推理 + 翻译）。**只进状态线，不进牌谱**：
     /// 它是本机的一个耗时，不是这一场对局的事实。
     LatencyMs: int
+    /// 它那一次前向给出的候选，**按上游那一列的顺序**（概率降序）。
+    ///
+    /// **空表不是错误**：老产物没有这一格、或者那几条一条都落不进这一包时就是空的，
+    /// 那时复盘那一行**退回票 93 今天的样子**（只说它打什么）。
+    Candidates: BaselineChoice list
+    /// 上游一共给了几条。**不是 `List.length Candidates`**：这一包里认不出的那几条
+    /// 不占位，但「它给了几条」这件事要照实报——票 92 把分布扔了而没人知道，就是因为没有这一格。
+    CandidatesTotal: int
 }
 
 /// **复盘那一屏问完一整场之后拿回来的那一叠**（票 93）。
@@ -103,14 +127,36 @@ module Baseline =
                 | Some bytes -> Ok bytes
                 | None -> Error "强 AI 基线拉不动：TS 侧的信封里既没有字节数也没有原因")
 
+    /// 一条候选：`{"action_id":N,"p":…}`。**两格缺一个就不要这一条**
+    /// （同 `mjai.ts` 的 `numberedActions`：形状不对宁可少一条，不许拿默认值填）。
+    let private choiceDecoder: Decoder<BaselineChoice> =
+        Decode.map2
+            (fun actionId p -> { ActionId = actionId; P = p })
+            (Decode.field "action_id" Decode.int)
+            (Decode.field "p" Decode.float)
+
     /// 一次出手的回执。**每个字段都可以缺**（同 `Agent.answerDecoder`）：
     /// 读不动的代价是这一手兜底，太贵。
+    ///
+    /// **候选那两格缺了也不算错**（票 103）：站点上摆的是一份老产物时它们就不在，
+    /// 而那一行该退回票 93 的样子、不是整行消失。
     let private answerDecoder: Decoder<BaselineAnswer> =
-        Decode.object (fun get -> {
-            ActionId = get.Optional.Field "action_id" Decode.int
-            Failure = get.Optional.Field "failure" Decode.string
-            LatencyMs = get.Optional.Field "latency_ms" Decode.int |> Option.defaultValue 0
-        })
+        Decode.object (fun get ->
+            let candidates =
+                get.Optional.Field "candidates" (Decode.list choiceDecoder)
+                |> Option.defaultValue []
+
+            {
+                ActionId = get.Optional.Field "action_id" Decode.int
+                Failure = get.Optional.Field "failure" Decode.string
+                LatencyMs = get.Optional.Field "latency_ms" Decode.int |> Option.defaultValue 0
+                Candidates = candidates
+                // 读不到那一格时拿手上这几条当全部：**不许写一个比实际大的数**
+                // （那会让页面说出一句「上游给了 3 条」而没人能核）。
+                CandidatesTotal =
+                    get.Optional.Field "candidates_total" Decode.int
+                    |> Option.defaultValue (List.length candidates)
+            })
 
     /// 一整叠回执。**一手交不出来不影响别的手**：它那一条带着 `failure` 照样回来，
     /// 由复盘那一层把那一行整行去掉。
@@ -158,6 +204,8 @@ module Baseline =
         ActionId = None
         Failure = Some reason
         LatencyMs = 0
+        Candidates = []
+        CandidatesTotal = 0
     }
 
     // ---- 边界（ADR-0005） ----

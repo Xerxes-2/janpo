@@ -1,6 +1,7 @@
 namespace Janpo.Web.Tests
 
 open Xunit
+open Thoth.Json.Newtonsoft
 open Janpo
 open Janpo.Web
 
@@ -276,6 +277,8 @@ module BaselineSeatTests =
                         ActionId = Some id
                         Failure = None
                         LatencyMs = 1
+                        Candidates = []
+                        CandidatesTotal = 0
                     }
                 ))
                 ready
@@ -307,6 +310,8 @@ module BaselineSeatTests =
                         ActionId = None
                         Failure = Some "它出的那一手不在这一包里"
                         LatencyMs = 2
+                        Candidates = []
+                        CandidatesTotal = 0
                     }
                 ))
                 ready
@@ -325,8 +330,64 @@ module BaselineSeatTests =
                 ActionId = Some 0
                 Failure = None
                 LatencyMs = 1
+                Candidates = []
+                CandidatesTotal = 0
             }
 
         // 票号对不上、座位对不上：两条都没有事情发生。
         Assert.Equal(0, (tableOf (step (BaselineDecided(seat 0, consult.Ticket + 7, answer)) ready)).Turns)
         Assert.Equal(0, (tableOf (step (BaselineDecided(seat 2, consult.Ticket, answer)) ready)).Turns)
+
+    // ---- 对局中它照旧不说话（票 103 的边界：确定度只进复盘那一行） ----
+
+    [<Fact>]
+    let ``回执里带着候选分布，对局中的牌桌上仍旧一个数都不出现`` () =
+        let ready = askedAt 0
+        let consult = consultOf ready
+
+        let ids =
+            DecisionPackage.options consult.Package
+            |> List.truncate 3
+            |> List.map ActionOption.id
+
+        // 票 103 之后跨界回来的多了两格（它那一次前向给的候选与概率）。
+        // **它们只服务终局之后的复盘那一行**：对局中给出「它有多确定」，
+        // 与对局中给出「换打会怎样」是同一种作弊（ADR-0003 管终局前的可见性，真人在座时更不许）。
+        let answer: BaselineAnswer =
+            {
+                ActionId = List.tryHead ids
+                Failure = None
+                LatencyMs = 1
+                Candidates =
+                    ids
+                    |> List.mapi (fun index id ->
+                        {
+                            ActionId = id
+                            P = 0.6961328 / float (index + 1)
+                        })
+                CandidatesTotal = List.length ids
+            }
+
+        let played = step (BaselineDecided(seat 0, consult.Ticket, answer)) ready
+        let table = tableOf played
+
+        // 它真出了手，而**这一桌的事实里没有多出任何一格**：没有决策记录（于是没有气泡、
+        // 没有 token 账单），牌谱里也找不到那几个数——它们从来没有进过 `Table`。
+        Assert.Equal(1, table.Turns)
+        Assert.Empty(table.Decisions)
+        Assert.Equal(0, Usage.promptTokens (Table.usage table))
+
+        let paifu =
+            match TablePage.rosterOf played with
+            | Some roster -> Table.paifu roster table |> Paifu.encoder |> Encode.toString 0
+            | None -> failwith "Live 那一桌必然有配桌"
+
+        // **阳性对照**：这一串数字确实是我们刚喂进去的那一个（否则「牌谱里没有它」
+        // 可能只是因为我们找的是一串本来就不存在的字符）。
+        Assert.Equal("0.6961328", ReviewStrong.probabilityToWire 0.6961328)
+        Assert.DoesNotContain("0.6961328", paifu)
+        Assert.DoesNotContain("candidates", paifu)
+
+        match TablePage.shown played with
+        | Shown.Board board -> Assert.Equal(None, TablePage.bubbles played board (seat 0))
+        | other -> failwith $"该有一张牌桌，却得到 {other}"

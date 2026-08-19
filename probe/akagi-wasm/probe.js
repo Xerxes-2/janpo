@@ -27,8 +27,14 @@ export function feedLine(instance, line) {
   return rc;
 }
 
-/** 让它出一手；返回解析好的 JSON 对象。 */
-export function decide(instance) {
+/**
+ * 让它出一手；返回 wasm 印出来的**那一段原文**（不解析）。
+ *
+ * **要原文的理由是逐位对拍**（票 103）：`decision_json` 里的 `p` 是 Rust 侧
+ * `f32` 的最短往返打印，一旦 `JSON.parse` 过就只剩一个双精度数，
+ * 「页面上那个数与 wasm 印出来的那个数逐位相同」这句话就再也没有左侧了。
+ */
+export function decideText(instance) {
   const packed = instance.exports.probe_decide();
   // 高 32 位是指针、低 32 位是字节数（返回值是 i64，JS 侧拿到 BigInt）。
   const ptr = Number(packed >> 32n);
@@ -36,7 +42,12 @@ export function decide(instance) {
   const view = new Uint8Array(instance.exports.memory.buffer, ptr, len);
   const json = TEXT_DECODER.decode(view.slice());
   instance.exports.probe_free(ptr, len);
-  return JSON.parse(json);
+  return json;
+}
+
+/** 让它出一手；返回解析好的 JSON 对象。 */
+export function decide(instance) {
+  return JSON.parse(decideText(instance));
 }
 
 function stats(samples) {

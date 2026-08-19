@@ -70,10 +70,30 @@ type ReviewNote = {
     Better: ReviewCandidate list
 }
 
-/// 强 AI 在那一手会怎么打（票 93，spec 的 story 36）。
+/// 强 AI 那一次前向给出的**一条候选**（票 103）：哪一条、叫什么、多少、排第几。
 ///
-/// **它不给理由**（ADR-0006 / 票 92）：跨界回来的只有一个动作 id 与一个延迟，
-/// 没有 thinking、没有一句话理由。**别为它编一句**（票面原话）——这里因此一格「理由」都不留。
+/// **`P` 是上游那个数本人**：这一层不归一化、不重排、不四舍五入（舍入只发生在
+/// 给人看的那一句里，而 `data-*` 上搬的是完整的那一串）。
+/// **它不是理由**：把 0.95 读成「它很确定」是我们替一个不会说话的网络编话（票 103 的硬边界）。
+type ReviewChoice = {
+    /// 这一条在那一包里的 id。
+    ActionId: int
+    /// 那一条的中文 label（`ActionOption.label`，引擎给的那一句）。
+    Label: string
+    /// 给机器看的那一半（`dahai:3p` / `pon` / …）。
+    Key: string
+    /// 上游给它的那个数。
+    P: float
+    /// 在**上游那一列**里排第几（1 起）。**中间那一条认不出来时序号不重排**：
+    /// 重排了的话「第 2」就不再是上游那张表里的第 2 了。
+    Rank: int
+}
+
+/// 强 AI 在那一手会怎么打（票 93，spec 的 story 36），**以及它那一次前向给出的那几条候选**（票 103）。
+///
+/// **它不给理由**（ADR-0006 / 票 92）：跨界回来的只有 id 与数，没有 thinking、没有一句话理由。
+/// **别为它编一句**（票面原话）——这里因此一格「理由」都不留，
+/// **概率也不是理由**：它只是上游那几个数，页面上只允许照抄。
 ///
 /// **它不是裁判，是参照系**（票 93 的边界）：`Differs` 只说「不同」，不说「你错了」，
 /// 也没有总分、没有「你比它差多少」。
@@ -90,6 +110,19 @@ type ReviewStrong = {
     Differs: bool
     /// 端到端毫秒（TS 那侧量的：翻译 + 喂这一局的流 + 一次前向）。
     LatencyMs: int
+    /// 它那一次前向给出的候选，按上游那一列的顺序（概率降序）。
+    ///
+    /// **空表是一种合法状态**（老产物 / 字段缺失）：那时这一行退回票 93 今天的样子
+    /// ——只说它打什么，**不是空白、不是「暂无」**。
+    Candidates: ReviewChoice list
+    /// 上游一共给了几条（今天是 top-3）。**不是 `List.length Candidates`**：
+    /// 这一包里认不出的那几条不占位，但它给了几条要照实说得出来。
+    CandidatesTotal: int
+    /// **你打的那一手在它的候选里的那一条**（票面：「你打的它给了 0.35，排第二」）；
+    /// 不在那几条里时是 None——**那不等于它给了 0**，上游只抬出前几条。
+    Yours: ReviewChoice option
+    /// 你那一手的中文 label（`ReviewNote.Label`）：上面那一句要叫得出它的名字。
+    PlayedLabel: string
 }
 
 /// 复盘面板此刻该画什么（票 90）。**三态是三个 case**（判据 12：拒绝理由各有各的 case）：
@@ -146,13 +179,62 @@ module ReviewCandidate =
 [<RequireQualifiedAccess>]
 module ReviewStrong =
 
-    /// **渲染层的单向出口**（ADR-0001）：`〔强 AI〕手切3索（与你不同）`。
+    /// 一个概率**给人看的那一半**：两位小数。
+    ///
+    /// **两头各拦一道，因为舍入会把事实舍成另一件事**：真语料里末一条的 p05 是 0.0004
+    /// （报告 103 §1），写成 `0.00` 就成了「它给了零」；同理 0.999 写成 `1.00`
+    /// 就成了「它给了全部」。两句都是事实上的界，**不是形容词**（票 103 的硬边界：
+    /// 页面上一个度量词都不许出现）。**完整的那一串在 `data-*` 上**（`probabilityToWire`）。
+    let probabilityToDisplay (p: float) : string =
+        if p > 0.0 && p < 0.005 then "<0.01"
+        elif p < 1.0 && p >= 0.995 then ">0.99"
+        else $"%.2f{p}"
+
+    /// 一个概率**给机器看的那一半**（`data-review-strong-ps`）：**一位都不舍**。
+    ///
+    /// 闸门拿它与 wasm 直接印出来的那一串逐位对拍（票 103 的那道闸），
+    /// 因此这里用的是**最短往返表示**（.NET 与 JS 的 `ToString()` 都是它），
+    /// 而不是 `%g` 那种按有效位数截的写法——截一位，那道闸就变成了「四舍五入看着差不多」。
+    let probabilityToWire (p: float) : string = string p
+
+    /// **渲染层的单向出口**（ADR-0001）：
+    /// `〔强 AI〕手切3索（与你不同）　它给了 3 条：手切3索 0.62、摸切9万 0.21、立直 0.11　你打的摸切1万 0.21（第 2）`。
     ///
     /// **相同那一半也说出来**：只标「不同」的话，没有标记的那几手看着像「还没算完」
     /// ——而「算不动」在这一票里的样子是**整行不出现**，两者在页面上必须分得开。
+    ///
+    /// **分布那两句只能照抄数字**（票 103 的硬边界）：不写「很确定 / 犹豫」这类度量词，
+    /// 不写「它认为……」。要不要按阈值分档是产品口味，留给人裁（提案在报告 103 里）。
+    ///
+    /// **分布为空时逐字退回票 93 那一句**：老产物上那一行仍然说得出它打什么，
+    /// 而不是多出一句「暂无候选」（票 90/92/93 同一个规矩：没有的东西不占位）。
     let toDisplay (strong: ReviewStrong) : string =
         let compared = if strong.Differs then "与你不同" else "与你相同"
-        $"〔强 AI〕{strong.Label}（{compared}）"
+        let head = $"〔强 AI〕{strong.Label}（{compared}）"
+
+        match strong.Candidates with
+        | [] -> head
+        | candidates ->
+            let listed =
+                candidates
+                |> List.map (fun choice -> $"{choice.Label} {probabilityToDisplay choice.P}")
+                |> String.concat "、"
+
+            // 认得出来的比上游给的少时，**把这件事说出来**：票 92 把分布整个扔了而没人知道，
+            // 靠的就是没有一句话把「上游给了几条」抬到台面上。（实测未触发，报告 103 §2。）
+            let counted =
+                if List.length candidates = strong.CandidatesTotal then
+                    $"它给了 {strong.CandidatesTotal} 条"
+                else
+                    $"它给了 {strong.CandidatesTotal} 条（这一包里认得出 {List.length candidates} 条）"
+
+            let yours =
+                match strong.Yours with
+                | Some choice -> $"你打的{strong.PlayedLabel} {probabilityToDisplay choice.P}（第 {choice.Rank}）"
+                // **不写成「它给了 0」**：上游只抬前几条，没抬到的那一手它的概率我们根本没拿到。
+                | None -> $"你打的{strong.PlayedLabel}：不在这 {strong.CandidatesTotal} 条里"
+
+            $"{head}　{counted}：{listed}　{yours}"
 
 /// 一条标注说出来是什么样。**面板只画这几句，一条规则都不判**（同 `HumanLine` / `AgentLine`）。
 [<RequireQualifiedAccess>]
@@ -377,30 +459,58 @@ module Review =
         notes
         |> List.choose (fun note -> note.Package |> Option.map (fun package -> note.Turn, package))
 
-    /// 它交回来的那个 id → 这一行。
+    /// 它交回来的那一条（id + 同一次前向的候选分布）→ 这一行。
     ///
     /// **算不动就整行不出现**（票面原话，与票 92 同一个规矩）：它交不出来（`None`）、
     /// 或者那个 id 压根不在这一包里时回 None——页面上因此一个元素都没有，
     /// 而不是一行「暂无」（占位的那一行看着像坏了）。
+    /// **分布缺失不在此列**（票 103）：那时这一行照旧出，只是退回票 93 那一句。
     ///
     /// **同不同按 id 比**：两边都是同一包里的序号，因此这一步没有第二份「怎么算同一手」的判据
     /// （摸切与手切也因此不会被当成分歧：一包里同一张牌只有一条打法，见 `mjai.ts` 的 `actionKey`）。
-    let strongOf (note: ReviewNote) (actionId: int option) (latencyMs: int) : ReviewStrong option =
-        match note.Package, actionId with
+    /// **「你排第几」同理按 id 比**，而不是拿中文去配。
+    let strongOf (note: ReviewNote) (answer: BaselineAnswer) : ReviewStrong option =
+        // 一条候选 → 它在这一包里叫什么。**序号用的是上游那一列的位置**（`List.indexed` 在前）：
+        // 先 choose 再编号的话，中间一条认不出来就会把第 3 条悔成第 2 条。
+        let choicesFrom (options: ActionOption list) : ReviewChoice list =
+            answer.Candidates
+            |> List.indexed
+            |> List.choose (fun (index, choice) ->
+                options
+                |> List.tryFind (fun option -> ActionOption.id option = choice.ActionId)
+                |> Option.map (fun option -> {
+                    ActionId = choice.ActionId
+                    Label = ActionOption.label option
+                    Key = keyOf (ActionOption.action option)
+                    P = choice.P
+                    Rank = index + 1
+                }))
+
+        match note.Package, answer.ActionId with
         | Some package, Some id ->
-            DecisionPackage.options package
+            let options = DecisionPackage.options package
+
+            options
             |> List.tryFind (fun option -> ActionOption.id option = id)
-            |> Option.map (fun option -> {
-                Turn = note.Turn
-                ActionId = id
-                Label = ActionOption.label option
-                Key = keyOf (ActionOption.action option)
-                // 包里找不到你那一手时算「不同」：那只会发生在包与牌谱对不上时，
-                // 而那一天该看见的是一个刺眼的标记，不是一句「与你相同」。
-                // （dotnet 那一侧的用例正面钉着「每一手都找得到」，这一支因此跑不到。）
-                Differs = DecisionPackage.tryId note.Played package <> Some id
-                LatencyMs = latencyMs
-            })
+            |> Option.map (fun option ->
+                let candidates = choicesFrom options
+                let played = DecisionPackage.tryId note.Played package
+
+                {
+                    Turn = note.Turn
+                    ActionId = id
+                    Label = ActionOption.label option
+                    Key = keyOf (ActionOption.action option)
+                    // 包里找不到你那一手时算「不同」：那只会发生在包与牌谱对不上时，
+                    // 而那一天该看见的是一个刺眼的标记，不是一句「与你相同」。
+                    // （dotnet 那一侧的用例正面钉着「每一手都找得到」，这一支因此跑不到。）
+                    Differs = played <> Some id
+                    LatencyMs = answer.LatencyMs
+                    Candidates = candidates
+                    CandidatesTotal = answer.CandidatesTotal
+                    Yours = candidates |> List.tryFind (fun choice -> Some choice.ActionId = played)
+                    PlayedLabel = note.Label
+                })
         | Some _, None
         | None, _ -> None
 

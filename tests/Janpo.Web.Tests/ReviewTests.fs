@@ -52,6 +52,32 @@ module ReviewTests =
         | Ok table -> table
         | Error error -> failwith $"这一桌应当开得起来，却得到「{error}」"
 
+    /// 一次回执，**不带分布**（票 93 那一行今天的样子，也是老产物上的样子）。
+    let private answered (actionId: int option) (latencyMs: int) : BaselineAnswer =
+        {
+            ActionId = actionId
+            Failure = None
+            LatencyMs = latencyMs
+            Candidates = []
+            CandidatesTotal = 0
+        }
+
+    /// 一次回执，**带上它那一次前向给的候选**（票 103）：
+    /// `total` 是上游一共给了几条（可能比认得出来的多）。
+    let private answeredWith (actionId: int option) (candidates: (int * float) list) (total: int) : BaselineAnswer =
+        { answered actionId 5 with
+            Candidates = candidates |> List.map (fun (id, p) -> { ActionId = id; P = p })
+            CandidatesTotal = total
+        }
+
+    /// 强 AI 那一行上**一个都不允许出现**的词。
+    ///
+    /// 前六个是票 92/93 的（别为它编一句理由、别造总分）；
+    /// **后六个是票 103 的**：概率不是理由，把 `p=0.95` 写成「它很确定」
+    /// 是替一个不会说话的网络编话，**而且编得越顺口越像真的**。
+    let private forbidden =
+        [ "因为"; "理由"; "评分"; "总分"; "暂无"; "错"; "确定"; "犹豫"; "认为"; "建议"; "把握"; "自信" ]
+
     let private notesOf (index: int) (model: TableModel) : ReviewNote list =
         match Review.shown model with
         | ReviewShown.Notes(shownSeat, notes) ->
@@ -572,13 +598,13 @@ module ReviewTests =
             | None -> failwith "他打的那一手必然在那一包里"
 
         // **算不动就整行不出现**：交不出来（None）与说了一个不存在的 id 都是同一个下场。
-        Assert.Equal(None, Review.strongOf note None 3)
-        Assert.Equal(None, Review.strongOf note (Some(List.length options)) 3)
-        Assert.Equal(None, Review.strongOf note (Some -1) 3)
+        Assert.Equal(None, Review.strongOf note (answered None 3))
+        Assert.Equal(None, Review.strongOf note (answered (Some(List.length options)) 3))
+        Assert.Equal(None, Review.strongOf note (answered (Some -1) 3))
 
         // 它正好选了你那一手：不是分歧。
         let same =
-            match Review.strongOf note (Some played) 7 with
+            match Review.strongOf note (answered (Some played) 7) with
             | Some row -> row
             | None -> failwith "包里那一条 id 该换得出一行"
 
@@ -596,7 +622,7 @@ module ReviewTests =
             | None -> failwith "这一手只有一条可选，换一手来量分歧"
 
         let differs =
-            match Review.strongOf note (Some elsewhere) 1 with
+            match Review.strongOf note (answered (Some elsewhere) 1) with
             | Some row -> row
             | None -> failwith "包里那一条 id 该换得出一行"
 
@@ -609,5 +635,177 @@ module ReviewTests =
 
         // **它不给理由，所以这一行不得凭空长出一句话**（票 92 的要害），
         // 也不得长出一个分数（票 93 的边界）。
-        for word in [ "因为"; "理由"; "评分"; "总分"; "暂无"; "错" ] do
+        for word in forbidden do
             Assert.DoesNotContain(word, said)
+
+        // **上游没给分布时逐字退回票 93 那一句**（票 103）：不是空白、也不是「暂无」。
+        Assert.Equal($"〔强 AI〕{differs.Label}（与你不同）", said)
+        Assert.Empty(differs.Candidates)
+        Assert.Equal(0, differs.CandidatesTotal)
+        Assert.Equal(None, differs.Yours)
+
+    // ---- 强 AI 那一行：它有多确定（票 103） ----
+
+    /// 一手打牌，连同它那一包里可挑的几条 id（**至少四条**：要摆得下三条候选加一条别的）。
+    let private handWithOptions () : ReviewNote * DecisionPackage * int list =
+        let notes = settledFirst.Force() |> notesOf 0
+
+        let picked =
+            notes
+            |> List.tryPick (fun note ->
+                match note.Package with
+                | Some package when List.length (DecisionPackage.options package) >= 4 ->
+                    Some(note, package, DecisionPackage.options package |> List.map ActionOption.id)
+                | _ -> None)
+
+        match picked with
+        | Some found -> found
+        | None -> failwith "一整场里总该有一手可挑的动作在四条以上"
+
+    [<Fact>]
+    let ``它那一次前向给的候选照原样带过来：几条、各自多少、排第几都是上游那几个数`` () =
+        let note, package, ids = handWithOptions ()
+
+        let labelOf (id: int) =
+            DecisionPackage.options package
+            |> List.tryFind (fun option -> ActionOption.id option = id)
+            |> Option.map ActionOption.label
+            |> Option.defaultValue "?"
+
+        // 上游给的就是这三条（`SHOW_TOP_N = 3`，实测形状见报告 103）。
+        let candidates = [ ids[0], 0.5961328; ids[1], 0.40268; ids[2], 0.0010278977 ]
+
+        let row =
+            match Review.strongOf note (answeredWith (Some ids[0]) candidates 3) with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        Assert.Equal(3, row.CandidatesTotal)
+        Assert.Equal<int list>(ids |> List.truncate 3, row.Candidates |> List.map (fun each -> each.ActionId))
+        // 序号是**上游那一列**里的位置，不是我们重排出来的。
+        Assert.Equal<int list>([ 1; 2; 3 ], row.Candidates |> List.map (fun each -> each.Rank))
+        // 概率**一位都不动**：这一层不归一化、不四舍五入（页面上那句中文才舍到两位）。
+        Assert.Equal<float list>([ 0.5961328; 0.40268; 0.0010278977 ], row.Candidates |> List.map (fun each -> each.P))
+        // 那一条叫什么由引擎说了算（`ActionOption.label`），不是我们拼的。
+        Assert.Equal<string list>(
+            ids |> List.truncate 3 |> List.map labelOf,
+            row.Candidates |> List.map (fun each -> each.Label)
+        )
+
+        let said = ReviewStrong.toDisplay row
+
+        Assert.Contains("它给了 3 条", said)
+        Assert.Contains($"{labelOf ids[0]} 0.60", said)
+        Assert.Contains($"{labelOf ids[1]} 0.40", said)
+        // 末一条小到两位小数写不出来时给的是一个**界**，不是一个假的 0.00（报告 103 §3）。
+        Assert.Contains($"{labelOf ids[2]} <0.01", said)
+
+        // **一句人话都没有**（这一票的全部风险）：既没有理由，也没有「很确定 / 犹豫」这类度量词。
+        for word in forbidden do
+            Assert.DoesNotContain(word, said)
+
+    [<Fact>]
+    let ``你打的那一手在它的候选里排第几：它排第 2 时那一栏说的就是第 2`` () =
+        let note, package, ids = handWithOptions ()
+
+        let played =
+            match DecisionPackage.tryId note.Played package with
+            | Some id -> id
+            | None -> failwith "他打的那一手必然在那一包里"
+
+        let elsewhere = ids |> List.filter (fun id -> id <> played)
+
+        // 它打的是别的（第 1 条），而**你打的那一手是它的第 2 条**——票面点名的那种局面。
+        let candidates = [ elsewhere[0], 0.62; played, 0.35; elsewhere[1], 0.03 ]
+
+        let row =
+            match Review.strongOf note (answeredWith (Some elsewhere[0]) candidates 3) with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        Assert.True(row.Differs)
+
+        match row.Yours with
+        | Some yours ->
+            Assert.Equal(played, yours.ActionId)
+            Assert.Equal(2, yours.Rank)
+            Assert.Equal(0.35, yours.P)
+        | None -> failwith "你打的那一手就在它给的那三条里，这一格不该是空的"
+
+        let said = ReviewStrong.toDisplay row
+        Assert.Contains($"你打的{note.Label} 0.35（第 2）", said)
+
+        for word in forbidden do
+            Assert.DoesNotContain(word, said)
+
+    [<Fact>]
+    let ``你打的那一手不在它给的那几条里：说「不在这几条里」，不说「它给了 0」`` () =
+        let note, package, ids = handWithOptions ()
+
+        let played =
+            match DecisionPackage.tryId note.Played package with
+            | Some id -> id
+            | None -> failwith "他打的那一手必然在那一包里"
+
+        let elsewhere = ids |> List.filter (fun id -> id <> played) |> List.truncate 3
+
+        let row =
+            match
+                Review.strongOf
+                    note
+                    (answeredWith (Some elsewhere[0]) (elsewhere |> List.mapi (fun i id -> id, 0.5 / float (i + 1))) 3)
+            with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        Assert.Equal(None, row.Yours)
+
+        let said = ReviewStrong.toDisplay row
+        Assert.Contains($"你打的{note.Label}：不在这 3 条里", said)
+        // **上游只抬前几条**：没抬到不等于它给了零，因此这一栏一个数都不许出现。
+        Assert.DoesNotContain("你打的", said.Replace($"你打的{note.Label}：不在这 3 条里", ""))
+        Assert.DoesNotContain("0.00", said)
+
+        for word in forbidden do
+            Assert.DoesNotContain(word, said)
+
+    [<Fact>]
+    let ``这一包里认不出的那一条不占位，但上游给了几条照实说，而且序号不重排`` () =
+        let note, _, ids = handWithOptions ()
+        let missing = (ids |> List.max) + 7
+
+        // 上游给了三条，中间那一条这一包里根本没有（例如上游把两张牌归并到了同一条）。
+        let row =
+            match Review.strongOf note (answeredWith (Some ids[0]) [ ids[0], 0.7; missing, 0.2; ids[1], 0.1 ] 3) with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        Assert.Equal(2, List.length row.Candidates)
+        Assert.Equal(3, row.CandidatesTotal)
+        // **序号不重排**：第三条仍旧是第 3 条——重排的话「第 2」就不再是上游那张表里的第 2 了。
+        Assert.Equal<int list>([ 1; 3 ], row.Candidates |> List.map (fun each -> each.Rank))
+
+        let said = ReviewStrong.toDisplay row
+        Assert.Contains("它给了 3 条（这一包里认得出 2 条）", said)
+
+        for word in forbidden do
+            Assert.DoesNotContain(word, said)
+
+    [<Fact>]
+    let ``两位小数只出现在给人看的那一句里；data-* 那一串一位都不舍`` () =
+        // 给人看的那一半：两位小数，两头各拦一道（写成 0.00 就成了「它给了零」，
+        // 写成 1.00 就成了「它给了全部」——两者都是把事实舍成了另一件事）。
+        Assert.Equal("0.60", ReviewStrong.probabilityToDisplay 0.5961328)
+        Assert.Equal("0.35", ReviewStrong.probabilityToDisplay 0.35)
+        Assert.Equal("<0.01", ReviewStrong.probabilityToDisplay 0.0010278977)
+        Assert.Equal(">0.99", ReviewStrong.probabilityToDisplay 0.9999)
+        Assert.Equal("1.00", ReviewStrong.probabilityToDisplay 1.0)
+        Assert.Equal("0.00", ReviewStrong.probabilityToDisplay 0.0)
+
+        // 给机器看的那一半：**最短往返表示**，闸门拿它与 wasm 印出来的那一串逐位对拍。
+        for p in [ 0.5961328; 0.40268; 0.0010278977; 1.0; 0.0 ] do
+            let wire = ReviewStrong.probabilityToWire p
+            Assert.Equal(p, Double.Parse(wire, Globalization.CultureInfo.InvariantCulture))
+            Assert.DoesNotContain("E", wire)
+
+        Assert.Equal("0.5961328", ReviewStrong.probabilityToWire 0.5961328)

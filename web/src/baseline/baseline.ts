@@ -10,7 +10,8 @@
  *
  * - `load()`：去拉那几 MB 并起起来。**只有它被调到才会有那一次 `fetch`**
  *   （ADR-0006 边界 1：首页与不选那一席的对局一个字节都不拉）。
- * - `decide(request)`：喂这一局的事件流、跑一次前向、把它出的那一手换成这一包里的 id。
+ * - `decide(request)`：喂这一局的事件流、跑一次前向、把它出的那一手换成这一包里的 id，
+ *   **顺手把同一次前向里那几条候选与它们的概率一并带回去**（票 103）。
  * - `decideAll(request)`：**复盘那一屏用的**（票 93）：一次交来一整场的几十上百份决策包，
  *   逐份走 `decide`（**同一道门，没有第二条推理路**），回一张「第几手 → 哪一条 id」的表。
  *   它自己会在需要时先 `load()`——复盘那一屏点下那一枚之前，同样一个字节都不拉。
@@ -52,6 +53,40 @@ export async function load(): Promise<string> {
 const refused = (why: string, startedAt: number) =>
   envelope({ failure: why, latency_ms: Math.round(performance.now() - startedAt) });
 
+/** 它那一次前向给出的一条候选：这一包里的哪一条，以及上游给它的那个数。 */
+export interface Choice {
+  action_id: number;
+  p: number;
+}
+
+/**
+ * 它那一次前向给出的候选分布 → **这一包里的几条 id 加各自的概率**（票 103）。
+ *
+ * **分布早就在跨界的 JSON 里了，是我们自己在这一层把它扔了**：`crate/src/lib.rs` 的
+ * `decision_json` 一直在印 `{"candidates":[{"action":…,"p":…}, …]}`，而票 92 只取了头一条的
+ * `action`。量出来的形状（`probe/akagi-wasm/candidates-shape.mjs`，111 份牌谱 × 四席 ×
+ * 69,318 个决策点）：**最多 3 条**（上游 `SHOW_TOP_N`），按概率降序，每条落在 [0,1] 里，
+ * **和不是 1**（中位 0.9895、14% 的决策点和 < 0.9）——它是 top-3 的切片，不是全分布。
+ *
+ * **认不出来的那一条不许瞎猜**（同 `matchAction`）：它落不进这一包就不进这张表，
+ * 但**上游一共给了几条照实报**（`candidates_total`），否则「我们扔了什么」这件事又没人知道了。
+ */
+export function candidatesOf(
+  decision: Record<string, unknown>,
+  options: ReturnType<typeof numberedActions>,
+) {
+  const raw = Array.isArray(decision.candidates) ? decision.candidates : [];
+
+  const named = raw.flatMap((each): Choice[] => {
+    const candidate = each as { action?: Record<string, unknown>; p?: unknown };
+    if (candidate.action === undefined || typeof candidate.p !== "number") return [];
+    const id = matchAction(candidate.action, options);
+    return id === null ? [] : [{ action_id: id, p: candidate.p }];
+  });
+
+  return { candidates: named, candidates_total: raw.length };
+}
+
 /**
  * 问它这一手打什么。
  *
@@ -83,6 +118,7 @@ export async function decide(request: string): Promise<string> {
   if (options.length === 0) return refused("这一包里一条动作都没有", startedAt);
 
   let action: Record<string, unknown>;
+  let distribution = { candidates: [] as Choice[], candidates_total: 0 };
   try {
     const lines = historyLines(history, seat);
     seatAt(loaded, seat);
@@ -91,12 +127,15 @@ export async function decide(request: string): Promise<string> {
     const out = decideNow(loaded);
     if (out.ok !== true) return refused(`它答不上来（${String(out.error)}）`, startedAt);
 
-    const decision = out.decision as { action?: Record<string, unknown> } | null;
+    const decision = out.decision as Record<string, unknown> | null;
     if (decision == null || decision.action === undefined) {
       // 它认为此刻自己没有合法动作，而引擎正等着这一席——两边对局面的看法分了岔。
       return refused("它认为这一手没有它的事，而引擎正在等它", startedAt);
     }
-    action = decision.action;
+    action = decision.action as Record<string, unknown>;
+    // **同一次前向**：这几条候选与上面那一手出自 `probe_decide` 的同一段 JSON，
+    // 因此带它们回去**不多跑一次推理**（票 103 量过：逐手 0.72 ms 不变）。
+    distribution = candidatesOf(decision, options);
   } catch (error) {
     const panic = lastPanic(loaded);
     const why = error instanceof TranslationError ? error.message : detail(error);
@@ -109,7 +148,11 @@ export async function decide(request: string): Promise<string> {
     return refused(`它出的那一手不在这一包里：${JSON.stringify(action)}`, startedAt);
   }
 
-  return envelope({ action_id: id, latency_ms: Math.round(performance.now() - startedAt) });
+  return envelope({
+    action_id: id,
+    latency_ms: Math.round(performance.now() - startedAt),
+    ...distribution,
+  });
 }
 
 /** 复盘那一屏交来的一手：手序 + 那一手当时喂给该席的那一份投影。 */
@@ -122,8 +165,8 @@ interface ReviewTurn {
  * **复盘：一整场逐手问一遍**（票 93）。
  *
  * 进来的是 `{"turns":[{"turn":N,"decision":{…}}, …]}`，回去的是
- * `{"bytes":N,"load_ms":N,"ask_ms":N,"answers":[{"turn":N,"action_id":N,"latency_ms":N}, …]}`
- * 或者一句 `{"error":"…"}`。
+ * `{"bytes":N,"load_ms":N,"ask_ms":N,"answers":[{"turn":N,"action_id":N,"latency_ms":N,`
+ * `"candidates":[{"action_id":N,"p":…}, …],"candidates_total":N}, …]}` 或者一句 `{"error":"…"}`。
  *
  * **逐手走的就是 `decide`**：翻译、喂流、前向、比对 id 全在那一条路上，这里只是个循环
  * ——复盘看到的那一手与它真坐一席时出的那一手因此不可能分岔（**没有第二条推理路**）。

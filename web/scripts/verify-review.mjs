@@ -35,15 +35,25 @@
 //   ⑬ **同一手问两遍给同一答案**（可复现），分歧手数照**规则**再数一遍（判据 8）；
 //      算不动时（CI 的常规趟：那 6 MB 不在场）**整行不出现**，而票 90 那几栏一条不少。
 //
+// 票 103 在第三程上又加两条（**它有多确定**）：
+//   ⑭ **候选分布两条路各自问一遍**：页面上那一行的 id 与概率，与闸门拿另一份重建的投影
+//      问出来的逐条相同；上游那份分布的形状（降序、落在 [0,1]、**和 ≤ 1**、条数 ≤ 3）
+//      逐手核一遍；**你打的那一手排第几**由闸门自己在上游那一列里找一遍（判据 8），
+//      并断言一整场里真造得出「你打的是它第 2 候选」那种局面；
+//   ⑮ **逐位对拍**：抽几手拿 `probe/akagi-wasm/probe.js` 那条 **node 路径**对同一份局面
+//      再问一次（拿到的是 `probe_decide` 印出来的原文，中间没有 janpo 的任何一层）：
+//      页面上那几个概率与它印出来的**严格相等**，且页面上那一串是最短往返表示（一位没舍）。
+//
 // 跑法：`cd web && pnpm run fable && pnpm run verify:review`
 // 它也是 `verify-browser.mjs` 里的一趟（十七趟共用一个浏览器与一台服务器）。
 //
 // **CI 里第三程走的是「它用不了」那一路**（ADR-0006 边界 6：那 6 MB 不入版本控制）：
-// 于是 ⑩ 的阳性对照量的是「请求真的发出去了」（回的是 404），而 ⑪⑫⑬ 量不到
+// 于是 ⑩ 的阳性对照量的是「请求真的发出去了」（回的是 404），而 ⑪⑫⑬⑭⑮ 量不到
 // ——**真推理只在本机演习那一档**：先按 `web/public/baseline/README.md` 造一份产物放进去，
 // 再跑这一趟（它自己探得到）。**CI 因此覆盖不到「它真出的那一手对不对」**，逐条写在报告 93 里。
 //
 // 选项：--budget ms（页面内驱动的时限）、--peek N（走多少手之后做①那一条）、
+// --sample-every N（第⑮条每隔几手抽一手去 node 那侧重问）、
 // --asset（本机演习：那份产物不在就当场报错，而不是静静地走降级那一路）。
 //
 // **把①按红的做法**（判据 1，票面点名）：把 `Review.settled` 那道判断去掉
@@ -52,6 +62,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  decideText,
+  feedLine,
+  instantiate as instantiateProbe,
+} from "../../probe/akagi-wasm/probe.js";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating } from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
@@ -124,6 +139,10 @@ function panel(page) {
         const raw = advice?.getAttribute(name) ?? "";
         return raw === "" ? [] : raw.split(" ");
       };
+      const split = (node, name) => {
+        const raw = node?.getAttribute(name) ?? "";
+        return raw === "" ? [] : raw.split(" ");
+      };
 
       return {
         turn: num(row, "data-review-turn"),
@@ -148,6 +167,15 @@ function panel(page) {
         strongId: strong === null ? null : num(strong, "data-review-strong-id"),
         strongDiff: strong === null ? null : strong.getAttribute("data-review-strong-diff"),
         strongText: strong?.textContent?.trim() ?? "",
+        // 候选分布（票 103）。**`ps` 取的是那一串字符本身**：闸门要拿它与 wasm
+        // 直接印出来的那一串对，先 `Number.parseFloat` 一遍就把「页面上到底写了什么」扔了。
+        strongIds: split(strong, "data-review-strong-ids").map((each) => Number.parseInt(each, 10)),
+        strongPs: split(strong, "data-review-strong-ps"),
+        strongKeys: split(strong, "data-review-strong-keys"),
+        strongTotal: strong === null ? null : num(strong, "data-review-strong-total"),
+        strongRank: strong === null ? null : num(strong, "data-review-strong-rank"),
+        strongYoursP:
+          strong === null ? null : (strong.getAttribute("data-review-strong-yours-p") ?? ""),
       };
     });
 
@@ -671,14 +699,16 @@ async function replayLeg(lane) {
  * **整个循环在页面内跑**（票 56 那条教训）：那一叠决策包有几 MB，
  * 每手一次 playwright 往返会把它们来回搬两遍；这里只把**结果**搬出来。
  */
-function asked(page, text, seat, godEvery) {
+function asked(page, text, seat, godEvery, sampleEvery) {
   return retryOnReload(() =>
     page.evaluate(
-      async ({ text, seat, godEvery }) => {
+      async ({ text, seat, godEvery, sampleEvery }) => {
         const check = await import("./src/generated/ReviewCheck.js");
         // **与页面用的是同一个模块实例**（Fable 那边 import 的也是它）：
         // 因此这里不会再拉一遍那几 MB，「恰好 1 次请求」那一条才成立。
         const baseline = await import("./src/baseline/baseline.ts");
+        // 翻译层（票 103 的第⑥趟要拿它把同一份投影变成 node 那侧喂得进去的 mjai 行）。
+        const mjai = await import("./src/baseline/mjai.ts");
 
         const plannedAt = performance.now();
         const plan = JSON.parse(check.asks(text, seat, godEvery));
@@ -690,12 +720,17 @@ function asked(page, text, seat, godEvery) {
           return {
             id: typeof reply.action_id === "number" ? reply.action_id : null,
             failure: reply.failure ?? null,
+            // 候选分布（票 103）：**概率搬的是 `String(x)`**，与页面往 `data-*` 上搬的
+            // 那一串是同一种写法（最短往返），于是两边比的是字符而不是四舍五入后的影子。
+            candidates: Array.isArray(reply.candidates) ? reply.candidates : [],
+            total: typeof reply.candidates_total === "number" ? reply.candidates_total : null,
           };
         };
 
         const askedAt = performance.now();
         const notes = [];
-        for (const note of plan.notes) {
+        const samples = [];
+        for (const [order, note] of plan.notes.entries()) {
           const mine = await ask(note.decision);
           notes.push({
             turn: note.turn,
@@ -705,19 +740,88 @@ function asked(page, text, seat, godEvery) {
             options: note.options,
             id: mine.id,
             failure: mine.failure,
+            candidates: mine.candidates,
+            total: mine.total,
             // **同一手问两遍**（可复现）：只在抽到的那几手上再问一次，均摊下来不贵。
             again: note.god_later === null ? null : (await ask(note.decision)).id,
             // 两份故意的上帝视角（只在抽到的那几手上造）。
             godLater: note.god_later === null ? null : await ask(note.god_later),
             godAll: note.god_all === null ? null : await ask(note.god_all),
           });
+
+          // 抽几手把**喂进去的那几行 mjai** 也搬出去：node 那侧拿同一份局面直接问那份 wasm，
+          // 印出来的原文就是逐位对拍的左侧（票 103 面点名的那条闸门）。
+          if (order % sampleEvery === 0) {
+            samples.push({
+              turn: note.turn,
+              lines: mjai.historyLines(note.decision.history, seat),
+            });
+          }
         }
 
-        return { notes, planMs, askMs: performance.now() - askedAt };
+        // **秒表在这里就停**：下面那一叠 `decideAll` 是另一件事，
+        // 把它算进「逐手问」里会凭空多出六十毫秒（这一条自己踩过一次）。
+        const askMs = performance.now() - askedAt;
+
+        // **跨界那一叠有多大**（票 103 要量的数）：走的就是页面那一枚按钮走的 `decideAll`，
+        // 回来的信封里把分布那两格拆掉再量一遍，**于是「改前」与「改后」量的是同一叠数据**
+        // （把两个版本各跑一遍再比，比的就多了一份随机性）。
+        const turns = plan.notes.map((note) => ({ turn: note.turn, decision: note.decision }));
+        const bulkAt = performance.now();
+        const bulk = await baseline.decideAll(JSON.stringify({ turns }));
+        const bulkMs = performance.now() - bulkAt;
+        const parsed = JSON.parse(bulk);
+        const stripped = JSON.stringify({
+          ...parsed,
+          answers: (parsed.answers ?? []).map(({ candidates, candidates_total, ...rest }) => rest),
+        });
+
+        return {
+          notes,
+          samples,
+          planMs,
+          askMs,
+          bulk: {
+            bytes: bulk.length,
+            bytesWithout: stripped.length,
+            wallMs: bulkMs,
+            askMs: parsed.ask_ms ?? null,
+            answers: (parsed.answers ?? []).length,
+          },
+        };
       },
-      { text, seat, godEvery },
+      { text, seat, godEvery, sampleEvery },
     ),
   );
+}
+
+/**
+ * **同一份局面，拿 `probe/akagi-wasm` 那条 node 路径再问一次**（票 103 的逐位对拍）。
+ *
+ * 这一步跑在 **node 里**（不在浏览器里），走的是探路件那份手写 ABI（`probe.js`），
+ * 拿到的是 `probe_decide` 印出来的**那一段 JSON 原文**——中间没有 janpo 的任何一层。
+ * 于是「页面上那几个概率是不是 wasm 印出来的那几个」有了一个与页面完全无关的左侧。
+ */
+async function askedInNode(samples, seat) {
+  const bytes = readFileSync(resolve(webRoot, "public", ASSET));
+  const instance = await instantiateProbe(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
+
+  if (instance.exports.probe_init(4, seat) !== 0) throw new Error("node 那侧 probe_init 失败");
+
+  return samples.map((sample) => {
+    for (const line of sample.lines) {
+      if (feedLine(instance, line) !== 1) throw new Error(`node 那侧喂不进去：${line}`);
+    }
+    const text = decideText(instance);
+    return {
+      turn: sample.turn,
+      // **不解析就取字符**：`"p":0.5961328` 里那一串就是 Rust 那侧 f32 的最短往返打印。
+      literals: [...text.matchAll(/"p":(-?[0-9][0-9.eE+-]*)/g)].map((match) => match[1]),
+      text,
+    };
+  });
 }
 
 /**
@@ -727,7 +831,7 @@ function asked(page, text, seat, godEvery) {
  * （整行不出现，而票 90 那几栏一条不少）。**走的是哪一档印在总结里**
  * （票 92 那一课：别让读日志的人以为 CI 里量到的是前一档）。
  */
-async function strongLeg(lane, { godEvery }) {
+async function strongLeg(lane, { godEvery, sampleEvery }) {
   const problems = [];
   const origin = await lane.devUrl();
   const context = await lane.newContext();
@@ -820,14 +924,34 @@ async function strongLeg(lane, { godEvery }) {
       problems.push(`按下去之后那份资产被请求了 ${fetched} 次，该正好 1 次`);
     }
 
-    const mine = await asked(page, text, WATCHED, godEvery);
+    const mine = await asked(page, text, WATCHED, godEvery, sampleEvery);
     if (mine.error) {
       problems.push(`闸门那一侧重建不出那几份投影：${mine.error}`);
       return problems;
     }
 
     const rows = new Map(shown.notes.map((note) => [note.turn, note]));
-    const counts = { rows: 0, diffs: 0, hidden: 0, again: 0, later: 0, all: 0, missing: 0 };
+    const counts = {
+      rows: 0,
+      diffs: 0,
+      hidden: 0,
+      again: 0,
+      later: 0,
+      all: 0,
+      missing: 0,
+      // 票 103：候选分布那几条断言各开口了几次（判据 3）。
+      dist: 0,
+      ranked: 0,
+      outside: 0,
+      second: 0,
+      shortlist: 0,
+      unnamed: 0,
+    };
+    /** 上游给了几条的直方图（报告里要写「到底给了几条」）。 */
+    const widths = new Map();
+    /** 一整场里概率和的极值：**先量再断言**，不先写一条 `sum = 1` 再去调数据。 */
+    let maxSum = 0;
+    let minSum = 1;
     /** 抬出两个具体例子印在总结里：一句「K 手」看不出它到底造出了什么局面。 */
     const samples = [];
 
@@ -858,6 +982,112 @@ async function strongLeg(lane, { godEvery }) {
 
       counts.rows += 1;
       const option = each.options.find((option) => option.id === each.id);
+      const named = each.candidates.map((choice) => choice.action_id);
+      const ps = each.candidates.map((choice) => String(choice.p));
+
+      // ⑲ **候选分布也要两条路各自问一遍**（票 103）：闸门这一侧重建投影、自己去问，
+      // 拿回来的那几条必须与页面上那一行逐条相同（id 逐个、概率逐位）。
+      if (each.candidates.length > 0) {
+        counts.dist += 1;
+        widths.set(each.total, (widths.get(each.total) ?? 0) + 1);
+
+        if (row.strongIds.join(" ") !== named.join(" ")) {
+          problems.push(
+            `第 ${each.turn} 手：闸门问出来的候选是 id=[${named.join(",")}]，` +
+              `页面上那一行写的是 [${row.strongIds.join(",")}]`,
+          );
+        }
+        if (row.strongPs.join(" ") !== ps.join(" ")) {
+          problems.push(
+            `第 ${each.turn} 手：闸门问出来的概率是 [${ps.join(",")}]，` +
+              `页面上写的是 [${row.strongPs.join(",")}]——两边不是同一次前向的那几个数`,
+          );
+        }
+        if (row.strongTotal !== each.total) {
+          problems.push(
+            `第 ${each.turn} 手：上游给了 ${each.total} 条，页面说的是 ${row.strongTotal} 条`,
+          );
+        }
+        if (named.length !== each.total) counts.unnamed += 1;
+
+        // **上游那份分布的形状**（`probe/akagi-wasm/candidates-shape.mjs` 在 69,318 个
+        // 决策点上量过的那几条）：降序、落在 [0,1] 里、**和 ≤ 1**（它是 top-3 切片，
+        // 不是全分布，因此和不必等于 1），且条数不超过上游那个上限。
+        // 它们变了就该有人重读报告 103（判据 15：前提被拆掉时要回头重问）。
+        const values = each.candidates.map((choice) => choice.p);
+        const sum = values.reduce((total, p) => total + p, 0);
+        maxSum = Math.max(maxSum, sum);
+        minSum = Math.min(minSum, sum);
+
+        if (values.some((p) => !(p >= 0 && p <= 1))) {
+          problems.push(`第 ${each.turn} 手：有一条候选的概率不在 [0,1] 里：[${values.join(",")}]`);
+        }
+        if (values.some((p, index) => index > 0 && p > values[index - 1])) {
+          problems.push(`第 ${each.turn} 手：上游那一列不再是降序的：[${values.join(",")}]`);
+        }
+        // 1.5e-7 是实测的 f32 舍入上限（同上）：超过它就不是舍入了。
+        if (sum > 1 + 2e-7) {
+          problems.push(`第 ${each.turn} 手：那几条的和是 ${sum}（> 1）：它不再是一份概率分布了`);
+        }
+        if (each.total > 3) {
+          problems.push(
+            `第 ${each.turn} 手：上游给了 ${each.total} 条候选——报告 103 量的那一版只给 top-3，` +
+              "它变了就该有人重新量一遍那份分布的形状",
+          );
+        }
+        if (each.total < 3) counts.shortlist += 1;
+
+        // **你打的那一手排第几**：闸门自己在上游那一列里找一遍（判据 8：
+        // 期望值取自规则，不取自被检查那句话的来源）。
+        const at = named.indexOf(each.playedId);
+        if (at === -1) {
+          counts.outside += 1;
+          if (row.strongRank !== null || row.strongYoursP !== "") {
+            problems.push(
+              `第 ${each.turn} 手：你打的 id=${each.playedId} 不在它那几条里，` +
+                `页面却说排第 ${row.strongRank}（${row.strongYoursP}）`,
+            );
+          }
+          if (!row.strongText.includes(`不在这 ${each.total} 条里`)) {
+            problems.push(
+              `第 ${each.turn} 手：你打的那一手不在它那几条里，那一行却没说清楚：「${row.strongText}」`,
+            );
+          }
+        } else {
+          counts.ranked += 1;
+          if (at === 1) counts.second += 1;
+          if (row.strongRank !== at + 1) {
+            problems.push(
+              `第 ${each.turn} 手：你打的 id=${each.playedId} 在上游那一列里排第 ${at + 1}，` +
+                `页面写的是第 ${row.strongRank}`,
+            );
+          }
+          if (row.strongYoursP !== ps[at]) {
+            problems.push(
+              `第 ${each.turn} 手：你打的那一手它给的是 ${ps[at]}，页面写的是 ${row.strongYoursP}`,
+            );
+          }
+          if (!row.strongText.includes(`（第 ${at + 1}）`)) {
+            problems.push(
+              `第 ${each.turn} 手：你打的那一手排第 ${at + 1}，而那一行写的是「${row.strongText}」`,
+            );
+          }
+        }
+
+        // **一个度量词都不允许**（票 103 的硬边界）：概率不是理由，
+        // 把 `p=0.95` 写成「它很确定」就是替一个不会说话的网络编话。
+        for (const word of ["确定", "犹豫", "认为", "建议", "把握", "理由", "因为"]) {
+          if (row.strongText.includes(word)) {
+            problems.push(
+              `第 ${each.turn} 手那一行出现了「${word}」：概率不是理由，页面上只能照抄数字`,
+            );
+          }
+        }
+      } else if (row.strongPs.length > 0) {
+        problems.push(
+          `第 ${each.turn} 手：闸门那一侧一条候选都没问到，页面却摆了 ${row.strongPs.length} 个概率`,
+        );
+      }
 
       if (row.strongId !== each.id) {
         const said = each.options.find((option) => option.id === row.strongId);
@@ -927,8 +1157,90 @@ async function strongLeg(lane, { godEvery }) {
       problems.push(`抬头说 ${shown.strongDiffs} 手与你不同，照规则数出来的是 ${counts.diffs} 手`);
     }
 
+    // ⑥ **逐位对拍**（票 103 面点名的那条）：抽到的那几手拿 `probe/akagi-wasm` 的 node
+    // 路径再问一次，页面上那几个概率必须与 wasm 直接印出来的那几个**一个 bit 不差**。
+    //
+    // 为什么不直接比字符串：Rust 的 `{}` 从不用指数写法（它印 `0.0000001`），
+    // 而 JS 在 1e-6 以下换成 `1e-7`——实测 69,318 个决策点里有 217 个落在这个区间
+    // （`candidates-shape.mjs`）。拿字面相等当断言会在那几手上假红，而**假红比真红危险**
+    // （判据 16）。因此这里断言的是两件事：两边解出来的双精度**严格相等**（`===`），
+    // 且页面上那一串本身是**最短往返表示**（`String(Number(s)) === s`）——合起来就是
+    // 「一位都没舍」，而不是「四舍五入之后看着差不多」。
+    let literal = 0;
+
+    try {
+      const raw = await askedInNode(mine.samples, WATCHED);
+
+      for (const each of raw) {
+        const row = rows.get(each.turn);
+        const asked = mine.notes.find((note) => note.turn === each.turn);
+
+        if (row === undefined || asked === undefined) {
+          problems.push(`第 ${each.turn} 手：node 那侧问到了，页面上却没有这一条`);
+          continue;
+        }
+        if (each.literals.length !== row.strongTotal) {
+          problems.push(
+            `第 ${each.turn} 手：node 那侧的 wasm 印了 ${each.literals.length} 条候选，` +
+              `页面说上游给了 ${row.strongTotal} 条：${each.text}`,
+          );
+          continue;
+        }
+        if (row.strongPs.length !== each.literals.length) {
+          problems.push(
+            `第 ${each.turn} 手：页面上摆了 ${row.strongPs.length} 个概率，` +
+              `wasm 直接印出来的是 ${each.literals.length} 个`,
+          );
+          continue;
+        }
+
+        for (const [index, digits] of each.literals.entries()) {
+          const shown = row.strongPs[index];
+          if (Number(shown) !== Number(digits)) {
+            problems.push(
+              `第 ${each.turn} 手第 ${index + 1} 条：页面上是 ${shown}，wasm 直接印的是 ${digits}` +
+                "——两边不是同一个数",
+            );
+          } else if (String(Number(shown)) !== shown) {
+            problems.push(
+              `第 ${each.turn} 手第 ${index + 1} 条：页面上那一串「${shown}」不是最短往返表示，` +
+                "它被舍过一道（那道闸门就变成了「四舍五入看着差不多」）",
+            );
+          } else if (digits === shown) {
+            literal += 1;
+          }
+        }
+        counts.raw = (counts.raw ?? 0) + 1;
+      }
+    } catch (error) {
+      problems.push(`node 那条路径问不了那份 wasm：${error}`);
+    }
+
     // 判据 3：这几条断言各开口了几次。为 0 的那一种，这一趟等于没跑。
     if (counts.rows < 40) problems.push(`只对拍了 ${counts.rows} 行：一整场该有几十手`);
+    if (counts.dist < 40) {
+      problems.push(`只有 ${counts.dist} 行带着候选分布：票 103 那几条断言这一趟等于没跑`);
+    }
+    if (counts.ranked === 0) {
+      problems.push("一整场下来没有一手「你打的就在它那几条里」：「排第几」那一栏等于没跑");
+    }
+    if (counts.second === 0) {
+      problems.push(
+        "一整场下来没有一手你打的是它的**第 2 候选**：票面点名的那个局面这一趟没造出来",
+      );
+    }
+    if (counts.outside === 0) {
+      problems.push("一整场下来没有一手你打的落在它那几条之外：「不在这几条里」那一句等于没跑");
+    }
+    if ((counts.raw ?? 0) === 0) {
+      problems.push("一手都没拿 node 那条路径对过：逐位对拍那一条这一趟等于没跑");
+    }
+    if (counts.unnamed > 0) {
+      problems.push(
+        `有 ${counts.unnamed} 手上游给的候选没能全落进那一包：` +
+          "页面上那句话还是实话（它会说「认得出 N 条」），但报告 103 量到的是 0，变了就该有人重读它",
+      );
+    }
     if (counts.diffs === 0)
       problems.push("一整场下来一手分歧都没有：「分歧点要跳出来」那一条等于没跑");
     if (counts.hidden === 0) {
@@ -952,10 +1264,39 @@ async function strongLeg(lane, { godEvery }) {
     );
     for (const sample of samples) console.log(`　${sample}`);
     console.log(
+      `候选分布：${counts.dist} 行与闸门另一条路问出来的逐条相同 ✓` +
+        `（上游给了几条：${[...widths.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([k, v]) => `${k} 条×${v}`)
+          .join("、")}；和落在 ${minSum.toFixed(4)}–${maxSum.toFixed(4)}，` +
+        `你打的在里面 ${counts.ranked} 手（其中排第 2 的 ${counts.second} 手）、不在里面 ${counts.outside} 手，` +
+        `上游给不足三条的 ${counts.shortlist} 手、认不出来的 ${counts.unnamed} 手）`,
+    );
+    console.log(
+      `逐位对拍：抽了 ${counts.raw ?? 0} 手拿 probe/akagi-wasm 的 node 路径重问一次，` +
+        `页面上那几个概率与 wasm 直接印的严格相等 ✓（其中 ${literal} 个连字面都一样）`,
+    );
+    console.log(
       `代价：按下去到有东西看共 ${wallMs} ms；页面那一边 ${shown.strongMs} ms / ${shown.strongRows} 行（它自己报的那一句：${shown.strongText.replace(/\s+/g, " ")}）；` +
         `闸门这一边重建投影 ${Math.round(mine.planMs)} ms、逐手问 ${Math.round(mine.askMs)} ms` +
         `（${mine.notes.length} 手，其中抽到的那几手多问了三遍）`,
     );
+    console.log(
+      `跨界那一叠（${mine.bulk.answers} 手）：${mine.bulk.bytes} 字节，` +
+        `把分布那两格拆掉是 ${mine.bulk.bytesWithout} 字节（多 ` +
+        `${(((mine.bulk.bytes - mine.bulk.bytesWithout) / mine.bulk.bytesWithout) * 100).toFixed(1)}%）；` +
+        `逐手问 ${Math.round(mine.bulk.askMs)} ms、连编解码共 ${Math.round(mine.bulk.wallMs)} ms`,
+    );
+    // **把页面上那几句原文印出来**：这一票唯一真正危险的事是「替它编一句人话」，
+    // 而那件事只有人读得出来。三种各挑一行（你打的排第一 / 排在后面 / 根本不在里面）。
+    const quote = (why, pick) => {
+      const found = shown.notes.find((note) => note.strongPs.length > 0 && pick(note));
+      if (found !== undefined) console.log(`　页面上那一行（${why}）：${found.strongText}`);
+    };
+
+    quote("你打的就是它第 1 条", (note) => note.strongRank === 1);
+    quote("你打的排在后面", (note) => note.strongRank !== null && note.strongRank > 1);
+    quote("你打的不在它那几条里", (note) => note.strongRank === null);
   } finally {
     await context.close();
   }
@@ -968,6 +1309,9 @@ export async function verifyReview(lane, options = {}) {
   const budgetMs = options.budgetMs ?? 20000;
   const peek = options.peek ?? 60;
   const godEvery = options.godEvery ?? 8;
+  // 第⑮条抽多少手：每一手要在 node 里重放一整局的事件流再推理一次（约 1 ms），
+  // 抽 16 分之一就有七八手——够一条断言开口，也不会把这一趟拖长。
+  const sampleEvery = options.sampleEvery ?? 16;
   const problems = [];
 
   if (options.asset === true && !assetPresent()) {
@@ -978,7 +1322,7 @@ export async function verifyReview(lane, options = {}) {
 
   problems.push(...(await humanLeg(lane, { budgetMs, peek })));
   problems.push(...(await replayLeg(lane)));
-  problems.push(...(await strongLeg(lane, { godEvery })));
+  problems.push(...(await strongLeg(lane, { godEvery, sampleEvery })));
 
   return problems.length === 0 ? [] : failure("复盘那一道没过：", problems);
 }
@@ -995,6 +1339,7 @@ if (isEntry(import.meta.url)) {
       budgetMs: numberAt("--budget", 20000),
       peek: numberAt("--peek", 60),
       godEvery: numberAt("--god-every", 8),
+      sampleEvery: numberAt("--sample-every", 16),
       asset: args.includes("--asset"),
     }),
   );
