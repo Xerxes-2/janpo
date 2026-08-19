@@ -35,6 +35,8 @@
     <Compile Include="HumanAssistTests.fs" />
     <!-- 强 AI 基线坐一席（票 92）：第四种选手、懒加载、降级真打完一场、它不会说话。 -->
     <Compile Include="BaselineSeatTests.fs" />
+    <!-- 它的来历摆在人看得见的地方（票 102）：配桌页那一句、加载与降级那两句里的署名。 -->
+    <Compile Include="BaselineCreditTests.fs" />
     <!-- 复盘：逐手对照标注（票 90）。只在终局后、每一手都有一条、每一个数都是引擎算的。 -->
     <Compile Include="ReviewTests.fs" />
     <!-- 配桌上那三项规则开关（票 72）：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变。 -->

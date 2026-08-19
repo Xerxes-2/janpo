@@ -1,6 +1,6 @@
 // **强 AI 基线坐一席**那道闸门（票 92；ADR-0006 的边界 1、2 与要害「它不会说话」）。
 //
-// 四趟，各答一件事：
+// 五趟，各答一件事：
 //
 //   ① **懒加载**（边界 1）：首页与不选那一席的对局**网络请求计数为 0**
 //      ——量的是浏览器真发出去的请求，不是「看着没拉」。
@@ -11,11 +11,18 @@
 //      不是显示一个空气泡或者「0 tok」。阳性对照是同一桌上的模型席：它有气泡、也有账单。
 //   ④ **与真人同桌**（票 87 已在的那条）：真人 + 强 AI + 两个 bot 打一段，
 //      整页 HTML 里**他家的手牌一张都不许有**——那条结构性不泄露照旧绿。
+//   ⑤ **署名落在人遇到它的那一刻**（票 102；主人的要求：「在网页和 README 都说明
+//      这个强 AI 基线是什么、来自哪里」）。**判据 20**：停在该发生的那一刻上量，
+//      别走完一整局再抓整页 HTML。四个量点各是一刻：
+//      **拨上之前**（那一句不在 DOM 里，而页脚那条声明链接**已经在**——它不挂在任何条件后面）
+//      → **真点那一枚的那一下**（那一句当场出现，具名 / 作者 / 许可 / 来源 commit 都在，
+//      链接真取得回那份声明）→ **正在加载那一刻**（把那次请求按住不放，`data-baseline=loading`
+//      的同一瞬间读那一行字）→ **掉下来那一刻**（降级那一句里名字也在）。
 //
 // **CI 里跑到的是「资产不在」那一路**（ADR-0006 边界 6：6 MB 不入版本控制）：
 // 于是 ② 是常态，而 ① 的阳性对照量的是「请求真的发出去了」（回的是 404）。
 // **真跑推理只在本机演习那一档**：先按 `web/public/baseline/README.md` 造一份产物放进去，
-// 再 `node scripts/verify-baseline.mjs --asset`——那一档多跑第 ⑤ 趟（它真打一局）。
+// 再 `node scripts/verify-baseline.mjs --asset`——那一档多跑第 ⑥ 趟（它真打一局）。
 // **CI 因此覆盖不到「它出的那一手对不对」**，逐条写在报告 92 里（判据 4）。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:baseline`
@@ -38,6 +45,24 @@ const ASSET = "baseline/janpo-baseline.wasm";
 
 /** 站点上到底有没有那份产物（决定第 ① 趟的阳性对照该期望 200 还是 404）。 */
 const assetPresent = () => existsSync(resolve(webRoot, "public", ASSET));
+
+/**
+ * 随站点分发的那份第三方声明（与 `src/Janpo.Web/Credit.fs` 的 `thirdPartyFile` 逐字相同）。
+ * 页脚那条与配桌页那一句指的都是它（票 102）。
+ */
+const THIRD_PARTY = "third-party/README.md";
+
+/**
+ * **署名那几个字**（票 102）。事实的真源是 `web/public/third-party/README.md`
+ * 与 `probe/akagi-wasm/NOTICE-upstream.md`；这里照拄一遂是故意的——页面上那几句话
+ * 哪天被改成另一种来源描述，这一道当场红。
+ *
+ * `NAMED_WORDS` 是牌桌上那几句要求的下限（一句话量级：只够点个名），
+ * `CREDIT_WORDS` 是配桌页那一句与那份声明本体要求的全套。
+ */
+const NAMED_WORDS = ["Akagi", "native_bot", "Apache-2.0"];
+
+const CREDIT_WORDS = [...NAMED_WORDS, "Shinkuan", "394b3290"];
 
 /** 假端点固定回的那句理由（**只可能从它那儿来**：页面里没有任何一处写着它）。 */
 const SAID = "假端点说：这一手照它的算法只能这么打";
@@ -117,7 +142,7 @@ function text(page, testId) {
  * 计数挂在 `context` 上而不是 `page` 上：`page.on("request")` 漏不掉子资源，
  * 但换了页（点「去牌桌」）之后还想接着数——那就得挂在 context 上。
  */
-async function openCounted(lane, url, { seating, blockAsset = false } = {}) {
+async function openCounted(lane, url, { seating, blockAsset = false, holdAssetMs = 0 } = {}) {
   const context = await lane.newContext();
   const asked = [];
   context.on("request", (request) => {
@@ -131,6 +156,14 @@ async function openCounted(lane, url, { seating, blockAsset = false } = {}) {
     // 它与「站点上没有这份产物」是同一个下场（页面明说原因 + 那一席退回 bot），
     // 但它**在有没有产物两种环境下都成立**，因此这一趟不看运气。
     await context.route(`**/${ASSET}`, (route) => route.abort("failed"));
+  } else if (holdAssetMs > 0) {
+    // **把那次请求按住不放**（票 102 的第 ⑤ 趟）：`Loading` 那一态在真环境里一闪而过，
+    // 而署名要在**那一刻**看得见。按住之后再让它失败——于是同一趟里既量得到
+    // 「正在加载」那一句，也量得到「掉下来」那一句，两句都不靠运气。
+    await context.route(`**/${ASSET}`, async (route) => {
+      await new Promise((done) => setTimeout(done, holdAssetMs));
+      await route.abort("failed");
+    });
   }
   await page.goto(url, { waitUntil: "load" });
   return { context, page, asked };
@@ -366,7 +399,147 @@ async function withHuman(lane, url, missing) {
   }
 }
 
-/** ⑤ 本机演习：资产在场，它真打一局，牌谱里认得出它。 */
+/** 等那一行进到某一态（`data-baseline` 就是那四态给机器看的那一半）。 */
+function waitForBaseline(page, state, timeout) {
+  return page.waitForFunction(
+    (want) =>
+      document.querySelector('[data-testid="table-baseline"]')?.getAttribute("data-baseline") ===
+      want,
+    state,
+    { timeout },
+  );
+}
+
+/**
+ * 等一件事发生，**等不到就返回 false 而不抛**。
+ *
+ * 闸门红的时候要抬着一份说得出话的清单（`failure`），而 playwright 超时抛出来的是
+ * 一堆英文栈：那不只是不好看——它会把同一趟里剩下那几条断言整个跳掉，
+ * 于是一次破坏只看得到第一条红。
+ */
+async function settled(wait) {
+  try {
+    await wait();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 那几个字在那一句里吗（缺的那几个返回一条带原文的失败）。 */
+function wordsMissing(said, words, where) {
+  return words
+    .filter((word) => !said.includes(word))
+    .map((word) => `${where}里没有「${word}」：「${said}」`);
+}
+
+/**
+ * ⑤ **署名落在人遇到它的那一刻**（票 102）。
+ *
+ * **判据 20**：四个量点各停在它自己那一刻上，一趟都不抽整页 HTML。
+ *
+ * a. **拨上之前**（四家均匀随机）：那一句不在 DOM 里（它是拨上去才出现的），
+ *    而**页脚那条声明链接已经在**——Apache-2.0 §4(d) 的义务不许挂在「选了那一席才显示」后面
+ *    （`Footer.fs` 里那条判断）。
+ * b. **真点那一枚「强 AI 基线」的那一下**：说明当场出现，具名 / 作者 / 许可 /
+ *    来源 commit / 那条风险都在，并且那条链接**真取得回那份声明**（不是 404）。
+ *    后一半同时是「页脚那条链接在 `web/dist` 里解析得到」的浏览器侧证据：
+ *    两处读的是同一份地址（`Credit.thirdPartyFile`）。
+ * c. **正在加载那一刻**：把那次请求按住，在 `data-baseline=loading` 的同一瞬间
+ *    读那一行字——人等那几 MB 时看得出等的是什么。
+ * d. **掉下来那一刻**：降级那一句里名字也在（而它那三句原话由第 ② 趟守着）。
+ */
+async function credited(lane, url, missing) {
+  const { context, page } = await openCounted(lane, hostPage(url), {
+    seating: plainSeats,
+    // 3 秒：够一趟断言读完，又不致于把这一趟拖成分钟级。
+    holdAssetMs: 3000,
+  });
+
+  try {
+    // a. 拨上之前。
+    await page.getByTestId("table-seating").waitFor();
+    if ((await page.getByTestId("table-baseline-credit").count()) !== 0) {
+      missing.push("四家均匀随机的那一桌就摆着强 AI 基线那一句说明：它该是拨上去才出现的");
+    }
+
+    const footerHref = await page
+      .getByTestId("site-footer")
+      .locator(`a[href$="${THIRD_PARTY}"]`)
+      .count();
+    if (footerHref !== 1) {
+      missing.push(
+        `没拨强 AI 基线的那一页，页脚里指向 ${THIRD_PARTY} 的链接有 ${footerHref} 条（该正好 1 条）：` +
+          "§4(d) 的义务不许挂在「选了那一席才显示」后面",
+      );
+    }
+
+    // b/c. **真点那一枚的那一下**（人就是在这一下把一席拨给了它）。
+    //
+    // **先等「正在取那几 MB」那一态**：那一句只在这一瞬间存在（那次请求被按住的这几秒），
+    // 而配桌页那一句说明与它是**同一次渲染的两半**，晚一点读也还在。
+    // **顺序反过来就错了**：先在那一句上等满 5 秒超时的话，这一行早已掉到 unavailable，
+    // 于是一次破坏会多红一条让人找不到北的「loading 没到过」（第一版真踩了这一脚）。
+    await page.getByTestId("table-seat-1-baseline").click();
+
+    const loading = await settled(() => waitForBaseline(page, "loading", 5000));
+
+    if (!loading) {
+      missing.push("拨上那一枚之后没有出现「正在取那几 MB」那一态（data-baseline 没到过 loading）");
+    } else {
+      missing.push(
+        ...wordsMissing((await text(page, "table-baseline")) ?? "", NAMED_WORDS, "正在加载那一句"),
+      );
+    }
+
+    // **等不到就是一条失败，不是一个异常**：这一道红的时候要把「署名没落在那一刻」
+    // 这句话说出来（同 `browser-lane.mjs` 那条规矩：闸门交一份清单，不自己抛）。
+    if ((await page.getByTestId("table-baseline-credit").count()) !== 1) {
+      missing.push(
+        "真把座位 1 拨到「强 AI 基线」之后，配桌页上没有那一句说明" +
+          "（table-baseline-credit 不在 DOM 里）：署名没落在人遇到它的那一刻",
+      );
+    } else {
+      const said = (await text(page, "table-baseline-credit")) ?? "";
+      missing.push(...wordsMissing(said, CREDIT_WORDS, "配桌页那一句说明"));
+
+      const href = await page
+        .getByTestId("table-baseline-credit")
+        .locator("a")
+        .getAttribute("href");
+
+      if (href === null || !href.endsWith(THIRD_PARTY)) {
+        missing.push(`配桌页那一句里没有一条通往 ${THIRD_PARTY} 的路（href=${href}）`);
+      } else {
+        // **那条路真走得通**：指过去是 404 的话，署名与许可义务等于没尽到。
+        // 量的是 `vite preview` 托的 `dist/`，因此它同时是发布件那一侧的证据。
+        const fetched = await page.evaluate(async (target) => {
+          const response = await fetch(target);
+          return { status: response.status, body: (await response.text()).slice(0, 4000) };
+        }, href);
+
+        if (fetched.status !== 200) {
+          missing.push(`那份第三方声明取回来是 HTTP ${fetched.status}（${href}）`);
+        } else {
+          missing.push(...wordsMissing(fetched.body, CREDIT_WORDS, "取回来的那份第三方声明"));
+        }
+      }
+    }
+
+    // d. 掉下来那一刻。
+    if (!(await settled(() => waitForBaseline(page, "unavailable", 15000)))) {
+      missing.push("按住的那次请求失败之后，那一行没有进 unavailable 那一态");
+    } else {
+      missing.push(
+        ...wordsMissing((await text(page, "table-baseline")) ?? "", NAMED_WORDS, "降级那一句"),
+      );
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+/** ⑥ 本机演习：资产在场，它真打一局，牌谱里认得出它。 */
 async function playsForReal(lane, url, missing, budgetMs) {
   const { context, page, asked } = await openCounted(lane, hostPage(url), {
     seating: baselineSeats(0),
@@ -429,6 +602,7 @@ export async function verifyBaseline(lane, { budgetMs = 60000, asset = false } =
   }
 
   await withHuman(lane, url, missing);
+  await credited(lane, url, missing);
 
   if (asset) {
     if (!assetPresent()) {
@@ -450,6 +624,10 @@ export async function verifyBaseline(lane, { budgetMs = 60000, asset = false } =
       : "（那一席这一趟是降级态的自带 bot：这一趟量的不是「它不会说话」——那一条在 dotnet 侧的 BaselineSeatTests 里）",
   );
   console.log("与真人同桌：他家三席的手牌行里一个 data-pai 都没有，那一席也不长气泡 ✓");
+  console.log(
+    "署名落在人遇到它的那一刻 ✓（拨上之前那一句不在、页脚那条声明已在；真点那一枚之后 " +
+      `${CREDIT_WORDS.join(" / ")} 都在，那条链接取回了那份声明；正在加载与降级那两句里名字也在）`,
+  );
   if (asset) console.log("本机演习：它真坐一席打完一局，牌谱里认得出它，一手都没兜底 ✓");
   else if (assetPresent())
     console.log("（这一趟站点上有那份产物，但没跑真打一局那一趟——加 --asset）");

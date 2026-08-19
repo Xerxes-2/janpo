@@ -33,6 +33,10 @@
     <!-- 模型档案库与四席绑定（票 73）：排在 `Roster.fs` 后面（要 `Bot` / `SeatPlayer`）、
          `Store.fs` 前面（它落 localStorage）。 -->
     <Compile Include="SeatingPlan.fs" />
+    <!-- 强 AI 基线「是什么、来自哪里」在页面侧的唯一真源（票 102）：具名、许可、来源 commit，
+         以及配桌页与牌桌上那几句话。排在 `SeatingPlan.fs` 后面（通名读它的 `baselineToDisplay`）、
+         `BaselineLine.fs` / `TablePanel.fs` / `Footer.fs` 前面（三处都读它）。 -->
+    <Compile Include="Credit.fs" />
     <!-- 配桌上拨得动的那三项规则（票 72）：排在 `Store.fs` 前面——它们落 localStorage。 -->
     <Compile Include="RulesetDraft.fs" />
     <Compile Include="Store.fs" />

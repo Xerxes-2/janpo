@@ -848,6 +848,41 @@ module TablePanel =
             prop.text (said + note)
         ]
 
+    /// **拨到强 AI 基线那一席时多出来的那一句**（票 102；主人的要求：
+    /// 「在网页和 README 都说明这个强 AI 基线是什么、来自哪里」）。
+    ///
+    /// **署名要落在人遇到它的那一刻**：页脚那条链接是分发件的法律义务（Apache-2.0 §4(d)），
+    /// 但它替不了「用户看得懂这是什么」——人就是在这一行上把一席拨给了它的。
+    ///
+    /// **拨上了才画**（与 `BaselineLine` 同一条判据：`SeatingPlan.baselineSeats` 空不空）：
+    /// 四家模型那一桌不需要读它。**这不与页脚那一条重复也不代替它**：页脚那一条
+    /// 不挂在任何条件后面（`Footer.fs` 里那条判断），这一句只在人拨到它时出现。
+    ///
+    /// **四席拨了几席就只出一句**：它说的是「那个选手是什么」，与坐几席无关，
+    /// 逐席各印一遭只是噪声（坐哪几席写在牌桌上那一行里）。
+    let private baselineCredit (live: LiveTable) =
+        match SeatingPlan.baselineSeats live.Seating with
+        | [] -> []
+        | _ -> [
+            Html.p [
+                prop.key "baseline-credit"
+                prop.className "intro"
+                prop.testId "table-baseline-credit"
+                prop.children [
+                    Html.span Credit.baselineIntroHead
+                    // **另开一个标签页**（同 `Footer.fs` 里那条理由）：正在配的这一桌只活在当前页面的内存里，
+                    // 在原地跳走等于把人拨了一半的桌子扔掉。
+                    Html.a [
+                        prop.href (Credit.thirdPartyUrl ())
+                        prop.target "_blank"
+                        prop.rel "noopener noreferrer"
+                        prop.text Credit.thirdPartyText
+                    ]
+                    Html.span Credit.baselineIntroTail
+                ]
+            ]
+          ]
+
     /// 模型面板底下那一段说明。
     ///
     /// **超时那一句里的数字插值而不手写**（票 72）：默认值只有 `ModelProfile.initial` 一个真源，
@@ -886,6 +921,8 @@ module TablePanel =
                         yield!
                             Seat.all model.Ruleset
                             |> List.map (fun seat -> seatRow names live seat dispatch)
+
+                        yield! baselineCredit live
                     ]
                 ]
                 Html.div [

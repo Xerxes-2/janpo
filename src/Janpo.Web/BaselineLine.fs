@@ -9,6 +9,9 @@ open Janpo
 /// 与 `AgentLine` / `HumanLine` 同一个形状：这里只把 `TableState` 算好的那几样画出来，
 /// 判据（拉不拉、退不退）在 `TableState.started` 与 `TableState.degraded` 里。
 ///
+/// **那四句话本身在 `Credit` 里**（票 102）：它们是同一份具名的落点，与配桌页那一句
+/// 共用一份来源描述——分散写就会漂成几种说法。这一层仍旧只管「画在哪儿、什么颜色」。
+///
 /// **它说的是资产，不是那一席在想什么**（票 92 的要害）：那一席**不会说话**
 /// ——没有 thinking、没有一句话理由、没有 token 账单，因此它**没有气泡、也没有账单行**
 /// （`Table.Decisions` 里根本没有它的记录，`bubbles` 与 `usage` 因此在结构上就为空）。
@@ -31,17 +34,6 @@ module BaselineLine =
                 | count -> $"（这一桌共 {count} 手）"
 
             $"　有一手它交不出来、由兜底代打：{latest}{tally}。"
-
-    /// 四态各一句话。**拉不动那一句要把两件事都说清**：为什么拉不动、那一席现在是谁在打
-    /// ——只说前半的话，人会以为这一桌停了；只说后半的话，人会以为自己拨错了按钮。
-    let private said (status: BaselineStatus) (seats: string) : string =
-        match status with
-        | BaselineStatus.Absent -> ""
-        | BaselineStatus.Loading -> $"正在取强 AI 基线那份资产（座位 {seats}）：第一次要下几 MB，之后走浏览器缓存。"
-        | BaselineStatus.Ready bytes ->
-            $"强 AI 基线已就位（座位 {seats}，{Baseline.bytesToDisplay bytes}）。它不会说话：没有思考气泡，也没有 token 账单。"
-        | BaselineStatus.Unavailable reason ->
-            $"强 AI 基线用不了：{reason}　座位 {seats} 已退回「{Bot.toDisplay Bot.Opinionated}」的自带 bot，其余席照常打完这一局。"
 
     /// 这一行（票 92）；这一桌没有强 AI 基线席时一行都不画。
     ///
@@ -87,6 +79,6 @@ module BaselineLine =
                     prop.custom ("data-baseline-bytes", bytes)
                     prop.custom ("data-baseline-seats", indices |> List.map string |> String.concat ",")
                     prop.custom ("data-baseline-troubles", string (List.length troubles))
-                    prop.text (said status seats + troubled troubles)
+                    prop.text (Credit.baselineSaid status seats + troubled troubles)
                 ]
             ]

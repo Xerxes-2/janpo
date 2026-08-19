@@ -28,11 +28,17 @@
 **In English.** janpo is a browser-only arena where an LLM plays Japanese mahjong (riichi).
 Bring your own API key, seat a model, choose how much information it gets (what a player at the
 table sees for free, or with shanten / ukeire / danger computed for it), watch it play hand by
-hand, and export the game log. There is no server: the site is a static page, your key stays in
+hand, and export the game log. You can also take a seat yourself, or seat the **strong AI
+baseline**: Akagi's [`native_bot`](https://github.com/shinkuan/Akagi) (Apache-2.0, © 2026 Shinkuan,
+source commit `394b3290`), a pure-Rust mahjong CNN behavior-cloned from human Tenhou logs that we
+ship as a ~6 MB WebAssembly module and run **inside your browser** — see the third-party notice for
+its license and for what we could not verify about its training data.
+There is no server: the site is a static page, your key stays in
 your browser's `localStorage`, and requests go straight from your browser to the provider.
 UI and docs are Chinese-first. Work in progress — the interface and the export format will change.
 
-> **还在做（WIP）。** 现在能玩的是「四个座位各自挑一个选手：均匀随机 / 有主见 / 某份模型档案」；
+> **还在做（WIP）。** 现在能玩的是「四个座位各自挑一个选手：均匀随机 / 有主见 / 某份模型档案 /
+> 你自己（本地真人坐一席）/ 强 AI 基线」；
 > 模型坐一席打完**一整场**东风战已经真跑过两次（同一个种子下两档脚手架各一次）：
 > 裸奔档 4 局 91 手、信息辅助档 7 局 153 手，**全程没有一手要引擎代打**；
 > 界面、prompt 与牌谱格式都还会变。
@@ -49,14 +55,16 @@ UI and docs are Chinese-first. Work in progress — the interface and the export
 3. **四个座位各挑一个选手**：每一席可以是**均匀随机**（默认，从这一手能做的动作里等概率挑一个）、
    **有主见**（听牌就立直、能和就和、有役才鸣——想看牌桌上真的出现立直、一发与供托就选它），
    或者**某一份模型档案**。四家都挑档案就是**四 LLM 同桌**；同一份档案坐两席、两席给不同的人格，
-   就是一场只差人格这一个变量的对照实验。
+   就是一场只差人格这一个变量的对照实验。还有两种选手与它们并排：**「我自己」**（你亲自坐一席，
+   牌桌下面多一排按钮）与**强 AI 基线**（在你浏览器里跑的一个麻将 CNN，下面有一节专说它）。
 4. **脚手架 / 人格 / 模板**：这三样**按座位各拨各的**（在那一席自己那一行上）。脚手架决定
    告诉模型多少东西——
    - **裸奔**：只给一个坐在牌桌前的人**免费得到**的一切（他亲眼见过的事件、一眼看得见的场况）；
    - **信息辅助**：额外把**要算才有**的量算给它——向听数、有效牌（进张）、每张打牌的进退向，
-     以及危险度排名。
-
-   （还有「工具搜索」一档，灰着，还没做。）
+     以及危险度排名；
+   - **工具搜索**：不把那几个数直接摆给它，而是给它一个工具，让它自己挑一张牌去问
+     「打这张之后会怎样」（引擎回同一套数），**一手最多问 4 次**，问满就没了；
+     它查了什么、查了几次都落在那一手的 prompt 里，点开气泡就能读到。
 5. **配桌**：**对局长度**（东风战 / 半庄战）、**赤宝牌**（有 / 无）与**食断**（有 / 无）三项在牌桌上面拨，
    **拨完要按「重开」才生效**（与种子同一条路——半场换规则的话，同一份牌谱前后按两套规则算，就再也重现不了）。
 6. 按 **播放** 让它自己打下去，或 **单步** 一手一手看；**视角**按钮在四个座位与上帝视角之间切
@@ -96,6 +104,27 @@ baseUrl 怎么填、端点那侧的 **CORS 怎么放行**、接不上时页面�
 弹一个授权框（允许本站访问你本地网络里的设备），点允许就通；
 页面开在本机（localhost）时则什么都不用管。
 
+## 那个「强 AI 基线」是什么，来自哪里
+
+四席里除了 bot、模型档案与「我自己」，还有一种选手叫**强 AI 基线**。
+它是 [shinkuan/Akagi](https://github.com/shinkuan/Akagi) 的 `native_bot`（来源 commit `394b3290`，
+**Apache-2.0，© 2026 Shinkuan**）——一个纯 Rust 的麻将 CNN（candle 推理，
+**行为克隆自人类天凤牌谱**）；我们把它编成一份约 6 MB 的 WebAssembly（模型权重内嵌在里面），
+**在你的浏览器里推理**，不经任何后端。它在这个平台上的用处是**当尺子**：
+同一张牌桌上模型（或你自己）打得怎么样，跟它比。
+
+**只有把某一席拨给它，浏览器才会去下那几 MB**：首页与不选它的对局一个字节都不下；
+拉不动就那一席退回自带 bot、其余席照常把这一局打完（页面会直说是为什么）。
+它**不会说话**：没有思考气泡、没有 token 账单，复盘里只摆得出它那一手打了什么。
+
+**许可，以及一条没消的风险。** 上游的代码与权重按 Apache-2.0 分发，
+那份 `LICENSE` 与 `NOTICE` 随站点一起发（页脚那条「第三方组件声明」，源文件在
+[`web/public/third-party/README.md`](web/public/third-party/README.md)）；
+但**权重具体用哪一份天凤牌谱训出来的，上游没有公开，我们无从核**
+——Apache-2.0 授权的是上游对代码与权重文件本身的权利，不代表牌谱的权利人授权过什么。
+我们照原样分发，并把这条风险明写在那份声明与
+[`probe/akagi-wasm/NOTICE-upstream.md`](probe/akagi-wasm/NOTICE-upstream.md)（逐条出处在那里）里。
+
 ## 不是什么
 
 - **不是天凤 / 雀魂的替代品**：没有账号、没有匹配、没有天梯，也不打联机。
@@ -111,17 +140,27 @@ baseUrl 怎么填、端点那侧的 **CORS 怎么放行**、接不上时页面�
 
 ## 现在能玩到什么，还差什么
 
-**现在**：四个座位各挑一个选手（均匀随机 / 有主见 / 某份模型档案，四家都可以是模型）；
-两档脚手架、人格与模板按座位各拨各的；播放与单步；
+**现在**：四个座位各挑一个选手——**均匀随机 / 有主见**两种自带 bot、**某一份模型档案**
+（四家都可以是模型）、**「我自己」**与**强 AI 基线**，四种随便混；
+**三档脚手架**（裸奔 / 信息辅助 / 工具搜索）、人格与模板按座位各拨各的；播放与单步；
 围观 / 上帝两种视角；牌谱随时导出，而导出的那份字节能原样回放出同一局；
 首页就是一局录像在自动播（时间轴拖得动），模型坐席的每一手在牌桌上有思考气泡；
 牌谱 JSON 导得回来看，「复制分享链接」能把一局装进一条地址——链接只带棋谱，完整推理在导出的 JSON 里。
+**你自己坐下也能把一整场打完**：点手里的牌就打出去，吃碰杠、立直、荣和自摸与九种九牌各是一枚按钮，
+而**按钮只在这一手真能做时才出现**（于是你没得犯规）；拨到信息辅助档时给你看的
+向听 / 有效牌 / 危险度，与模型 prompt 里那几个数是**同一次计算**；思考时限按座位配
+（默认不限时，到点替你打一张并说明白）；有真人在座时对局中不给他看别家的气泡与暗牌，**终局才解锁**。
+**终局之后有逐手复盘**：坐到哪一席就看哪一席（模型席也看得了），那一席每一手一条标注
+（向听、有效牌、危险度、有没有更好的打法）；再按一枚按钮还能把**强 AI 基线那一手**并排列出来（那几 MB 到这一步才下）。
 规则跑的是完整的东风战——役与符、点数、立直棒与本场、终局精算都在，默认规则对齐天凤鳳凰卓；
 这份对齐是验过的：引擎与鳳凰卓实战牌谱**逐局对拍**过 **2,500 万局以上**（2009–2026），
 **引擎错误零场**——所有剩余差异都逐场查明，出在牌谱数据一侧
 （上游数据缺口、原始记录异常，或早年对局打的是当年的规则）。
 
-**还差**：本地真人也坐一席；接一个成熟的麻将 AI 做对照基线。
+**还差**：强 AI 基线只报它打哪张，**给不出理由**（想读推理只能看模型席）；
+真人席拨到「工具搜索」时按信息辅助处理（没给人做那个查询面板）；
+**三档脚手架 × 多个模型的成套对照实验还没人跑**——现在只有每档几局的单场记录，
+谈不上胜率与雀力结论；没有账号、匹配、天梯与联机（那几样也不打算做，见上面「不是什么」）。
 
 ## 许可证
 

@@ -4,16 +4,20 @@
 #
 #   cd web && JANPO_BASE=/janpo/ pnpm run build && cd .. && ./scripts/check-pages-dist.sh
 #
-# 三件事：
+# 四件事：
 #
 #   1. **许可随产物上线**（ADR-0006 边界 4，Apache-2.0 §4(a)/(d)）：
 #      `third-party/` 那三份必须在 `dist` 里，且都不是空的。
-#      页脚那条链接指的就是其中的 `README.md`（`src/Janpo.Web/Footer.fs`），
+#      页脚那条链接指的就是其中的 `README.md`（`src/Janpo.Web/Credit.fs` 那一行路径），
 #      文件不在 = 页面上那条声明点进去是 404 = 义务没尽到。
 #   2. **产物在的时候，它得是一份像样的 wasm**：头四个字节 `\0asm`、体积够装下内嵌权重。
 #      半截的 6 MB 比没有更坏：页面会当它拉到了，然后在 `instantiate` 那一步炸。
 #   3. **产物不在的时候不算失败**（ADR-0006 边界 2）：站点照常发，那一席在浏览器里如实降级。
 #      但这一步要**大声说出来**，免得没人注意到线上又回到了 404 那一天。
+#   4. **署名真的随发布件一起出去**（票 102）：打包产物里要找得到那条声明的路径
+#      与具名 / 作者 / 许可 / 来源 commit。第 1 件只证了**文件在**，它证的是**页面上真有人
+#      指着它、且说得出来历是谁**——两件分开红：文件在而无人指，与有人指而文件不在，
+#      在页面上是同一个下场。浏览器那一侧的同名断言在 `web/scripts/verify-baseline.mjs` 第 ⑤ 趟。
 #
 # 这一道**红得起来**：三份许可少一份、wasm 头四个字节不对、体积不到 5 MB，各红一次
 # （反向自证的输出在 `run/reports/101-pages-baseline-asset.md`）。
@@ -63,5 +67,14 @@ else
   echo "      要它上线：让 scripts/build-baseline-wasm.sh 在 pnpm run build 之前跑成功。"
 fi
 
+# ④ 署名（票 102）：事实的真源是 `web/public/third-party/README.md` 与
+#    `probe/akagi-wasm/NOTICE-upstream.md`；页面侧只写在 `src/Janpo.Web/Credit.fs` 一处。
+#    这里按字面在打包产物里找它们：那几个字一个不在，就是发出去的那一份没了署名。
+for word in "third-party/README.md" "native_bot" "Apache-2.0" "Shinkuan" "394b3290"; do
+  grep -rqF -- "$word" "$dist/assets" ||
+    fail "打包产物里找不到「$word」（票 102）：发出去的这一份没把强 AI 基线的来历说出来"
+done
+
 [[ "$failed" -eq 0 ]] || exit 1
 echo "发布件闸门通过：$dist"
+echo "强 AI 基线的来历随发布件上线：具名 / 作者 / 许可 / 来源 commit 与那条声明的路径都在 dist/assets 里。"
