@@ -27,6 +27,9 @@
     <!-- 真人坐席（票 87）：把一份决策包拆成“能点哪几张 / 「过」是哪一条”。
          排在 `TableState.fs` 前面（`LiveTable` 带着 `AutoPass`），不依赖页面侧任何东西。 -->
     <Compile Include="HumanSeat.fs" />
+    <!-- 新手辅助轮（票 89）：把决策包里**引擎已经算好的**那几个数摆成真人看得懂的几行。
+         排在 `HumanSeat.fs` 后面、`TableState.fs` 前面（`LiveTable` 不带它，取值器要）。 -->
+    <Compile Include="HumanScaffold.fs" />
     <!-- 模型档案库与四席绑定（票 73）：排在 `Roster.fs` 后面（要 `Bot` / `SeatPlayer`）、
          `Store.fs` 前面（它落 localStorage）。 -->
     <Compile Include="SeatingPlan.fs" />

@@ -20,6 +20,7 @@
     "verify:llm": "node scripts/verify-llm-seat.mjs",
     "verify": "node scripts/verify-tracer.mjs",
     "verify:browser": "node scripts/verify-browser.mjs",
+    "verify:assist": "node scripts/verify-assist.mjs",
     "verify:baseline": "node scripts/verify-baseline.mjs",
     "verify:bubbles": "node scripts/verify-bubbles.mjs",
     "verify:golden": "node scripts/verify-golden.mjs",

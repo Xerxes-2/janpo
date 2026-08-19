@@ -8,7 +8,7 @@
 //
 //   janpo.profiles.count                = "2"
 //   janpo.profiles.<i>.name|provider|model|base_url|api_key|timeout_ms|thinking
-//   janpo.seats.<座位>.choice|tier|persona|template
+//   janpo.seats.<座位>.choice|tier|persona|template|clock
 //
 // `choice` 的三种写法：`random` / `opinionated` / `profile:<档案名>`。
 //
@@ -26,8 +26,8 @@ const PROFILE = {
   thinking: "off",
 };
 
-/** 一席绑定的默认值（与 F# 侧 `SeatBinding.initial` 同一套：均匀随机、裸奔档）。 */
-const BINDING = { choice: "random", tier: "bare", persona: "", template: "" };
+/** 一席绑定的默认值（与 F# 侧 `SeatBinding.initial` 同一套：均匀随机、裸奔档、不限时）。 */
+const BINDING = { choice: "random", tier: "bare", persona: "", template: "", clock: "0" };
 
 /** 引用一份档案的那种 choice。 */
 export const profileChoice = (name) => `profile:${name}`;

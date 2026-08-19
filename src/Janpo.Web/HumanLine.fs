@@ -15,18 +15,26 @@ open Janpo
 [<RequireQualifiedAccess>]
 module HumanLine =
 
-    /// 你自己按掉的那几次「过」（票 88 接票 87 那本账）。**最近一次逐条列出来 + 这一桌总共几次**：
-    /// 只报个数说不清放掉的是碰还是荣和，只报最近一次又看不出这件事一直在发生。
+    /// 你自己按掉的那几次「过」与时限到点替你打的那几手（票 88 开账、票 89 拓宽）。
+    /// **最近一次逐条列出来 + 这一桌总共几次**：只报个数说不清放掉的是碰还是荣和，
+    /// 只报最近一次又看不出这件事一直在发生。
+    ///
+    /// **两种各报各的数**（票 89）：「你按了几次」与「时限替你打了几手」是两件事，
+    /// 揉成一个数的话，人看到的就只是「我好像过了很多次」。
     let private passed (passes: HumanPass list) : string =
         match passes with
         | [] -> ""
         | latest :: _ ->
-            let tally =
-                match List.length passes with
-                | 1 -> ""
-                | count -> $"（这一桌共 {count} 次）"
+            let count (which: HumanPass -> bool) (word: string) : string list =
+                match passes |> List.filter which |> List.length with
+                | 0 -> []
+                | times -> [ $"{word} {times} 次" ]
 
-            $"　{HumanPass.toDisplay latest}{tally}。"
+            let tally =
+                count HumanPass.pressed "你按「过」" @ count (HumanPass.pressed >> not) "时限代打"
+                |> String.concat "、"
+
+            $"　{HumanPass.toDisplay latest}（这一桌{tally}）。"
 
     /// 这一刻他能做的那三态各是一句话，附带给机器看的那个状态名。
     ///
@@ -35,8 +43,21 @@ module HumanLine =
     /// **终局那一屏不能再说「轮到别人」**（那时谁的回合都不是），而且那一刻正是视角与气泡
     /// 一起松开的时候——这一句要把它说出来，否则人不知道刚才藏着的那几样现在看得了。
     /// 判据直接读 `lockedSeat`（它就是 `unlocked` 的反面），不在这一层再判一遍。
+    /// 倒计时那半句话（票 89 的 story 32）。**不限时那句话一字未改**（票 87/88 的默认）：
+    /// 不设时限那条路上一个行为都不变是这一票的硬判据。
+    ///
+    /// **到点会发生什么也写出来**：人要能预知平台会替他做什么，
+    /// 而不是等牌自己飞出去了才回头猜。
+    let private ticking (clock: HumanClock option) (responding: bool) : string =
+        match clock with
+        | None -> "不限时，整桌等着你。"
+        | Some clock ->
+            let deadline = if responding then "自动过" else "自动摸切"
+            $"还剩 {HumanClock.remaining clock} 秒（共 {clock.Limit} 秒，到点{deadline}）。"
+
     let private said (model: TableModel) (seat: Seat) (turn: DecisionPackage option) : string * string =
         let index = Seat.index seat
+        let clock = TableState.humanClock model
 
         match turn, TableState.lockedSeat model with
         | Some package, _ ->
@@ -45,11 +66,16 @@ module HumanLine =
 
             match HumanSeat.pass package with
             // 有「过」= 他家打出了一张，正在等他要不要鸣 / 荣和（`Action.None` 那段注释）。
-            | Some _ -> "respond", $"他家打出了一张，等你（座位 {index}）：牌桌下面那一排就是你此刻做得了的（{calls} 条），不要就按「过」。不限时，整桌等着你。"
+            | Some _ ->
+                "respond",
+                $"他家打出了一张，等你（座位 {index}）：牌桌下面那一排就是你此刻做得了的（{calls} 条），不要就按「过」。"
+                + ticking clock true
             | None when HumanSeat.declaringRiichi package ->
                 // 立直是两段（`Action.Riichi` 那段注释）：宣言之后这一手还要选宣言牌，
                 // 而**能打哪几张仍旧只由合法动作集说了算**——引擎那一集里只剩「打完仍听牌」的。
-                "reach", $"立直宣言了（座位 {index}）：现在选宣言牌——点得动的那 {playable} 张是引擎给的那一集（打完仍听牌的才在里面）。"
+                "reach",
+                $"立直宣言了（座位 {index}）：现在选宣言牌——点得动的那 {playable} 张是引擎给的那一集（打完仍听牌的才在里面）。"
+                + ticking clock false
             | None ->
                 let also =
                     match calls with
@@ -57,7 +83,8 @@ module HumanLine =
                     | count -> $"　这一手还能宣言 {count} 条，按钮在牌桌下面。"
 
                 "waiting",
-                $"轮到你出牌了（座位 {index}）：点自己手里的一张就打出去，能点的那几张由引擎给的合法动作集定（此刻 {playable} 条）。不限时，整桌等着你。"
+                $"轮到你出牌了（座位 {index}）：点自己手里的一张就打出去，能点的那几张由引擎给的合法动作集定（此刻 {playable} 条）。"
+                + ticking clock false
                 + also
         | None, Some _ -> "watching", $"你坐在座位 {index}：轮到别人，看着就好。"
         | None, None -> "settled", $"这一场打完了（你坐的是座位 {index}）：视角与思考气泡都解锁了，四家的牌与推理现在都看得了。"
@@ -68,6 +95,12 @@ module HumanLine =
     /// `data-human-seat`（坐哪一席）、`data-human`（上面那五态）、
     /// `data-human-playable`（此刻点得出去几张牌）、`data-human-calls`（牌桌下面那一排几枚，不含「过」）、
     /// `data-human-options`（引擎这一手一共给了几条）、`data-human-passes`（他自己按过几次「过」）。
+    ///
+    /// 票 89 又挂上三个：`data-human-tier`（这一席拨到哪一档）、
+    /// `data-human-clock`（这一手还剩几秒，**不限时或不轮到他时是空串**）、
+    /// `data-human-expired`（时限到点替他打了几手）。
+    /// **`data-human-passes` 的意思一字未改**（票 88 定的：他自己按下去几次）：
+    /// 超时那几手另占一个数，两者相加才是那本账的长度。
     ///
     /// **`data-human-options` 是「按钮与合法动作集一一对应」那道闸门的锚**（票 88 的要害）：
     /// 页面上点得到的那些 id 合起来必须正好是 `0 … options-1`——多一枚是凭空造的，
@@ -84,6 +117,8 @@ module HumanLine =
 
             let state, sentence = said model seat turn
 
+            let pressed = passes |> List.filter HumanPass.pressed |> List.length
+
             [
                 Html.p [
                     prop.key "human"
@@ -94,10 +129,95 @@ module HumanLine =
                     prop.custom ("data-human-playable", counted (HumanSeat.dahaiOptions >> List.length))
                     prop.custom ("data-human-calls", counted (HumanSeat.buttons >> List.length))
                     prop.custom ("data-human-options", counted (DecisionPackage.options >> List.length))
-                    prop.custom ("data-human-passes", List.length passes)
+                    prop.custom ("data-human-passes", pressed)
+                    prop.custom ("data-human-expired", List.length passes - pressed)
+                    prop.custom (
+                        "data-human-tier",
+                        TableState.humanTier model
+                        |> Option.map ScaffoldTier.toWire
+                        |> Option.defaultValue ""
+                    )
+                    prop.custom (
+                        "data-human-clock",
+                        TableState.humanClock model
+                        |> Option.map (HumanClock.remaining >> string)
+                        |> Option.defaultValue ""
+                    )
                     prop.text (sentence + passed passes)
                 ]
             ]
+
+    /// **新手辅助轮那一块**（票 89 的 story 33）：向听、有效牌与危险度，逐条对应他点得动的那几张。
+    ///
+    /// **裸奔档它一行都不画**，而且那一条判据不在这里：`TableState.humanScaffold` 是
+    /// 辅助渲染的**唯一入口**（它同时管着牌桌上那块危险度）。这一层只负责把它给的数画出来
+    /// ——**一个数都不算**（同 `HumanSeat` 一条规则都不判）。
+    ///
+    /// **每一行带着那一条的包内 id**（`data-scaffold-id`）：与手牌上那张牌的 `data-dahai-id`
+    /// 是同一个号，人读完这一行就知道该点哪一张，闸门也照它把两处对起来。
+    let internal assist (model: TableModel) : ReactElement list =
+        match TableState.humanScaffold model, TableState.humanTurn model with
+        | Some scaffold, Some package ->
+            let lines = HumanScaffold.lines package
+            let threats = HumanScaffold.threats scaffold
+
+            let heading =
+                match threats with
+                | "" -> $"信息辅助（引擎算的事实，不是建议）：{HumanScaffold.summary scaffold}"
+                | who -> $"信息辅助（引擎算的事实，不是建议）：{HumanScaffold.summary scaffold}。有威胁的家：{who}"
+
+            [
+                Html.section [
+                    prop.key "human-scaffold"
+                    prop.className "settlement human-scaffold"
+                    prop.testId "table-human-scaffold"
+                    // 这一块一共摆了几行（闸门拿它对「能点的那几张」），以及现在几向听。
+                    prop.custom ("data-scaffold-lines", List.length lines)
+                    prop.custom ("data-scaffold-shanten", Shanten.value scaffold.Shanten)
+                    prop.children [
+                        Html.h3 heading
+                        Html.p [
+                            prop.key "note"
+                            prop.className "intro"
+                            prop.text "这几个数与同桌模型拿到的是同一份（同一次引擎计算）。拨回「裸奔」就一个都不给，那才是一个坐在牌桌前的人本来看得见的。"
+                        ]
+                        Html.div [
+                            prop.key "lines"
+                            prop.children [
+                                for line in lines ->
+                                    Html.p [
+                                        prop.key line.Id
+                                        prop.testId $"human-scaffold-{line.Id}"
+                                        prop.custom ("data-scaffold-id", line.Id)
+                                        prop.custom ("data-scaffold-shanten", Shanten.value line.Trial.Shanten)
+                                        prop.custom ("data-scaffold-delta", line.Trial.ShantenDelta)
+                                        prop.custom (
+                                            "data-scaffold-ukeire",
+                                            line.Trial.Ukeire
+                                            |> Option.map (Ukeire.total >> string)
+                                            |> Option.defaultValue ""
+                                        )
+                                        prop.custom (
+                                            "data-scaffold-kinds",
+                                            line.Trial.Ukeire
+                                            |> Option.map (Ukeire.kindCount >> string)
+                                            |> Option.defaultValue ""
+                                        )
+                                        prop.custom (
+                                            "data-scaffold-danger",
+                                            line.Trial.Danger
+                                            |> Option.map (fun danger -> string danger.Rank)
+                                            |> Option.defaultValue ""
+                                        )
+                                        prop.text (HumanScaffold.toDisplay line)
+                                    ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        // 裸奔档 / 不轮到他 / 响应阶段（没牌可打）：**一行都不画**。
+        | _, _ -> []
 
     /// 一枚按钮。**`button` 而不是加了 onClick 的 `span`**（与手牌那几张同一个理由，票 87）：
     /// 键盘走得到、读屏念得出、`:focus-visible` 那圈靛青自然就有。

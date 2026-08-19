@@ -977,6 +977,22 @@ input[type="range"] {
   font-weight: 400;
 }
 
+/* 新手辅助轮那一块（票 89）：向听 / 有效牌 / 危险度，一条打牌动作一行。
+   **紧接着那一排响应按钮**：他要做的选择就在上面，这几个数是为那一下服务的。
+   **等宽数字**：十来行数上下对齐才扫得动（枚数与名次是拿来横向比较的）；
+   行距收到 0.15rem——一手十来张牌就是十来行，按 `.settlement p` 的 0.25rem 会拉出半屏。
+   **裸奔档下这一整块不在 DOM 里**（`TableState.assists`），因此这里没有「藏起来」那一档样式
+   ——用 CSS 藏一块算好的数，一行 DevTools 就能把它翻出来。 */
+.human-scaffold {
+  margin-top: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.human-scaffold p[data-scaffold-id] {
+  margin: 0.15rem 0;
+  font-size: 0.8125rem;
+}
+
 /* 窄视口（票 44）：三列的真牌桌在约 40rem 以下会把每一列挤到放不下半排河，
    那时**改成竖排**——自家仍在最下、对家仍在最上，左右两家按上家 → 下家的顺序夹在中间。
    方位关系因此只退化不颠倒。M1 验的 820px 仍走三列那一套。

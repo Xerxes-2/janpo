@@ -40,6 +40,27 @@ module Awaiting =
     /// 但那是另一次计时的事——这里报的是「最迟什么时候会有下一条消息」那个数。
     let limitSeconds (awaiting: Awaiting) : int = awaiting.Config.TimeoutMs / 1000
 
+/// 真人这一手的倒计时（票 89 的 story 32）。
+///
+/// **三格里没有「轮到他了」那一格**（票 87 的判据）：轮不轮到他现问 `handOf`。
+/// `Turn` 在这里只回答一件事：**这还是同一手吗**——牌桌每落定一个动作 `Table.Turns` 就 +1，
+/// 因此他的每一次决策各占一个不同的手序号，它天然就是这一记倒计时的票号。
+type HumanClock = {
+    /// 这一手的手序号（`Table.Turns`）。`HumanTicked` 带回来的就是它，对不上的那一记丢掉。
+    Turn: int
+    /// 这一手已经想掉几秒。
+    Elapsed: int
+    /// 这一手的上限秒数（座位配置拄下来的那一份，恒 > 0；不限时就没有这一整个值）。
+    Limit: int
+}
+
+/// 倒计时的两个出口。
+[<RequireQualifiedAccess>]
+module HumanClock =
+
+    /// 还剩几秒（**不会负**：到点那一刻就代他打了，这一格随即换成下一手的）。
+    let remaining (clock: HumanClock) : int = max 0 (clock.Limit - clock.Elapsed)
+
 /// 在等强 AI 基线那一手（票 92）。**它与 `Awaiting` 刻意是两个类型**：
 ///
 /// - 没有 `Config`：它没有 provider / key / 超时预算，那几 MB 的资产整桌只有一份；
@@ -220,12 +241,21 @@ type LiveTable = {
     /// **它不进牌谱**：那一席一条决策记录都不留（票面边界），因此兵底计数也只能
     /// 记在这里——而「这一手不是它自己决的」不许静默替换（票 23 的那条规矩）。
     BaselineTroubles: string list
-    /// 这一桌至此刻真人**自己按「过」**的那几次，**新的在前**（票 87 开账、票 88 换了语义）。
+    /// 这一桌至此刻真人**没有自己打出去的那几手**，**新的在前**
+    /// （票 87 开账、票 88 换了语义、票 89 拓宽了一格）。
     ///
     /// 票 87 时这里记的是「平台替他过掉了什么」（那时还没有按钮）；票 88 把按钮做了出来，
-    /// 于是它记的是**他自己放掉了什么**。两者在页面上是两句不同的话，因此不合并。
-    /// 跨局累计（同 `Table.fallbacks`），只在重开一桌时清空：它数的是“这一桌你放掉了几次”。
+    /// 于是它记的是**他自己放掉了什么**；票 89 的时限到点代他打的那几手同样记在这一本上，
+    /// 两种靠 `HumanPass.AutoPlayed` 分开（分开成两本账的话，「这一局他有几手不是自己决的」
+    /// 就要从两处各数一遍再相加）。
+    /// 跨局累计（同 `Table.fallbacks`），只在重开一桌时清空。
     Passed: HumanPass list
+    /// 真人**这一手**的倒计时（票 89 的 story 32）；没设时限、或者此刻不轮到他时是 None。
+    ///
+    /// **它不是「轮到他了吗」的第二份判据**（票 87 那条：那件事现问 `handOf`）：
+    /// 这一格只记「哪一手、走掉几秒」，而它自己每条消息都由 `wound` 按 `handOf` 重新推一遍
+    /// ——“倒计时只在轮到自己时走”因此是结构上的事实，不是几处记得设一下的纪律。
+    Clock: HumanClock option
     /// 问话的票号，每问一次 +1（全局递增，四席共用一本账）。
     Ticket: int
     /// Agent 层的状态线，**每席一项**（按座位升序，票 74）。
@@ -597,6 +627,13 @@ type TableMsg =
     /// 页面构造不出一个 `Action`，id 不在这一包里就没有事情发生
     /// ——于是“真人不可能犯规”（spec 的 story 30）在**结构上**成立。
     | HumanPlayed of id: int
+    /// **真人这一手的倒计时又走了一秒**（票 89）。`turn` 是那一手的手序号（`Table.Turns`），
+    /// 对不上（他已经出手了、重开过一桌、或者时限拨成了不限）就丢掉，链自己断
+    /// ——与 `Waited` 逐字同一条规矩。
+    ///
+    /// **到点那一记不是「把牌桌停下来」而是代他打一手**：牌局因此继续走，
+    /// 代打那一手走的是与 `HumanPlayed` 同一条路（引擎的 `Table.apply`）。
+    | HumanTicked of turn: int
 
 /// 牌桌页面的状态与 MVU 三件套（票 70 从 `TablePage.fs` 拆出来的第一块）。
 ///
@@ -746,6 +783,64 @@ module TableState =
             |> Option.bind (fun _ -> DecisionPackage.forSeat seat table.State)
         | Some _, Error _
         | None, _ -> None
+
+    /// 真人那一席的绑定（票 89）；这一桌没有真人时是 None。**取真人那一席的配置只有这一处**：
+    /// 档位与时限各自找一遍座位的话，「一桌只坐得下一席」那条不变量就要被相信两次。
+    ///
+    /// **读的是 `live.Seating` 而不是 `effective live`**（同名牌）：定型（`Rendering`）
+    /// 定的是人格与模板（那两样在可缓存前缀里，一局内不变），而真人根本不走 prompt
+    /// ——他拨一下档位或时限当场就该变（新手辅助轮是给人用的，不是对照实验的自变量）。
+    let private humanBinding (live: LiveTable) : SeatBinding option =
+        SeatingPlan.humanSeats live.Seating
+        |> List.tryHead
+        |> Option.map (fun seat -> SeatingPlan.bindingAt seat live.Seating)
+
+    /// 真人那一席拨到的脚手架档位（票 89）；这一桌没有真人时是 None。
+    let private tierOf (live: LiveTable) : ScaffoldTier option =
+        humanBinding live |> Option.map (fun binding -> binding.Tier)
+
+    /// 真人那一席设的思考时限（秒）；**默认不限时就是 None**（票 89 的 story 32）。
+    let private limitOf (live: LiveTable) : int option =
+        humanBinding live |> Option.bind SeatBinding.limit
+
+    /// 倒计时那一记钟（票 89）：一秒后发一条 `HumanTicked`。**一手一条链**
+    /// ——他出手（或到点代他出手）之后手序号就变了，旧那条链下一记回来时自己断。
+    /// 与 `waitCmd` 逐字同一个形状。
+    let private clockCmd (turn: int) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch -> JS.setTimeout (fun () -> dispatch (HumanTicked turn)) 1000 |> ignore)
+
+    /// 倒计时该不该在走，以及它是不是还在计同一手（票 89）。
+    ///
+    /// **判据只有一条：`handOf` 说轮到他、而且这一席设了时限**。因此它挂在「轮到他了吗」
+    /// 上而不是「牌桌停着吗」上（票 88 之后他在想的时候模型席照问照答，牌桌并没停）。
+    ///
+    /// **每条消息都重新推一遍**（`clocked`）：于是“他中途坐下来”、“他把时限拨成不限”、
+    /// “重开一桌”这几种都不必各写一次启停——那正是判据会漂的开头。
+    /// **只有开新一记时才发定时器**（已经在走的那一手原样返回），因此一手只有一条链。
+    let private wound (live: LiveTable) : LiveTable * Cmd<TableMsg> =
+        match handOf live, limitOf live, live.Table with
+        | Some _, Some limit, Ok table ->
+            match live.Clock with
+            // 同一手、同一个上限：链还在走，什么都不必做。
+            // （人在他想的当口改了上限：重新计时——拿旧秒数去卡新上限会当场到点）
+            | Some clock when clock.Turn = table.Turns && clock.Limit = limit -> live, Cmd.none
+            | _ ->
+                {
+                    live with
+                        Clock =
+                            Some {
+                                Turn = table.Turns
+                                Elapsed = 0
+                                Limit = limit
+                            }
+                },
+                clockCmd table.Turns
+        // 不轮到他 / 不限时 / 牌桌开不起来：那一格该是空的。
+        // **不限时那条路上一个效果体都不发**（票 87/88 那几条数效果体的用例读的就是它）。
+        | _ ->
+            match live.Clock with
+            | None -> live, Cmd.none
+            | Some _ -> { live with Clock = None }, Cmd.none
 
     /// 这一刻真正发得出去的那份坐法（票 46 的定型，票 73 改成按座位各自成立）：
     /// 每一席的人格与模板取**那一席本局定型的那一版**，其余字段取面板现在的值。
@@ -1378,6 +1473,19 @@ module TableState =
             else
                 drain roster asked, Cmd.batch cmds
 
+    /// **真人那一手落进引擎**（票 87/88 他自己点的那一下、票 89 时限到点代他打的那一手
+    /// 走的是这同一条）。**两条路合在这里而不是各写一遍**：牌谱里那一手因此逐字同形
+    /// （都是 `Table.apply`，都不留决策记录）——超时那一手在回放里与手动那一手分不出来，
+    /// 而那正是票面要的（他就是那一席的选手，平台只是代他按了一下）。
+    ///
+    /// `note` 是这一手要不要记一笔：他按的那几次「过」与时限代打的那几手记在**同一本账**上
+    /// （`HumanPass.AutoPlayed` 分开两种）；他自己打出去的那几手不记（那就是对局本身）。
+    let private landed (action: Action) (note: HumanPass option) (table: Table) (live: LiveTable) : LiveTable = {
+        live with
+            Table = Ok(Table.apply action table)
+            Passed = Option.toList note @ live.Passed
+    }
+
     /// 落完一手之后：接着播还是停下来。
     ///
     /// **等回执（或等真人点那一下）的那段不续定时器**（但仍然是 `Playing`）：
@@ -1691,10 +1799,62 @@ module TableState =
     /// 真人那一行、驱动循环（`waiting` / `step`）与用例读的是同一个 `handOf`。
     let humanTurn (model: TableModel) : DecisionPackage option = live model |> Option.bind handOf
 
-    /// 这一桌至此刻真人自己按「过」的那几次（新的在前，票 87 开账、票 88 换了语义）；
-    /// 没有真人时是空表。
+    /// 这一桌至此刻真人**没有自己打出去的那几手**（新的在前；票 87 开账、票 88 换了语义、
+    /// 票 89 把时限代打的那几手也记在里面）；没有真人时是空表。
+    ///
+    /// **两种靠 `HumanPass.pressed` 分**（不是两个取值器）：页面上那两个计数钩子
+    /// （`data-human-passes` / `data-human-expired`）与用例读的都是同一本账的两个滤镜。
     let passes (model: TableModel) : HumanPass list =
         live model |> Option.map (fun live -> live.Passed) |> Option.defaultValue []
+
+    /// 真人那一席拨到的脚手架档位（票 89）；这一桌没有真人时是 None。
+    ///
+    /// **公开的**：页面上那句「你这一席是哪一档」与用例读同一处推导。
+    let humanTier (model: TableModel) : ScaffoldTier option = live model |> Option.bind tierOf
+
+    /// **这一屏此刻给不给得出「要算才有的那几个数」**（票 89）。
+    ///
+    /// **判据只有这一条**，两个消费点（真人那几行辅助、牌桌上的危险度面板与那一枚开关）
+    /// 读的都是它——各写一份就是两处判据，而两处判据迟早漂到「辅助藏了、危险度还摆着」
+    /// 那一步（同票 87 把气泡 / 视角 / 曳光弹合成 `unlocked` 一条的理由）。
+    ///
+    /// **危险度也在里面**：术语表那条「感知 vs 计算」把 Danger 归在 Assisted 一侧
+    /// （现物与筋都得从河里推），因此 Bare 坐着一个人时那一块不能拨得出来
+    /// ——否则「裸奔」这个对照组靠的只是他自觉不按那一枚。
+    ///
+    /// **没有真人（或已终局）时恒真**：四家模型那一桌与回放与从前逐字相同
+    /// （判据跟着 `lockedSeat` 走：它就是 `unlocked` 的反面）。
+    let assists (model: TableModel) : bool =
+        match lockedSeat model with
+        | None -> true
+        | Some _ -> humanTier model |> Option.map HumanScaffold.shows |> Option.defaultValue true
+
+    /// **真人这一手的信息辅助**（票 89 的 story 33）：引擎给这一包算好的那份脚手架；
+    /// 裸奔档、不轮到他、或手牌形态读不出来时是 None。
+    ///
+    /// **辅助渲染的唯一入口**：页面上一行向听 / 有效牌 / 危险度都从它来，
+    /// 因此「Bare 什么都不给」是一句只有一处执行人的话（判据 2）。
+    ///
+    /// **它就是模型看到的那一份**：`DecisionPackage.scaffold` 随包而来，
+    /// 而 prompt 尾部那一节读的是同一份包的同一个字段（跨界时由 `Scaffold.encoder` 编出去）
+    /// ——**不是两处各算一遍，是同一次调用**。
+    let humanScaffold (model: TableModel) : Scaffold option =
+        if not (assists model) then
+            None
+        else
+            humanTurn model |> Option.bind DecisionPackage.scaffold
+
+    /// 真人这一手的倒计时（票 89）；不限时或不轮到他时是 None。
+    ///
+    /// **公开的**：真人那一行上那句「还剩 N 秒」与用例读同一格。
+    let humanClock (model: TableModel) : HumanClock option =
+        live model |> Option.bind (fun live -> live.Clock)
+
+    /// 真人那一席设的思考时限（秒）；**默认不限时就是 None**（票 89）。
+    ///
+    /// 它与 `humanClock` 是两件事：这一个是「这一席设了几秒」（拨了就有），
+    /// 那一个是「这一手走到哪儿了」（轮到他才有）。
+    let humanLimit (model: TableModel) : int option = live model |> Option.bind limitOf
 
     /// **视角是一道信息闸门**（票 81）：坐在座位 N 上只看得见**那一席**在想什么，
     /// 上帝视角四家全开——与手牌同一条规则（`Board`：坐座视角消费那一席的 `Observation`）。
@@ -1944,6 +2104,9 @@ module TableState =
             BaselineTroubles = []
             // 他还没按过一次「过」（票 88）。「轮不轮到他」没有存储：现问局面（`handOf`）。
             Passed = []
+            // 倒计时同样不在这里启动（票 89）：下面那一行 `clocked` 按 `handOf` 推一遍，
+            // 轮到他且设了时限才上发条——页面一打开就轮到他的那一局因此也计得上。
+            Clock = None
             Ticket = 0
             Agent = seating.Seats |> List.map (fun _ -> AgentStatus.Idle)
             // 还没点过「复制分享链接」（票 78）。
@@ -1952,6 +2115,8 @@ module TableState =
 
         // 上一次就把某一席拨给了强 AI 基线（localStorage 里存着）：那就现在开始拉。
         let live, loading = started live
+        // 真人坐在这一桌上、而且一打开就轮到他（他是东 1 局的亲）：倒计时从这一刻起走。
+        let live, winding = wound live
 
         {
             Ruleset = ruleset
@@ -1973,7 +2138,7 @@ module TableState =
             // 导入入口不在这一页（票 78），这一格恒为 None。
             ImportFault = None
         },
-        loading
+        Cmd.batch [ loading; winding ]
 
     /// 首页（`/`）初次摆的那一屏：一份还没拉回来的 Demo 回放（票 71；ADR-0003）。
     ///
@@ -2054,6 +2219,10 @@ module TableState =
         | SpeedPicked _
         | Ticked _
         | Waited _
+        // 倒计时那一记（票 89）：大多数只把页面上那个数往前走（同 `Waited`）。
+        // **到点那一记确实把牌桌挪了一下**，但那一刻桌边坐着真人——气泡与全文面板
+        // 本来就一个都不在（`reveals`），因此不会出现「牌局在走而画面冻着」那一幕。
+        | HumanTicked _
         | ViewpointPicked _
         | RecordOpened _
         | DangerToggled
@@ -2069,9 +2238,29 @@ module TableState =
         | ShareSettled _
         | ImportPicked _ -> false
 
-    let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
-        let model = if moves message then rewound model else model
+    /// **每一条消息之后把倒计时重新推一遍**（票 89）。
+    ///
+    /// **只有这一处**：他出了手、模型席答上来了、人中途把自己摆上座位、把时限拨成了不限、
+    /// 重开一桌——十几种情形各写一次启停就是十几份会漂的判据。`wound` 现问 `handOf`，
+    /// 于是“倒计时只在轮到自己时走”与“轮不轮到他不存状态”（票 87）是同一件事。
+    ///
+    /// **不限时那条路上它一个效果体都不多发**（`wound` 那一支返回 `Cmd.none`）：
+    /// 票 87/88 那几条数效果体的用例因此逐条照旧。
+    let private clocked (model: TableModel) (cmd: Cmd<TableMsg>) : TableModel * Cmd<TableMsg> =
+        match model.Source with
+        | Source.Replay _ -> model, cmd
+        | Source.Live live ->
+            let winded, winding = wound live
 
+            {
+                model with
+                    Source = Source.Live winded
+            },
+            Cmd.batch [ cmd; winding ]
+
+    /// 一条消息推一步。**倒计时不在这里启停**（票 89）：它由外面那层 `update`
+    /// 每条消息重新推一遍（`clocked`）——这一层因此一条新分支都不必知道时限的存在。
+    let private stepped (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match message with
         | SeedEdited seed -> model |> onLive (fun _ live -> { live with SeedText = seed }, Cmd.none)
         | Restarted ->
@@ -2107,8 +2296,10 @@ module TableState =
                             Awaiting = []
                             Consulting = []
                             BaselineTroubles = []
-                            // 「你按了几次过」是旧那桌的事（票 87/88）。
+                            // 「你按了几次过」与「超时代打了几手」都是旧那桌的事（票 87/88/89）。
                             Passed = []
+                            // 旧那桌那一手的倒计时一并作废；新那桌轮不轮到他由 `clocked` 重新推。
+                            Clock = None
                             Agent = idled live
                             // 旧桌的分享回执也撤下来：那句话说的是已经不存在的一桌（票 78）。
                             Shared = None
@@ -2340,23 +2531,21 @@ module TableState =
                     // **没有事情发生**——绝不在这里放宽合法性（真人不可能犯规）。
                     | None -> model, Cmd.none
                     | Some action ->
-                        let played = {
-                            live with
-                                Table = Ok(Table.apply action table)
-                                // **他自己按的那几次「过」记下来**（票 88 接票 87 那本账）：
-                                // 放掉的是碰还是荣和，是复盘（票 90）第一件要问的事。
-                                // 记的是**这一次他放掉了什么**，不是“平台替他过了什么”。
-                                Passed =
-                                    match action with
-                                    | Action.None _ ->
-                                        {
-                                            Turn = table.Turns
-                                            Seat = HumanSeat.seat package
-                                            Skipped = HumanSeat.buttons package |> List.map (fun button -> button.Label)
-                                        }
-                                        :: live.Passed
-                                    | _ -> live.Passed
-                        }
+                        // **他自己按的那几次「过」记下来**（票 88 接票 87 那本账）：
+                        // 放掉的是碰还是荣和，是复盘（票 90）第一件要问的事。
+                        // `AutoPlayed = None` 说的就是「这一下是他按的」（票 89 那一格的另一面）。
+                        let pressed =
+                            match action with
+                            | Action.None _ ->
+                                Some {
+                                    Turn = table.Turns
+                                    Seat = HumanSeat.seat package
+                                    Skipped = HumanSeat.buttons package |> List.map (fun button -> button.Label)
+                                    AutoPlayed = None
+                                }
+                            | _ -> None
+
+                        let played = landed action pressed table live
 
                         {
                             model with
@@ -2365,6 +2554,63 @@ module TableState =
                         |> resume Cmd.none
                 // 不轮到他（或者牌桌开不起来）：同上，没有事情发生。
                 | _, _ -> model, Cmd.none
+        // **真人这一手的倒计时又走了一秒**（票 89 的 story 32）。
+        //
+        // 三道前置全对得上才算数：倒计时还在、现在仍旧轮到他、而且还是当时那一手。
+        // 对不上就丢掉（他已经出手了 / 重开过一桌 / 时限拨成了不限），链自己断
+        // ——与 `Waited` 逐字同一条规矩。
+        | HumanTicked turn ->
+            match live model with
+            | None -> model, Cmd.none
+            | Some live ->
+                match live.Clock, handOf live, live.Table with
+                | Some clock, Some package, Ok table when clock.Turn = turn && table.Turns = turn ->
+                    if HumanClock.remaining clock > 1 then
+                        // 还有时间：只把页面上那个数往前走一格，**牌桌一根汗毛都不动**（同 `Waited`）。
+                        {
+                            model with
+                                Source =
+                                    Source.Live {
+                                        live with
+                                            Clock =
+                                                Some {
+                                                    clock with
+                                                        Elapsed = clock.Elapsed + 1
+                                                }
+                                    }
+                        },
+                        clockCmd turn
+                    else
+                        // **到点：代他打一手，牌局接着走**（票面那句「不许卡死」）。
+                        //
+                        // **代打那一手向引擎要**（`Fallback.action`，判据 11：要读规则才做得出的决定归引擎）：
+                        // 它的 Bare 那一支就是「摸切 → 过 → 合法动作集的第一条」，正是票面要的
+                        // 「超时自动摸切，响应阶段自动过」；而碰吃之后要打牌那一手根本没有「刚摸进的那张」，
+                        // 第三级因此不是凑数。
+                        //
+                        // **恒拿 Bare 那一支，不看他自己拨的档位**：到点那一手不是他打的，
+                        // 平台不该替他用一遍辅助（Assisted 那一支会挑「不退向听的安全打」）；
+                        // 而且那样的话「时限」会把档位这个自变量也搬进来。
+                        let action = Fallback.action ScaffoldTier.Bare package
+
+                        let expired = {
+                            Turn = table.Turns
+                            Seat = HumanSeat.seat package
+                            // 他没来得及宣言的那几条（该他出牌那一手常常是空的）。
+                            Skipped = HumanSeat.buttons package |> List.map (fun button -> button.Label)
+                            // **代打了什么要说出来**（不许静默替换，票 23）；
+                            // 它同时就是「这一次不是他按的」那一格。
+                            AutoPlayed = Some(Action.toDisplay action)
+                        }
+
+                        let played = landed action (Some expired) table live
+
+                        {
+                            model with
+                                Source = Source.Live(drain (rosterFor model.Ruleset played) played)
+                        }
+                        |> resume Cmd.none
+                | _ -> model, Cmd.none
         // 那几 MB 拉完了（票 92）。**两种下场都要把牌桌重新开动**（`resume`）：
         // 拉到了就接着问它这一手，拉不动则那一席已经退回自带 bot（`rosterFor` 里的 `degraded`）
         // ——**其余席照常打完一局**（ADR-0006 边界 2：它是可选依赖，不是单点）。
@@ -2434,3 +2680,12 @@ module TableState =
                                         each)
                     },
                     waitCmd ticket)
+
+    /// 一条消息推一步，**再把真人那一手的倒计时按此刻的局面重新推一遍**（票 89）。
+    ///
+    /// 两层而不是一层：倒计时要在十几种消息之后各自重算（他出了手、人拨了座位、
+    /// 时限改成了不限、重开一桌……），而那几处各写一次启停就是十几份会漂的判据。
+    let update (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
+        let model = if moves message then rewound model else model
+        let stepped, cmd = stepped message model
+        clocked stepped cmd

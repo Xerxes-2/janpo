@@ -418,7 +418,15 @@ module TablePanel =
                 @ god
                 // 危险度（票 25）：围观者想看就拨开，**默认关**。
                 // 它只摆得出**观测者自家**那一手（`TableBoard.dangerSeats`），因此锁着也不泄。
-                @ [ picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch ]
+                //
+                // **裸奔档的真人坐在桌边时这一枚根本不在 DOM 里**（票 89）：危险度是
+                // 「要算才有的量」（术语表那条「感知 vs 计算」），灰掉不算数——一行 DevTools
+                // 就把 disabled 平了（票 81 对视角说过同一句话）。判据只有 `TableState.assists`
+                // 一条，牌桌那一块（`TableBoard.dangerPanels`）读的是同一个。
+                @ [
+                    if TableState.assists model then
+                        picker "table-danger" model.ShowDanger "危险度" DangerToggled dispatch
+                ]
                 @ note
             )
         ]
@@ -661,17 +669,36 @@ module TablePanel =
                 @ profiles
                 @ [
                     // 脚手架档位：**它是实验变量**，主持人在座位上现拨，不用改代码。
-                    // 工具搜索档是 M3 的，灰着；它真被选上也不会坏事（prompt 与兜底都退回 Bare）。
+                    // **三档都选得到**（票 89 放开了工具搜索档）：那一档在票 94 做完了
+                    // （`what_if` 工具、上限与账单都落地），从前那句 `tier <> ToolSearch` 是
+                    // 「M3 还没做」的临时状态，而 M3 已经到了。真人席选到它时按信息辅助处理
+                    // （`HumanScaffold.shows`，页面上说得出这件事）——这一票不给真人做查询面板。
                     selectField
                         $"table-seat-{index}-tier"
                         "脚手架"
                         (SeatBinding.field SeatField.Tier binding)
                         (ScaffoldTier.all
-                         |> List.map (fun tier ->
-                             ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, tier <> ScaffoldTier.ToolSearch))
+                         |> List.map (fun tier -> ScaffoldTier.toWire tier, ScaffoldTier.toDisplay tier, true))
                         (fun value -> SeatEdited(seat, SeatField.Tier, value))
                         dispatch
                     custom
+                ]
+                // **思考时限只画在真人那一行**（票 89 的 story 32）：模型席「想多久」是那份档案的
+                // `TimeoutMs`（一次跨网请求的上限），两者量的不是一件事，摆两格只会让人以为
+                // 拨哪一格都行。**默认不限时**，因此空着的时候它就该写着 0。
+                @ [
+                    match binding.Choice with
+                    | SeatChoice.Human ->
+                        textField
+                            $"table-seat-{index}-clock"
+                            "number"
+                            "思考时限（秒，0＝不限时）"
+                            (SeatBinding.field SeatField.Clock binding)
+                            (fun value -> SeatEdited(seat, SeatField.Clock, value))
+                            dispatch
+                    | SeatChoice.Bot _
+                    | SeatChoice.Baseline
+                    | SeatChoice.Profile _ -> ()
                 ]
             )
         ]

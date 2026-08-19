@@ -57,9 +57,10 @@ type SeatChoice =
     | Profile of name: string
     /// **我自己**（票 87）：坐在这台浏览器前的那个人。
     ///
-    /// **它不引用任何东西**：真人没有档案（没有 provider、没有 key）；
-    /// 座位级那三项（脚手架 / 人格 / 模板）对它今天也不生效——
-    /// 新手辅助轮（术语表说 `ScaffoldTier` 在真人这一侧复用同一类型）是票 89 的事。
+    /// **它不引用任何东西**：真人没有档案（没有 provider、没有 key）。
+    /// **脚手架档位对它同样生效**（票 89）：术语表的 `ScaffoldTier` 词条最后一句
+    /// 「真人坐席复用同一类型，它同时是新手辅助轮」从这一票起有了执行者；
+    /// 人格与模板仍旧不生效（他不走 prompt），而**思考时限只有他有**（`SeatBinding.Clock`）。
     ///
     /// **一桌只坐得下一席**（`SeatingPlan.soloHuman`）：本地就一个人一副眼睛。
     | Human
@@ -72,13 +73,19 @@ type SeatChoice =
     /// 那几 MB 的资产整桌只拉一份，而它每一手只要 0.7 ms（ADR-0006 的数）。
     | Baseline
 
-/// 座位级那三项里在面板上编辑的部分。**它们不在档案里**（术语表的分工：
-/// 档案答「怎么问」，这三样答「给多少信息 / 什么风格 / 哪套措辞」）。
+/// 座位级那几项里在面板上编辑的部分。**它们不在档案里**（术语表的分工：
+/// 档案答「怎么问」，这几样答「给多少信息 / 什么风格 / 哪套措辞 / 想多久」）。
 [<RequireQualifiedAccess>]
 type SeatField =
     | Tier
     | Persona
     | Template
+    /// 思考时限（票 89 的 story 32），秒；0 = 不限时（默认）。
+    ///
+    /// **它落在座位上而不是档案里**，与另外三项同一条分工：模型席「想多久」是那份档案的
+    /// `TimeoutMs`（一次跨网请求的上限），真人这一格是**他自己的节奏**——两者量的不是一件事，
+    /// 因此不合并。面板上它只画在真人那一行（`TablePanel.seatRow`）。
+    | Clock
 
 /// 一个座位的绑定（票 73）：交给谁，以及这一席自己的脚手架档位、人格与 prompt 模板。
 ///
@@ -87,8 +94,10 @@ type SeatField =
 type SeatBinding = {
     /// 这一席交给谁。
     Choice: SeatChoice
-    /// 脚手架档位（CONTEXT.md 的 `ScaffoldTier`）。
+    /// 脚手架档位（CONTEXT.md 的 `ScaffoldTier`）。**模型席与真人席共用这一格**（票 89）。
     Tier: ScaffoldTier
+    /// 思考时限，秒；**0 = 不限时**（默认）。只有真人席读它（票 89 的 story 32）。
+    Clock: int
     /// 人格（CONTEXT.md 的 `Persona`）：一段自由文本，**一局内不变**。
     Persona: string
     /// prompt 模板的覆盖（CONTEXT.md 的 `PromptTemplate`），一段 JSON；**一局内不变**。
@@ -250,7 +259,7 @@ module ProfileField =
 module SeatField =
 
     /// 全部字段，按座位那一行上的顺序。
-    let all: SeatField list = [ SeatField.Tier; SeatField.Persona; SeatField.Template ]
+    let all: SeatField list = [ SeatField.Tier; SeatField.Persona; SeatField.Template; SeatField.Clock ]
 
     /// localStorage 里的键名（不带前缀）。**与票 23 那一版逐字相同**，理由同 `ProfileField.key`。
     let key (field: SeatField) : string =
@@ -258,6 +267,7 @@ module SeatField =
         | SeatField.Tier -> "tier"
         | SeatField.Persona -> "persona"
         | SeatField.Template -> "template"
+        | SeatField.Clock -> "clock"
 
 /// 一个座位交给谁：wire 名与两个方向的转换。
 [<RequireQualifiedAccess>]
@@ -302,7 +312,14 @@ module SeatBinding =
         // 不填就是默认模板、没有人格（票 31）。
         Persona = ""
         Template = ""
+        // **默认不限时**（票 89 的 story 32 原话）：想加压力是主持人自己拨的另一个变量。
+        Clock = 0
     }
+
+    /// 这一席的思考时限（票 89）：**0 与负数都是「不限时」**，因此调用方只有
+    /// 「有没有上限」一种分法，不必再各判一遍 0。
+    let limit (binding: SeatBinding) : int option =
+        if binding.Clock > 0 then Some binding.Clock else None
 
     /// 字段现在的值（输入框里显示的那个）。
     let field (which: SeatField) (binding: SeatBinding) : string =
@@ -310,6 +327,7 @@ module SeatBinding =
         | SeatField.Tier -> ScaffoldTier.toWire binding.Tier
         | SeatField.Persona -> binding.Persona
         | SeatField.Template -> binding.Template
+        | SeatField.Clock -> string binding.Clock
 
     /// 改一个字段。**读不懂的档位原样不改**（同 `ModelProfile.edit`）；
     /// 人格与模板原样存着，这一层不判读：它们的形状在 Agent 层（`template.ts`），
@@ -322,6 +340,15 @@ module SeatBinding =
             | None -> binding
         | SeatField.Persona -> { binding with Persona = value }
         | SeatField.Template -> { binding with Template = value }
+        // **清空 = 不限时**（不是「原样不改」）：那既是默认也是这一格最常见的值，
+        // 而人要把它关掉时唯一的动作就是清空这一格。读不懂的（负数、字母）才原样不改。
+        | SeatField.Clock ->
+            match value.Trim() with
+            | "" -> { binding with Clock = 0 }
+            | text ->
+                match System.Int32.TryParse text with
+                | true, seconds when seconds >= 0 -> { binding with Clock = seconds }
+                | _ -> binding
 
     /// 一份档案 + 这一席那三项 → **真发给 Agent 层的那份配置**（`LlmSeat`）。
     ///
@@ -508,6 +535,8 @@ module SeatingPlan =
     ///
     /// **模型席写的是档案名 + 脚手架档位**：两席引同一份档案而档位不同是对照实验的常态
     /// （CONTEXT.md 的 `ModelProfile` / `ScaffoldTier` 是两个维度），只写档案名就分不出那两席。
+    /// **真人席同理写档位**（票 89）：那一格从这一票起真的在生效（新手辅助轮），
+    /// 而他正看着牌桌——拨错了档位得在看得见的地方看得出来。
     /// **bot 席不写档位**：它们不走 prompt，那一格对它们没意义，写上去只会让人以为它在生效。
     ///
     /// **它不是 `names`**（那一份恒是 `provider/model`，上牌谱）：档案名是本机的私人叫法，
@@ -517,7 +546,7 @@ module SeatingPlan =
         |> List.map (fun binding ->
             match binding.Choice with
             | SeatChoice.Bot kind -> Bot.toDisplay kind
-            | SeatChoice.Human -> humanToDisplay
+            | SeatChoice.Human -> $"{humanToDisplay}・{ScaffoldTier.toDisplay binding.Tier}"
             | SeatChoice.Baseline -> baselineToDisplay
             | SeatChoice.Profile name ->
                 match tryProfile name seating with

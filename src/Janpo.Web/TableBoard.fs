@@ -743,8 +743,13 @@ module TableBoard =
 
     /// 牌桌上的危险度：**默认关**，没人立直也没人副露时开了也没东西看
     /// （那时引擎本来就不给排序）。
+    ///
+    /// **裸奔档的真人坐在桌边时连拨都拨不出来**（票 89）：危险度是「要算才有的量」
+    /// （术语表那条「感知 vs 计算」：现物与筋都得从河里推），拨得出来的话
+    /// 「裸奔」这个对照组靠的就只是他自觉不按那一枚。判据不在这里：
+    /// **辅助给不给只有 `TableState.assists` 一条**（面板上那一枚按钮读的也是它）。
     let private dangerPanels (model: TableModel) (table: Table) (viewer: Seat option) =
-        if model.ShowDanger then
+        if model.ShowDanger && TableState.assists model then
             dangerSeats viewer table.State
             |> List.collect (fun seat -> dangerPanel seat table.State)
         else
@@ -877,6 +882,9 @@ module TableBoard =
                     // 而「碰不碰」与「打哪张」是同一件事，两样东西不该隔着半屏。
                     // 不轮到他、或者这一手一条宣言都没有时它一行都不画。
                     @ HumanLine.calls model dispatch
+                    // 新手辅助轮那一块（票 89）：**接在那一排按钮后面**——他要做的选择就在上面，
+                    // 向听与危险度是为那一下服务的；裸奔档与不轮到他时一行都不画。
+                    @ HumanLine.assist model
                     @ fault
                     // 气泡点开的那一手（票 76）：紧挨着牌桌——上面那张牌桌就是它说的那一刻。
                     @ ThinkingBubble.detail model dispatch

@@ -19,9 +19,10 @@
 //  15 真人坐下把一局打完：视角按钮不在 DOM 里、整页 HTML 不泄他家手牌、?dev=1 不给开（票 87）
 //  16 ToolSearch 档：真的一条 `what_if` tool call 走完来回、到上限就停、账单是几倍（票 94）
 //  17 复盘：对局中一条标注都没有，终局后每一手都有，那几个数与引擎逐字相同（票 90）
+//  17 真人的信息辅助与思考时限：裸奔档整页没有一个算好的数、到点自动摸切、面板上选得到三档（票 89）
 //
 // **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
-// 其余十三趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// 其余十四趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
 // 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
 // 理由写在它自己的文件头上；第 14 趟两个地址都开（分享链接从 `?table=1` 复制、
 // 导入入口在 `/` 上），理由同样在它自己的文件头上。
@@ -34,6 +35,7 @@
 // 跑法：`cd web && pnpm run fable && node node_modules/vite/bin/vite.js build && pnpm run verify:browser`
 
 import { failure, openLane, printFailures } from "./browser-lane.mjs";
+import { verifyAssist } from "./verify-assist.mjs";
 import { verifyBoard } from "./verify-board.mjs";
 import { verifyBubbles } from "./verify-bubbles.mjs";
 import { verifyExport } from "./verify-export.mjs";
@@ -232,6 +234,18 @@ const gates = [
     name: "ToolSearch 档：真的一条 what_if tool call 走完来回、到上限就停、账单是几倍",
     how: "node scripts/verify-toolsearch.mjs",
     run: (lane) => verifyToolSearch(lane),
+  },
+  // 票 89：**真人的信息辅助与思考时限**。四程：裸奔档那一程是**阴性对照**
+  // （整页 HTML 里一个 `data-scaffold-*` 都没有、整页文字里没有「向听 / 有效牌 / 进退向 /
+  // 危险度」、危险度那一枚开关根本不在 DOM 里，阳性对照是同一页拨到信息辅助）；
+  // 信息辅助那一程逐手核「辅助那几行 = 他点得动的那几张」，并与牌桌上那块危险度对拍
+  // （两处渲染读的是同一份脚手架）；时限那一程等足够久证明默认不限时什么都不会发生，
+  // 再拨成两秒不动手，到点自动摸切且牌局接着走；最后一程把票 94 那一档在**面板上**
+  // 拨起来，用它把一局打完（导出的牌谱里那一席真去查了、0 兜底）。
+  {
+    name: "真人的信息辅助与思考时限：裸奔档整页没有一个算好的数、到点自动摸切、面板上选得到三档",
+    how: "node scripts/verify-assist.mjs",
+    run: (lane) => verifyAssist(lane),
   },
   // 票 90：**复盘的逐手对照标注**。第一程真人坐一席打完一整场：对局中复盘那一块
   // **整个不在 DOM 里**（阴性对照——对局中给出「换打会怎样」就是作弊，那是票 89 的事），

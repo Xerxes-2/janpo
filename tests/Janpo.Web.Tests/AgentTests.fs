@@ -265,7 +265,10 @@ module AgentTests =
 
         Assert.Equal<string list>(List.distinct keys, keys)
         Assert.Equal(7, List.length ProfileField.all)
-        Assert.Equal(3, List.length SeatField.all)
+        // 座位级那几项：票 73 的三项 + 票 89 的思考时限。**这个数改了要连同报告一起改**
+        // ——它守的是「加一格设定就得同时想清楚它落哪个键」。
+        Assert.Equal(4, List.length SeatField.all)
+        Assert.Contains(SeatField.Clock, SeatField.all)
 
     [<Fact>]
     let ``provider 列表里没有 Bedrock——它是 Node-only`` () =

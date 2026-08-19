@@ -11,7 +11,7 @@ open Janpo
 /// `TableState`、牌桌与结算在 `TableBoard`、配桌与模型面板在 `TablePanel`、
 /// Agent 层那两行状态在 `AgentLine`。
 ///
-/// **这一层还转出十八个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
+/// **这一层还转出二十多个入口**：F# 不许同一个模块分在两个文件里（FS0248），而 `Main.fs` 调的是
 /// `TablePage.Page`、dotnet 侧的用例（`tests/Janpo.Web.Tests`）调的是 `TablePage.initial` / `home` /
 /// `shared` / `init` / `update` / `rosterOf` / `seatConfigOf` / `nameplates` / `renderingPending` /
 /// `rulesPending` / `live` / `shown` / `canAdvance` / `timeline` / `reveals` / `bubbles` / `detail` /
@@ -95,6 +95,21 @@ module TablePage =
 
     /// 真人自己按「过」的那几次（票 87 开账、票 88 换了语义）。实现与理由见 `TableState.passes`。
     let passes (model: TableModel) : HumanPass list = TableState.passes model
+
+    /// 真人那一席拨到的脚手架档位（票 89）。实现与理由见 `TableState.humanTier`。
+    let humanTier (model: TableModel) : ScaffoldTier option = TableState.humanTier model
+
+    /// 这一屏此刻给不给得出「要算才有的那几个数」（票 89）。实现与理由见 `TableState.assists`。
+    let assists (model: TableModel) : bool = TableState.assists model
+
+    /// 真人这一手的信息辅助（票 89）。实现与理由见 `TableState.humanScaffold`。
+    let humanScaffold (model: TableModel) : Scaffold option = TableState.humanScaffold model
+
+    /// 真人这一手的倒计时（票 89）。实现与理由见 `TableState.humanClock`。
+    let humanClock (model: TableModel) : HumanClock option = TableState.humanClock model
+
+    /// 真人那一席设的思考时限（票 89）。实现与理由见 `TableState.humanLimit`。
+    let humanLimit (model: TableModel) : int option = TableState.humanLimit model
 
     /// 这一席的推理此刻看不看得见（票 81）。实现与理由见 `TableState.reveals`。
     ///

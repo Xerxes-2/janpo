@@ -138,6 +138,10 @@ module SeatingPlanTests =
                 Tier = ScaffoldTier.Assisted
                 Persona = "你打得很凶。"
                 Template = """{"id":"我的模板"}"""
+                // 思考时限（票 89）：**它是第四样座位级配置，而且只有真人席读它**。
+                // 下面那份 `LlmSeat` 里没有它这一格——`SeatBinding.config` 编得过就是证据
+                // （模型席「想多久」是档案的 `TimeoutMs`，两者量的不是一件事）。
+                Clock = 30
             }
 
         let config = SeatBinding.config zhang binding
