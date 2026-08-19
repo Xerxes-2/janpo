@@ -315,16 +315,33 @@ module MaskedStreamProperties =
         |> List.map Tile.toMjai
         |> Set.ofList
 
-    let private streamTiles (seat: Seat) (state: GameState) : Set<string> =
-        Observation.stream seat state
-        |> List.collect MaskedEvent.tiles
-        |> List.map Tile.toMjai
-        |> Set.ofList
+    /// 一条掩蔽流里出现的全部记法。
+    let private notationsIn (stream: MaskedEvent list) : Set<string> =
+        stream |> List.collect MaskedEvent.tiles |> List.map Tile.toMjai |> Set.ofList
+
+    /// 这条掩蔽流**泄露给这个座位**的记法：流里出现、而它此刻看不见的那几个（空集就是没漏）。
+    ///
+    /// **定义域不含宣言中的那个杠**（`CONTEXT.md` 的 `Ankan Declaration`，票 100）：
+    /// 暗杠与加杠加上去的那张一经宣言就是公开信息，而引擎那侧宣言不改局面——那几张仍在宣言者
+    /// 手里。两边都对，差的是词：那一段**本来就不在这条不变量管的范围里**，因此比之前先过一道
+    /// `ChankanFixtures.maskedWithoutUnestablishedKan`。
+    ///
+    /// **这是改定义域，不是调松**，两件事各自有证据：
+    ///
+    /// - 改完之后它守的局面**比从前多一种**——国士抢暗杠那条轨迹票 99 时被显式排在锚点外，
+    ///   现在收了回来（`ChankanFixtures.traces` 四条全扫）；
+    /// - 摘掉的是**那一条事件**而不是那几种记法：宣言窗口之外的他家暗牌照旧抓得住
+    ///   （下面那条阴性对照）。
+    let private leaksTo (seat: Seat) (state: GameState) (stream: MaskedEvent list) : Set<string> =
+        let disclosed =
+            stream |> ChankanFixtures.maskedWithoutUnestablishedKan |> notationsIn
+
+        Set.difference disclosed (visibleTo seat state)
 
     [<Property>]
     let ``任意局面任意座位，掩蔽流里不出现他家暗牌中的任何一张`` (state: GameState) =
         Seat.all ruleset
-        |> List.forall (fun seat -> Set.isSubset (streamTiles seat state) (visibleTo seat state))
+        |> List.forall (fun seat -> Observation.stream seat state |> leaksTo seat state |> Set.isEmpty)
 
     /// 掩蔽流里**他家摸的那张一律没有牌面**，自家摸的一律有。
     [<Property>]
@@ -414,16 +431,14 @@ module MaskedStreamProperties =
         |> dahaisAfterNaki
         |> List.forall (fun (_, tsumogiri) -> not tsumogiri)
 
-    // ---- 抢杠那个窗口的定点锚点（票 99）----
+    // ---- 抢杠那个窗口的定点锚点（票 99 / 100）----
 
     /// 随机采样到不了抢杠那个窗口（全域里 `ResponseCause.Kan` 的局面 0 个），
     /// 而那一段恰好是掩蔽流最容易与局面分家的一段：事件已经播出去了、局面还没动。
     ///
-    /// **`掌蔽流里不出现他家暗牌` 只扫加杠那两条轨迹**（`kakanTraces`）：国士抢暗杠时
-    /// 那四张牌**必须**亮给别家看（不然没法决定抢不抢），而它们在引擎里仍是暗牌，
-    /// 因此那条不变量在暗杠这个窗口里**本来就不成立**。这是术语问题（要把「宣言中的暗杠」
-    /// 认成公开信息），不是断言强度问题：因此这里**显式把那条轨迹排在外面**（判据 4），
-    /// 而不是把断言调松。建议写在报告 `99-chankan-window-observation.md` 的术语那一节。
+    /// **`不出现他家暗牌` 现在四条轨迹全扫**（票 100）：票 99 时国士抢暗杠那一条被
+    /// 显式排在外面，因为那四张牌必须亮给别家看而引擎里它们仍是暗牌；术语裁完之后
+    /// （`CONTEXT.md` 的 `Ankan Declaration`）那一段落在定义域外，这条锚点把它收了回来。
     [<Fact>]
     let ``抢杠那个窗口：摊好牌山的轨迹逐步，掩蔽流的不变量都成立`` () =
         ChankanFixtures.sweep
@@ -435,7 +450,135 @@ module MaskedStreamProperties =
                 "鸣完必手切", ``任意局面，碰或吃之后的那一张打牌必然是手切``
             ]
 
-        ChankanFixtures.sweep ChankanFixtures.kakanTraces [ "不出现他家暗牌", ``任意局面任意座位，掩蔽流里不出现他家暗牌中的任何一张`` ]
+        ChankanFixtures.sweep ChankanFixtures.traces [ "不出现他家暗牌", ``任意局面任意座位，掩蔽流里不出现他家暗牌中的任何一张`` ]
+
+    // ---- 定义域那一段：它放行了什么、它之外还抓不抓得住（票 100）----
+
+    /// 宣言那一刻，他家看得见那条掩蔽流，以及宣言的那个杠本身。
+    ///
+    /// **验的那几条都停在这一刻**（判据 20）：换一步量就不是这件事了——杠一旦成立，
+    /// 那几张进了副露；一旦被抢，被抢的那张写在 `hora` 事件上。**两种结局都公开**，
+    /// 拿它们量出来的空集只能说明量错了地方。
+    let private viewsAtDeclaration () =
+        [
+            for label, phase, state in ChankanFixtures.declarationWindows ChankanFixtures.traces do
+                let declarer = phase.Target
+
+                let declared =
+                    match phase.Cause with
+                    | ResponseCause.Kan kan -> Naki.tiles kan
+                    | ResponseCause.Dahai -> failwith $"{label} 的抢杠那一轮竟然不是对杠的响应"
+
+                for viewer in Seat.all ruleset do
+                    if viewer <> declarer then
+                        yield label, declarer, declared, viewer, state
+        ]
+
+    /// **这条定义域到底放行了什么**：宣言那一刻，掩蔽流里那几个记法减去引擎那侧
+    /// 「这家看得见的牌」——也就是改判据之前那条属性红在哪几个记法上。**逐条轨迹写死。**
+    ///
+    /// 少了这一条，「定义域不含宣言中的那几张」就可能是句空话：两条普通加杠轨迹加上去的
+    /// 那张与底下那组碰同记法，差集本来就是空的——**票 99 §5.4 那条同型漏就是这么躲过去的**
+    /// （真牌谱那两局同样不踩），因此票 100 摄了一条踩得到的进来。
+    [<Fact>]
+    let ``宣言中的那个杠：定义域放行的就是它亮出去、而引擎仍当成暗牌的那几张`` () =
+        // 渲成一段文字再比，不拿 `Assert.Equal` 直比集合：xunit 把集合截成 `[···]`，
+        // 而这一条红的时候要看的恰恰就是「那几个记法到底是哪几个」（同 `ChankanFixtures.sweep`）。
+        let rendered =
+            viewsAtDeclaration ()
+            |> List.map (fun (label, _, _, viewer, state) ->
+                let disclosed = Observation.stream viewer state |> notationsIn
+                let excused = Set.difference disclosed (visibleTo viewer state)
+
+                let notations = Set.toList excused |> String.concat " "
+
+                if Set.isEmpty excused then
+                    $"{label}：（一张也没放行）"
+                else
+                    $"{label}：{notations}")
+            |> List.distinct
+            |> String.concat "\n"
+
+        let expected =
+            [
+                "加杠抢杠（天凤）：（一张也没放行）"
+                "国士抢暗杠（雀魂）：7z"
+                "加杠抢杠、抢的那家先立直（天凤）：（一张也没放行）"
+                "加杠抢杠、加的那张是红宝牌（天凤）：5sr"
+            ]
+            |> String.concat "\n"
+
+        Assert.Equal(expected, rendered)
+
+    /// 往宣言那一条之前塞一条伪造的「他家摸牌带着牌面」（票 99 §6.1 弄坏 `MaskedEvent.forSeat`
+    /// 时漏出来的就是这个形状）。
+    ///
+    /// **必须塞在宣言那一条之前**：塞在后面会给那条宣言接上一个「不是荣和」的下一条，
+    /// 而按 `Ankan Declaration`，那就意味着那个杠成立了——定义域不再放行它，
+    /// 这条对照验的就变成另一件事了。
+    let private leaking (pai: Tile) (actor: Seat) (stream: MaskedEvent list) : MaskedEvent list =
+        match List.rev stream with
+        | declaration :: earlier -> List.rev earlier @ [ MaskedEvent.Tsumo(actor, Some pai); declaration ]
+        | [] -> [ MaskedEvent.Tsumo(actor, Some pai) ]
+
+    /// **「收窄定义域」与「把断言调松」的分界线**（票 100）：停在宣言中、还没结局那一刻，
+    /// 往那条掩蔽流里塞一张**宣言之外**的他家暗牌，那条不变量必须照旧抓得住。
+    ///
+    /// 少了它，上面那条属性转绿在证据上有两种读法而分不开：一是定义域本来就不含宣言中的
+    /// 那几张（本票认的），二是那道闸门被拆了当修好。**两头各验一遍**：
+    ///
+    /// - 宣言者手里那几张**与杠无关**的暗牌：一张也不准出现；
+    /// - 宣言亮出去的那几个记法本身：换一条事件漏出来照样抓得住——
+    ///   放行的是**那一条宣言事件**，不是那几种牌。
+    [<Fact>]
+    let ``宣言窗口之外的他家暗牌，那条不变量照旧抓得住`` () =
+        let windows = viewsAtDeclaration ()
+
+        // 四条轨迹 × 三个他家：少一个就说明哪条轨迹退化成了空转（判据 3）。
+        Assert.Equal(3 * List.length ChankanFixtures.traces, List.length windows)
+
+        for label, declarer, declared, viewer, state in windows do
+            let stream = Observation.stream viewer state
+            let where = $"{label}，座位 {Seat.index viewer} 看座位 {Seat.index declarer} 宣言的那个杠"
+            let leaked = leaksTo viewer state stream
+            let leakedNotations = Set.toList leaked |> String.concat " "
+
+            // 同一刻、同一个座位：真的那条流不漏。对照组与对照的那一面在同一处量。
+            Assert.True(Set.isEmpty leaked, $"{where}：真的那条流漏了 {leakedNotations}")
+
+            let declaredNotations = declared |> List.map Tile.toMjai |> Set.ofList
+
+            let concealed =
+                match GameState.player declarer state with
+                | Some player -> PlayerState.hand player @ Option.toList (PlayerState.drawn player)
+                | None -> failwith $"{where}：宣言那家竟然不在牌桌上"
+
+            // 宣言之外的他家暗牌：既不在那个杠里，这一刻也不在牌桌上。
+            let outsiders =
+                concealed
+                |> List.filter (fun pai ->
+                    not (Set.contains (Tile.toMjai pai) declaredNotations)
+                    && not (Set.contains (Tile.toMjai pai) (visibleTo viewer state)))
+
+            match outsiders with
+            | [] -> failwith $"{where}：这一刻找不出一张宣言之外的他家暗牌，阴性对照已经退化成空转了"
+            | outside :: _ ->
+                let caught = leaking outside declarer stream |> leaksTo viewer state
+
+                Assert.True(
+                    Set.contains (Tile.toMjai outside) caught,
+                    $"{where}：漏了一张 {Tile.toMjai outside}（宣言之外的暗牌），而那条不变量没抓住它"
+                )
+
+            // 宣言亮出去的那几个记法：放行的是那一条事件，换一条事件漏出来照样不行。
+            for pai in declared do
+                if not (Set.contains (Tile.toMjai pai) (visibleTo viewer state)) then
+                    let caught = leaking pai declarer stream |> leaksTo viewer state
+
+                    Assert.True(
+                        Set.contains (Tile.toMjai pai) caught,
+                        $"{where}：{Tile.toMjai pai} 换一条事件漏出来就不算漏了——放行的应当只有宣言那一条"
+                    )
 
 /// 见逃密集的局面上再跑一遍掩蔽流的不变量。**同巡振听与立直后见逃只在这批轨迹里出现**。
 [<Properties(Arbitrary = [| typeof<MinogashiArbitraries> |], Parallelism = 4)>]

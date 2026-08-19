@@ -155,7 +155,7 @@ module ObservationProperties =
     /// 函数本身**，不另写一份（另写一份就会各自飘）。它红过：修 fold 之前，
     /// 三条轨迹上共 20 步破了「fold 与引擎一致」（原文在报告 `99-chankan-window-observation.md`）。
     [<Fact>]
-    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，观测的不变量都成立`` () =
+    let ``抢杠那个窗口：摊好牌山的那几条轨迹逐步，观测的不变量都成立`` () =
         ChankanFixtures.sweep
             ChankanFixtures.traces
             [

@@ -13,6 +13,11 @@
 // 剩下的一条是术语问题——`Masked/不出现他家暗牌` 在**国士抢暗杠**那个窗口里本来就不成立：
 // 那四张牌必须亮给别家看，而它们在引擎里仍是暗牌。它要的是术语裁决，不是把断言调松。
 //
+// **票 100 把那一条也收了**：主人裁定「宣言中的暗杠」是公开信息（`CONTEXT.md` 的
+// `Ankan Declaration`），那条不变量的**定义域**不含宣言中的那几张，判据因此改成
+// 「先摘掉还没成立的那条杠宣言再比」。同时摧了一条**加杠加上去的那张是红宝牌**的轨迹
+// （票 99 报告 §5.4 那个同型漏：碰 `5s 5s 5s`、加杠加 `5sr`），因此这里现在扫四条轨迹。
+//
 //   nix develop --command dotnet build -c Release
 //   dotnet fsi --exec scripts/fsi/chankan-trace.fsx
 
@@ -111,8 +116,13 @@ let kakanStates = chankanTrace chankanScript
 
 let ankanStates = kokushiChankanTrace kokushiChankanScript
 
+/// 票 100 那条：同一座牌山、同一个选手，只把那四张 5s 里「哪一张是红的」换了个位置：
+/// 碰的是三张正五、加杠加的是 `5sr`。
+let akadoraStates = chankanTrace chankanAkadoraScript
+
 printTrace "加杠抢杠（chankanScript + chankanSeeking，默认规则集）" kakanStates
 printTrace "国士抢暗杠（kokushiChankanScript + kanSeeking，雀魂规则集）" ankanStates
+printTrace "加杠抢杠、加的那张是红宝牌（chankanAkadoraScript，默认规则集）" akadoraStates
 
 // ---- 二、牌理由引擎复核（判据 19：人工可核对的证据先拿引擎核一遍）----
 
@@ -297,10 +307,11 @@ let sweep (label: string) (states: GameState list) =
 
     printfn ""
 
-printfn "== 四、把这两条轨迹喂给全部吃 GameState 的属性 =="
+printfn "== 四、把这几条轨迹喂给全部吃 GameState 的属性 =="
 printfn ""
 sweep "加杠抢杠" kakanStates
 sweep "国士抢暗杠（雀魂）" ankanStates
+sweep "加杠抢杠、加的那张是红宝牌" akadoraStates
 
 // ---- 四之二、fold 出来的观测与引擎在哪一段分了家（上面第四类红的细节）----
 
@@ -358,6 +369,7 @@ let printObservationDrift (label: string) (states: GameState list) =
 
 printObservationDrift "加杠抢杠" kakanStates
 printObservationDrift "国士抢暗杠（雀魂）" ankanStates
+printObservationDrift "加杠抢杠、加的那张是红宝牌" akadoraStates
 
 // ---- 五、同一座牌山，抢的那家先立直：一发那条也红（票 98 报的第三类）----
 //

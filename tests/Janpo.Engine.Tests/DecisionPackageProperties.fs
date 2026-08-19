@@ -161,7 +161,7 @@ module DecisionPackageProperties =
     /// 而包里的观测与历史恰恰在那一段与引擎分过家（票 98 §4 第四类，票 99 修掉）：
     /// 模型与真人坐席当时看到的就是一个**从未成立的杠**。
     [<Fact>]
-    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，包里那两个字段仍钉得住`` () =
+    let ``抢杠那个窗口：摊好牌山的那几条轨迹逐步，包里那两个字段仍钉得住`` () =
         ChankanFixtures.sweep
             ChankanFixtures.traces
             [

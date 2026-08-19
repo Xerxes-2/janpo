@@ -28,7 +28,8 @@ type RobbedKan =
 ///
 /// 这个模块把这一段的**词汇摊在一处**，各族属性的定点锚点都从这里取：
 /// 「哪一步是抢杠那一轮」（`phaseOf`）、「哪个杠被抢掉了」（`robbedDeclarer`）、
-/// 「三条摊好牌山的轨迹」（`traces`）与「把一组判据逐步喂给它们」（`sweep`）。
+/// 「摊好牌山的那几条轨迹」（`traces`）、「宣言中、还没结局的那一刻」（`declarationWindows`）
+/// 与「把一组判据逐步喂给它们」（`sweep`）。
 /// 票 98 时同一件事在两份探针与 `KanProperties` 里各写了一遍，那正是它们各自飘掉的路。
 [<RequireQualifiedAccess>]
 module ChankanFixtures =
@@ -86,28 +87,31 @@ module ChankanFixtures =
     /// 这一局里被抢掉的那个杠。
     let robbedKan (state: GameState) : RobbedKan option = GameState.events state |> robbedKanIn
 
-    /// 这条事件流里去掉**没有成立的那个杠宣言**。两种情形，合起来就是抢杠那个窗口：
+    /// 这条流里去掉**没有成立的那个杠宣言**。两种情形，合起来就是抢杠那个窗口：
     ///
     /// - **被抢掉了**：宣言之后紧接着荣和（或三家和了的途中流局）；
     /// - **还挂在那一轮上**：宣言就是这条流的最后一条，响应还没收齐。
     ///
-    /// **凡是从事件流重数「成立的杠」的地方都该先过一道它**：引擎的 `GameState.kanCount`
-    /// 数的是副露，而宣言不改副露；它欠的那张宝牌指示牌也同理没翻（`revealPendingKanDora`
-    /// 压根没跑过）。票 98 就是在这里逆了：`KanProperties.杠数与新宝牌` 把宣言当成了成立。
-    let withoutUnestablishedKan (events: Event list) : Event list =
-        let declaresKan (event: Event) =
-            match event with
-            | Ankan _
-            | Kakan _ -> true
+    /// 两种情形合起来就是 `CONTEXT.md` 的 `Ankan Declaration` 那句「宣言的结局由**下一条事件**
+    /// 宣告」：荣和（或三家抢同一杠判成的途中流局）= 原地作废，其余每一条都意味着杠成立了。
+    ///
+    /// `asEvent` 是「这一项是哪条 mjai 事件」：事件流那一侧是它自己，掩蔽流那一侧是
+    /// `MaskedEvent.publicEvent`——宣言与宣告它结局的那几条都是 `MaskedEvent.Public`，
+    /// **两侧因此共用同一份判据**，不会各自飘掉。
+    let private withoutUnestablishedKanBy (asEvent: 'item -> Event option) (items: 'item list) : 'item list =
+        let declaresKan (item: 'item) =
+            match asEvent item with
+            | Some(Ankan _)
+            | Some(Kakan _) -> true
             | _ -> false
 
-        let robsKan (event: Event) =
-            match event with
-            | Hora _ -> true
-            | Ryuukyoku fields -> fields.Reason = SanchaHora
+        let robsKan (item: 'item) =
+            match asEvent item with
+            | Some(Hora _) -> true
+            | Some(Ryuukyoku fields) -> fields.Reason = SanchaHora
             | _ -> false
 
-        let rec loop (rest: Event list) (kept: Event list) =
+        let rec loop (rest: 'item list) (kept: 'item list) =
             match rest with
             // 宣言之后紧接着的那一条把它抢了：丢掉宣言，留下抢它的那一条。
             | declaration :: next :: tail when declaresKan declaration && robsKan next -> loop tail (next :: kept)
@@ -116,9 +120,28 @@ module ChankanFixtures =
             | event :: tail -> loop tail (event :: kept)
             | [] -> List.rev kept
 
-        loop events []
+        loop items []
 
-    // ---- 三条摊好牌山的轨迹 ----
+    /// 事件流那一侧。
+    ///
+    /// **凡是从事件流重数「成立的杠」的地方都该先过一道它**：引擎的 `GameState.kanCount`
+    /// 数的是副露，而宣言不改副露；它欠的那张宝牌指示牌也同理没翻（`revealPendingKanDora`
+    /// 压根没跑过）。票 98 就是在这里逆了：`KanProperties.杠数与新宝牌` 把宣言当成了成立。
+    let withoutUnestablishedKan (events: Event list) : Event list = withoutUnestablishedKanBy Some events
+
+    /// 掩蔽流那一侧（票 100）。
+    ///
+    /// **「掩蔽流里不出现他家暗牌」那条不变量的定义域不含宣言中的那几张**
+    /// （`CONTEXT.md` 的 `Ankan Declaration`）：暗杠与加杠加上去的那张一经宣言就是公开信息（不亮
+    /// 别家就无从决定抢不抢），而引擎那侧宣言不改局面——那几张仍在宣言者手里。
+    /// 判掩蔽流漏没漏之前先过一道它，那一段就落在定义域外。
+    ///
+    /// **摘掉的是那一条事件，不是那几种记法**：宣言一个 7z 的暗杠不会让别处漏出来的 7z
+    /// 变得合法（`MaskedStreamProperties` 那条阴性对照验的就是这件事）。
+    let maskedWithoutUnestablishedKan (stream: MaskedEvent list) : MaskedEvent list =
+        withoutUnestablishedKanBy MaskedEvent.publicEvent stream
+
+    // ---- 四条摊好牌山的轨迹 ----
 
     /// 名字、成因、逐步的全部局面。**取值域到不了它们中的任何一条**，因此它们只挂在
     /// 各族的定点锚点上（票 98 量过挂进 `Traces` 的账：权重 2 只买到一趟 47%，而锚点是 100%）：
@@ -128,21 +151,38 @@ module ChankanFixtures =
     /// - **暗杠**（雀魂规则集）：国士抢暗杠，天凤禁、雀魂允（`KokushiAnkanChankan`）——
     ///   **这一条取值域里永远不可能出现**，那张表只用默认规则集；
     /// - **加杠、抢的那家先立直**：同一座牌山换个选手，抢杠时和的是「立直 + 一发 + 抢杠」——
-    ///   「杠宣言了、还没成立」与「一发还亮着」同时在场的唯一一条轨迹（票 99）。
+    ///   「杠宣言了、还没成立」与「一发还亮着」同时在场的唯一一条轨迹（票 99）；
+    /// - **加杠、加上去的那张是红宝牌**：碰的是三张正五、加的是 `5sr`（票 100）——
+    ///   宣言那一刻掩蔽流里多出一个底下那组碰里没有的记法，而引擎认为它仍在手里。
+    ///   另外两条加杠轨迹与真牌谱那两局**碰巧都不踩**它（票 99 报告 §5.4）。
+    ///
+    /// **四条全挂在同一张表上**：票 99 时暗杠那一条被「掩蔽流里不出现他家暗牌」显式排在外面
+    /// （`kakanTraces`），因为那条不变量在暗杠窗口里看着不成立；术语裁完之后它收了回来
+    /// （`Ankan Declaration`：那不是例外，是那条不变量本来就不管的一段）。
     let traces: (string * NakiKind * GameState list) list =
         [
             "加杠抢杠（天凤）", NakiKind.Kakan, chankanTrace chankanScript
             "国士抢暗杠（雀魂）", NakiKind.Ankan, kokushiChankanTrace kokushiChankanScript
             "加杠抢杠、抢的那家先立直（天凤）", NakiKind.Kakan, chankanRiichiTrace chankanScript
+            "加杠抢杠、加的那张是红宝牌（天凤）", NakiKind.Kakan, chankanTrace chankanAkadoraScript
         ]
 
-    /// 只有加杠那两条。**给「掩蔽流里不出现他家暗牌」用**：国士抢暗杠时那四张牌必须亮给
-    /// 别家看（不然没法决定抢不抢），而它们在引擎里仍是暗牌——那条不变量在暗杠这个窗口里
-    /// **本来就不成立**。这是术语问题（`CONTEXT.md` 的 `MaskedEvent` / `Naki` 要认「宣言中的
-    /// 暗杠」是公开信息），不是断言强度问题，因此这里**显式把那条轨迹排在外面**（判据 4），
-    /// 而不是把断言调松。建议写在报告 `99-chankan-window-observation.md` 的术语那一节。
-    let kakanTraces: (string * NakiKind * GameState list) list =
-        traces |> List.filter (fun (_, kind, _) -> kind = NakiKind.Kakan)
+    /// 每条轨迹上**宣言中、还没结局**的那一步：名字、那一轮的响应阶段、那个局面。
+    /// 一条轨迹恰好一步（抢杠即收场）。
+    ///
+    /// **阴性对照要停在这一刻上量**（判据 20）：走完一整局再抓，量的就是另一件事了——
+    /// 到那时那个杠要么成立了（那几张进了副露，谁都看得见），要么被抢了
+    /// （被抢的那张写在 `hora` 事件上，同样公开）。**两种结局都会把对照变成空转。**
+    let declarationWindows
+        (traces: (string * NakiKind * GameState list) list)
+        : (string * AwaitingResponse * GameState) list =
+        [
+            for label, _, states in traces do
+                for state in states do
+                    match phaseOf state with
+                    | Some phase -> yield label, phase, state
+                    | None -> ()
+        ]
 
     // ---- 逐步扫一遍 ----
 
@@ -199,5 +239,5 @@ module ChankanFixtures =
             ]
 
         // 逐条报而不是 `Assert.Equal<string list>`：xunit 把集合截到前五项，而这一族的红
-        // 恰恰是「宣言那一步 + 终局那一步 × 三条轨迹」这么一串，截掉就看不出形状了。
+        // 恰恰是「宣言那一步 + 终局那一步 × 每一条轨迹」这么一串，截掉就看不出形状了。
         Assert.True(List.isEmpty broken, broken |> String.concat "\n")

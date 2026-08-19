@@ -320,5 +320,5 @@ module GameStateProperties =
     /// 也不是自摸和了的那家。后一支票 98 时是红的（`98-chankan-never-sampled.md` §4 第二类），
     /// 票 99 把「抢杠收尾」补进了那条属性的终局形态里。
     [<Fact>]
-    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，各家手牌张数都对得上`` () =
+    let ``抢杠那个窗口：摊好牌山的那几条轨迹逐步，各家手牌张数都对得上`` () =
         ChankanFixtures.sweep ChankanFixtures.traces [ "14 张", ``等着打牌的那家 14 张，自摸和了的那家 14 张，其余各家 13 张`` ]

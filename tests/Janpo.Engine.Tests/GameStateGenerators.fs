@@ -383,6 +383,28 @@ module GameStateFixtures =
             Draws = "5s 4z 4z 4z 5s"
         }
 
+    /// **加杠加上去的那张是红宝牌**的抢杠剧本（票 100）：与 `chankanScript` 只差一件事
+    /// ——座位 1 碰的是两张**正**五（`5s 5s` 配 Oya 的 `5s`），后来摸进的第四张是 `5sr`。
+    ///
+    /// **它是为「宣言中的暗杠」那条术语的同型漏来的**（票 99 报告 §5.4）：加杠宣言一播出去，
+    /// 掩蔽流里就多了一个 `5sr`，而引擎那侧它仍在座位 1 的手里（宣言不改局面）——
+    /// 底下那组碰是三张正五，**一张同记法的牌都没有**，于是那个记法在「看得见的牌」里无处安放。
+    /// `chankanScript` 与真牌谱那两局**碰巧都不踩**：它们的碰里已经有 `5sr`，加上去的那张与它同记法。
+    ///
+    /// 牌山与 `chankanScript` 同一座，只把那四张 5s 里「哪一张是红的」换了个位置，
+    /// 因此九步走法逐步相同（抢的那张多一番红宝牌，只改点数）。
+    let chankanAkadoraScript =
+        {
+            Hands =
+                [
+                    "1m 9m 1p 9p 1s 9s 1z 2z 3z 2m 4m 6m 8m"
+                    "5s 5s 1z 1z 2z 2z 3z 3z 5z 5z 6z 6z 7z"
+                    "1m 2m 3m 4m 5m 6m 7p 8p 9p 4s 6s 9m 9m"
+                    "2p 5p 8p 2s 3s 9s 4z 6z 7z 6p 3p 7s 4p"
+                ]
+            Draws = "5s 4z 4z 4z 5sr"
+        }
+
     /// 加杠后当场岭上开花的剧本（**明杠的新宝牌翻牌时机**，16 票）：
     /// Oya 第一手摸切 5s，座位 1 碰它；一圈之后座位 1 摸进第四张 5s 加杠，
     /// 岭上牌正好是它单骑听的 1z——**加杠 → 岭上开花**，中间没有任何一次打牌。
@@ -1304,6 +1326,7 @@ module GameStateFixtures =
     /// 那是真发现，归另一票，逐条写在报告 `98-chankan-never-sampled.md` 里。
     let chankanTrace (script: Script) : GameState list =
         traceFrom chankanSeeking (Rng.ofSeed 1) (startScripted script)
+
 
     /// 一局**国士抢暗杠**的全部局面：抢暗杠要规则集开着 `KokushiAnkanChankan`（雀魂），
     /// 天凤那一侧暗杠当场成立、压根不进响应阶段（四步就完：摸切 → 暗杠 → 抢 → 终局）。
