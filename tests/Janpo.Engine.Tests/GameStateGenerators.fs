@@ -359,6 +359,30 @@ module GameStateFixtures =
             Draws = "5s 4z 4z 4z 5s"
         }
 
+    /// **抢杠必然发生**的剧本（票 98）：Oya 第一手摸切 5s，座位 1 碰它；一圈之后座位 1
+    /// 摸进第四张 5s 加杠，而座位 2 正好听 5s ——它抢了那个杠。
+    ///
+    /// 与 `kakanScript` 的差别是**座位 2 荣和 5s 时一个役都没有**（`123m 456m 789p + 99m + 46s`：
+    /// 嵌张听不成平和、带 1m 9m 9p 不成断幺九，三色 / 一气 / 混全带一个都不成）。这不是花活，
+    /// 是这条轨迹走得下去的**前提**：无役不可和 ⇒ Oya 打出那张 5s 时它压根不被问，于是那张 5s
+    /// 才轮得到座位 1 碰；抢杠时**抢杠本身就是役**（1 番 40 符 1300 点，引擎跑出来的数）。
+    /// 见和就和的选手拿 `kakanScript` 跑只会在第 1 巡就荣和收场，一个杠都摸不到。
+    ///
+    /// 其余两家全是死牌：Oya 的配牌是九种幺九牌（顺手把九种九牌那一支也带进这条轨迹），
+    /// 座位 1 除了两张 5s 全是字牌对子（它打出去谁也碰不走、吃不了），座位 3 一手孤张。
+    /// **九步跑完**：摸切 → 碰 → 手切 → 三家各摸切一张 → 加杠 → 抢杠 → 终局。
+    let chankanScript =
+        {
+            Hands =
+                [
+                    "1m 9m 1p 9p 1s 9s 1z 2z 3z 2m 4m 6m 8m"
+                    "5s 5sr 1z 1z 2z 2z 3z 3z 5z 5z 6z 6z 7z"
+                    "1m 2m 3m 4m 5m 6m 7p 8p 9p 4s 6s 9m 9m"
+                    "2p 5p 8p 2s 3s 9s 4z 6z 7z 6p 3p 7s 4p"
+                ]
+            Draws = "5s 4z 4z 4z 5s"
+        }
+
     /// 加杠后当场岭上开花的剧本（**明杠的新宝牌翻牌时机**，16 票）：
     /// Oya 第一手摸切 5s，座位 1 碰它；一圈之后座位 1 摸进第四张 5s 加杠，
     /// 岭上牌正好是它单骑听的 1z——**加杠 → 岭上开花**，中间没有任何一次打牌。
@@ -1106,6 +1130,98 @@ module GameStateFixtures =
 
             chosen, rng
 
+    /// 见和就和、见杠就杠、见碰就碰的选手，其余时候摸切（摸切不在合法动作里时取第一条手切）。
+    ///
+    /// **它是为抢杠那一支来的**：抢杠要先有人碰、再摸进第四张加杠，而
+    /// `kanSeeking` 从不碰（碰不进它的偏好表）、`nakiSeeking` 从不杠也从不和，
+    /// 两者都跑不出 `chankanScript` 那九步。和了排在杠前面：抢杠那一轮只有荣和与「过」。
+    let chankanSeeking: Player<Rng> =
+        fun rng _ choice ->
+            let pick (predicate: Action -> bool) =
+                choice.Actions |> List.tryFind predicate
+
+            let chosen =
+                pick (fun action ->
+                    match action with
+                    | Action.Hora _ -> true
+                    | Action.Dahai _
+                    | Action.Pon _
+                    | Action.Chi _
+                    | Action.Riichi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
+                    | Action.Ryuukyoku _
+                    | Action.None _ -> false)
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _ -> true
+                        | Action.Dahai _
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Pon _ -> true
+                        | Action.Dahai _
+                        | Action.Hora _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai(_, _, tsumogiri) -> tsumogiri
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.Dahai _ -> true
+                        | Action.Hora _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.None _ -> false))
+                |> Option.orElseWith (fun () ->
+                    pick (fun action ->
+                        match action with
+                        | Action.None _ -> true
+                        | Action.Dahai _
+                        | Action.Pon _
+                        | Action.Chi _
+                        | Action.Riichi _
+                        | Action.Ankan _
+                        | Action.Kakan _
+                        | Action.Minkan _
+                        | Action.Ryuukyoku _
+                        | Action.Hora _ -> false))
+                |> Option.defaultValue (List.head choice.Actions)
+
+            chosen, rng
+
     /// 用给定选手推进，直到 `until` 成立或这一局终了。黄金用例用它跑到「有事发生」的那一步，
     /// 再自己提交那一手关键动作。
     let driveUntil (player: Player<Rng>) (until: GameState -> bool) (state: GameState) : GameState =
@@ -1150,6 +1266,26 @@ module GameStateFixtures =
     /// 没断言过覆盖率的属性只证明了没崩，没证明跑到过。
     let kanTrace (rinshan: string) (script: Script) : GameState list =
         traceFrom kanSeeking (Rng.ofSeed 1) (startScriptedRinshan rinshan script)
+
+    /// 一局**必然出现抢杠**的全部局面：摊好的抢杠剧本 + 碰完就杠、见和就和的选手。
+    /// 九步里恰好一步是「加杠宣言了、还没成立」那一轮（`ResponseCause.Kan`）。
+    ///
+    /// **它不在 `GameStateArbitraries.Traces` 里**，而是挂在 `KanProperties` 的定点锚点上。
+    /// 票 98 量过两件事（`scripts/fsi/chankan-trace.fsx`）：一是买不到什么——权重 2 只换得到
+    /// 一趟 47% 的开口率，要一趟必开口得占权重表的 40.5%（权重 22 / 合计 55），
+    /// 而锚点是每趟 100%（这九步局面是锁死的，让采样去抽它找不出新 bug）；
+    /// 二是挂上去会当场把**七条**现成的属性按红（两条轨迹合起来十条）——
+    /// 那是真发现，归另一票，逐条写在报告 `98-chankan-never-sampled.md` 里。
+    let chankanTrace (script: Script) : GameState list =
+        traceFrom chankanSeeking (Rng.ofSeed 1) (startScripted script)
+
+    /// 一局**国士抢暗杠**的全部局面：抢暗杠要规则集开着 `KokushiAnkanChankan`（雀魂），
+    /// 天凤那一侧暗杠当场成立、压根不进响应阶段（四步就完：摸切 → 暗杠 → 抢 → 终局）。
+    /// **取值域里永远不会有它**：那张表只用默认规则集，因此抢暗杠只有锚点守得住。
+    let kokushiChankanTrace (script: Script) : GameState list =
+        let soul = Ruleset.withKokushiAnkanChankan ruleset
+
+        traceFrom kanSeeking (Rng.ofSeed 1) (startScriptedWith soul script)
 
     /// 一局**必然有人立直**的全部局面：摊好的立直剧本 + 见立直就立直的选手。
     ///

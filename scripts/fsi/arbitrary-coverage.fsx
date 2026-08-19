@@ -192,6 +192,11 @@ let predicates: (string * string * (GameState -> bool)) list =
             match awaitingDahai state with
             | Some choice -> hasAction isKanAction choice
             | None -> false
+        // **这一行恒是 0，而且是查过的**：引擎只在真有人抢得了时才建那个响应阶段，
+        // 而十三条轨迹没有一条造得出「加杠正撞上别家的和了牌且它不振听有役」（票 98）。
+        // 摊得出那样一座牌山（`GameStateFixtures.chankanScript`），但挂进这张表会当场把
+        // 七条现成的属性按红——因此它挂在 `KanProperties` 的定点锚点上。
+        // 数与红的清单：`scripts/fsi/chankan-trace.fsx` 与报告 `98-chankan-never-sampled.md`。
         "chankan", "Kan 抢杠那一轮", isChankan
         "response", "GameState 响应阶段族", fun state -> responses state |> List.isEmpty |> not
         "ron-offered", "GameState「Ron 只在不振听有役时出现」", fun state -> responses state |> List.exists (hasAction isRon)
