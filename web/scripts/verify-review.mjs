@@ -20,21 +20,49 @@
 //   ⑥ 默认上帝视角：复盘**没有主语**——面板不在，只有那一句「坐到某一席就看得了」；
 //   ⑦ 点一下座位 1 的视角：那一席的逐手复盘出来了，条数与那几个数同样与引擎对拍；
 //   ⑧ **点某一手 → 游标跳过去 → 关掉回原处**（票 86 立的回程规矩）：轴只有票 75 那一根；
-//   ⑨ **强 AI 那一行留位置但不占位**（票 93）：整块面板里 `data-review-strong` 一个都没有，
-//      也没有任何一行写着「暂无」。
+//   ⑨ **没按那一枚之前，强 AI 那一行一个都没有**（票 93）：`data-review-strong` 零个，
+//      面板里也没有任何一行写着「暂无」或者「评分」。
+//
+// 第三程（票 93：**强 AI 的对照标注**，spec 的 story 36）：
+//   ⑩ **懒加载**（ADR-0006 边界 1）：复盘面板摆在那儿、没人按那一枚时，
+//      那份资产的网络请求计数为 **0**；按下去之后恰好 1 次（阳性对照）；
+//   ⑪ **喂给它的必须是那一手当时喂给该席的那一份投影**（这一票的全部难点）：
+//      闸门拿**另一条路**重建同一份投影（`ReviewCheck.asks`：`Replay.traceOfPaifu` +
+//      `GameState.step`）自己去问同一份 wasm，逐手与页面上那一行对 id；
+//   ⑫ **上帝视角会打 A、该席视角只能打 B**：闸门拿两份故意的上帝视角（同一席在
+//      这一局最后一次出手时那一份流 / 一条不掩一张不隐的 `GodView.stream`）去问同一份 wasm，
+//      构造出 A≠B 的那几手，逐手断言页面给的是 **B**；
+//   ⑬ **同一手问两遍给同一答案**（可复现），分歧手数照**规则**再数一遍（判据 8）；
+//      算不动时（CI 的常规趟：那 6 MB 不在场）**整行不出现**，而票 90 那几栏一条不少。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:review`
 // 它也是 `verify-browser.mjs` 里的一趟（十七趟共用一个浏览器与一台服务器）。
 //
-// 选项：--budget ms（页面内驱动的时限）、--peek N（走多少手之后做①那一条）。
+// **CI 里第三程走的是「它用不了」那一路**（ADR-0006 边界 6：那 6 MB 不入版本控制）：
+// 于是 ⑩ 的阳性对照量的是「请求真的发出去了」（回的是 404），而 ⑪⑫⑬ 量不到
+// ——**真推理只在本机演习那一档**：先按 `web/public/baseline/README.md` 造一份产物放进去，
+// 再跑这一趟（它自己探得到）。**CI 因此覆盖不到「它真出的那一手对不对」**，逐条写在报告 93 里。
+//
+// 选项：--budget ms（页面内驱动的时限）、--peek N（走多少手之后做①那一条）、
+// --asset（本机演习：那份产物不在就当场报错，而不是静静地走降级那一路）。
 //
 // **把①按红的做法**（判据 1，票面点名）：把 `Review.settled` 那道判断去掉
 // （例如 `let settled (_: TableModel) : bool = true`），重编 Fable 再跑这一趟。红的原文在报告 90 里。
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating } from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
+
+const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** 强 AI 基线那份产物在站点里的地址（与 `web/src/baseline/wasm.ts` 的 `ASSET_FILE` 逐字相同）。 */
+const ASSET = "baseline/janpo-baseline.wasm";
+
+/** 站点上到底有没有那份产物（决定第 ⑩ 趟走哪一档；同 `verify-baseline.mjs`）。 */
+const assetPresent = () => existsSync(resolve(webRoot, "public", ASSET));
 
 /** 真人坐这一席（东 1 局的亲：页面一打开就轮到他）。 */
 const ME = 0;
@@ -90,6 +118,7 @@ function panel(page) {
 
     const notes = [...section.querySelectorAll("[data-review-turn]")].map((row) => {
       const advice = row.querySelector("[data-review-advice]");
+      const strong = row.querySelector("[data-review-strong]");
       const said = (selector) => row.querySelector(selector)?.textContent?.trim() ?? "";
       const list = (name) => {
         const raw = advice?.getAttribute(name) ?? "";
@@ -114,8 +143,15 @@ function panel(page) {
         headline: said(".review-jump"),
         figures: said(".review-figures"),
         adviceText: advice?.textContent?.trim() ?? "",
+        // 强 AI 那一行（票 93）：**没问过 / 算不动时这一整行根本不存在**，因此是 null 而不是空串。
+        strong: strong === null ? null : strong.getAttribute("data-review-strong"),
+        strongId: strong === null ? null : num(strong, "data-review-strong-id"),
+        strongDiff: strong === null ? null : strong.getAttribute("data-review-strong-diff"),
+        strongText: strong?.textContent?.trim() ?? "",
       };
     });
+
+    const head = at("review-strong");
 
     return {
       present: true,
@@ -124,6 +160,11 @@ function panel(page) {
       said: num(section, "data-review-notes"),
       open: section.getAttribute("data-review-open"),
       strong: section.querySelectorAll("[data-review-strong]").length,
+      strongState: head === null ? null : head.getAttribute("data-review-strong-state"),
+      strongRows: head === null ? null : num(head, "data-review-strong-rows"),
+      strongDiffs: head === null ? null : num(head, "data-review-strong-diffs"),
+      strongMs: head === null ? null : num(head, "data-review-strong-ms"),
+      strongText: head?.textContent?.trim() ?? "",
       text: section.textContent ?? "",
       notes,
     };
@@ -598,15 +639,21 @@ async function replayLeg(lane) {
       );
     }
 
-    // ⑨ 强 AI 那一行留位置但不占位（票 93）。
+    // ⑨ 没按那一枚之前，强 AI 那一行一个都没有（票 93；票 90 那条「一个都没有」翻的就是它）。
     if (shown.strong !== 0) {
       problems.push(
-        `面板里已经有 ${shown.strong} 处强 AI 的位置：那是票 93 的事，今天整行不该出现`,
+        `没人按那一枚，面板里已经有 ${shown.strong} 行强 AI 的标注：` +
+          "那几 MB 只在有人按下去那一刻才拉（ADR-0006 边界 1）",
       );
     }
-    for (const word of ["暂无", "强 AI", "评分"]) {
+    if (shown.strongState !== "untouched") {
+      problems.push(`没人按那一枚，强 AI 那一条的状态却是「${shown.strongState}」`);
+    }
+    for (const word of ["暂无", "评分"]) {
       if (shown.text.includes(word)) {
-        problems.push(`复盘面板里出现了「${word}」：没有的东西不占位，也不造总分（票 90 的边界）`);
+        problems.push(
+          `复盘面板里出现了「${word}」：没有的东西不占位，也不造总分（票 90/93 的边界）`,
+        );
       }
     }
   } finally {
@@ -616,14 +663,322 @@ async function replayLeg(lane) {
   return problems;
 }
 
+/**
+ * 闸门自己那一侧的**另一条路**（判据 6）：`ReviewCheck.asks` 走 `Replay.traceOfPaifu` +
+ * `GameState.step` 重建每一手的那一份投影，**再拿它去问同一份 wasm**，
+ * 最后与页面上那一行对 id。页面那一侧走的是 `Table.replay` 的帧 + `Review`。
+ *
+ * **整个循环在页面内跑**（票 56 那条教训）：那一叠决策包有几 MB，
+ * 每手一次 playwright 往返会把它们来回搬两遍；这里只把**结果**搬出来。
+ */
+function asked(page, text, seat, godEvery) {
+  return retryOnReload(() =>
+    page.evaluate(
+      async ({ text, seat, godEvery }) => {
+        const check = await import("./src/generated/ReviewCheck.js");
+        // **与页面用的是同一个模块实例**（Fable 那边 import 的也是它）：
+        // 因此这里不会再拉一遍那几 MB，「恰好 1 次请求」那一条才成立。
+        const baseline = await import("./src/baseline/baseline.ts");
+
+        const plannedAt = performance.now();
+        const plan = JSON.parse(check.asks(text, seat, godEvery));
+        const planMs = performance.now() - plannedAt;
+        if (plan.error) return { error: plan.error };
+
+        const ask = async (decision) => {
+          const reply = JSON.parse(await baseline.decide(JSON.stringify({ decision })));
+          return {
+            id: typeof reply.action_id === "number" ? reply.action_id : null,
+            failure: reply.failure ?? null,
+          };
+        };
+
+        const askedAt = performance.now();
+        const notes = [];
+        for (const note of plan.notes) {
+          const mine = await ask(note.decision);
+          notes.push({
+            turn: note.turn,
+            kind: note.kind,
+            playedId: note.played_id,
+            hidden: note.hidden,
+            options: note.options,
+            id: mine.id,
+            failure: mine.failure,
+            // **同一手问两遍**（可复现）：只在抽到的那几手上再问一次，均摊下来不贵。
+            again: note.god_later === null ? null : (await ask(note.decision)).id,
+            // 两份故意的上帝视角（只在抽到的那几手上造）。
+            godLater: note.god_later === null ? null : await ask(note.god_later),
+            godAll: note.god_all === null ? null : await ask(note.god_all),
+          });
+        }
+
+        return { notes, planMs, askMs: performance.now() - askedAt };
+      },
+      { text, seat, godEvery },
+    ),
+  );
+}
+
+/**
+ * 第三程（票 93）：**强 AI 会怎么打**。
+ *
+ * 两档：站点上有那份 6 MB 产物时真问一遍（⑩–⑬ 全量），没有时量的是「算不动那一路」
+ * （整行不出现，而票 90 那几栏一条不少）。**走的是哪一档印在总结里**
+ * （票 92 那一课：别让读日志的人以为 CI 里量到的是前一档）。
+ */
+async function strongLeg(lane, { godEvery }) {
+  const problems = [];
+  const origin = await lane.devUrl();
+  const context = await lane.newContext();
+  const requests = [];
+  context.on("request", (request) => {
+    if (request.url().includes(ASSET)) requests.push(request.url());
+  });
+
+  const page = await context.newPage();
+  const real = assetPresent();
+
+  try {
+    await page.goto(`${origin}/`, { waitUntil: "domcontentloaded" });
+    await page.getByTestId("table-timeline").waitFor({ timeout: 15000 });
+    await page.getByTestId(`table-view-${WATCHED}`).click();
+    await page.getByTestId("table-review").waitFor({ timeout: 20000 });
+
+    // ⑩ 懒加载：面板摆在那儿、没人按那一枚时，一个字节都没拉。
+    const before = await panel(page);
+    if (requests.length !== 0) {
+      problems.push(`没人按那一枚，复盘就拉了那份资产 ${requests.length} 次：${requests[0]}`);
+    }
+    if (before.strongState !== "untouched" || before.strong !== 0) {
+      problems.push(
+        `没人按那一枚，强 AI 那一条就已经是「${before.strongState}」（${before.strong} 行标注）`,
+      );
+    }
+
+    if (
+      !(await clicked(page, "review-strong-ask", problems, "复盘里该有一枚「让强 AI 也看一遍」"))
+    ) {
+      return problems;
+    }
+
+    // 墙钟：从按下去到有东西看为止。**它比页面自己报的那两个数大**：
+    // 中间还夹着把一百多份决策包编成 JSON（F# 那一侧，同步）与两次重画。
+    const clickedAt = Date.now();
+
+    await page.waitForFunction(
+      () => {
+        const state = document
+          .querySelector('[data-testid="review-strong"]')
+          ?.getAttribute("data-review-strong-state");
+        return state === "ready" || state === "unavailable";
+      },
+      undefined,
+      { timeout: 120000 },
+    );
+
+    const wallMs = Date.now() - clickedAt;
+    const shown = await panel(page);
+    const fetched = requests.length;
+
+    // 票 90 那几栏一条不少（两档都要）：强 AI 那一行叠上去之后，引擎自算那一层照旧对得上号。
+    const text = readFileSync(new URL("../public/demo-paifu.json", import.meta.url), "utf8");
+    const expected = await expectedFrom(page, text, WATCHED);
+    if (expected.error) {
+      problems.push(`引擎读不动首页那份牌谱：${expected.error}`);
+      return problems;
+    }
+    const { problems: mismatches } = compare("问过强 AI 之后", shown, expected);
+    problems.push(...mismatches);
+
+    if (shown.strongState !== "ready") {
+      // **算不动那一路**（CI 的常规趟）：整行不出现，但页面明说原因。
+      if (real) {
+        problems.push(
+          `站点上有那份产物，强 AI 那一条却是「${shown.strongState}」：${shown.strongText}`,
+        );
+      }
+      if (shown.strong !== 0) {
+        problems.push(`它用不了，页面上却摆了 ${shown.strong} 行强 AI 的标注`);
+      }
+      if (!shown.strongText.includes("强 AI 基线")) {
+        problems.push(`它用不了，面板却没说清为什么：「${shown.strongText}」`);
+      }
+      if (shown.text.includes("暂无")) {
+        problems.push("它用不了时页面写了「暂无」：没有的东西不占位（票 90/92/93 同一个规矩）");
+      }
+      console.log(
+        `（这一趟站点上没有那份 6 MB 产物：量的是「算不动就整行不出现」那一路，` +
+          `页面说的是「${shown.strongText}」；请求发出去了 ${fetched} 次）`,
+      );
+      return problems;
+    }
+
+    // ---- 以下只在本机演习那一档跑得到（那份产物真在场） ----
+
+    if (fetched !== 1) {
+      problems.push(`按下去之后那份资产被请求了 ${fetched} 次，该正好 1 次`);
+    }
+
+    const mine = await asked(page, text, WATCHED, godEvery);
+    if (mine.error) {
+      problems.push(`闸门那一侧重建不出那几份投影：${mine.error}`);
+      return problems;
+    }
+
+    const rows = new Map(shown.notes.map((note) => [note.turn, note]));
+    const counts = { rows: 0, diffs: 0, hidden: 0, again: 0, later: 0, all: 0, missing: 0 };
+    /** 抬出两个具体例子印在总结里：一句「K 手」看不出它到底造出了什么局面。 */
+    const samples = [];
+
+    for (const each of mine.notes) {
+      const row = rows.get(each.turn);
+      if (row === undefined) {
+        problems.push(`第 ${each.turn} 手引擎说有，页面上却没有这一条标注`);
+        continue;
+      }
+      if (each.hidden > 0) counts.hidden += 1;
+
+      // ⑪ **喂给它的是同一份投影**：两条路各自重建、各自去问，出来的必须是同一条 id。
+      if (each.id === null) {
+        counts.missing += 1;
+        if (row.strong !== null) {
+          problems.push(
+            `第 ${each.turn} 手引擎那一侧没问出来（${each.failure}），页面上却有一行「${row.strongText}」`,
+          );
+        }
+        continue;
+      }
+      if (row.strongId === null) {
+        problems.push(
+          `第 ${each.turn} 手引擎那一侧问出来了（id=${each.id}），页面上却没有强 AI 那一行`,
+        );
+        continue;
+      }
+
+      counts.rows += 1;
+      const option = each.options.find((option) => option.id === each.id);
+
+      if (row.strongId !== each.id) {
+        const said = each.options.find((option) => option.id === row.strongId);
+        problems.push(
+          `第 ${each.turn} 手：拿那一手当时的投影问出来的是 ${option?.key}（id=${each.id}），` +
+            `页面写的是 ${said?.key ?? row.strong}（id=${row.strongId}）——两边喂的不是同一份观测`,
+        );
+      }
+      if (option !== undefined && row.strong !== option.key) {
+        problems.push(`第 ${each.turn} 手：那一手该是 ${option.key}，页面写的是 ${row.strong}`);
+      }
+
+      // ⑬ 分歧照**规则**再数一遍（判据 8）：它选的那一条与你打的那一条不是同一个 id。
+      const differs = each.playedId !== each.id;
+      if (differs) counts.diffs += 1;
+      if (row.strongDiff !== (differs ? "1" : "")) {
+        problems.push(
+          `第 ${each.turn} 手：你打的是 id=${each.playedId}、它打的是 id=${each.id}，` +
+            `页面却把它标成了「${row.strongDiff === "1" ? "不同" : "相同"}」`,
+        );
+      }
+      if (differs !== row.strongText.includes("与你不同")) {
+        problems.push(
+          `第 ${each.turn} 手：那一行写的是「${row.strongText}」，而两边 id 说的是另一回事`,
+        );
+      }
+
+      // ⑬ 可复现：同一手问两遍给同一答案。
+      if (each.again !== null) {
+        counts.again += 1;
+        if (each.again !== each.id) {
+          problems.push(`第 ${each.turn} 手问两遍给了两个答案（${each.id} 与 ${each.again}）`);
+        }
+      }
+
+      // ⑫ **上帝视角会打 A、该席视角只能打 B**：造出 A≠B 的那几手，断言页面给的是 B。
+      for (const [which, god] of [
+        ["later", each.godLater],
+        ["all", each.godAll],
+      ]) {
+        if (god === null || god.id === each.id) continue;
+        counts[which] += 1;
+        if (!samples.some((sample) => sample.startsWith(which))) {
+          const a =
+            god.id === null
+              ? `答不上来（${god.failure}）`
+              : (each.options.find((option) => option.id === god.id)?.key ?? `id=${god.id}`);
+          samples.push(
+            `${which}：第 ${each.turn} 手上帝视角打 A=${a}，该席视角只能打 B=${option?.key}，页面给的是 ${row.strong}`,
+          );
+        }
+        if (row.strongId !== each.id) {
+          const a = god.id === null ? `答不上来（${god.failure}）` : `id=${god.id}`;
+          problems.push(
+            `第 ${each.turn} 手：上帝视角（${which}）会给 ${a}、该席视角给的是 id=${each.id}，` +
+              `而页面上那一行是 id=${row.strongId}`,
+          );
+        }
+      }
+    }
+
+    // 页面自己抬头那两个数与逐行数出来的必须一致。
+    if (shown.strongRows !== shown.notes.filter((note) => note.strong !== null).length) {
+      problems.push(`抬头说有 ${shown.strongRows} 行，实际画了 ${shown.strong} 行`);
+    }
+    if (shown.strongDiffs !== counts.diffs) {
+      problems.push(`抬头说 ${shown.strongDiffs} 手与你不同，照规则数出来的是 ${counts.diffs} 手`);
+    }
+
+    // 判据 3：这几条断言各开口了几次。为 0 的那一种，这一趟等于没跑。
+    if (counts.rows < 40) problems.push(`只对拍了 ${counts.rows} 行：一整场该有几十手`);
+    if (counts.diffs === 0)
+      problems.push("一整场下来一手分歧都没有：「分歧点要跳出来」那一条等于没跑");
+    if (counts.hidden === 0) {
+      problems.push("没有一手的投影里遮着他家摸的牌：「喂的不是上帝视角」那一条等于没跑");
+    }
+    if (counts.again === 0) problems.push("一手都没问第二遍：可复现那一条等于没跑");
+    if (counts.later + counts.all === 0) {
+      problems.push(
+        "一手「上帝视角会打 A、该席视角只能打 B」的局面都没造出来：这一票唯一真正难的那条断言等于没跑",
+      );
+    }
+
+    console.log(
+      `强 AI 逐手对照：${counts.rows} 行与引擎另一条路问出来的同一条 id ✓` +
+        `（分歧 ${counts.diffs} 手、遮着他家摸牌的 ${counts.hidden} 行、问两遍同答案 ${counts.again} 手、` +
+        `它交不出来 ${counts.missing} 手）`,
+    );
+    console.log(
+      `上帝视角会打 A、该席视角只能打 B：同一局后来那一份流 ${counts.later} 手、` +
+        `一条不掩一张不隐那一份 ${counts.all} 手——逐手断言页面给的是 B ✓`,
+    );
+    for (const sample of samples) console.log(`　${sample}`);
+    console.log(
+      `代价：按下去到有东西看共 ${wallMs} ms；页面那一边 ${shown.strongMs} ms / ${shown.strongRows} 行（它自己报的那一句：${shown.strongText.replace(/\s+/g, " ")}）；` +
+        `闸门这一边重建投影 ${Math.round(mine.planMs)} ms、逐手问 ${Math.round(mine.askMs)} ms` +
+        `（${mine.notes.length} 手，其中抽到的那几手多问了三遍）`,
+    );
+  } finally {
+    await context.close();
+  }
+
+  return problems;
+}
+
 /** 这一道闸门（合并跑与单跑走的是同一段代码）。 */
 export async function verifyReview(lane, options = {}) {
   const budgetMs = options.budgetMs ?? 20000;
   const peek = options.peek ?? 60;
+  const godEvery = options.godEvery ?? 8;
   const problems = [];
+
+  if (options.asset === true && !assetPresent()) {
+    return failure("--asset 说资产在场，但 web/public/ 里没有它：", [
+      `找不到 web/public/${ASSET}——造一份的做法见 web/public/baseline/README.md`,
+    ]);
+  }
 
   problems.push(...(await humanLeg(lane, { budgetMs, peek })));
   problems.push(...(await replayLeg(lane)));
+  problems.push(...(await strongLeg(lane, { godEvery })));
 
   return problems.length === 0 ? [] : failure("复盘那一道没过：", problems);
 }
@@ -636,6 +991,11 @@ if (isEntry(import.meta.url)) {
   };
 
   await runStandalone((lane) =>
-    verifyReview(lane, { budgetMs: numberAt("--budget", 20000), peek: numberAt("--peek", 60) }),
+    verifyReview(lane, {
+      budgetMs: numberAt("--budget", 20000),
+      peek: numberAt("--peek", 60),
+      godEvery: numberAt("--god-every", 8),
+      asset: args.includes("--asset"),
+    }),
   );
 }

@@ -32,8 +32,10 @@ type ReviewCandidate = {
 /// 一个字节都没动——复盘要的东西（那一手落定之前的局面）本来就在逐帧的牌桌里，
 /// 把那一帧交给 `DecisionPackage.forSeat` 就得到当时那份脚手架。
 ///
-/// **强 AI 那一行不在这里**（票 93）：它一个字段都不预留——预留一个没人填的字段
-/// 等于写下一条没有执行者的不变量（判据 2 的反面），而页面上「暂无」那种占位比不显示更糟。
+/// **强 AI 那一行挂在 `Package` 上**（票 93）：那一格存的不是「它打了什么」，而是
+/// **那一手当时喂给该席的那一份投影**——问它的时候交出去的就是它，一个字节不多。
+/// 它答回来的那个 id 由 `Review.strongOf` 换成一行（`ReviewStrong`），
+/// **答不上来就整行不出现**，页面上不写「暂无」。
 type ReviewNote = {
     /// 第几手（`Table.Turns` 那个号，CONTEXT.md 的 Turn；跨局累计）。
     Turn: int
@@ -45,6 +47,19 @@ type ReviewNote = {
     Kind: string
     /// 这一手给人看的中文（`Action.toDisplay`）。
     Label: string
+    /// 这一手本身。**`Kind` 与 `Label` 是它的两种渲染**，这一格是拿来比对的那一份：
+    /// 「强 AI 那一手与你的是不是同一条」按**这一包里的 id** 比（票 93），
+    /// 而 id 要拿这个动作向包里问（`DecisionPackage.tryId`）。
+    Played: Action
+    /// **那一手当时喂给该席的那一份投影**（`DecisionPackage.forSeat seat before.State`）。
+    ///
+    /// **这一票的全部难点就在这一格**（票 93）：复盘时整局都在手上，随手一喂就是上帝视角，
+    /// 而那样问出来的答案是人做不到的（它知道你不知道的牌）。这里存的是引擎那条唯一的
+    /// 掩蔽法则给出的那一份（`Observation.ofState` 内部的「掩蔽 + fold」），
+    /// **90 那几个数与 93 那一行因此是同一份包的两次消费**——没有第二条算路可漂。
+    ///
+    /// 这一席此刻不在合法动作集里时是 None（走不到：这一手就是它自己落定的）。
+    Package: DecisionPackage option
     /// **打之前那一刻**引擎算出的脚手架（`Scaffold.calculate` 那一份）；
     /// 手牌形态读不出来时是 None——那时一个数都不给（`Scaffold` 自己的规矩：
     /// 错的向听数比没有向听数更坏）。
@@ -53,6 +68,28 @@ type ReviewNote = {
     Trial: DahaiScaffold option
     /// 比你打的那张更好的几个候选，按有效牌降序；**空表 = 这一手是当时的最优之一**。
     Better: ReviewCandidate list
+}
+
+/// 强 AI 在那一手会怎么打（票 93，spec 的 story 36）。
+///
+/// **它不给理由**（ADR-0006 / 票 92）：跨界回来的只有一个动作 id 与一个延迟，
+/// 没有 thinking、没有一句话理由。**别为它编一句**（票面原话）——这里因此一格「理由」都不留。
+///
+/// **它不是裁判，是参照系**（票 93 的边界）：`Differs` 只说「不同」，不说「你错了」，
+/// 也没有总分、没有「你比它差多少」。
+type ReviewStrong = {
+    /// 第几手（与那一条标注的 `Turn` 同一个号）。
+    Turn: int
+    /// 它选的那一条在**那一包**里的 id（跨界回来的就是这一个整数，ADR-0005）。
+    ActionId: int
+    /// 那一条的中文 label（`ActionOption.label`，引擎给的那一句）。
+    Label: string
+    /// 给机器看的那一半（`dahai:3p` / `pon` / …）：闸门读它，人读上面那一句。
+    Key: string
+    /// 与这一席当时打的那一手**不同吗**。**只标不同**。
+    Differs: bool
+    /// 端到端毫秒（TS 那侧量的：翻译 + 喂这一局的流 + 一次前向）。
+    LatencyMs: int
 }
 
 /// 复盘面板此刻该画什么（票 90）。**三态是三个 case**（判据 12：拒绝理由各有各的 case）：
@@ -105,7 +142,19 @@ module ReviewCandidate =
 
         $"打{Tile.toDisplay candidate.Pai}（{said}）"
 
-/// 一条标注说出来是什么样。**面板只画这三句，一条规则都不判**（同 `HumanLine` / `AgentLine`）。
+/// 强 AI 那一行说出来是什么样。
+[<RequireQualifiedAccess>]
+module ReviewStrong =
+
+    /// **渲染层的单向出口**（ADR-0001）：`〔强 AI〕手切3索（与你不同）`。
+    ///
+    /// **相同那一半也说出来**：只标「不同」的话，没有标记的那几手看着像「还没算完」
+    /// ——而「算不动」在这一票里的样子是**整行不出现**，两者在页面上必须分得开。
+    let toDisplay (strong: ReviewStrong) : string =
+        let compared = if strong.Differs then "与你不同" else "与你相同"
+        $"〔强 AI〕{strong.Label}（{compared}）"
+
+/// 一条标注说出来是什么样。**面板只画这几句，一条规则都不判**（同 `HumanLine` / `AgentLine`）。
 [<RequireQualifiedAccess>]
 module ReviewNote =
 
@@ -159,9 +208,11 @@ module ReviewNote =
 
 /// 复盘：**逐手对照标注**（票 90，spec 的 story 34）。
 ///
-/// **这一票零外部依赖**：每一条都是引擎已经会算的量（`Shanten` / `Ukeire` / `Danger`），
-/// 由 `Scaffold.calculate` 对着**那一手落定之前那一帧**现算一遍——终局之后立刻有东西看，
-/// 不等任何模型。强 AI 的那一行是票 93 的事，这里连位置都不占。
+/// **引擎自算那一层零外部依赖**（M3 起草时主人已裁，ADR-0006 的后果 3）：
+/// 向听 / 有效牌 / 危险度那几个数由 `Scaffold.calculate` 对着**那一手落定之前那一帧**
+/// 现算一遍——终局之后立刻有东西看，不等任何模型。
+/// **强 AI 那一行叠在它上面而不是替掉它**（票 93）：那几 MB 拉不动时复盘照常出，
+/// 只是没有那一行。
 ///
 /// **它读的是牌谱**（ADR-0002：牌谱是唯一的可分享物）：逐帧的牌桌由 `Table.replay` fold 出来，
 /// 而每一帧的局面就是那一刻引擎的权威状态。因此**复盘不需要任何新字段**：
@@ -254,6 +305,16 @@ module Review =
         | Action.Dahai(_, pai, _) -> Some(Tile.deaka pai)
         | _ -> None
 
+    /// 一条动作给机器看的那一半（`dahai:3p` / `pon` / …）。
+    ///
+    /// **打牌那一类带上牌**（包里同一张牌只有一条打法，因此不带摸切与否），
+    /// 其余只写 mjai 动作名。**它只给人与闸门读**：同不同的判据是 id（见 `strongOf`），
+    /// 不是这一串字——一串字一旦拿来当判据，吃那几种吃法就会被当成同一手。
+    let private keyOf (action: Action) : string =
+        match action with
+        | Action.Dahai(_, pai, _) -> $"dahai:{Tile.toMjai pai}"
+        | _ -> HumanSeat.kind action
+
     /// 一帧一条：`before` 是那一手**落定之前**的局面，`after` 是落定之后的那一帧。
     ///
     /// **脚手架现问 `DecisionPackage.forSeat`**（判据 11：要读规则才做得出的决定归引擎）：
@@ -264,9 +325,11 @@ module Review =
         |> Option.map (fun turn -> turn.Action)
         |> Option.filter (fun action -> Action.actor action = seat)
         |> Option.map (fun action ->
-            let scaffold =
-                DecisionPackage.forSeat seat before.State
-                |> Option.bind DecisionPackage.scaffold
+            // **一处构造、两处消费**：90 那几个数（脚手架）与 93 那一行（拿它去问强 AI）
+            // 读的是**同一份包**。各造一份也跑得动，但那就有了两条可以各自漂的路，
+            // 而「喂给它的必须与那一手当时喂给该席的是同一份投影」正是票 93 的全部难点。
+            let package = DecisionPackage.forSeat seat before.State
+            let scaffold = package |> Option.bind DecisionPackage.scaffold
 
             let trial =
                 match scaffold, discarded action with
@@ -281,6 +344,8 @@ module Review =
                 Seat = seat
                 Kind = HumanSeat.kind action
                 Label = Action.toDisplay action
+                Played = action
+                Package = package
                 Scaffold = scaffold
                 Trial = trial
                 Better =
@@ -299,6 +364,51 @@ module Review =
         |> List.pairwise
         |> List.indexed
         |> List.choose (fun (index, (before, after)) -> noteOf seat (index + 1) before after)
+
+    // ---- 强 AI 那一行（票 93） ----
+
+    /// 要问强 AI 的那几手，以及**每一手该交出去的那一份**。
+    ///
+    /// **交出去的就是 `note.Package`**（`DecisionPackage.forSeat seat before.State`）：
+    /// 与那一手当时喂给该席的是**同一个构造子的同一份值**，这一层一个字段都不拼。
+    /// 复盘时手上握着整局（每一帧的 `GameState` 都在），**随手一喂就是上帝视角**
+    /// ——而那样的对照毫无意义：它会拿你那一手根本不知道的牌去选，人做不到。
+    let requests (notes: ReviewNote list) : (int * DecisionPackage) list =
+        notes
+        |> List.choose (fun note -> note.Package |> Option.map (fun package -> note.Turn, package))
+
+    /// 它交回来的那个 id → 这一行。
+    ///
+    /// **算不动就整行不出现**（票面原话，与票 92 同一个规矩）：它交不出来（`None`）、
+    /// 或者那个 id 压根不在这一包里时回 None——页面上因此一个元素都没有，
+    /// 而不是一行「暂无」（占位的那一行看着像坏了）。
+    ///
+    /// **同不同按 id 比**：两边都是同一包里的序号，因此这一步没有第二份「怎么算同一手」的判据
+    /// （摸切与手切也因此不会被当成分歧：一包里同一张牌只有一条打法，见 `mjai.ts` 的 `actionKey`）。
+    let strongOf (note: ReviewNote) (actionId: int option) (latencyMs: int) : ReviewStrong option =
+        match note.Package, actionId with
+        | Some package, Some id ->
+            DecisionPackage.options package
+            |> List.tryFind (fun option -> ActionOption.id option = id)
+            |> Option.map (fun option -> {
+                Turn = note.Turn
+                ActionId = id
+                Label = ActionOption.label option
+                Key = keyOf (ActionOption.action option)
+                // 包里找不到你那一手时算「不同」：那只会发生在包与牌谱对不上时，
+                // 而那一天该看见的是一个刺眼的标记，不是一句「与你相同」。
+                // （dotnet 那一侧的用例正面钉着「每一手都找得到」，这一支因此跑不到。）
+                Differs = DecisionPackage.tryId note.Played package <> Some id
+                LatencyMs = latencyMs
+            })
+        | Some _, None
+        | None, _ -> None
+
+    /// 分歧手数（面板抬头那一句与闸门读它）。**它不是分数**：
+    /// 分母是“问出来了几手”而不是“你打了几手”，也不成百分比——
+    /// 一旦写成百分比，下一步就是拿它当分数（票面边界：不造总分）。
+    let disagreements (rows: ReviewStrong list) : int =
+        rows |> List.sumBy (fun row -> if row.Differs then 1 else 0)
 
     // ---- 这一屏此刻给不给看 ----
 

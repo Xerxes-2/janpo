@@ -459,10 +459,10 @@ module ReviewTests =
         Assert.Equal(200, (timelineOf closed).Cursor)
         Assert.Equal(None, Review.opened closed)
 
-    // ---- 强 AI 那一行留位置但不占位 ----
+    // ---- 强 AI 那一行：问之前一行都没有 ----
 
     [<Fact>]
-    let ``强 AI 那一行今天整行不出现：一条标注只说得出三句话，里面没有「暂无」`` () =
+    let ``没问之前强 AI 那一行整行不出现：一条标注只说得出三句话，里面没有「暂无」`` () =
         let notes = settledWorst.Force() |> notesOf 0
 
         for note in notes do
@@ -478,6 +478,136 @@ module ReviewTests =
 
             for line in said do
                 Assert.DoesNotContain("暂无", line)
+                // 那几 MB 没拉、没问过之前，引擎自算那几句里一个字都不提强 AI（票 93）。
                 Assert.DoesNotContain("强 AI", line)
-                // 这一票不造总分（票 93 才有模型）：一条标注里不许出现「分」这种口径。
+                // **不造总分**（票 90 与票 93 同一条边界）：一条标注里不许出现「分」这种口径。
                 Assert.DoesNotContain("评分", line)
+
+    // ---- 强 AI 那一行：拿哪一份观测去问它（票 93 的全部难点） ----
+
+    [<Fact>]
+    let ``问强 AI 时交出去的就是那一手当时喂给该席的那一份投影（上帝视角那一份真的不同）`` () =
+        let model = settledFirst.Force()
+        let notes = notesOf 0 model
+        let walk = walked (seat 0) (paifuOf model)
+
+        // 每一手都问得出去：这一席落定了几手，就有几份投影（一份都不允许漏）。
+        Assert.Equal(List.length notes, List.length (Review.requests notes))
+        Assert.Equal<int list>(notes |> List.map (fun note -> note.Turn), Review.requests notes |> List.map fst)
+
+        // 逐手与**另一条路**重建的那一份逐字对拍：页面那侧走 `Table.replay` 的帧，
+        // 这里走 `Replay.traceOfPaifu` + `GameState.step`（判据 6）。
+        // 对的是 **wire 上那一串字节**：真正交给强 AI 的就是它。
+        let encoded (package: DecisionPackage) : string =
+            DecisionPackage.encoder package |> Encode.toString 0
+
+        // 对的是 `Review.requests`（**真正交出去的那一叠**）而不是 `note.Package`：
+        // 两者今天是同一个值，但这一条要钉的是前者——喂错东西的地方在那一步。
+        let leaked =
+            List.zip3 walk notes (Review.requests notes)
+            |> List.map (fun ((turn, _, state), note, (asked, mine)) ->
+                Assert.Equal(turn, asked)
+
+                let theirs =
+                    match DecisionPackage.forSeat (seat 0) state with
+                    | Some package -> package
+                    | None -> failwith $"第 {turn} 手引擎该给得出一份决策包"
+
+                Assert.Equal(encoded theirs, encoded mine)
+                Assert.Equal(Some(encoded mine), note.Package |> Option.map encoded)
+
+                // **结构上漏不出去**（票 29a 的那条唯一掩蔽法则）：交出去的那条流里，
+                // 他家摸的那张牌面根本没有位置。两头一起数（判据 3）：
+                //   `hidden` = 投影里被遮着的他家摸牌；`godly` = 上帝视角那条流里同一批摸牌。
+                // godly > 0 是**阳性对照**：没有它，「一张都没漏」也可能只是这一局压根没人摸牌。
+                let history = DecisionPackage.history mine
+
+                let seen =
+                    history
+                    |> List.sumBy (fun event ->
+                        match event with
+                        | MaskedEvent.Tsumo(actor, Some _) when actor <> seat 0 -> 1
+                        | _ -> 0)
+
+                let hidden =
+                    history
+                    |> List.sumBy (fun event ->
+                        match event with
+                        | MaskedEvent.Tsumo(actor, None) when actor <> seat 0 -> 1
+                        | _ -> 0)
+
+                let godly =
+                    GodView.stream state
+                    |> List.sumBy (fun event ->
+                        match event with
+                        | Event.Tsumo(actor, _) when actor <> seat 0 -> 1
+                        | _ -> 0)
+
+                Assert.Equal(0, seen)
+                Assert.Equal(godly, hidden)
+                godly)
+
+        // 阳性对照：上帝视角那条流里真的摆着一大批他家摸的牌，而交出去的那一份一张都没有。
+        Assert.True(List.sum leaked > 200, $"上帝视角那侧只多出 {List.sum leaked} 张牌：这一条什么都没证明")
+
+    [<Fact>]
+    let ``它交回来的那个 id → 那一行：交不出来、认不出来的那几手整行不出现`` () =
+        let notes = settledFirst.Force() |> notesOf 0
+
+        let note =
+            match notes |> List.tryFind (fun note -> note.Kind = "dahai") with
+            | Some note -> note
+            | None -> failwith "一整场总该有一手打牌"
+
+        let package =
+            match note.Package with
+            | Some package -> package
+            | None -> failwith "这一手必然有投影"
+
+        let options = DecisionPackage.options package
+
+        let played =
+            match DecisionPackage.tryId note.Played package with
+            | Some id -> id
+            | None -> failwith "他打的那一手必然在那一包里"
+
+        // **算不动就整行不出现**：交不出来（None）与说了一个不存在的 id 都是同一个下场。
+        Assert.Equal(None, Review.strongOf note None 3)
+        Assert.Equal(None, Review.strongOf note (Some(List.length options)) 3)
+        Assert.Equal(None, Review.strongOf note (Some -1) 3)
+
+        // 它正好选了你那一手：不是分歧。
+        let same =
+            match Review.strongOf note (Some played) 7 with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        Assert.False(same.Differs)
+        Assert.Equal(note.Label, same.Label)
+        Assert.Equal(note.Turn, same.Turn)
+        Assert.Equal(7, same.LatencyMs)
+        Assert.StartsWith("dahai:", same.Key)
+        Assert.Contains("与你相同", ReviewStrong.toDisplay same)
+
+        // 它选了别的：标「不同」——**而不是「你错了」**（票面边界：不造总分）。
+        let elsewhere =
+            match options |> List.tryFind (fun option -> ActionOption.id option <> played) with
+            | Some option -> ActionOption.id option
+            | None -> failwith "这一手只有一条可选，换一手来量分歧"
+
+        let differs =
+            match Review.strongOf note (Some elsewhere) 1 with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        Assert.True(differs.Differs)
+        Assert.Equal(1, Review.disagreements [ same; differs ])
+
+        let said = ReviewStrong.toDisplay differs
+        Assert.Contains("〔强 AI〕", said)
+        Assert.Contains("与你不同", said)
+
+        // **它不给理由，所以这一行不得凭空长出一句话**（票 92 的要害），
+        // 也不得长出一个分数（票 93 的边界）。
+        for word in [ "因为"; "理由"; "评分"; "总分"; "暂无"; "错" ] do
+            Assert.DoesNotContain(word, said)

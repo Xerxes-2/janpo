@@ -42,6 +42,22 @@ type BaselineAnswer = {
     LatencyMs: int
 }
 
+/// **复盘那一屏问完一整场之后拿回来的那一叠**（票 93）。
+///
+/// **为什么是一叠而不是一手一次**：一整场一席一百多手，一手一次就要在 F# 这侧
+/// 串一百多个 Promise（本仓库没有 `Fable.Promise`，也不为这件事添一个包），
+/// 而那一堆链路里每一环都是一处能漏掉错误的地方。TS 那侧循环一遍，这侧只接一个回执。
+type BaselineReview = {
+    /// 那份产物的字节数（页面上印出来：看一遍复盘让你多下了多少东西）。
+    Bytes: int
+    /// 拉那几 MB 花了多久（已经起好了就是 0）。
+    LoadMs: int
+    /// 逐手问完一整场花了多久（**包含每手重喂一遍这一局的事件流**）。
+    AskMs: int
+    /// 每一手的回执：手序 + 那一手的答案。交不出来的那几手同样在里面（`Failure`）。
+    Answers: (int * BaselineAnswer) list
+}
+
 /// F#/TS 的第四道边界（ADR-0005：**只有 F# 调 TS 这一个方向，且只传字符串**）。
 ///
 /// 出去的是一段 JSON（就是 `DecisionPackage.encoder` 的产物，一个字段都不改写），
@@ -96,12 +112,43 @@ module Baseline =
             LatencyMs = get.Optional.Field "latency_ms" Decode.int |> Option.defaultValue 0
         })
 
+    /// 一整叠回执。**一手交不出来不影响别的手**：它那一条带着 `failure` 照样回来，
+    /// 由复盘那一层把那一行整行去掉。
+    let private reviewDecoder: Decoder<Result<BaselineReview, string>> =
+        Decode.object (fun get ->
+            match get.Optional.Field "error" Decode.string with
+            | Some reason -> Error reason
+            | None ->
+                let answers =
+                    Decode.map2 (fun turn answer -> turn, answer) (Decode.field "turn" Decode.int) answerDecoder
+
+                match get.Optional.Field "answers" (Decode.list answers) with
+                | Some answers ->
+                    Ok {
+                        Bytes = get.Optional.Field "bytes" Decode.int |> Option.defaultValue 0
+                        LoadMs = get.Optional.Field "load_ms" Decode.int |> Option.defaultValue 0
+                        AskMs = get.Optional.Field "ask_ms" Decode.int |> Option.defaultValue 0
+                        Answers = answers
+                    }
+                | None -> Error "强 AI 基线答不上：信封里既没有答案也没有原因")
+
     /// 一次问话的 wire 形态。`decision` 就是 `DecisionPackage.encoder` 的产物
     /// ——**与 Agent 层读的是同一份东西**，也与 `janpo decide` 打印的是同一份。
     ///
     /// **座位不另传**：它就写在包上（`DecisionPackage.seat`），传第二份只会对不上。
     let private requestEncoder: Encoder<DecisionPackage> =
         fun package -> Encode.object [ "decision", DecisionPackage.encoder package ]
+
+    /// 一整叠问话的 wire 形态（票 93）：每一条带着手序，**包本身一个字段都不改写**。
+    let private reviewEncoder: Encoder<(int * DecisionPackage) list> =
+        fun turns ->
+            Encode.object [
+                "turns",
+                turns
+                |> List.map (fun (turn, package) ->
+                    Encode.object [ "turn", Encode.int turn; "decision", DecisionPackage.encoder package ])
+                |> Encode.list
+            ]
 
     // ---- 构造 ----
 
@@ -121,6 +168,9 @@ module Baseline =
 
     [<Import("decide", "../../web/src/baseline/baseline.ts")>]
     let private askFor (_request: string) : JS.Promise<string> = jsNative
+
+    [<Import("decideAll", "../../web/src/baseline/baseline.ts")>]
+    let private askForAll (_request: string) : JS.Promise<string> = jsNative
 
     /// 去拉那几 MB 并起起来。**这个 Promise 不会 reject**：TS 那侧把 404、离线、
     /// 编译不动与初始化失败都做成了值，万一还是抛了，`catch` 把它也变成一句原因。
@@ -146,3 +196,19 @@ module Baseline =
         let failed (error: obj) = refused $"强 AI 基线抛了异常：{error}"
 
         (requestEncoder package |> Encode.toString 0 |> askFor).``then``(read).catch (failed)
+
+    /// **复盘：一整场逐手问一遍**（票 93）。每一对是「第几手」与**那一手当时喂给该席的
+    /// 那一份投影**（`DecisionPackage.forSeat`）——这一层一个字段都不改写，与当时真的问出去的
+    /// 那一份逐字相同。
+    ///
+    /// **那几 MB 在这一步才拉**（ADR-0006 边界 1）：调到它的只有复盘那一枚按钮。
+    /// **这个 Promise 同样不会 reject**（理由同上）。
+    let askAll (turns: (int * DecisionPackage) list) : JS.Promise<Result<BaselineReview, string>> =
+        let read (envelope: string) : Result<BaselineReview, string> =
+            match Decode.fromString reviewDecoder envelope with
+            | Ok result -> result
+            | Error message -> Error $"强 AI 基线的回执读不动：{message}"
+
+        let failed (error: obj) : Result<BaselineReview, string> = Error $"强 AI 基线抛了异常：{error}"
+
+        (reviewEncoder turns |> Encode.toString 0 |> askForAll).``then``(read).catch (failed)

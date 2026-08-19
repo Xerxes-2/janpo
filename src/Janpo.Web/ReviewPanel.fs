@@ -14,6 +14,30 @@ open Janpo
 [<RequireQualifiedAccess>]
 module ReviewPanel =
 
+    /// 强 AI 那一行此刻走到哪一步（票 93）。**四态是四个 case**（同 `BaselineStatus`，判据 12）：
+    /// 「还没问」与「问了但它用不了」在页面上是两句完全不同的话。
+    ///
+    /// **它活在这一个组件里，不上 `TableModel`**：强 AI 的对照是终局之后现算的一份投影，
+    /// 不是这一场对局的事实——它不进牌谱（ADR-0002），也不该占住共用类型上的一格。
+    [<RequireQualifiedAccess>]
+    type private Consulted =
+        /// 还没人按那一枚：**一个字节都没拉**（ADR-0006 边界 1）。
+        | Untouched
+        /// 正在拉那几 MB / 逐手问。
+        | Asking of hands: int
+        /// 问完了：哪几手有那一行，以及这一趟的代价。
+        | Ready of rows: Map<int, ReviewStrong> * bytes: int * loadMs: int * askMs: int
+        /// 拉不动 / 起不来：**页面明说原因**（ADR-0006 边界 2），而复盘其余那几栏照常在。
+        | Unavailable of reason: string
+
+    /// 四态给机器看的那一半（`data-review-strong-state`）；人读的是旁边那一句中文。
+    let private stateWire (consulted: Consulted) : string =
+        match consulted with
+        | Consulted.Untouched -> "untouched"
+        | Consulted.Asking _ -> "asking"
+        | Consulted.Ready _ -> "ready"
+        | Consulted.Unavailable _ -> "unavailable"
+
     /// 一个「有就写数、没有就写空串」的钩子。**空串与 0 必须分得开**：
     /// 「这一手没有危险度」（桌上没有立直也没有副露）与「危险度排第 0」是两件事。
     let private mark (name: string) (value: int option) =
@@ -27,7 +51,12 @@ module ReviewPanel =
     ///
     /// `data-*` 给无头闸门读、那几句中文给人读，**两头同源**（都出自这一条 `ReviewNote`）：
     /// 闸门再拿它们与引擎直接算的那份对拍，对不上就是错。
-    let private noteRow (opened: int option) (dispatch: TableMsg -> unit) (note: ReviewNote) =
+    let private noteRow
+        (opened: int option)
+        (dispatch: TableMsg -> unit)
+        (strong: ReviewStrong option)
+        (note: ReviewNote)
+        =
         let trial = note.Trial
         let ukeire = trial |> Option.bind (fun trial -> trial.Ukeire)
         let danger = trial |> Option.bind (fun trial -> trial.Danger)
@@ -55,9 +84,33 @@ module ReviewPanel =
                 ])
             |> Option.toList
 
+        // 强 AI 那一行（票 93）。**算不动就整行不出现**：没问过、它交不出来、
+        // 或者它出的那一手不在这一包里时，这里**一个元素都没有**（与票 92 同一个规矩）。
+        let baseline =
+            strong
+            |> Option.map (fun strong ->
+                Html.p [
+                    prop.key "strong"
+                    prop.className "review-strong"
+                    // 闸门拿 `data-review-strong-id` 与它自己重建的那一份投影问出来的 id 逐手对拍；
+                    // `data-review-strong` 那一串只是给人读的那一手叫什么。
+                    prop.custom ("data-review-strong", strong.Key)
+                    prop.custom ("data-review-strong-id", strong.ActionId)
+                    prop.custom ("data-review-strong-diff", if strong.Differs then "1" else "")
+                    prop.text (ReviewStrong.toDisplay strong)
+                ])
+            |> Option.toList
+
         Html.li [
             prop.key note.Turn
-            prop.className "review-note"
+            // 分歧那几手在这一列里**一眼扫得到**（票面：分歧点要跳出来）：
+            // 只换一条左边线的颜色，**不打叉也不标红**——它不是裁判，是参照系。
+            prop.className (
+                match strong with
+                | Some strong when strong.Differs -> "review-note review-note-diff"
+                | Some _
+                | None -> "review-note"
+            )
             prop.custom ("data-review-turn", note.Turn)
             prop.custom ("data-review-frame", note.Frame)
             prop.custom ("data-review-kind", note.Kind)
@@ -90,10 +143,8 @@ module ReviewPanel =
                     ]
                 ]
                 @ advice
+                @ baseline
             )
-        // **强 AI 那一行今天不在这里**（票 93）：`advice` 下面**一个元素都没有**，
-        // 也不写「暂无」——占位的那一行比不显示更糟（它看着像坏了）。
-        // 93 接上时多的是：`ReviewNote` 上一格、这里一行、闸门里那条「一个都没有」翻面。
         ]
 
     /// 面板抬头那一排：说清这是谁的复盘，以及**跳走了怎么回来**（票 86 的回程）。
@@ -125,8 +176,79 @@ module ReviewPanel =
             )
         ]
 
+    /// 强 AI 那一条抬头（票 93）：那一枚按钮、这一趟的代价、以及分歧几手。
+    ///
+    /// **它得有人按**（ADR-0006 边界 1）：那几 MB 只在按下去那一刻才拉。
+    /// 自动拉的话，任何一局打完都会闷不作声地多下六兆字节——而复盘的头一层
+    /// （向听 / 有效牌 / 危险度）本来就是零依赖的，不该为了叠一行把它拖下水。
+    ///
+    /// **不造总分**（票面边界）：这里只数得出「几手不同」，不算百分比、不排名次、
+    /// 也不说「你比它差多少」——一写成百分比，下一步就是拿它当分数。
+    let private strongHead (consulted: Consulted) (rows: ReviewStrong list) (hands: int) (ask: unit -> unit) =
+        let button (label: string) =
+            Html.button [
+                prop.key "ask"
+                prop.className "review-strong-ask"
+                prop.testId "review-strong-ask"
+                prop.onClick (fun _ -> ask ())
+                prop.text label
+            ]
+
+        // **每一句自带一把 key**：同一层里两句话共用一把 key 会让 React 当场警告，
+        // 而那句警告只在控制台里，页面上看不出来。
+        let said (key: string) (text: string) =
+            Html.p [ prop.key key; prop.className "review-strong-said"; prop.text text ]
+
+        let children =
+            match consulted with
+            | Consulted.Untouched -> [
+                button $"让强 AI 把这 {hands} 手也看一遍"
+                said "how" "它在浏览器里跑，按下去那一刻才去取它那几 MB；它只看得见你当时看得见的那一份牌面，而且它不讲理由。"
+              ]
+            | Consulted.Asking asking -> [ said "asking" $"正在逐手问它（{asking} 手）……" ]
+            | Consulted.Ready(_, bytes, loadMs, askMs) -> [
+                said
+                    "cost"
+                    ($"强 AI 逐手看过了：{List.length rows} 手里有 {Review.disagreements rows} 手与你不同。"
+                     + $"（{Baseline.bytesToDisplay bytes}，取它 {loadMs} ms、逐手重建局面并推理 {askMs} ms）")
+                said "what" "它不是裁判：不同只是不同，它也说不出自己为什么那么打。"
+              ]
+            | Consulted.Unavailable reason -> [ said "why" reason; button "再试一次" ]
+
+        Html.div [
+            prop.key "strong-head"
+            prop.className "review-strong-head"
+            prop.testId "review-strong"
+            prop.custom ("data-review-strong-state", stateWire consulted)
+            prop.custom ("data-review-strong-rows", List.length rows)
+            prop.custom ("data-review-strong-diffs", Review.disagreements rows)
+            prop.custom (
+                "data-review-strong-ms",
+                match consulted with
+                | Consulted.Ready(_, _, loadMs, askMs) -> string (loadMs + askMs)
+                | Consulted.Untouched
+                | Consulted.Asking _
+                | Consulted.Unavailable _ -> ""
+            )
+            prop.children children
+        ]
+
     /// 复盘那一块本身。
-    let private body (seat: Seat) (notes: ReviewNote list) (opened: int option) (dispatch: TableMsg -> unit) =
+    let private body
+        (seat: Seat)
+        (notes: ReviewNote list)
+        (opened: int option)
+        (consulted: Consulted)
+        (ask: unit -> unit)
+        (dispatch: TableMsg -> unit)
+        =
+        let rows =
+            match consulted with
+            | Consulted.Ready(rows, _, _, _) -> rows
+            | Consulted.Untouched
+            | Consulted.Asking _
+            | Consulted.Unavailable _ -> Map.empty
+
         Html.section [
             prop.key "review"
             prop.className "settlement review"
@@ -143,10 +265,14 @@ module ReviewPanel =
                     prop.text
                         "这几行是引擎按你当时看得见的牌现算的（向听、有效牌、危险度），不是打分——「更好的候选」只列在这几个数上不比你差、至少一项更好的那几张。点某一手：牌桌摆出那一刻的快照（回放里时间轴跟着跳过去），按「回到原处」就回来。"
                 ]
+                strongHead consulted (rows |> Map.toList |> List.map snd) (List.length notes) ask
                 Html.ol [
                     prop.key "notes"
                     prop.className "review-notes"
-                    prop.children (notes |> List.map (noteRow opened dispatch))
+                    prop.children (
+                        notes
+                        |> List.map (fun note -> noteRow opened dispatch (Map.tryFind note.Turn rows) note)
+                    )
                 ]
             ]
         ]
@@ -182,10 +308,39 @@ module ReviewPanel =
                 [| box (Review.settled model); box seated; box (Review.signature model) |]
             )
 
+        // 强 AI 那一行的一叠回执（票 93）。**它不进 `TableModel`**（见 `Consulted` 那段）。
+        let consulted, setConsulted = React.useState Consulted.Untouched
+
+        // 换了一席 / 换了一份牌谱就丢掉：上一席的那一叠按手序对得上号，却是别人的牌
+        // ——那是一屏逐手都对得上号的假话。
+        React.useEffect ((fun () -> setConsulted Consulted.Untouched), [| box seated; box (Review.signature model) |])
+
+        let ask (notes: ReviewNote list) () =
+            let turns = Review.requests notes
+            setConsulted (Consulted.Asking(List.length turns))
+
+            (Baseline.askAll turns)
+                .``then`` (fun answered ->
+                    match answered with
+                    | Ok review ->
+                        // **算不动那几手根本不进这张表**（`strongOf` 回 None）：
+                        // 没有键就没有那一行，页面上因此不会出现一个空壳。
+                        let rows =
+                            review.Answers
+                            |> List.choose (fun (turn, answer) ->
+                                notes
+                                |> List.tryFind (fun note -> note.Turn = turn)
+                                |> Option.bind (fun note -> Review.strongOf note answer.ActionId answer.LatencyMs)
+                                |> Option.map (fun row -> row.Turn, row))
+
+                        setConsulted (Consulted.Ready(Map.ofList rows, review.Bytes, review.LoadMs, review.AskMs))
+                    | Error reason -> setConsulted (Consulted.Unavailable reason))
+            |> ignore
+
         match shown with
         | ReviewShown.Hidden -> Html.none
         | ReviewShown.Unaddressed -> hint
-        | ReviewShown.Notes(seat, notes) -> body seat notes (Review.opened model) dispatch
+        | ReviewShown.Notes(seat, notes) -> body seat notes (Review.opened model) consulted (ask notes) dispatch
 
     /// 挂载点：**页面那一层只留这一行**（票 90 的边界）。
     let internal at (model: TableModel) (dispatch: TableMsg -> unit) : ReactElement list = [ Panel(model, dispatch) ]

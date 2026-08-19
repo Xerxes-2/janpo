@@ -6,11 +6,14 @@
  * **这一层拿不到 `GameState`，也构造不出 `Action`**——与 `decide.ts`（LLM 席）
  * 和真人那一席逐字同一条规矩。
  *
- * 两个出口：
+ * 三个出口：
  *
  * - `load()`：去拉那几 MB 并起起来。**只有它被调到才会有那一次 `fetch`**
  *   （ADR-0006 边界 1：首页与不选那一席的对局一个字节都不拉）。
  * - `decide(request)`：喂这一局的事件流、跑一次前向、把它出的那一手换成这一包里的 id。
+ * - `decideAll(request)`：**复盘那一屏用的**（票 93）：一次交来一整场的几十上百份决策包，
+ *   逐份走 `decide`（**同一道门，没有第二条推理路**），回一张「第几手 → 哪一条 id」的表。
+ *   它自己会在需要时先 `load()`——复盘那一屏点下那一枚之前，同样一个字节都不拉。
  *
  * **两个出口都不 reject**：拉不动、跑不起来、翻译不动都是**值**——
  * 那一席是可选依赖而不是单点（ADR-0006 边界 2），页面必须永远说得出一句人话。
@@ -107,4 +110,60 @@ export async function decide(request: string): Promise<string> {
   }
 
   return envelope({ action_id: id, latency_ms: Math.round(performance.now() - startedAt) });
+}
+
+/** 复盘那一屏交来的一手：手序 + 那一手当时喂给该席的那一份投影。 */
+interface ReviewTurn {
+  turn: number;
+  decision: unknown;
+}
+
+/**
+ * **复盘：一整场逐手问一遍**（票 93）。
+ *
+ * 进来的是 `{"turns":[{"turn":N,"decision":{…}}, …]}`，回去的是
+ * `{"bytes":N,"load_ms":N,"ask_ms":N,"answers":[{"turn":N,"action_id":N,"latency_ms":N}, …]}`
+ * 或者一句 `{"error":"…"}`。
+ *
+ * **逐手走的就是 `decide`**：翻译、喂流、前向、比对 id 全在那一条路上，这里只是个循环
+ * ——复盘看到的那一手与它真坐一席时出的那一手因此不可能分岔（**没有第二条推理路**）。
+ *
+ * **那几 MB 在这里才拉**（ADR-0006 边界 1）：复盘那一屏要有人真按下那一枚才走到这里，
+ * 首页与对局中一个字节都不拉。拉不动就是一句 `{"error":…}`，页面照常出，只是没有那一行。
+ *
+ * **一手交不出来不打断整场**：那一条的信封里带 `failure`，F# 那侧把它当成「这一手整行不出现」。
+ */
+export async function decideAll(request: string): Promise<string> {
+  let turns: ReviewTurn[];
+  try {
+    const parsed = JSON.parse(request) as { turns?: unknown };
+    turns = Array.isArray(parsed.turns) ? (parsed.turns as ReviewTurn[]) : [];
+  } catch (error) {
+    return envelope({ error: `复盘交来的那一叠读不动（${detail(error)}）` });
+  }
+
+  const loadStartedAt = performance.now();
+  if (loaded === null) {
+    const said = JSON.parse(await load()) as { error?: string };
+    if (said.error !== undefined) return envelope({ error: said.error });
+  }
+  const loadMs = Math.round(performance.now() - loadStartedAt);
+  if (loaded === null) return envelope({ error: "强 AI 基线起不来" });
+
+  const askStartedAt = performance.now();
+  const answers: unknown[] = [];
+  for (const each of turns) {
+    const reply = JSON.parse(await decide(JSON.stringify({ decision: each.decision }))) as Record<
+      string,
+      unknown
+    >;
+    answers.push({ ...reply, turn: each.turn });
+  }
+
+  return envelope({
+    bytes: loaded.bytes,
+    load_ms: loadMs,
+    ask_ms: Math.round(performance.now() - askStartedAt),
+    answers,
+  });
 }

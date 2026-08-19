@@ -1400,3 +1400,38 @@ input[type="range"] {
 .review-advice {
   color: var(--ink-soft);
 }
+
+/* —— 复盘：强 AI 那一行（票 93）——
+   一条标注多出第四行「〔强 AI〕打8筒（与你不同）」。分歧那几手**只把那一条左边线与
+   那一行字加深**（`--line` → `--ink-soft`），**故意不用朱红**：这块调色板里朱红是
+   「赤牌・立直・兜底与警示」（文件头那一行），拿它标分歧就是在说「你错了」
+   ——而它不是裁判，是参照系（票面边界：只标不同，不造总分）。截图看过两遍才换的这一版。
+   与「正摊开的那一手」（靛青）分得开：那一条说的是「你正在看这里」，
+   这一条说的是「这一手它会打别的」；两件事同时成立时靛青压在上面
+   ——上面那条 `.review-note[data-review-open="1"]` 带属性选择器，优先级本来就更高，
+   不必为它再写一条（写了就是同一件事的第二份规则）。
+   **算不动就整行不出现**：这几条规则因此没有「空态」的样子可写。 */
+
+.review-note-diff {
+  border-left-color: var(--ink-soft);
+}
+
+.review-strong {
+  margin: 0.1rem 0 0.1rem 0.9rem;
+  font-size: 0.92em;
+  color: var(--ink-soft);
+}
+
+.review-strong[data-review-strong-diff="1"] {
+  color: var(--ink);
+}
+
+.review-strong-head {
+  margin: 0.6rem 0 0;
+}
+
+.review-strong-said {
+  margin: 0.2rem 0 0;
+  font-size: 0.92em;
+  color: var(--ink-soft);
+}
