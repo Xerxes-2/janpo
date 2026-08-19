@@ -1,6 +1,7 @@
 namespace Janpo.Engine.Tests
 
 open System.Text.RegularExpressions
+open Xunit
 open FsCheck.Xunit
 open Thoth.Json.Newtonsoft
 open Janpo
@@ -141,3 +142,27 @@ module ObservationProperties =
 
         view.Seats |> List.map (fun each -> each.Hand) = (GameState.players state |> List.map PlayerState.hand)
         && view.UraMarkers = Wall.uraIndicators (GameState.wall state)
+
+    // ---- 抢杠那个窗口的定点锚点（票 99）----
+
+    /// **上面每一条属性的随机部分都到不了抢杠那个窗口**（`GameStateArbitraries` 的全域里
+    /// `ResponseCause.Kan` 的局面是 0 个，票 96 / 97 / 98 三把尺子量出同一个数）——
+    /// 而 fold 恰恰在那一段与引擎分过家：`kakan` 一播出去 fold 就把那组碰原地升成了杠、
+    /// 把那张牌从手里拿走，而引擎要等杠成立才动；被抢之后那个杠永远不成立，
+    /// **观测那份再也没回滚**（票 98 §4 第四类，票 99 修掉）。
+    ///
+    /// 因此这一族在那个窗口里的闸门是下面这条定点锚点：**跑的就是上面那几条属性的
+    /// 函数本身**，不另写一份（另写一份就会各自飘）。它红过：修 fold 之前，
+    /// 三条轨迹上共 20 步破了「fold 与引擎一致」（原文在报告 `99-chankan-window-observation.md`）。
+    [<Fact>]
+    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，观测的不变量都成立`` () =
+        ChankanFixtures.sweep
+            ChankanFixtures.traces
+            [
+                "看得见的牌", ``任意局面任意座位，观测里的每一张牌都是这个座位看得见的``
+                "序列化不漏暗牌", ``任意局面任意座位，观测的序列化结果里不出现他家暗牌里的牌``
+                "河一致", ``任意局面任意座位，观测的河与那一家的河逐张一致``
+                "他家手牌张数", ``任意局面任意座位，他家的手牌张数与那一家实际的一致``
+                "fold 与引擎一致", ``任意局面任意座位，掩蔽流 fold 出来的观测与引擎的状态逐字段一致``
+                "上帝视角", ``任意局面，上帝视角亮出每一家的暗牌``
+            ]

@@ -1,5 +1,6 @@
 namespace Janpo.Engine.Tests
 
+open Xunit
 open FsCheck
 open FsCheck.FSharp
 open FsCheck.Xunit
@@ -412,6 +413,29 @@ module MaskedStreamProperties =
         GameState.events state
         |> dahaisAfterNaki
         |> List.forall (fun (_, tsumogiri) -> not tsumogiri)
+
+    // ---- 抢杠那个窗口的定点锚点（票 99）----
+
+    /// 随机采样到不了抢杠那个窗口（全域里 `ResponseCause.Kan` 的局面 0 个），
+    /// 而那一段恰好是掩蔽流最容易与局面分家的一段：事件已经播出去了、局面还没动。
+    ///
+    /// **`掌蔽流里不出现他家暗牌` 只扫加杠那两条轨迹**（`kakanTraces`）：国士抢暗杠时
+    /// 那四张牌**必须**亮给别家看（不然没法决定抢不抢），而它们在引擎里仍是暗牌，
+    /// 因此那条不变量在暗杠这个窗口里**本来就不成立**。这是术语问题（要把「宣言中的暗杠」
+    /// 认成公开信息），不是断言强度问题：因此这里**显式把那条轨迹排在外面**（判据 4），
+    /// 而不是把断言调松。建议写在报告 `99-chankan-window-observation.md` 的术语那一节。
+    [<Fact>]
+    let ``抢杠那个窗口：摊好牌山的轨迹逐步，掩蔽流的不变量都成立`` () =
+        ChankanFixtures.sweep
+            ChankanFixtures.traces
+            [
+                "只有自家摸牌带牌面", ``任意局面任意座位，只有自家那几条摸牌带着牌面``
+                "与上帝视角对齐", ``任意局面任意座位，掩蔽流与上帝视角那条流一样长且逐条对齐``
+                "立直后全摸切", ``任意局面，立直成立之后那一家的打牌全是摸切（宣言牌除外）``
+                "鸣完必手切", ``任意局面，碰或吃之后的那一张打牌必然是手切``
+            ]
+
+        ChankanFixtures.sweep ChankanFixtures.kakanTraces [ "不出现他家暗牌", ``任意局面任意座位，掩蔽流里不出现他家暗牌中的任何一张`` ]
 
 /// 见逃密集的局面上再跑一遍掩蔽流的不变量。**同巡振听与立直后见逃只在这批轨迹里出现**。
 [<Properties(Arbitrary = [| typeof<MinogashiArbitraries> |], Parallelism = 4)>]

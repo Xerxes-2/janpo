@@ -478,3 +478,127 @@ module PaifuDifferentialTests =
 
         Assert.Equal<bool list option>(None, PaifuOracle.tenpaisFromDeltas [ 0; 0; 0; 0 ])
         Assert.Equal<bool list option>(None, PaifuOracle.tenpaisFromDeltas [ 8000; -4000; -2000; -2000 ])
+
+    // ---- 抢杠那个窗口：真牌谱那一路（票 99）----
+
+    /// 固件里的**抢杠局**：先在 mjai 那一侧筛（一条 `kakan` / `ankan` 之后紧接着一条 `hora`
+    /// ——那个杠被抢掉了），只把筛出来的那几局交给引擎重放。
+    /// 逐局全量重放一遍太贵，而这一条要的只是那几局。
+    let private robbedInPaifu (moves: PaifuEvent list) : bool =
+        moves
+        |> List.pairwise
+        |> List.exists (fun (first, second) ->
+            match first, second with
+            | (PaifuEvent.Kakan _ | PaifuEvent.Ankan _), PaifuEvent.Hora _ -> true
+            | _ -> false)
+
+    let private chankanKyokus =
+        lazy
+            (corpus.Value
+             |> fst
+             |> List.collect (fun (paifu, _) -> paifu.Kyokus |> List.map (fun kyoku -> paifu.Id, kyoku))
+             |> List.filter (fun (_, kyoku) -> robbedInPaifu kyoku.Moves)
+             |> List.map (fun (id, kyoku) ->
+                 let label = $"{id} 第 {kyoku.Index + 1} 局"
+
+                 match PaifuReplay.kyoku PaifuDifferential.ruleset label kyoku with
+                 | Skipped reason -> failwith $"{label}：重放不了（{reason}）"
+                 | Replayed replay -> label, replay.Events))
+
+    /// 某一家在这份观测里亮着的副露（自家与他家两侧是两个类型，这里摊平）。
+    let private meldsOf (seat: Seat) (observation: Observation) : Naki list =
+        if observation.Self.Seat = seat then
+            observation.Self.Naki
+        else
+            observation.Others
+            |> List.tryFind (fun other -> other.Seat = seat)
+            |> Option.map (fun other -> other.Naki)
+            |> Option.defaultValue []
+
+    /// 这份观测里，那个**被抢掉的**杠亮出来了没有：宣言那家的副露里有没有一组同牌种的杠。
+    let private showsRobbedKan (robbed: RobbedKan) (observation: Observation) : bool =
+        meldsOf robbed.Declarer observation
+        |> List.exists (fun naki ->
+            Naki.isKan naki
+            && Naki.tiles naki
+               |> List.forall (fun tile -> Tile.kindIndex tile = Tile.kindIndex robbed.Pai))
+
+    /// 照**浏览器回放那条路**把一局走一遍（`Replay.trace`：开局局面 + 逐条交回引擎的动作，
+    /// `Janpo.Web` 的 `Table.replay` 走的就是它），每一手把四条掩蔽流各推一步，
+    /// 逐座位收两样分歧：观测与引擎的权威状态对不上的字段，以及**牌桌上冒出来的那个杠**。
+    let private replayDrift (label: string) (events: Event list) : string list =
+        match ChankanFixtures.robbedKanIn events with
+        | None -> [ $"{label}：这一局里没有被抢掉的杠，它已经不是抢杠局了" ]
+        | Some robbed ->
+            match Replay.trace PaifuDifferential.ruleset events with
+            | Error error -> [ $"{label}：回放不出来（{ReplayError.toDisplay error}）" ]
+            | Ok kyokus ->
+                let seats = Seat.all PaifuDifferential.ruleset
+
+                let at (turn: int) (state: GameState) (streams: SeatStream list) =
+                    (seats, streams)
+                    ||> List.map2 (fun seat stream ->
+                        match SeatStream.observation stream with
+                        | None -> [ $"{label} 第 {turn} 手 座位 {Seat.index seat}：观测缺席" ]
+                        | Some observation ->
+                            let mismatches =
+                                ObservationFixtures.mismatches seat state observation
+                                |> List.map (fun field -> $"{label} 第 {turn} 手 座位 {Seat.index seat}：{field}")
+
+                            if showsRobbedKan robbed observation then
+                                mismatches @ [ $"{label} 第 {turn} 手 座位 {Seat.index seat}：牌桌上出现了那个从未成立的杠" ]
+                            else
+                                mismatches)
+                    |> List.concat
+
+                kyokus
+                |> List.collect (fun kyoku ->
+                    let seeded =
+                        seats
+                        |> List.map (fun seat ->
+                            (SeatStream.start PaifuDifferential.ruleset seat, GameState.events kyoku.Opening)
+                            ||> List.fold (fun stream event -> SeatStream.advance event stream))
+
+                    let rec loop
+                        (turn: int)
+                        (state: GameState)
+                        (streams: SeatStream list)
+                        (actions: Action list)
+                        found
+                        =
+                        let sofar = found @ at turn state streams
+
+                        match actions with
+                        | [] -> sofar
+                        | action :: rest ->
+                            match GameState.step state action with
+                            | Error illegal -> sofar @ [ $"{label} 第 {turn} 手：{IllegalAction.toDisplay illegal}" ]
+                            | Ok(next, produced) ->
+                                let carried =
+                                    streams
+                                    |> List.map (fun stream ->
+                                        (stream, produced)
+                                        ||> List.fold (fun current event -> SeatStream.advance event current))
+
+                                loop (turn + 1) next carried rest sofar
+
+                    loop 0 kyoku.Opening seeded kyoku.Actions [])
+
+    /// **真牌谱那一路**（票 99）：座席看到的历史就是掩蔽流 fold 出来的那份观测（票 29a），
+    /// 浏览器里的回放与 Agent 收到的观测都走它。`kakan` 一播出去 fold 就把那组碰原地升成了杠，
+    /// 而引擎要等杠成立才动——**被抢之后那个杠永远不成立，fold 那份却一直显示着它**。
+    ///
+    /// 摊好牌山的锚点证明它在实验室里修好了；这一条证明**真牌谱回放到那一局也修好了**：
+    /// 照 `Replay.trace`（页面回放那条路）逐手推进，每一手四条掩蔽流各推一步，
+    /// 与引擎的权威状态逐字段对，并且盯着「那个被抢掉的杠有没有冒到牌桌上」。
+    [<Fact>]
+    let ``真牌谱里的抢杠局：照回放那条路走一遍，牌桌上一次都没出现过那个被抢掉的杠`` () =
+        let kyokus = chankanKyokus.Value
+
+        // 判据 3：闸门要报执行次数。固件是按覆盖挑的，抢杠是挑法里点名的形态之一，
+        // 一局都没有就说明语料被换掉了——那时这条测试是空转，不是绿。
+        Assert.True(not (List.isEmpty kyokus), "固件里一局抢杠都没有：这条闸门已经退化成空转了")
+
+        let found = kyokus |> List.collect (fun (label, events) -> replayDrift label events)
+
+        Assert.True(List.isEmpty found, found |> List.truncate 20 |> String.concat "\n")

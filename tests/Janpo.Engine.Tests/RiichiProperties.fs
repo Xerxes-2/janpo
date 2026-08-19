@@ -32,13 +32,21 @@ module RiichiProperties =
         | None -> RiichiState.none
 
     /// 最后一条事件是不是鸣牌（**三种杠也算**：它们同样打断全场的一发）。
+    ///
+    /// **暗杠 / 加杠的宣言还不算**（票 99）：引擎要等抢杠那一轮收齐才 `applyKan`，
+    /// 而一发就是在 `applyKan` 里打断的。被抢掉的那个杠更是从来没发生过，
+    /// 抢杠和了的那家因此拿得到「立直 + 一发 + 抢杠」——**引擎给的是对的**，
+    /// 从前是这条判据把宣言当成了鸣牌（票 98 §4 第三类）。
+    ///
+    /// 杠一成立，引擎当场就接上 `dora` / `tsumo`，因此「最后一条是杠的宣言」与
+    /// 「正停在抢杠那一轮」是同一件事。
     let private lastIsNaki (state: GameState) : bool =
         match List.tryLast (GameState.events state) with
         | Some(Pon _)
         | Some(Chi _)
-        | Some(Ankan _)
-        | Some(Kakan _)
         | Some(Minkan _) -> true
+        | Some(Ankan _)
+        | Some(Kakan _) -> ChankanFixtures.phaseOf state |> Option.isNone
         | Some(StartGame _)
         | Some(StartKyoku _)
         | Some(Tsumo _)
@@ -363,3 +371,16 @@ module RiichiProperties =
 
         Assert.True(accepted > 0, $"40 局里一次立直都没有：{accepted}")
         Assert.NotEmpty(horasWithRiichi)
+
+    // ---- 抢杠那个窗口的定点锚点（票 99）----
+
+    /// **一发那条的随机部分到不了「杠宣言了、还没成立」那一段**（全域里 `ResponseCause.Kan`
+    /// 的局面 0 个），而它的 `lastIsNaki` 把 `Kakan` / `Ankan` **宣言**也算成了鸣牌，
+    /// 于是在那一刻就要求全场没有一发。**引擎是对的**：被抢的那个杠没有发生，因此它不打断一发，
+    /// 抢杠和了的那家拿得到「立直 + 一发 + 抢杠」（票 98 §4 第三类，票 99 改了那条判据）。
+    ///
+    /// 三条轨迹里只有「抢的那家先立直」那一条同时摆得出「一发亮着 + 杠宣言中」，
+    /// 另外两条把这条锚点里的其余局面也顺带扫一遍。
+    [<Fact>]
+    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，一发那条仍然成立`` () =
+        ChankanFixtures.sweep ChankanFixtures.traces [ "一发", ``一发只可能亮在立直成立的那家头上，任何鸣牌之后全场都没有一发`` ]

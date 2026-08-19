@@ -8,6 +8,11 @@
 // 票 98 的判决就是照第 2、3 问的数下的：挂上去只买到一趟 47%，却当场把七条现成的属性按红
 // （两条轨迹合起来十条），因此那两条轨迹挂在 `KanProperties` 的定点锚点上（每趟 100%），不进取值域表。
 //
+// **票 99 把那十条红收了九条**：第四类（观测 / 决策包 / 掩蔽流）是 fold 的真 bug，修在
+// `SeatStream` 里；第一 / 二 / 三类是那三条断言自己写错了，各自改在断言侧。
+// 剩下的一条是术语问题——`Masked/不出现他家暗牌` 在**国士抢暗杠**那个窗口里本来就不成立：
+// 那四张牌必须亮给别家看，而它们在引擎里仍是暗牌。它要的是术语裁决，不是把断言调松。
+//
 //   nix develop --command dotnet build -c Release
 //   dotnet fsi --exec scripts/fsi/chankan-trace.fsx
 
@@ -302,6 +307,19 @@ sweep "国士抢暗杠（雀魂）" ankanStates
 let printObservationDrift (label: string) (states: GameState list) =
     printfn "== %s：观测 vs 引擎的权威状态 ==" label
 
+    let drifted =
+        states
+        |> List.filter (fun state ->
+            Seat.all ruleset
+            |> List.exists (fun seat ->
+                Observation.ofState seat state
+                |> Option.map (ObservationFixtures.mismatches seat state)
+                |> Option.map (List.isEmpty >> not)
+                |> Option.defaultValue false))
+
+    if List.isEmpty drifted then
+        printfn "逐步、逐座位、逐字段全对得上"
+
     states
     |> List.iteri (fun index state ->
         let drift =
@@ -339,38 +357,19 @@ let printObservationDrift (label: string) (states: GameState list) =
     printfn ""
 
 printObservationDrift "加杠抢杠" kakanStates
+printObservationDrift "国士抢暗杠（雀魂）" ankanStates
 
-// ---- 五、同一座牌山，抢的那家先立直：一发那条也红（票 98 报的第四类）----
+// ---- 五、同一座牌山，抢的那家先立直：一发那条也红（票 98 报的第三类）----
 //
-// 固件里的 `chankanSeeking` 不宣言立直，因此这一支只在探针里跑：座位 2 在第 3 步立直，
-// 抢杠时和的是「立直 + 一发 + 抢杠」——而 `RiichiProperties` 那条一发的属性
-// 把 `Kakan` 事件当成鸣牌，于是在**杠还没成立**的那一刻就要求全场没有一发。
+// 座位 2 在第 3 步立直，抢杠时和的是「立直 + 一发 + 抢杠」——而 `RiichiProperties` 那条
+// 一发的属性把 `Kakan` **宣言**当成鸣牌，于是在杠还没成立的那一刻就要求全场没有一发。
+// 票 99 把那条判据改对了，并把这条轨迹从探针搬进了固件（`chankanRiichiTrace`）——
+// 四族属性的定点锚点现在每趟都跑它，探针这里只是把同一条轨迹摄下来给人看。
 
-let riichiFirst: Player<Rng> =
-    fun rng state choice ->
-        let riichi =
-            choice.Actions
-            |> List.tryFind (fun action ->
-                match action with
-                | Action.Riichi _ -> true
-                | Action.Dahai _
-                | Action.Hora _
-                | Action.Pon _
-                | Action.Chi _
-                | Action.Ankan _
-                | Action.Kakan _
-                | Action.Minkan _
-                | Action.Ryuukyoku _
-                | Action.None _ -> false)
+let riichiStates = chankanRiichiTrace chankanScript
 
-        match riichi with
-        | Some declaration -> declaration, rng
-        | None -> chankanSeeking rng state choice
-
-let riichiStates =
-    traceFrom riichiFirst (Rng.ofSeed 1) (startScripted chankanScript)
-
-printTrace "加杠抢杠（抢的那家先立直，只在探针里跑）" riichiStates
+printTrace "加杠抢杠（抢的那家先立直）" riichiStates
 sweep "加杠抢杠（抢的那家先立直）" riichiStates
+printObservationDrift "加杠抢杠（抢的那家先立直）" riichiStates
 
 printfn "取值域里现在有几个抢杠局面：跑 scripts/fsi/arbitrary-coverage.fsx 看 `chankan` 那一行（票 98 时是 0）。"

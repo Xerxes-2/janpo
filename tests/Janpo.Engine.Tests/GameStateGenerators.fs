@@ -1222,6 +1222,32 @@ module GameStateFixtures =
 
             chosen, rng
 
+    /// 见立直就立直，其余照 `chankanSeeking`。
+    ///
+    /// **它是为「抢的那家先立直」那条轨迹来的**（票 99）：抢杠时和的是
+    /// 「立直 + 一发 + 抢杠」，而一发要活到那一刻就得有人先立直。
+    /// `riichiSeeking` 代替不了：它从不碰，而加杠要先有人碰。
+    let chankanRiichiSeeking: Player<Rng> =
+        fun rng state choice ->
+            let declaration =
+                choice.Actions
+                |> List.tryFind (fun action ->
+                    match action with
+                    | Action.Riichi _ -> true
+                    | Action.Dahai _
+                    | Action.Hora _
+                    | Action.Pon _
+                    | Action.Chi _
+                    | Action.Ankan _
+                    | Action.Kakan _
+                    | Action.Minkan _
+                    | Action.Ryuukyoku _
+                    | Action.None _ -> false)
+
+            match declaration with
+            | Some riichi -> riichi, rng
+            | None -> chankanSeeking rng state choice
+
     /// 用给定选手推进，直到 `until` 成立或这一局终了。黄金用例用它跑到「有事发生」的那一步，
     /// 再自己提交那一手关键动作。
     let driveUntil (player: Player<Rng>) (until: GameState -> bool) (state: GameState) : GameState =
@@ -1286,6 +1312,14 @@ module GameStateFixtures =
         let soul = Ruleset.withKokushiAnkanChankan ruleset
 
         traceFrom kanSeeking (Rng.ofSeed 1) (startScriptedWith soul script)
+
+    /// 一局**抢的那家先立直**的抢杠：同一座 `chankanScript` 的牌山，只换选手。
+    /// 十步里第 8 步就是抢杠那一轮，和了是**立直 + 一发 + 抢杠**（3 番 40 符 5200 点）。
+    ///
+    /// **它为一发那条不变量来的**（票 99）：被抢的杠没有发生，因此它不打断一发——
+    /// 少了这条轨迹，「杠宣言了、还没成立」与一发同时在场的局面一个也到不了。
+    let chankanRiichiTrace (script: Script) : GameState list =
+        traceFrom chankanRiichiSeeking (Rng.ofSeed 1) (startScripted script)
 
     /// 一局**必然有人立直**的全部局面：摊好的立直剧本 + 见立直就立直的选手。
     ///

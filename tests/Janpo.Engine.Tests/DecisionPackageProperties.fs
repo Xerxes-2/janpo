@@ -1,5 +1,6 @@
 namespace Janpo.Engine.Tests
 
+open Xunit
 open FsCheck.FSharp
 open FsCheck.Xunit
 open Janpo
@@ -90,58 +91,80 @@ module DecisionPackageProperties =
 
             List.length (List.distinct labels) = List.length labels)
 
-    [<Property>]
-    let ``任意局面，包里的历史 fold 出来的就是包里的那份观测`` (state: GameState) =
+    /// 「包里的历史 fold 出来的就是包里的那份观测」的全部分歧。**它就是下面那条属性的判据本身**：
+    /// 抽成具名函数只为了抢杠那个窗口的定点锚点能跑**同一份**判据而不是复制品
+    /// （票 99；判据 3：另写一份就会各自飘）——断言本身一个字未改。
+    let historyFoldDivergences (state: GameState) : string list =
         // **两种形态构造性一致**（票 29b 第零节）：前缀是掩蔽事件流，尾部是它的 fold。
         // 对不上就意味着模型看到的是自相矛盾的输入，而我们无从判断该信哪个。
         //
         // **「两者相同」不够**（票 61）：两侧是同一个 fold，一起错就一起对得上。
         // 因此尾部那份观测还要钉在引擎的权威状态上——那一侧不掩蔽、不 fold。
-        let found =
-            packagesOf state
-            |> List.collect (fun package ->
-                let seat = DecisionPackage.seat package
-                let observation = DecisionPackage.observation package
+        packagesOf state
+        |> List.collect (fun package ->
+            let seat = DecisionPackage.seat package
+            let observation = DecisionPackage.observation package
 
-                let folded = DecisionPackage.history package |> Observation.ofMasked ruleset seat
+            let folded = DecisionPackage.history package |> Observation.ofMasked ruleset seat
 
-                let sameFold =
-                    if folded = Some observation then
-                        []
-                    else
-                        [ divergence seat "历史 fold vs 包里的观测" "整份观测" ]
+            let sameFold =
+                if folded = Some observation then
+                    []
+                else
+                    [ divergence seat "历史 fold vs 包里的观测" "整份观测" ]
 
-                sameFold @ anchored seat state "包里的观测 vs 引擎状态" observation)
+            sameFold @ anchored seat state "包里的观测 vs 引擎状态" observation)
+
+    [<Property>]
+    let ``任意局面，包里的历史 fold 出来的就是包里的那份观测`` (state: GameState) =
+        let found = historyFoldDivergences state
 
         List.isEmpty found |> Prop.label (toDisplay found)
 
-    [<Property>]
-    let ``任意局面，包里的历史就是那条唯一的掩蔽流`` (state: GameState) =
+    /// 「包里的历史就是那条唯一的掩蔽流」的全部分歧。抽它的理由同上（票 99）。
+    let onlyMaskedStreamDivergences (state: GameState) : string list =
         // 没有第二处判断「某座位能看见什么」（29a 的一条掩蔽法则）。
         //
         // **右侧不是另一份同源的流**（票 61）：与那条唯一的掩蔽法则对，只证明包没把
         // 两个字段建在不同的座位或不同的局面上；掩蔽法则自己坏了，两侧一起坏。
         // 因此还要把这条流 **fold 出来的观测**钉在引擎的权威状态上。
-        let found =
-            packagesOf state
-            |> List.collect (fun package ->
-                let seat = DecisionPackage.seat package
-                let history = DecisionPackage.history package
+        packagesOf state
+        |> List.collect (fun package ->
+            let seat = DecisionPackage.seat package
+            let history = DecisionPackage.history package
 
-                let sameStream =
-                    if history = Observation.stream seat state then
-                        []
-                    else
-                        [ divergence seat "包里的历史 vs 唯一那条掩蔽流" "整条流" ]
+            let sameStream =
+                if history = Observation.stream seat state then
+                    []
+                else
+                    [ divergence seat "包里的历史 vs 唯一那条掩蔽流" "整条流" ]
 
-                let leg = "包里的历史 fold 出来的观测 vs 引擎状态"
+            let leg = "包里的历史 fold 出来的观测 vs 引擎状态"
 
-                // 座位不在规则集里时 fold 不出观测——但包存在就说明引擎正在问这个座位，因此那也是一处分歧。
-                let foldsToObservation =
-                    match Observation.ofMasked ruleset seat history with
-                    | None -> [ divergence seat leg "观测缺席" ]
-                    | Some folded -> anchored seat state leg folded
+            // 座位不在规则集里时 fold 不出观测——但包存在就说明引擎正在问这个座位，因此那也是一处分歧。
+            let foldsToObservation =
+                match Observation.ofMasked ruleset seat history with
+                | None -> [ divergence seat leg "观测缺席" ]
+                | Some folded -> anchored seat state leg folded
 
-                sameStream @ foldsToObservation)
+            sameStream @ foldsToObservation)
+
+    [<Property>]
+    let ``任意局面，包里的历史就是那条唯一的掩蔽流`` (state: GameState) =
+        let found = onlyMaskedStreamDivergences state
 
         List.isEmpty found |> Prop.label (toDisplay found)
+
+    // ---- 抢杠那个窗口的定点锚点（票 99）----
+
+    /// 上面两条的随机部分都到不了抢杠那个窗口（全域里 `ResponseCause.Kan` 的局面 0 个），
+    /// 而包里的观测与历史恰恰在那一段与引擎分过家（票 98 §4 第四类，票 99 修掉）：
+    /// 模型与真人坐席当时看到的就是一个**从未成立的杠**。
+    [<Fact>]
+    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，包里那两个字段仍钉得住`` () =
+        ChankanFixtures.sweep
+            ChankanFixtures.traces
+            [
+                "历史 fold", historyFoldDivergences >> List.isEmpty
+                "唯一掩蔽流", onlyMaskedStreamDivergences >> List.isEmpty
+            ]

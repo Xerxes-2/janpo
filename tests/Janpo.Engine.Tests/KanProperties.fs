@@ -30,10 +30,17 @@ module KanProperties =
 
     let private engine = Ruleset.yonma
 
+    /// 一局里事件流记下的那些杠，**去掉没成立的那一个**（抢杠那个窗口，票 99）。
+    ///
+    /// 下面两个 fold 都从它起算：引擎那侧无论是杠数还是欠着的宝牌指示牌，都只在
+    /// **杠成立**那一刻才动（`applyKan` / `revealPendingKanDora`），而宣言不改局面。
+    let private establishedKanEvents (state: GameState) : Event list =
+        GameState.events state |> ChankanFixtures.withoutUnestablishedKan
+
     /// 一局里成立过几个杠：`ankan` / `kakan` / `daiminkan` 三种事件的条数。
     /// 引擎的 `GameState.kanCount` 数的是副露，这里从事件流重新数一遍——两条路径对上才算数对。
     let private kanEvents (state: GameState) : int =
-        GameState.events state
+        establishedKanEvents state
         |> List.filter (fun event ->
             match event with
             | Ankan _
@@ -87,10 +94,10 @@ module KanProperties =
     /// （票 64 把还账故意弄坏实证：这里 9 条照样全绿）；真正守着它的是 KanTests 的
     /// 连杠具名用例与真牌谱对拍，两处都红过。
     ///
-    /// 前提与 `kanEvents` 同一条：被抢的那个杠不算成立（那时事件数与 `kanCount` 就对不上了，
-    /// 下面那条合取先报）。
+    /// 前提与 `kanEvents` 同一条：被抢的（或还挂在抢杠那一轮上的）那个杠不算成立，
+    /// 因此也不欠一张指示牌、不把前一杠欠的那张还清——两件事都在 `applyKan` 之后（票 99）。
     let private pendingKanDora (state: GameState) : int =
-        (0, GameState.events state)
+        (0, establishedKanEvents state)
         ||> List.fold (fun pending event ->
             match event with
             // 明杠：前一杠欠的在这一刻还清，换成它自己欠一张。
@@ -251,88 +258,29 @@ module KanProperties =
 
     // ---- 摊好牌山的抢杠锚点（采样到不了那一支，判据 1 / 3 / 4）----
 
-    /// 抢杠那一轮的响应阶段（不是那一轮就是 `None`）。
-    /// **不能拿「最后一条事件是杠」当判据**：宣言杠不改局面，而杠成立时引擎当场就接上
-    /// `dora` / `tsumo`，两边的最后一条事件都不是杠。
-    let private chankanPhaseOf (state: GameState) : AwaitingResponse option =
-        match GameState.phase state with
-        | AwaitingResponse phase ->
-            match phase.Cause with
-            | ResponseCause.Kan _ -> Some phase
-            | ResponseCause.Dahai -> None
-        | AwaitingDahai _
-        | Ended _ -> None
-
-    /// 两条**摊好牌山**的抢杠轨迹，两种成因各一条：
-    ///
-    /// - **加杠**（默认规则集）：座位 1 碰了 Oya 的 5s，一圈之后摸进第四张加杠，
-    ///   座位 2 抢它（无役 ⇒ 之前那张 5s 它压根没被问，因此不振听；抢杠本身就是役）；
-    /// - **暗杠**（雀魂规则集）：国士抢暗杠，天凤禁、雀魂允（`KokushiAnkanChankan`）。
-    ///
-    /// 后一条**取值域里永远不可能出现**（那张表只用默认规则集），只有锚点守得住它。
-    let private scriptedChankanTraces =
-        [
-            "加杠抢杠（天凤）", NakiKind.Kakan, chankanTrace chankanScript
-            "国士抢暗杠（雀魂）", NakiKind.Ankan, kokushiChankanTrace kokushiChankanScript
-        ]
-
     /// 锚点逐步验的不变量：**跑的就是上面那几条随机属性的函数本身**，不另写一份
     /// （另写一份就会各自飘，而那正是判据 3 抱怨的「看着在守」）。
     ///
-    /// **`杠数与新宝牌` 不在这张表里**，而且不是因为它不重要：它在抢杠局面上就是红的
-    /// （它把 `Kakan` 事件当成立的杠数，而被抢的那个杠不成立，`GameState.kanCount` 是 0）——
-    /// `pendingKanDora` 的注释自己写着这一条前提。把它排在外面是**显式记下这件事**（判据 4），
-    /// 不是把它调松；它与另外七条在抢杠局面上的红写在票 98 的报告里，归另一票。
+    /// **`杠数与新宝牌` 票 98 时排在外面，票 99 把它收了回来**：当时它在抢杠局面上是红的
+    /// （把被抢的 `Kakan` 事件当成立的杠数，而 `GameState.kanCount` 不算它）——
+    /// 那是**断言自己写错了**，不是引擎错；票 99 把那两个从事件流重数的 fold 排掉了被抢的那个杠。
     let private chankanInvariants: (string * (GameState -> bool)) list =
         [
             "王牌张数", ``王牌恒是规则集给的那么多张：杠取走一张岭上牌，可摸区就补进一张``
             "可摸区张数", ``可摸区每杠少一张：剩余张数恒等于「开局可摸张数 − 已摸 − 杠数」``
+            "杠数与新宝牌", ``杠数与新宝牌：每个杠翻一张，明杠那张欠到下一次杠或下一次打牌``
             "杠后牌数守恒", ``杠后牌数守恒：一组杠仍旧只折三张暗牌``
             "杠的副露牌种唯一", ``杠的副露里牌种唯一、四张齐全``
             "杠只在摸完牌那一手", ``摸牌后阶段的杠只在自己摸完牌那一手出现，且杠数没到上限``
             "抢杠那一轮的形状", ``抢杠那一轮只有荣和与「过」，宣言杠的那家不在被问之列``
         ]
 
-    /// **票 98 的定点锚点**：两条摊好牌山的抢杠轨迹逐步验上面那几条不变量，
-    /// **并先自证抢杠那一轮真的到过**（两种成因各至少一个，且那一轮真在问荣和）——
-    /// 少了这几句自证，锚点会悄悄退化成空转，而那正是这一票要治的毛病（判据 3）。
+    /// **票 98 的定点锚点**：三条摊好牌山的抢杠轨迹逐步验上面那几条不变量，
+    /// 并先自证抢杠那一轮真的到过（两种成因各至少一个，且那一轮真在问荣和）——
+    /// 两件事都在 `ChankanFixtures.sweep` 里，四族属性的锚点共用它（票 99）。
     [<Fact>]
-    let ``摊好牌山的两条抢杠轨迹：抢杠那一轮真的到过，杠的不变量逐步都成立`` () =
-        for label, kind, states in scriptedChankanTraces do
-            let phases = states |> List.choose chankanPhaseOf
-
-            match phases with
-            | [] -> failwith $"{label} 这条轨迹里一个抢杠局面都没有：它已经退化成空转了"
-            | _ ->
-                for phase in phases do
-                    match phase.Cause with
-                    | ResponseCause.Kan kan -> Assert.Equal<NakiKind>(kind, Naki.kind kan)
-                    | ResponseCause.Dahai -> failwith $"{label} 的抢杠局面竟然不是对杠的响应"
-
-                    // 被问的那几家里真的有人抢得了：否则那条属性的内层 forall 仍旧是空转。
-                    let asked =
-                        phase.Responses
-                        |> List.filter (fun choice ->
-                            choice.Actions
-                            |> List.exists (fun action ->
-                                match action with
-                                | Action.Hora _ -> true
-                                | Action.Dahai _
-                                | Action.Pon _
-                                | Action.Chi _
-                                | Action.Riichi _
-                                | Action.Ankan _
-                                | Action.Kakan _
-                                | Action.Minkan _
-                                | Action.Ryuukyoku _
-                                | Action.None _ -> false))
-
-                    Assert.True(not (List.isEmpty asked), $"{label} 的抢杠那一轮没有任何一家被问荣和：那一支仍是空转")
-
-                states
-                |> List.iteri (fun index state ->
-                    for invariant, predicate in chankanInvariants do
-                        Assert.True(predicate state, $"{label} 第 {index} 步破了「{invariant}」"))
+    let ``摊好牌山的抢杠轨迹：抢杠那一轮真的到过，杠的不变量逐步都成立`` () =
+        ChankanFixtures.sweep ChankanFixtures.traces chankanInvariants
 
     // ---- 责任支付 ----
 

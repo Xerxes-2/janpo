@@ -1,5 +1,6 @@
 namespace Janpo.Engine.Tests
 
+open Xunit
 open FsCheck.Xunit
 open Thoth.Json.Newtonsoft
 open Janpo
@@ -54,19 +55,27 @@ module GameStateProperties =
 
     [<Property>]
     let ``等着打牌的那家 14 张，自摸和了的那家 14 张，其余各家 13 张`` (state: GameState) =
+        // 抢杠**收尾**那一刻仍握着刚摸进那张的那家（票 99）：那个杠从来没成立，
+        // 副露仍是碰、手里仍是 11 张，而它既不是「等着打牌的那家」也不是自摸和了的那家。
+        let robbedDeclarer () =
+            ChankanFixtures.robbedKan state |> Option.map (fun robbed -> robbed.Declarer)
+
         let holdingFourteen =
             match GameState.phase state with
             | AwaitingDahai phase -> Some phase.Actor
-            // 荣和的那张留在放铳者的河里，和了的那家仍是 13 张（牌数守恒也靠这条）。
+            // 荣和的那张留在放铳者的河里，和了的那家仍是 13 张（牌数守恒也靠这条）；
+            // 抢杠收尾时没有自摸和了的那家，握着第十四张的是被抢的那家。
             | Ended(KyokuEnd.Hora horas) ->
                 horas
                 |> List.tryPick (fun hora -> if hora.Actor = hora.Target then Some hora.Actor else None)
+                |> Option.orElseWith robbedDeclarer
             // 抢杠的那一段：杠宣言了还没成立，宣言的那家手里仍握着刚摸进的那张。
             | AwaitingResponse phase ->
                 match phase.Cause with
                 | ResponseCause.Kan _ -> Some phase.Target
                 | ResponseCause.Dahai -> None
-            | Ended(KyokuEnd.Ryuukyoku _) -> None
+            // 三家抢同一个杠时途中流局收场，握着第十四张的同样是被抢的那家。
+            | Ended(KyokuEnd.Ryuukyoku _) -> robbedDeclarer ()
 
         GameState.players state
         |> Seat.indexed
@@ -301,3 +310,15 @@ module GameStateProperties =
                 result.Deltas |> List.forall (fun delta -> delta = 0)
             else
                 List.forall2 (fun tenpai delta -> if tenpai then delta > 0 else delta < 0) result.Tenpais result.Deltas
+
+    // ---- 抢杠那个窗口的定点锚点（票 99）----
+
+    /// **`14 张` 那条的随机部分到不了抢杠那个窗口**（`GameStateArbitraries` 的全域里
+    /// `ResponseCause.Kan` 的局面是 0 个，票 96 / 97 / 98 三把尺子量出同一个数）。
+    /// 它在那个窗口里有两支：宣言那一轮（属性里写着的 `ResponseCause.Kan` 那一支），
+    /// 与**抢杠收尾那一刻**——被抢的那家手里仍握着刚摸进的那张，而它既不是「等着打牌的那家」
+    /// 也不是自摸和了的那家。后一支票 98 时是红的（`98-chankan-never-sampled.md` §4 第二类），
+    /// 票 99 把「抢杠收尾」补进了那条属性的终局形态里。
+    [<Fact>]
+    let ``抢杠那个窗口：三条摊好牌山的轨迹逐步，各家手牌张数都对得上`` () =
+        ChankanFixtures.sweep ChankanFixtures.traces [ "14 张", ``等着打牌的那家 14 张，自摸和了的那家 14 张，其余各家 13 张`` ]

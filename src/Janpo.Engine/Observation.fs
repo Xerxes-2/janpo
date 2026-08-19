@@ -287,6 +287,18 @@ type SeatStream =
             SelfJunme: int
             /// 他家，按**下家、对家、上家**的顺序（投影要的就是这个顺序）。
             Others: MaskedSeat list
+            /// **宣言了、还没成立的那个杠**（抢杠那个窗口）：谁宣言的，与拼出来的那组副露。
+            ///
+            /// 引擎的 `declareKan` 在这一段**不改局面**（宣言不改局面，因此被抢时无需回滚），
+            /// 因此 fold 这一侧也得等：`ankan` / `kakan` 一播出去只把它记在这里，
+            /// 下一条事件才宣告结局——是荣和（或三家抢同一个杠判成的途中流局）就原地作废，
+            /// 其余每一条都意味着那个杠成立了，这时才升那组副露、才打断一发。
+            ///
+            /// **票 99 之前这里没有等**：宣言那一刻 fold 就把碰升成了杠、把那张牌从手里拿走，
+            /// 于是抢杠那一轮两边差一张牌、差一个副露种类；而被抢之后那个杠永远不成立，
+            /// fold 那份再也没回滚——座席的历史、浏览器的回放与 Agent 的观测因此都会显示
+            /// **一个从未成立的杠**。
+            DeclaredKan: (Seat * Naki) option
             Kyotaku: int
             DoraMarkers: Tile list
             WallRemaining: int
@@ -322,6 +334,7 @@ module SeatStream =
             SelfKawa = []
             SelfJunme = 0
             Others = []
+            DeclaredKan = None
             Kyotaku = 0
             DoraMarkers = []
             WallRemaining = 0
@@ -374,6 +387,9 @@ module SeatStream =
             SelfKawa = []
             SelfJunme = 0
             Others = others
+            // 一条流里多局相接，前一局要是停在抢杠那一轮上（走不到：那一轮必然当场收场），
+            // 宣言中的那个杠也不该跨到这一局来。
+            DeclaredKan = None
             Kyotaku = fields.Kyotaku
             DoraMarkers = [ fields.DoraMarker ]
             // 可摸区的张数是规则集算得出来的：整副牌减王牌再减配牌。
@@ -442,8 +458,18 @@ module SeatStream =
             Ippatsu = false
         }
 
+    /// 鸣了一组落到自家身上：加杠是把原来那组碰**原地换成杠**（`PlayerState.addKakan`），
+    /// 其余四种追在末尾。与引擎那侧的 `applyKan` / `applyNaki` 逐字同形。
+    let private addNakiTo (naki: Naki) (player: PlayerState) : PlayerState =
+        match Naki.kind naki, Naki.taken naki with
+        | NakiKind.Kakan, Some added -> PlayerState.addKakan added naki player
+        | _ -> PlayerState.addNaki naki player
+
     /// 一发被打断：**任何鸣牌（碰 / 吃与三种杠）都把全场的一发打掉**，鸣的那家自己也算在内
     /// （与 `GameState.interruptIppatsu` 同一条规则）。
+    ///
+    /// **杠在成立那一刻才打断它**（引擎里这一句在 `applyKan` 里，不在 `declareKan` 里）：
+    /// 被抢的那个杠没有发生，因此它不打断一发——抢杠和了的那家拿得到「立直 + 一发 + 抢杠」。
     let private interruptIppatsu (stream: SeatStream) : SeatStream =
         { stream with
             Self = stream.Self |> Option.map PlayerState.clearIppatsu
@@ -578,13 +604,46 @@ module SeatStream =
                 else
                     cleared
 
+    /// 下一条事件宣告那个宣言中的杠**没有发生**吗：抢杠的荣和，或三家抢同一个杠
+    /// 被判成的途中流局（`SanchaHora`）——两条路引擎都不跑 `applyKan`。
+    ///
+    /// 其余每一条都意味着那个杠成立了：成立那一刻引擎当场接上翻宝牌与补摸岭上牌
+    /// （`completeKan`），因此宣言之后不可能什么事也不发生。
+    /// 四杠散了不在此列：它要等杠的那家打完一张才判（`Ryuukyoku.afterDahai`），
+    /// 那时这个杠早已落定。
+    let private robsDeclaredKan (next: MaskedEvent) : bool =
+        match MaskedEvent.publicEvent next with
+        | Some(Hora _) -> true
+        | Some(Ryuukyoku fields) -> fields.Reason = SanchaHora
+        | _ -> false
+
+    /// 宣言中的那个杠遇上下一条事件：要么成立（副露升级、手里那几张离手、全场一发打断），
+    /// 要么**原地作废**（被抢掉了，那个杠从来没有发生，因此也无需回滚）。
+    ///
+    /// **它与引擎同时动**：引擎那侧是响应收齐后的 `applyKan`，而 `applyKan` 当场就会
+    /// 产出下一条事件（`dora` / `tsumo`）——fold 这一侧看到那条事件就是看到了那一刻。
+    let private settleDeclaredKan (next: MaskedEvent) (stream: SeatStream) : SeatStream =
+        match stream.DeclaredKan with
+        | None -> stream
+        | Some(actor, naki) ->
+            let cleared = { stream with DeclaredKan = None }
+
+            if robsDeclaredKan next then
+                cleared
+            else
+                cleared |> mapSeat actor (addNakiTo naki) (withNaki naki) |> interruptIppatsu
+
     /// 吃一条**已经掩蔽好的**事件。
     ///
     /// **fold 的全部输入就是它**：这个函数看不到未掩蔽的事件，也看不到 `GameState`——
     /// 「观测是掩蔽流的 fold」因此是类型上的事实而不是约定。
+    ///
+    /// **先把上一条宣言的杠结了**（`settleDeclaredKan`）：那个杠成不成立，答案就写在
+    /// 手里这一条事件上。两步互不相干：一步改副露与一发，另一步（挂着的那张荣和）改振听。
     let absorb (masked: MaskedEvent) (stream: SeatStream) : SeatStream =
         let viewer = stream.Viewer
-        let resolved = resolvePendingRon masked stream
+        let settled = settleDeclaredKan masked stream
+        let resolved = resolvePendingRon masked settled
 
         let advanced =
             match masked with
@@ -641,27 +700,30 @@ module SeatStream =
                     { withKawa with
                         PendingRon = actor <> viewer && canRon None pai withKawa
                     }
+                // 碰 / 吃 / 大明杠都是**既成事实**：事件播出去的那一刻引擎早已落定（它们是对打牌的
+                // 响应，而响应收齐才产事件），因此这一侧当场就改。
                 | Pon(actor, _, _, _)
                 | Chi(actor, _, _, _)
-                | Minkan(actor, _, _, _)
+                | Minkan(actor, _, _, _) ->
+                    match nakiOf (meldsOf actor resolved) event with
+                    | None -> resolved
+                    | Some naki -> resolved |> mapSeat actor (addNakiTo naki) (withNaki naki) |> interruptIppatsu
+                // 暗杠 / 加杠只是**宣言**：引擎要先问抢杠，都不要这个杠它才成立（`declareKan`）。
+                // **宣言不改局面**，因此这里只把它记下来，等下一条事件宣告结局（`settleDeclaredKan`）：
+                // 升副露、拿牌、打断一发都得等到那一刻。不等的后果是票 99：
+                // 被抢之后那个杠永远不成立，而牌桌上一直摆着它。
                 | Ankan(actor, _)
                 | Kakan(actor, _, _) ->
-                    let called =
+                    let declared =
                         match nakiOf (meldsOf actor resolved) event with
                         | None -> resolved
                         | Some naki ->
-                            resolved
-                            |> mapSeat
-                                actor
-                                (fun player ->
-                                    match Naki.kind naki, Naki.taken naki with
-                                    | NakiKind.Kakan, Some added -> PlayerState.addKakan added naki player
-                                    | _ -> PlayerState.addNaki naki player)
-                                (withNaki naki)
-                            |> interruptIppatsu
+                            { resolved with
+                                DeclaredKan = Some(actor, naki)
+                            }
 
                     // 抢杠：宣言的那个杠可以被荣和（加杠任何牌型、暗杠只有国士）。
-                    // **宣言不改局面**，因此判据里的手牌就是当下这份。
+                    // 判据里的手牌就是当下这份——它本来就没变。
                     let robbed =
                         match event with
                         | Kakan(_, pai, _) -> Some(NakiKind.Kakan, pai)
@@ -671,10 +733,10 @@ module SeatStream =
 
                     match robbed with
                     | Some(kind, pai) when actor <> viewer ->
-                        { called with
-                            PendingRon = canRon (Some kind) pai called
+                        { declared with
+                            PendingRon = canRon (Some kind) pai declared
                         }
-                    | _ -> called
+                    | _ -> declared
                 | Dora doraMarker ->
                     { resolved with
                         DoraMarkers = resolved.DoraMarkers @ [ doraMarker ]

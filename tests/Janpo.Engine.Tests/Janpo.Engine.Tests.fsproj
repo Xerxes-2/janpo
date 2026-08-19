@@ -72,6 +72,9 @@
   <!-- 一局的状态机与各动作。此段顺序有依赖：后面的文件用到前面定义的生成器。 -->
   <ItemGroup>
     <Compile Include="GameStateGenerators.fs" />
+    <!-- 抢杠那个窗口的词汇与三条摊好牌山的轨迹（票 99）。排在这里是因为下面四族属性
+         各自都对那一段有一份判断，而随机采样一次也到不了它。 -->
+    <Compile Include="ChankanFixtures.fs" />
     <Compile Include="GameStateTests.fs" />
     <Compile Include="GameStateProperties.fs" />
     <Compile Include="HoraTests.fs" />
