@@ -33,6 +33,12 @@ jobs:
       #    仓库改名（或换成自定义域名，那时填 "/"）**只改这一行**，别处没有第二处写着路径。
       #    它经 vite.config.ts 的 JANPO_BASE 变成打包产物里的资源前缀。
       JANPO_BASE: /janpo/
+      # 强 AI 基线那份产物在仓库里的位置（票 101）。同样只写这一行：
+      # 下面取缓存与存缓存两步各引用它，两处写法不会漂。
+      # （真正造它的是 `scripts/build-baseline-wasm.sh`，那份脚本本机也要单跑，
+      # 所以它自己那一行路径没法从这里拿；两边对不上的下场是“发布件里没有它”，
+      # 而那正是下面那道闸门大声报的那件事。）
+      BASELINE_WASM: web/public/baseline/janpo-baseline.wasm
     steps:
       - uses: actions/checkout@v7
 
@@ -57,9 +63,81 @@ jobs:
       - name: 恢复 dotnet 本地工具（Fable）
         run: nix develop --command dotnet tool restore
 
+      # ★★ 强 AI 基线那 6 MB（票 101；ADR-0006）。
+      #
+      # 它**不入版本控制**（边界 6），所以发布前得在这里造一份——没人造就永远是线上那个 404。
+      # 造它的输入只有三样：造法（那两个脚本）、crate 源码与锁文件、上游钉死的 commit
+      # （它写在 fetch-upstream.sh 里）——**它们都不变时产物就不变**，所以缓存键就是它们的摘要。
+      #
+      # **为什么是缓存而不是每次现造**（票 45 的规矩：加缓存先量后加）：本机实测冷 target 目录
+      # 编一遍是 **43 s**（全机 32 线程 43.1 s / 限到 4 核 43.8 s——它是串行尾巴制约，加核没用），
+      # runner 单核慢一截，估 1.5–2.5 分钟；而这份缓存只有 4.8 MB（zstd 后），恢复是秒级。
+      # 与票 45 那次“缓存 20 s vs 冷拉 18 s = 净亏”不同，这里两边差两个数量级。数在报告 101 里。
+      #
+      # 用 restore/save 拆开而不是一个 `actions/cache`：只有**造成功**那一次才存，
+      # 否则一次失败的构建会把一个不存在的文件当缓存存进去。
+      # 键单独算一步，为的是那三行门神：**`hashFiles` 一个文件都匹配不上时不报错，它返回空字符串**
+      # （本机用 act 跑出过这一幕：键退化成 `baseline-wasm-Linux-`）。键一旦退化成常量，
+      # 「上游 pin 或 crate 改了就要重造」这条不变量会**静静地失效**，
+      # 站点从此永远发一份照旧源码造的产物——那比没有产物坏。
+      # 同时它把那一长串 `hashFiles` 收成一处（restore 与 save 不必各写一遍）。
+      - name: 算强 AI 基线产物的缓存键
+        id: baseline-key
+        shell: bash
+        run: |
+          digest='${{ hashFiles('scripts/build-baseline-wasm.sh', 'probe/akagi-wasm/fetch-upstream.sh', 'probe/akagi-wasm/crate/Cargo.toml', 'probe/akagi-wasm/crate/Cargo.lock', 'probe/akagi-wasm/crate/src/**', 'probe/akagi-wasm/crate/.cargo/config.toml') }}'
+          if [[ -z "$digest" ]]; then
+            echo "hashFiles 一个文件都没匹配上：造产物那几份输入的路径改了？这一步不能放行，" >&2
+            echo "否则缓存键会退化成常量，站点会永远发一份照旧源码造的产物。" >&2
+            exit 1
+          fi
+          echo "key=baseline-wasm-${{ runner.os }}-$digest" >> "$GITHUB_OUTPUT"
+
+      - name: 取上次造好的强 AI 基线产物
+        id: baseline-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.BASELINE_WASM }}
+          key: ${{ steps.baseline-key.outputs.key }}
+
+      # **没造出来不阻断部署**（`continue-on-error`）。这是故意的：站点上没有这份产物时
+      # 页面会**如实降级**（ADR-0006 边界 2：那一席退回自带 bot、其余席照常打完），
+      # 而把整个站扣下不发会连带拦住与它无关的十几样东西——它是**可选依赖，不是单点**。
+      # 它失败时那一步在 Actions 里是红的，下面那道闸门会在总结里大声说一句。
+      - name: 造强 AI 基线那份产物（缓存没命中才跑；失败不阻断部署）
+        id: baseline-build
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        # 不进 nix dev shell：需要的 rustup/cargo **runner 镜像自带**
+        # （2026-08-19 核过 actions/runner-images 的 Ubuntu2404-Readme：Rust/Cargo 1.97.1、Rustup 1.29.0，
+        # 与本机同一版）。**不把 Rust 塞进 `flake.nix`** 是量过的：那会给 dev shell
+        # 再添约 470 MiB 下载 / 1.6 GiB 解开（`nix build --dry-run nixpkgs#rustc` + `#cargo`），
+        # 而那份 shell **每一趟 CI 都要拉**（今天冷拉 18–21 s）——为一条只有 Pages 用得上的工具链
+        # 把每趟 CI 都拖慢，不划算。
+        run: ./scripts/build-baseline-wasm.sh
+
+      - name: 存起来给下一次部署用
+        if: steps.baseline-build.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.BASELINE_WASM }}
+          key: ${{ steps.baseline-cache.outputs.cache-primary-key }}
+
       # `pnpm run build` = `dotnet fable ../src/Janpo.Web` + `vite build` → web/dist
+      # Vite 把 `web/public/` 原样拷进 `dist/`，上面那份产物与 `third-party/` 的三份许可都走这一步。
       - name: 构建静态站（Fable + Vite）
         run: nix develop --command bash -c "cd web && pnpm run build"
+
+      # 发出去之前核一遍发布件：**许可随产物上线**（边界 4）、产物在的话得是一份像样的 wasm。
+      # 它把“这次到底发了什么”写进跑批总结（含 sha256），
+      # 于是“线上那份是不是这一份”变成一句可核对的话（报告 101 的“推完看什么”）。
+      #
+      # `shell: bash` 不是装饰：不写它时默认壳是 `bash -e {0}`，**没有 pipefail**，
+      # 于是 `脚本 | tee` 的退出码是 `tee` 的 0——这道闸门会变成一道**永远不会红的闸门**。
+      # （这不是推论：本机 act 跑第一版时脚本根本没找到，那一步依旧报了 ✅。）
+      - name: 核一遍发布件
+        shell: bash
+        run: ./scripts/check-pages-dist.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/configure-pages@v6
 

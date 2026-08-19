@@ -30,25 +30,33 @@ CI 的常规趟就是这个形态——那里没有这份产物，因此**跑到
 ## 怎么造一份放进来
 
 ```sh
-cd probe/akagi-wasm
-./fetch-upstream.sh                 # 拉上游 native_bot（约 5 MB，含权重）到 .upstream/
-
-# CARGO_TARGET_DIR 挪到 /tmp 是因为 target/ 有 800 MB+，不该躺在工作区里。
-(cd crate && CARGO_TARGET_DIR=/tmp/janpo-probe-target \
-   cargo build --release --target wasm32-unknown-unknown)
-
-cp /tmp/janpo-probe-target/wasm32-unknown-unknown/release/akagi_wasm_probe.wasm \
-   ../../web/public/baseline/janpo-baseline.wasm
+./scripts/build-baseline-wasm.sh    # 拉上游 + cargo 编 wasm + 放进这个目录，一条命令
 ```
 
-要 `wasm32-unknown-unknown` target（`rustup target add wasm32-unknown-unknown`），
+本机冷跑（空 target 目录）实测 **43 s**；已经编过一遍的话几秒。
+`CARGO_TARGET_DIR` 默认挪到 `/tmp/janpo-baseline-target`（那个目录有 325 MB，不该躺在工作区里），
+想用别处就自己传一个。要 `wasm32-unknown-unknown` target（脚本自己会 `rustup target add`），
 不需要 wasm-bindgen 或 wasm-pack——产物是自足的（理由在 `probe/akagi-wasm/README.md`）。
 
-## 上线（GitHub Pages）
+## 上线（GitHub Pages，票 101）
 
-同一条路：Pages 那条 workflow 在部署前跑上面三行，把产物放进 `web/public/baseline/`，
-再 `pnpm run build`——Vite 把 `public/` 原样拷进 `dist/`。
+**跑的是同一份脚本**：`.github/workflows/pages.yml` 在 `pnpm run build` 之前调
+`scripts/build-baseline-wasm.sh`，Vite 再把 `public/` 原样拷进 `dist/`。
 **仓库里因此永远只有脚本与说明。**
+
+三件值得知道的事：
+
+1. **产物进 Actions 缓存**，键跟着「造它的那几份输入」走（两个脚本 + crate 源码与锁文件）。
+   它们不变时部署只多花几秒（取一份 4.8 MB 的缓存）；改了就重造一次（估 1.5–2.5 分钟）。
+2. **造不出来不阻断部署**：站点照发，页面在浏览器里如实降级（上一节）。
+   那一步失败时 Actions 里是红的，且跑批总结里会写一句「本次发布的站点上没有它」。
+3. **发出去之前 `scripts/check-pages-dist.sh` 核一遍 `web/dist`**：
+   三份许可在不在、产物（在的话）是不是一份像样的 wasm，并把体积与 sha256 写进跑批总结。
+   本机同样跑得了：`cd web && JANPO_BASE=/janpo/ pnpm run build && cd .. && ./scripts/check-pages-dist.sh`。
+
+**产物不是逐字可重现的**：同一份源码在不同目录下编出来的 `.wasm` 差几十个字节
+（嵌进去的源码路径不同；实测 6,039,832 vs 6,039,960）。
+所以「线上那份是不是这一次发的」要拿**那一次跑批总结里印的 sha256** 比，不是拿本机造的那份比。
 
 ## 许可
 

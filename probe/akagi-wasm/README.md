@@ -29,7 +29,13 @@ node scan-corpus.mjs ../../tests/fixtures/paifu/mjai/*.mjson   # 扫语料：接
 
 **要 `wasm32-unknown-unknown` target**（`rustup target add wasm32-unknown-unknown`）。
 不需要 `wasm-bindgen-cli`，也不需要 `wasm-pack`——见下面「为什么不用 wasm-bindgen」。
-所以 **`flake.nix` 里现在什么都不用加**：探路件不进 CI，票 92 真要上线时才谈工具链。
+
+**`flake.nix` 里什么都不用加，这一条票 101 量过之后维持原判**：上线那条路（`pages.yml` →
+`scripts/build-baseline-wasm.sh`）用的是 **runner 镜像自带的 Rust**
+（actions/runner-images 的 Ubuntu2404-Readme：Rust/Cargo **1.97.1**，Rustup 1.29.0），
+只多一行 `rustup target add`；而把 rustc + cargo 塞进 dev shell 要再添
+**约 470 MiB 下载 / 1.6 GiB 解开**（`nix build --dry-run nixpkgs#rustc`、`#cargo`），
+而那份 shell **每一趟 CI 都要拉**。数与理由在 `run/reports/101-pages-baseline-asset.md`。
 
 ## 那一手是可以人工核对的
 
