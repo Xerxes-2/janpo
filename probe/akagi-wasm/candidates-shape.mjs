@@ -19,10 +19,14 @@
 // 量出来的数写在 `.scratch/llm-riichi-arena/run/reports/103-baseline-confidence.md`。
 
 import { readFileSync } from "node:fs";
+import { PUBLIC_ASSET } from "../../web/scripts/baseline-asset.mjs";
 import { decideText, feedLine, instantiate } from "./probe.js";
 
-/** 默认量的就是**站点上真发出去的那一份**（`scripts/build-baseline-wasm.sh` 造的那份）。 */
-const DEFAULT_WASM = new URL("../../web/public/baseline/janpo-baseline.wasm", import.meta.url);
+/**
+ * 默认量的就是**站点上真发出去的那一份**（`scripts/build-baseline-wasm.sh` 造的那份）。
+ * 路径不在这里再写一遍：真源是 `web/scripts/baseline-asset.mjs`（票 106）。
+ */
+const DEFAULT_WASM = PUBLIC_ASSET;
 
 /** `p` 在 wasm 印出来那段原文里的样子：`"p":0.5961328`。**逐位取的是这一串字符**。 */
 const P_LITERAL = /"p":(-?[0-9][0-9.eE+-]*)/g;

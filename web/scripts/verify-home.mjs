@@ -9,7 +9,8 @@
 //   ④ 页脚照旧（票 37）：回仓库的外链与许可；
 //   ⑤ **默认上帝视角**（裁决 71-8，票 75 执行）：四家的手牌都摊着；切到座位视角之后
 //      至少三家扣起来——**后半句是阳性对照**，没有它这条断言在「投影恒亮」时也会绿；
-//   ⑥ **时间轴真的拖得动**（票 75）：在滑块上真点一下（不是设 value），牌桌跳到那一处；
+//   ⑥ **时间轴真的拖得动**（票 75，spec 的 story 17：这一桌牌拖得回去）：
+//      在滑块上真点一下（不是设 value），牌桌跳到那一处；
 //      拖回 0 是开局那一瞬；「下一步 → 上一步」走一个来回之后 DOM 逐字相同（幂等）；
 //      点某一局的局号就落在那一局的开局帧；
 //   ⑦ **这份牌谱带着推理**（票 76 写下、票 79 翻面、票 81 按视角分开数）：首页那一场现在是
@@ -26,13 +27,13 @@
 //      没有它的话，「里宝牌整个不画了」同样能让上一句变绿。
 //
 // **它与 `verify-tracer` 不重**：那一道量的是「首页里没有开发向内容」（藏没藏住），
-// 这一道量的是「首页本身像不像个门面」。两道都开 `/`，其余七道全开 `?table=1`。
+// 这一道量的是「首页本身像不像个门面」。两道都开 `/`，其余全开 `?table=1`。
 //
 // **资产是 `fetch` 拉的**（`web/public/demo-paifu.json`，不打进 bundle）：因此这一道顺带
 // 是那条取用路径的唯一无头证据——404 了页面会说一句「Demo 牌谱拉不到」，而 ① 会当场红。
 //
 // 跑法：`cd web && pnpm run build && pnpm run verify:home`
-// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（跑道上那几趟共用一个浏览器与一台服务器）。
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -365,7 +366,7 @@ async function hiddenHands(page) {
 
 /**
  * 等页面安静下来。**超时不扔异常而是返回 false**：这一道闸门的契约是交一份失败清单
- * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把十趟一起搞挂。
+ * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把同一条跑道上其余那几趟一起搞挂。
  */
 async function settles(page, predicate, argument) {
   try {
@@ -691,7 +692,7 @@ export async function verifyHome(lane) {
       }
       // 面板上要人读得到自己被搬到了哪一手（从前只有 `data-bubble-turn` 给机器看）。
       // **不用 `locator.textContent()`**：那一句没画出来时它抛 `TimeoutError`，
-      // 而这一道闸门的契约是交一份失败清单（报错会把合并跑的那十四趟一起搞挂）。
+      // 而这一道闸门的契约是交一份失败清单（报错会把合并跑的其余那几趟一起搞挂）。
       const viewing = await page.evaluate(
         () =>
           document.querySelector('[data-testid="bubble-viewing"]')?.textContent?.trim() ??

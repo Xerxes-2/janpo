@@ -1,30 +1,18 @@
-// 浏览器里那**十七趟**闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
+// 浏览器里那几趟闸门，跑在**同一条跑道**上（票 56）：一个 Chrome 进程、
 // 一台 `vite preview`（托管 dist/）、一台 `vite dev`（托管源码形态的 Fable 输出），
-// 十七趟各开自己的 page / context。
+// 每一趟各开自己的 page / context。
 //
-//   1 曳光弹对拍（顺带首页无开发向内容、页脚与副露来源，票 19/35/37/38）
-//   2 首页就是一局回放：牌桌在动、没有配桌控件、上帝视角、时间轴拖得动（票 71/75）
-//   3 牌桌上人看得见的八项 + 副露的位置就是来源（票 44/51）
-//   4 浏览器内黄金用例（票 21）
-//   5 牌谱导出走 40 手（票 26/34）
-//   6 牌谱导出打完一整场（票 39）
-//   7 **反向自证**：拌了 key 的导出物必须让第 5 趟那条断言当场红（票 34）
-//   8 回显 key 的自建网关：报错原文进牌谱前必须已打码（票 36）
-//   9 URL 分享的载荷：真往返 + 逐位置腐蚀 + 审计三样一个都不上路（票 77）
-//  10 **反向自证**：抹不干净的载荷必须让第 9 趟那条断言当场红（票 77）
-//  11 配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 `ruleset` 跟着变（票 72）
-//  12 四 LLM 同桌：一份档案坐两席（人格各不同）、坏 key 那一席只兜自己的底、老配置迁得过来（票 73）
-//  13 思考气泡：气泡里的字来自那一手的记录、bot 席没有、挡不住牌、点得开、兜底那一态（票 76）
-//  14 牌谱从外面进来的两条路：分享链接真往返（剪贴板）、导入 JSON（气泡有话）、坏输入三连（票 78）
-//  15 真人坐下把一局打完：视角按钮不在 DOM 里、整页 HTML 不泄他家手牌、?dev=1 不给开（票 87）
-//  16 ToolSearch 档：真的一条 `what_if` tool call 走完来回、到上限就停、账单是几倍（票 94）
-//  17 复盘：对局中一条标注都没有，终局后每一手都有，那几个数与引擎逐字相同（票 90）
-//  17 真人的信息辅助与思考时限：裸奔档整页没有一个算好的数、到点自动摸切、面板上选得到三档（票 89）
+// **跑几趟、各是哪一趟、各是哪张票的验收，唯一的真源是下面那张 `gates` 表**（票 106）。
+// 从前这里、`scripts/ci-web.sh` 与各 `verify-*.mjs` 的文件头各拄一份「几趟」，于是它们各自漂：
+// 票 92 / 90 / 89 各加一趟，每次两侧都要改同一行，而本票接手时这个数在仓库里
+// 同时写着十一、十三、十五、十七与十八五种说法，**而真的那个只在这张表里**。
+// 现在趟数一律从 `gates` 现算（它跑起来自己会印），加一趟就是往那张表里加一项，
+// **别处一个字都不用改**——`scripts/check-single-source.sh` 盯着这一条。
 //
-// **地址不是随便开的**（票 71）：只有第 1 与第 2 趟开 `/`（它俩量的就是首页），
-// 其余十四趟全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
+// **地址不是随便开的**（票 71）：只有曳光弹与首页那两趟开 `/`（它俩量的就是首页），
+// 其余全开 `?table=1`——首页从此自动播，而要点、要读牌桌的闸门靠的是
 // 「默认暂停」那一页（`Playback.initial`）。`verify-tracer` 那一趟三个地址都开，
-// 理由写在它自己的文件头上；第 14 趟两个地址都开（分享链接从 `?table=1` 复制、
+// 理由写在它自己的文件头上；`verify-inbound` 那一趟两个地址都开（分享链接从 `?table=1` 复制、
 // 导入入口在 `/` 上），理由同样在它自己的文件头上。
 //
 // **一趟都没少、一条断言都没拆**：每一趟调的就是 `verify-*.mjs` 里那个同名函数，
@@ -34,7 +22,7 @@
 //
 // 跑法：`cd web && pnpm run fable && node node_modules/vite/bin/vite.js build && pnpm run verify:browser`
 
-import { failure, openLane, printFailures } from "./browser-lane.mjs";
+import { failure, mark, openLane, printFailures } from "./browser-lane.mjs";
 import { verifyAssist } from "./verify-assist.mjs";
 import { verifyBoard } from "./verify-board.mjs";
 import { verifyBubbles } from "./verify-bubbles.mjs";
@@ -89,8 +77,14 @@ async function strippedProof(lane) {
   return [];
 }
 
-/** 十七趟。`how` 是它单跑时的命令——红了照抄就能只重跑这一趟。 */
+/**
+ * 这条跑道上的那几趟。**这张表就是「几趟」的唯一真源**（票 106）：
+ * 加一趟 = 往这里加一项，别处没有第二个地方写着趟数。
+ * `how` 是它单跑时的命令——红了照抄就能只重跑这一趟。
+ */
 const gates = [
+  // 票 19/35/37/38：同一种子在浏览器里跑出来的终局点数与顺位，必须与 `janpo kyoku` / `janpo game` 逐项相同；
+  // 顺带：曳光弹藏在 `?dev=1` 后面、首页页脚有回仓库的外链与一句许可、副露看得出被鸣的那张与来源。
   {
     name: "浏览器内曳光弹对拍（与 dotnet 侧逐项对照；顺带验首页：没有曳光弹、有回仓库那一行、副露看得出来源）",
     how: "node scripts/verify-tracer.mjs",
@@ -118,6 +112,9 @@ const gates = [
     how: "node scripts/verify-board.mjs",
     run: (lane) => verifyBoard(lane),
   },
+  // 票 21：`tests/fixtures/golden/dual-target.json` 里每条用例的每个字段的每一行，
+  // 在浏览器里跑出来都要与文件一致（跑的是 Fable 的输出本身）。
+  // 同一份用例文件在 dotnet 侧由 `GoldenSuiteTests` 跑——**两侧读同一份数据**。
   {
     name: "浏览器内黄金用例（与 tests/fixtures/golden/ 逐字段逐行对照）",
     how: "node scripts/verify-golden.mjs",
@@ -140,7 +137,8 @@ const gates = [
     how: "node scripts/verify-export.mjs --to-end --seed 447",
     run: (lane) => verifyExport(lane, { toEnd: true, seed: "447" }),
   },
-  // 票 34 的反向自证（前一趟是第 5 趟）：拿同一份导出物拌一把 key 进去，上面那条断言**必须**当场红。
+  // 票 34 的反向自证（被它按红的是上面「走 40 手」那一趟）：拿同一份导出物拌一把 key 进去，
+  // 上面那条断言**必须**当场红。
   // 没这一趟的话，「代码里有那行断言」与「那行断言真的拦得住东西」就又分不开了
   // （立这张票的起因就是上一次只核到了前者）。手数压到 12：它只需要导出得成。
   {
@@ -165,7 +163,7 @@ const gates = [
     how: "node scripts/verify-share.mjs",
     run: (lane) => verifyShare(lane),
   },
-  // 票 77 的反向自证：把「载荷里没有审计那三样」按红一次。理由与第 7 趟逐字相同——
+  // 票 77 的反向自证：把「载荷里没有审计那三样」按红一次。理由与拌 key 那一趟逐字相同——
   // 「代码里有那三行断言」与「那三行断言真的拦得住东西」是两件事。
   {
     name: "反向自证：抹不干净的载荷必须让那道闸门变红",
@@ -264,6 +262,8 @@ const gates = [
 const lane = await openLane();
 const results = [];
 
+console.log(`浏览器闸门共 ${gates.length} 趟（同一个浏览器进程、同一台服务器）。`);
+
 try {
   for (const gate of gates) {
     console.log("");
@@ -278,9 +278,9 @@ try {
 }
 
 console.log("");
-console.log("十七趟浏览器闸门（同一个浏览器进程、同一台服务器）：");
+console.log(`${results.length} 趟浏览器闸门（同一个浏览器进程、同一台服务器）：`);
 for (const { gate, failures, ms } of results) {
-  console.log(`  ${failures.length > 0 ? "✗" : "✓"} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
+  console.log(`  ${mark(failures)} ${(ms / 1000).toFixed(1)}s　${gate.how}`);
 }
 
 const reds = results.filter((each) => each.failures.length > 0);

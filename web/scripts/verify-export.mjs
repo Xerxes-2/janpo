@@ -17,7 +17,7 @@
 // **不是替代关系**：CI 那条守的是「key 只是躺在 localStorage 里」，手验那条守的是
 // 「key 真交给过 provider、决策记录里有真 prompt 与真输出」。
 //
-// 跑法（它也是 `verify-browser.mjs` 里的三趟：走 40 手、打完整场、反向自证）：
+// 跑法（它也是 `verify-browser.mjs` 里那几趟：走 40 手、打完整场、反向自证）：
 //   cd web && pnpm run fable && pnpm run verify:export
 //   node scripts/verify-export.mjs --to-end    # 一路打到终局精算那一屏
 //   JANPO_KEY_FILE=/tmp/deepseek_key node scripts/verify-export.mjs --llm --thinking medium
@@ -64,8 +64,8 @@ const FAKE_KEY = "sk-janpo-fake-key-NOT-A-REAL-KEY-jia-4f2a91";
 const poisoned = (paifu, key) => JSON.stringify({ ...JSON.parse(paifu), leaked_api_key: key });
 
 /**
- * 牌谱导出那一道。**同一段代码跑三趟**（走 40 手 / 打完整场 / 反向自证），
- * 差别只在 options，因此三趟的断言恒是同一套。
+ * 牌谱导出那一道。**同一段代码跑好几趟**（走 40 手 / 打完整场 / 反向自证），
+ * 差别只在 options，因此每一趟的断言恒是同一套。
  */
 export async function verifyExport(lane, options = {}) {
   const {

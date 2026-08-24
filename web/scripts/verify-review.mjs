@@ -45,7 +45,7 @@
 //      页面上那几个概率与它印出来的**严格相等**，且页面上那一串是最短往返表示（一位没舍）。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:review`
-// 它也是 `verify-browser.mjs` 里的一趟（十七趟共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 //
 // **CI 里第三程走的是「它用不了」那一路**（ADR-0006 边界 6：那 6 MB 不入版本控制）：
 // 于是 ⑩ 的阳性对照量的是「请求真的发出去了」（回的是 404），而 ⑪⑫⑬⑭⑮ 量不到
@@ -59,25 +59,16 @@
 // **把①按红的做法**（判据 1，票面点名）：把 `Review.settled` 那道判断去掉
 // （例如 `let settled (_: TableModel) : bool = true`），重编 Fable 再跑这一趟。红的原文在报告 90 里。
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import {
   decideText,
   feedLine,
   instantiate as instantiateProbe,
 } from "../../probe/akagi-wasm/probe.js";
-import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { ASSET, assetPresent, PUBLIC_ASSET } from "./baseline-asset.mjs";
+import { failure, isEntry, mark, runStandalone, tick } from "./browser-lane.mjs";
 import { plantSeating } from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
-
-const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-/** 强 AI 基线那份产物在站点里的地址（与 `web/src/baseline/wasm.ts` 的 `ASSET_FILE` 逐字相同）。 */
-const ASSET = "baseline/janpo-baseline.wasm";
-
-/** 站点上到底有没有那份产物（决定第 ⑩ 趟走哪一档；同 `verify-baseline.mjs`）。 */
-const assetPresent = () => existsSync(resolve(webRoot, "public", ASSET));
 
 /** 真人坐这一席（东 1 局的亲：页面一打开就轮到他）。 */
 const ME = 0;
@@ -90,7 +81,7 @@ const WATCHED = 1;
  *
  * 不用 `getByTestId(...).getAttribute(...)`：那一条在元素不存在时会**干等 30 秒再抛**，
  * 而这一道闸门的契约是交一份失败清单（合并跑那个入口要先关浏览器、再逐道汇报）——
- * 抛出去会把十七趟一起搞挂（票 86/87/88 各写下过同一课）。
+ * 抛出去会把同一条跑道上其余那几趟一起搞挂（票 86/87/88 各写下过同一课）。
  */
 function attr(page, testId, name) {
   return page.evaluate(
@@ -104,7 +95,7 @@ function attr(page, testId, name) {
  * 点一枚按钮，**它不在就报一条失败而不是抛出去**。
  *
  * `getByTestId(...).click()` 在元素不存在时会**干等 30 秒再抛**，而这一道闸门的契约是
- * 交一份失败清单（合并跑那个入口要先关浏览器、再逐道汇报）——抛出去会把十七趟一起搞挂。
+ * 交一份失败清单（合并跑那个入口要先关浏览器、再逐道汇报）——抛出去会把同一条跑道上其余那几趟一起搞挂。
  * **这一条是被破坏实验逃出来的**：把「点一条标注」改成 `CursorMoved` 那一次，
  * 「回到原处」那一枚根本没出现，于是这一趟抛了个 `TimeoutError`（票 86/87/88 各写下过同一课）。
  */
@@ -518,7 +509,8 @@ async function humanLeg(lane, { budgetMs, peek }) {
     const { problems: mismatches, counts } = compare("真人那一桌", shown, expected);
     problems.push(...mismatches);
     console.log(
-      `真人那一桌：${counts.rows} 条逐项对拍 ✓（有效牌 ${counts.ukeire} 条、危险度 ${counts.danger} 条、` +
+      `真人那一桌：${counts.rows} 条逐项对拍 ${tick(mismatches.length === 0)}` +
+        `（有效牌 ${counts.ukeire} 条、危险度 ${counts.danger} 条、` +
         `更好的候选 ${counts.better} 条、最优之一 ${counts.best} 条、差 10 枚以上 ${counts.gain} 条）`,
     );
 
@@ -614,7 +606,8 @@ async function replayLeg(lane) {
     const { problems: mismatches, counts } = compare("首页那份牌谱", shown, expected);
     problems.push(...mismatches);
     console.log(
-      `首页座位 ${WATCHED}：${counts.rows} 条逐项对拍 ✓（有效牌 ${counts.ukeire} 条、危险度 ${counts.danger} 条、` +
+      `首页座位 ${WATCHED}：${counts.rows} 条逐项对拍 ${tick(mismatches.length === 0)}` +
+        `（有效牌 ${counts.ukeire} 条、危险度 ${counts.danger} 条、` +
         `更好的候选 ${counts.better} 条、最优之一 ${counts.best} 条）`,
     );
 
@@ -803,7 +796,7 @@ function asked(page, text, seat, godEvery, sampleEvery) {
  * 于是「页面上那几个概率是不是 wasm 印出来的那几个」有了一个与页面完全无关的左侧。
  */
 async function askedInNode(samples, seat) {
-  const bytes = readFileSync(resolve(webRoot, "public", ASSET));
+  const bytes = readFileSync(PUBLIC_ASSET);
   const instance = await instantiateProbe(
     bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
   );
@@ -1253,18 +1246,22 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
       );
     }
 
+    // 那几个勾**由数据决定**（票 106）。这一程四个题目的断言推在**同一个逐手循环**里，
+    // 拆不开“哪一条是哪个题目推的”，因此四句共用**这一程的**清单：
+    // 宁可四句一起印 `✗`，也不许出现一条与失败矛盾的 `✓`。
+    const strongMark = mark(problems);
     console.log(
-      `强 AI 逐手对照：${counts.rows} 行与引擎另一条路问出来的同一条 id ✓` +
+      `强 AI 逐手对照：${counts.rows} 行与引擎另一条路问出来的同一条 id ${strongMark}` +
         `（分歧 ${counts.diffs} 手、遮着他家摸牌的 ${counts.hidden} 行、问两遍同答案 ${counts.again} 手、` +
         `它交不出来 ${counts.missing} 手）`,
     );
     console.log(
       `上帝视角会打 A、该席视角只能打 B：同一局后来那一份流 ${counts.later} 手、` +
-        `一条不掩一张不隐那一份 ${counts.all} 手——逐手断言页面给的是 B ✓`,
+        `一条不掩一张不隐那一份 ${counts.all} 手——逐手断言页面给的是 B ${strongMark}`,
     );
     for (const sample of samples) console.log(`　${sample}`);
     console.log(
-      `候选分布：${counts.dist} 行与闸门另一条路问出来的逐条相同 ✓` +
+      `候选分布：${counts.dist} 行与闸门另一条路问出来的逐条相同 ${strongMark}` +
         `（上游给了几条：${[...widths.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([k, v]) => `${k} 条×${v}`)
@@ -1274,7 +1271,7 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
     );
     console.log(
       `逐位对拍：抽了 ${counts.raw ?? 0} 手拿 probe/akagi-wasm 的 node 路径重问一次，` +
-        `页面上那几个概率与 wasm 直接印的严格相等 ✓（其中 ${literal} 个连字面都一样）`,
+        `页面上那几个概率与 wasm 直接印的严格相等 ${strongMark}（其中 ${literal} 个连字面都一样）`,
     );
     console.log(
       `代价：按下去到有东西看共 ${wallMs} ms；页面那一边 ${shown.strongMs} ms / ${shown.strongRows} 行（它自己报的那一句：${shown.strongText.replace(/\s+/g, " ")}）；` +

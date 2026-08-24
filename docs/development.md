@@ -38,7 +38,7 @@ cd web
 pnpm install
 pnpm run dev       # Fable watch + Vite dev server（HMR），改 .fs 约 6s 后页面更新
 pnpm run build     # Fable 编译 + Vite 打包 → web/dist（可静态托管）
-pnpm run verify:browser # 浏览器里那十四趟（CI 跑的就是它）：共用一个浏览器与一台服务器，红了会告诉你单跑哪一趟
+pnpm run verify:browser # 浏览器里那整条跑道（CI 跑的就是它）：共用一个浏览器与一台服务器，趟数它自己印，红了会告诉你单跑哪一趟
 pnpm run verify    # 无头验收：浏览器内跑同种子的一局 / 一整场，与 CLI 逐项对照
 pnpm run verify:home    # 无头验收：首页（`/`）就是一局回放——牌桌在动、没有配桌控件、上帝视角、时间轴拖得动
 pnpm run verify:inbound # 无头验收：牌谱从外面进来的两条路——分享链接真往返（剪贴板）、导入 JSON（气泡有话）、坏输入三连

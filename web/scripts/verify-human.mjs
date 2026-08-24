@@ -39,7 +39,7 @@
 //   ⑨ **阴性对照**：同一条地址、四家没有真人时曳光弹照旧开得了。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:human`
-// 它也是 `verify-browser.mjs` 里的一趟（十五趟共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 //
 // 选项：--budget ms、--peek N（走多少手之后抓那一份整页 HTML）。
 //
@@ -76,7 +76,7 @@ const SAID = "假端点说：这一手照它的算法只能这么打";
  *
  * 不用 `getByTestId(...).getAttribute(...)`：那一条在元素不存在时会**干等 30 秒再抛**，
  * 而这一道闸门的契约是交一份失败清单（合并跑那个入口要先关浏览器、再逐道汇报）——
- * 抛出去会把十五趟一起搞挂。**这一条是被破坏实验逃出来的**：
+ * 抛出去会把同一条跑道上其余那几趟一起搞挂。**这一条是被破坏实验逃出来的**：
  * 把 `humanSeated` 按回恒 false 那一次，它正好把自己抛掉了。
  */
 function attr(page, testId, name) {
@@ -385,7 +385,7 @@ function driveHuman(page, { limit, budgetMs, policy }) {
 
           // **要点的那一枚必须还在**：刚才那一记「单步」若把这一手推走了，它就没了
           // ——那正是「平台替他做了决定」，报出来而不是让脚本自己炸掉（合并跑的那个入口
-          // 要的是一份失败清单，抛出去会把十五趟一起搞挂）。
+          // 要的是一份失败清单，抛出去会把同一条跑道上其余那几趟一起搞挂）。
           const target =
             wanted !== undefined && wanted !== null
               ? document.querySelector(`[data-human-action-id="${wanted.id}"]`)

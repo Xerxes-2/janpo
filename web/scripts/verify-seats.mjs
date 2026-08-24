@@ -21,7 +21,7 @@
 //   而且**迁移只做一次**（再打开一次，人后来改的东西不会被老键盖回去）。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:seats`
-// 它也是 `verify-browser.mjs` 里的一趟（十三趟共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 //
 // 选项：--budget ms、--keep <路径>（把导出的牌谱另存一份）。
 
@@ -30,7 +30,7 @@ import { copyFileSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { failure, isEntry, mark, runStandalone } from "./browser-lane.mjs";
 import { personaFor, plantSeating, preambleProblems, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
 import { stepTurns } from "./table-drive.mjs";
@@ -211,8 +211,9 @@ async function seatDensityProblems(page) {
         `（视口 ${expanded.viewport} px，它们在 ${pushedOut.map((row) => `${row.top}→${row.bottom}`).join("、")}）`,
     );
   }
+  // 这一句的勾读的就是这一项自己的清单（票 106）：这个函数只管「四席在一屏里」这一件事。
   console.log(
-    `四席在一屏里 ✓（视口 ${viewport} px，四行跨 ${rows[0].top}→${rows[3].bottom}；` +
+    `四席在一屏里 ${mark(problems)}（视口 ${viewport} px，四行跨 ${rows[0].top}→${rows[3].bottom}；` +
       `展开一席后跨 ${expanded.rows[0].top}→${expanded.rows[3].bottom}），` +
       `记号：${rows.map((row) => `座位 ${row.seat}「${row.said}」`).join("　")}`,
   );

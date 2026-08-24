@@ -1,6 +1,6 @@
 // **强 AI 基线坐一席**那道闸门（票 92；ADR-0006 的边界 1、2 与要害「它不会说话」）。
 //
-// 五趟，各答一件事：
+// 它自己起一条跑道，逐趟各答一件事：
 //
 //   ① **懒加载**（边界 1）：首页与不选那一席的对局**网络请求计数为 0**
 //      ——量的是浏览器真发出去的请求，不是「看着没拉」。
@@ -29,10 +29,10 @@
 // 选项：--asset（本机演习：资产在场，多跑真打一局那一趟）、--budget ms。
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ASSET, assetPresent } from "./baseline-asset.mjs";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
@@ -40,14 +40,9 @@ import { stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 那份产物在站点里的地址（与 `web/src/baseline/wasm.ts` 的 `ASSET_FILE` 逐字相同）。 */
-const ASSET = "baseline/janpo-baseline.wasm";
-
-/** 站点上到底有没有那份产物（决定第 ① 趟的阳性对照该期望 200 还是 404）。 */
-const assetPresent = () => existsSync(resolve(webRoot, "public", ASSET));
-
 /**
- * 随站点分发的那份第三方声明（与 `src/Janpo.Web/Credit.fs` 的 `thirdPartyFile` 逐字相同）。
+ * 随站点分发的那份第三方声明（与 `src/Janpo.Web/Credit.fs` 的 `thirdPartyFile` 逐字相同；
+ * **那句「逐字相同」由 `scripts/check-single-source.sh` 执行**，票 106）。
  * 页脚那条与配桌页那一句指的都是它（票 102）。
  */
 const THIRD_PARTY = "third-party/README.md";

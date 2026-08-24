@@ -6,7 +6,7 @@
 // 因此「这边红那边绿」只可能是 Fable 与 dotnet 编出来的语义不一样。
 //
 // 跑法：`cd web && pnpm run fable && pnpm run verify:golden [-- <用例文件>]`
-// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（跑道上那几趟共用一个浏览器与一台服务器）。
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { readFileSync } from "node:fs";

@@ -19,10 +19,10 @@
 // 四家都是自带 bot，**一个网络请求都不发**，因此它进 CI。
 //
 // 跑法：`cd web && pnpm run build && pnpm run verify:setup`
-// 它也是 `verify-browser.mjs` 里的一趟（十一趟共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 
 import { readFileSync } from "node:fs";
-import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { failure, isEntry, markerSince, runStandalone } from "./browser-lane.mjs";
 import { hostPage } from "./serve.mjs";
 import { stepTurns } from "./table-drive.mjs";
 
@@ -143,6 +143,8 @@ export async function verifySetup(lane) {
     await page.getByTestId("table-akadora-off").click();
     await page.getByTestId("table-kuitan-off").click();
 
+    // 那一句里的勾由**这一项自己**的成败决定（票 106）。
+    const halfwayMark = markerSince(problems);
     const picked = await onPage(page);
     if (picked.pending !== "true") problems.push("三项都拨过了，页面却没说「按重开才生效」");
     if (picked.rules !== fresh.rules) {
@@ -158,7 +160,7 @@ export async function verifySetup(lane) {
       );
     }
     console.log(
-      `拨完三项没按重开：页面「${picked.rules}」、牌谱「${fromPaifu(halfway)}」，都还是老规则 ✓`,
+      `拨完三项没按重开：页面「${picked.rules}」、牌谱「${fromPaifu(halfway)}」，都还是老规则 ${halfwayMark()}`,
     );
 
     // ④ 按「重开」那一刻才换。
@@ -198,6 +200,7 @@ export async function verifySetup(lane) {
     );
 
     // ⑥ 三项落 localStorage：把这一页重新打开一次，拨到的还在。
+    const storedMark = markerSince(problems);
     const stored = await page.evaluate(() =>
       ["length", "akadora", "kuitan"].map(
         (key) => `${key}=${localStorage.getItem(`janpo.rules.${key}`)}`,
@@ -211,7 +214,9 @@ export async function verifySetup(lane) {
     if (reopened.pending !== "false") {
       problems.push("重新打开这一页，它立刻就说「按重开才生效」——存下来的与开出来的对不上");
     }
-    console.log(`localStorage 里：janpo.rules.{${stored.join(", ")}}　重新打开还在 ✓`);
+    console.log(
+      `localStorage 里：janpo.rules.{${stored.join(", ")}}　重新打开还在 ${storedMark()}`,
+    );
   } finally {
     await context.close();
   }

@@ -104,7 +104,7 @@ async function startEndpoint(origin, extra) {
 
 /**
  * 等页面安静下来。**超时不扔异常而是返回 false**：这一道闸门的契约是交一份失败清单
- * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把十三趟一起搞挂
+ * （合并跑的那个入口要先关浏览器、再逐道汇报），在 try 里抛会把同一条跑道上其余那几趟一起搞挂
  * ——`verify-home` 早就写下过这一课。
  */
 async function settles(page, predicate, argument, timeout) {

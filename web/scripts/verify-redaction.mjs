@@ -14,7 +14,7 @@
 //      那就又成了一道从不失败的闸门（票 34 的教训）。
 //
 // 全程本机：页面是本地 dev server，端点是本地假端点，**一个字节都不出网**，因此它进 CI。
-// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（跑道上那几趟共用一个浏览器与一台服务器）。
 //
 //   cd web && pnpm run fable && node scripts/verify-redaction.mjs
 //

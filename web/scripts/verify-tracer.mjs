@@ -14,14 +14,14 @@
 //   `?dev=1`    曳光弹：与 dotnet 侧逐项对拍（票 19）
 //
 // 跑法：`cd web && pnpm run build && pnpm run verify [-- --seed 1177]`
-// 它也是 `verify-browser.mjs` 里的一道（十道共用一个浏览器与一台服务器）。
+// 它也是 `verify-browser.mjs` 里的一道（跑道上那几趟共用一个浏览器与一台服务器）。
 // 浏览器：优先 $JANPO_CHROME，其次 playwright 自带的 chromium，最后系统里的 chrome/chromium。
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
+import { failure, isEntry, runStandalone, tick } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
 import { hostPage } from "./serve.mjs";
 import { stepTurns } from "./table-drive.mjs";
@@ -239,7 +239,7 @@ function compare(label, keys, dotnetSide, browserSide, failures) {
     const actual = browserSide[key];
     const same = expected === actual;
     if (!same) failures.push(`${label}.${key}: dotnet「${expected}」≠ 浏览器「${actual}」`);
-    rows.push(`  ${same ? "✓" : "✗"} ${label}.${key.padEnd(6)} ${expected}`);
+    rows.push(`  ${tick(same)} ${label}.${key.padEnd(6)} ${expected}`);
   }
   return rows;
 }

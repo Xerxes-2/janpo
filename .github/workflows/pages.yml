@@ -33,11 +33,13 @@ jobs:
       #    仓库改名（或换成自定义域名，那时填 "/"）**只改这一行**，别处没有第二处写着路径。
       #    它经 vite.config.ts 的 JANPO_BASE 变成打包产物里的资源前缀。
       JANPO_BASE: /janpo/
-      # 强 AI 基线那份产物在仓库里的位置（票 101）。同样只写这一行：
+      # 强 AI 基线那份产物在仓库里的位置（票 101）。这一步只写这一行：
       # 下面取缓存与存缓存两步各引用它，两处写法不会漂。
-      # （真正造它的是 `scripts/build-baseline-wasm.sh`，那份脚本本机也要单跑，
-      # 所以它自己那一行路径没法从这里拿；两边对不上的下场是“发布件里没有它”，
-      # 而那正是下面那道闸门大声报的那件事。）
+      # （真正造它的是 `scripts/build-baseline-wasm.sh`，那份脚本本机也要单跑；
+      # 而这一行是 **workflow 解析期**就要的值（`env:` 段），那时既没 checkout 也没 node，
+      # 因此两边**收不成一处**。收不成就钉在一起：`scripts/check-single-source.sh`
+      # 每趟 CI 都拿 `web/src/baseline/wasm.ts` 的 `ASSET_FILE` 逐处对字面，这一行漂了当场红
+      # （票 106；从前两边对不上的下场是“发布件里静静地没有它”，只有发布那一刻才知道）。
       BASELINE_WASM: web/public/baseline/janpo-baseline.wasm
     steps:
       - uses: actions/checkout@v7

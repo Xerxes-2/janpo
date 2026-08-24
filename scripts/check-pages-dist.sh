@@ -7,9 +7,11 @@
 # 四件事：
 #
 #   1. **许可随产物上线**（ADR-0006 边界 4，Apache-2.0 §4(a)/(d)）：
-#      `third-party/` 那三份必须在 `dist` 里，且都不是空的。
+#      `third-party/` 那几份必须在 `dist` 里，且都不是空的。
 #      页脚那条链接指的就是其中的 `README.md`（`src/Janpo.Web/Credit.fs` 那一行路径），
 #      文件不在 = 页面上那条声明点进去是 404 = 义务没尽到。
+#      **这一件由 `scripts/check-third-party.sh` 做**（票 106）：同一份脚本在 `ci-web.sh` 里
+#      核**源**（`web/public/`）、在这里核**分发件**（`web/dist/`），名单只写在它那里一处。
 #   2. **产物在的时候，它得是一份像样的 wasm**：头四个字节 `\0asm`、体积够装下内嵌权重。
 #      半截的 6 MB 比没有更坏：页面会当它拉到了，然后在 `instantiate` 那一步炸。
 #   3. **产物不在的时候不算失败**（ADR-0006 边界 2）：站点照常发，那一席在浏览器里如实降级。
@@ -19,7 +21,7 @@
 #      指着它、且说得出来历是谁**——两件分开红：文件在而无人指，与有人指而文件不在，
 #      在页面上是同一个下场。浏览器那一侧的同名断言在 `web/scripts/verify-baseline.mjs` 第 ⑤ 趟。
 #
-# 这一道**红得起来**：三份许可少一份、wasm 头四个字节不对、体积不到 5 MB，各红一次
+# 这一道**红得起来**：许可少一份、wasm 头四个字节不对、体积不到 5 MB，各红一次
 # （反向自证的输出在 `run/reports/101-pages-baseline-asset.md`）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -38,11 +40,9 @@ fail() {
 }
 [[ -s "$dist/index.html" ]] || fail "$dist/index.html 不在或是空的"
 
-# ① 许可（三份都是页脚那条声明的落点，缺一份都算没尽到义务）
-for name in LICENSE-akagi.txt NOTICE-akagi README.md; do
-  file="$dist/third-party/$name"
-  [[ -s "$file" ]] || fail "许可件 $file 不在或是空的（ADR-0006 边界 4）"
-done
+# ① 许可（那几份都是页脚那条声明的落点，缺一份都算没尽到义务）。
+# 名单与“页面那条链接指的文件在不在”都在那份共用脚本里（票 106）。
+bash "$(dirname "$0")/check-third-party.sh" "$dist" || failed=1
 
 # ② / ③ 那 6 MB
 wasm="$dist/baseline/janpo-baseline.wasm"
@@ -69,6 +69,7 @@ fi
 
 # ④ 署名（票 102）：事实的真源是 `web/public/third-party/README.md` 与
 #    `probe/akagi-wasm/NOTICE-upstream.md`；页面侧只写在 `src/Janpo.Web/Credit.fs` 一处。
+#    下面那一串里的路径与 `Credit.fs` 对不对得上，由 `scripts/check-single-source.sh` 钉着（票 106）。
 #    这里按字面在打包产物里找它们：那几个字一个不在，就是发出去的那一份没了署名。
 for word in "third-party/README.md" "native_bot" "Apache-2.0" "Shinkuan" "394b3290"; do
   grep -rqF -- "$word" "$dist/assets" ||
