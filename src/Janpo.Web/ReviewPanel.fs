@@ -17,8 +17,11 @@ module ReviewPanel =
     /// 强 AI 那一行此刻走到哪一步（票 93）。**四态是四个 case**（同 `BaselineStatus`，判据 12）：
     /// 「还没问」与「问了但它用不了」在页面上是两句完全不同的话。
     ///
-    /// **它活在这一个组件里，不上 `TableModel`**：强 AI 的对照是终局之后现算的一份投影，
+    /// **它仍旧不上 `TableModel`**（票 93 定的）：强 AI 的对照是终局之后现算的一份投影，
     /// 不是这一场对局的事实——它不进牌谱（ADR-0002），也不该占住共用类型上的一格。
+    /// **票 105 把它从面板那个组件里提到了 `useReview` 这一个钩子里**：
+    /// 时间轴上那几枚标记与复盘那一列读的必须是**同一叠回执**，
+    /// 各存一份就是两处可以各自漂的状态（而这一票要铉的正是「两处逐手对得上号」）。
     [<RequireQualifiedAccess>]
     type private Consulted =
         /// 还没人按那一枚：**一个字节都没拉**（ADR-0006 边界 1）。
@@ -42,6 +45,25 @@ module ReviewPanel =
     /// 「这一手没有危险度」（桌上没有立直也没有副露）与「危险度排第 0」是两件事。
     let private mark (name: string) (value: int option) =
         prop.custom (name, value |> Option.map string |> Option.defaultValue "")
+
+    /// 这一屏的复盘（票 105）：**一处算、两处消费**。
+    ///
+    /// 复盘那一块本身在牌桌**下面**，而时间轴在牌桌**上面**（票 75 那一根），
+    /// 两处要标的却是同一批手。因此这一格把两件东西一起交出去：
+    /// 画好的那一块，与时间轴要标的那几枚——**它们出自同一次 `Review.focused`**。
+    ///
+    /// `NoComparison` 是 `ReactElement` 逼出来的（同 `TableMsg`）：浏览器对象比不了大小，
+    /// 而这一格本来就没有谁在比较。
+    [<NoComparison>]
+    type ReviewView = {
+        /// 时间轴上要标出来的那几手（**就是筛选开着时复盘摆的那几条**）。
+        ///
+        /// **它不跟着那一枚开关变**：拨回「看全部」只是把其余那几百条也摆出来，
+        /// 值得看的仍旧是那几手——轴上那几枚因此在两种状态下逐枚相同。
+        Marks: ReviewMark list
+        /// 复盘那一块（这一场还没打完时是空表：**整块不在 DOM 里**）。
+        Panel: ReactElement list
+    }
 
     /// 一条标注那一行。
     ///
@@ -142,6 +164,10 @@ module ReviewPanel =
             prop.custom ("data-review-turn", note.Turn)
             prop.custom ("data-review-frame", note.Frame)
             prop.custom ("data-review-kind", note.Kind)
+            // 这一手为什么值得看（票 105）：`better` / `strong` / `both`，都不占就是空串
+            // （拨到「看全部」时这一列里就会有空串的那几条）。**闸门逐手读它**：
+            // 两条判据里哪一条点亮了这一手，不能只看并集（并集会把单条判据的漂盖住）。
+            prop.custom ("data-review-worth", Review.worth strong note)
             prop.custom ("data-review-open", if opened = Some note.Turn then "1" else "")
             mark "data-review-shanten" (note.Scaffold |> Option.map (fun each -> Shanten.value each.Shanten))
             mark "data-review-shanten-after" (trial |> Option.map (fun each -> Shanten.value each.Shanten))
@@ -175,11 +201,13 @@ module ReviewPanel =
             )
         ]
 
-    /// 面板抬头那一排：说清这是谁的复盘，以及**跳走了怎么回来**（票 86 的回程）。
+    /// 面板抬头那一排：说清这是谁的复盘、**这一列摆几条**（票 105），
+    /// 以及**跳走了怎么回来**（票 86 的回程）。
     ///
     /// 「回到原处」只在真跳走了之后才画：没跳走时它是一枚点了什么也不会发生的按钮，
     /// 而那种按钮会让人以为自己刚才做错了什么。
-    let private head (seat: Seat) (count: int) (opened: int option) (dispatch: TableMsg -> unit) =
+    /// **筛选那一枚反过来恒在**：它是这一列的开关，一直得有得拨。
+    let private head (seat: Seat) (count: int) (filtered: bool) (opened: int option) (dispatch: TableMsg -> unit) =
         let back =
             opened
             |> Option.map (fun turn ->
@@ -195,12 +223,21 @@ module ReviewPanel =
             prop.key "head"
             prop.className "bubble-head"
             prop.children (
-                Html.h3 [
-                    prop.key "title"
-                    prop.testId "review-at"
-                    prop.text $"复盘：座位 {Seat.index seat} 的逐手对照（{count} 手）"
+                [
+                    Html.h3 [
+                        prop.key "title"
+                        prop.testId "review-at"
+                        prop.text $"复盘：座位 {Seat.index seat} 的逐手对照（{count} 手）"
+                    ]
+                    Html.button [
+                        prop.key "filter"
+                        prop.className "review-filter-toggle"
+                        prop.testId "review-filter-toggle"
+                        prop.onClick (fun _ -> dispatch ReviewFilterToggled)
+                        prop.text (ReviewFilter.toggle filtered)
+                    ]
                 ]
-                :: back
+                @ back
             )
         ]
 
@@ -263,21 +300,20 @@ module ReviewPanel =
             prop.children children
         ]
 
-    /// 复盘那一块本身。
+    /// 复盘那一块本身。`focused` 是**值得看的那几手**（票 105），`shown` 是这一列真摆出来的那几条
+    /// （筛选开着时就是前者，关掉时是全部）。
     let private body
         (seat: Seat)
         (notes: ReviewNote list)
+        (focused: ReviewNote list)
+        (filtered: bool)
         (opened: int option)
         (consulted: Consulted)
+        (rows: Map<int, ReviewStrong>)
         (ask: unit -> unit)
         (dispatch: TableMsg -> unit)
         =
-        let rows =
-            match consulted with
-            | Consulted.Ready(rows, _, _, _) -> rows
-            | Consulted.Untouched
-            | Consulted.Asking _
-            | Consulted.Unavailable _ -> Map.empty
+        let shown = if filtered then focused else notes
 
         Html.section [
             prop.key "review"
@@ -285,9 +321,13 @@ module ReviewPanel =
             prop.testId "table-review"
             prop.custom ("data-review-seat", Seat.index seat)
             prop.custom ("data-review-notes", List.length notes)
+            // 值得看的有几手（= 时间轴上那几枚标记）与这一枚开关拨在哪边：
+            // **两格各管各的**——拨回「看全部」只改摆几条，不改哪几手值得看。
+            prop.custom ("data-review-kept", List.length focused)
+            prop.custom ("data-review-filter", ReviewFilter.toWire filtered)
             prop.custom ("data-review-open", opened |> Option.map string |> Option.defaultValue "")
             prop.children [
-                head seat (List.length notes) opened dispatch
+                head seat (List.length notes) filtered opened dispatch
                 Html.p [
                     prop.key "intro"
                     prop.className "intro"
@@ -295,12 +335,30 @@ module ReviewPanel =
                     prop.text
                         "这几行是引擎按你当时看得见的牌现算的（向听、有效牌、危险度），不是打分——「更好的候选」只列在这几个数上不比你差、至少一项更好的那几张。点某一手：牌桌摆出那一刻的快照（回放里时间轴跟着跳过去），按「回到原处」就回来。"
                 ]
+                // **筛掉了多少当场说出来**（票 105 票面：不许静静地少显示）。
+                // 那一句里只有两个数，且两态同一个顺序（`ReviewFilter.toDisplay`）。
+                Html.p [
+                    prop.key "filter"
+                    prop.className "intro review-filter"
+                    prop.testId "review-filter"
+                    prop.custom ("data-review-filter", ReviewFilter.toWire filtered)
+                    prop.custom ("data-review-shown", List.length shown)
+                    // **没问过强 AI 时那一句只说得出第一条判据**：那几 MB 没拉之前，
+                    // 第二条一手都筛不到，写出来就是声称一件此刻没有执行体的事（判据 2）。
+                    prop.text (
+                        ReviewFilter.toDisplay
+                            filtered
+                            (not (Map.isEmpty rows))
+                            (List.length notes)
+                            (List.length focused)
+                    )
+                ]
                 strongHead consulted (rows |> Map.toList |> List.map snd) (List.length notes) ask
                 Html.ol [
                     prop.key "notes"
                     prop.className "review-notes"
                     prop.children (
-                        notes
+                        shown
                         |> List.map (fun note -> noteRow opened dispatch (Map.tryFind note.Turn rows) note)
                     )
                 ]
@@ -320,15 +378,23 @@ module ReviewPanel =
             prop.text "这一场打完了：在上面那排视角里坐到某一席，就看得到那一席的逐手复盘（每一手的向听、有效牌、危险度，以及换打会怎样）。"
         ]
 
-    /// 复盘那一块。**贵的那一步包在 `React.useMemo` 里**：每一条标注都要给那一手现搭一份
+    /// 这一屏的复盘：**画好的那一块，加时间轴要标的那几枚**（票 105）。
+    ///
+    /// **贵的那一步包在 `React.useMemo` 里**：每一条标注都要给那一手现搭一份
     /// 决策包（`DecisionPackage.forSeat` 要一次从头 fold，再逐张试打），一整场东风战约
     /// 一百多手——不 memo 的话，回放每走一帧就重算一整场。
     ///
     /// **依赖只用整数**（`Review.settled` / 座位号 / `Review.signature`）：`Option` 与元组
     /// 每次渲染都是新对象，拿它们当依赖等于没有 memo。三样都不变时，摊开的是哪一手
-    /// （`Review.opened`）照旧每次现读——那一格不进 memo，它每点一下就该变。
-    [<ReactComponent>]
-    let Panel (model: TableModel, dispatch: TableMsg -> unit) =
+    /// （`Review.opened`）与筛选拨在哪边（`model.ReviewFiltered`）照旧每次现读
+    /// ——那两格不进 memo，它们每点一下就该变。
+    ///
+    /// **它是一个钩子而不是一个组件**（票 105 改的）：时间轴在牌桌上面、复盘在牌桌下面，
+    /// 而两处要标的是同一批手。把那一叠回执关在面板自己的组件里的话，轴上那几枚就只能
+    /// 另问一遍——那就是第二条可以自己漂的算路（判据 9 同一族）。
+    /// 因此 `TablePage.Page` 调它一次，把 `Marks` 给控制条、`Panel` 摆在牌桌下面。
+    [<Hook>]
+    let useReview (model: TableModel, dispatch: TableMsg -> unit) : ReviewView =
         let seated =
             Review.addressed model |> Option.map Seat.index |> Option.defaultValue -1
 
@@ -368,9 +434,31 @@ module ReviewPanel =
             |> ignore
 
         match shown with
-        | ReviewShown.Hidden -> Html.none
-        | ReviewShown.Unaddressed -> hint
-        | ReviewShown.Notes(seat, notes) -> body seat notes (Review.opened model) consulted (ask notes) dispatch
+        | ReviewShown.Hidden -> { Marks = []; Panel = [] }
+        | ReviewShown.Unaddressed -> { Marks = []; Panel = [ hint ] }
+        | ReviewShown.Notes(seat, notes) ->
+            let rows =
+                match consulted with
+                | Consulted.Ready(rows, _, _, _) -> rows
+                | Consulted.Untouched
+                | Consulted.Asking _
+                | Consulted.Unavailable _ -> Map.empty
 
-    /// 挂载点：**页面那一层只留这一行**（票 90 的边界）。
-    let internal at (model: TableModel) (dispatch: TableMsg -> unit) : ReactElement list = [ Panel(model, dispatch) ]
+            // **一处算、两处消费**：这一列摆哪几条与轴上标哪几枚，出自同一次 `Review.focused`。
+            let focused = Review.focused rows notes
+
+            {
+                Marks = Review.marks focused
+                Panel = [
+                    body
+                        seat
+                        notes
+                        focused
+                        model.ReviewFiltered
+                        (Review.opened model)
+                        consulted
+                        rows
+                        (ask notes)
+                        dispatch
+                ]
+            }

@@ -139,12 +139,46 @@ module TablePanel =
             ]
         ]
 
+    /// 时间轴上那几枚**复盘标记**（票 105）：值得看的那几手各落在轴上哪一点。
+    ///
+    /// **它不判任何事**：标哪几枚由 `Review.focused` 说了算（与复盘那一列同一次调用），
+    /// 这里只把帧号换成百分比。**坐标系与滑块完全同一根**：分母就是滑块的上界
+    /// （`timeline.Last`），因此一枚标记的位置就是拖到那一帧时滑块停的位置。
+    ///
+    /// **不是按钮**：一整场二三十枚标记挤在一根轴上，每枚实宽不到两个像素
+    /// ——做成点得动的东西就是在邀人点不中（票 87 记过同一族：点不中的按钮比没有更坏）。
+    /// 要跳到那一手的路子只有一条：复盘那一列里点它（票 76 的 `RecordOpened`）。
+    /// 因此它们对读屏整个隐起来（`aria-hidden`）：同一件事已经在复盘那一列里说过一遍。
+    let private reviewMarks (timeline: Timeline) (marks: ReviewMark list) =
+        // 末帧是 0 只有一种情形（一份只有一帧的牌谱），那时滑块本身也拖不动；
+        // 除以 0 在 JS 里会变成 Infinity，而一个 `left: Infinity%` 是静静地画错。
+        let span = max 1 timeline.Last
+
+        Html.div [
+            prop.key "review-marks"
+            prop.className "timeline-marks"
+            prop.testId "table-timeline-marks"
+            prop.ariaHidden true
+            prop.custom ("data-marks", List.length marks)
+            prop.children (
+                marks
+                |> List.map (fun mark ->
+                    Html.span [
+                        prop.key mark.Turn
+                        prop.className "timeline-mark"
+                        prop.custom ("data-timeline-mark", mark.Turn)
+                        prop.custom ("data-timeline-mark-frame", mark.Frame)
+                        prop.style [ style.left (length.percent (100.0 * float mark.Frame / float span)) ]
+                    ])
+            )
+        ]
+
     /// 时间轴那一根滑块（票 75）。**滑块的 `value` 就是游标**：拖到哪一帧牌桌就是那一帧
     /// （O(1) 取帧，帧在载入时一次 fold 好）。旁边那句话说的是「第几手 / 第几局」。
     ///
     /// `prop.onChange` 收 `int` 那一条重载读的是 `valueAsNumber`，正是 range 输入框该用的那一个。
     /// `data-*` 给无头闸门读：人读的是那句中文，机器读的是它们，两边对不上就是错。
-    let private timelineRow (timeline: Timeline) (dispatch: TableMsg -> unit) =
+    let private timelineRow (timeline: Timeline) (marks: ReviewMark list) (dispatch: TableMsg -> unit) =
         let at =
             timeline.Marks
             |> List.tryItem timeline.Kyoku
@@ -162,17 +196,24 @@ module TablePanel =
                     "下一步"
                     (CursorMoved(timeline.Cursor + 1))
                     dispatch
-                Html.input [
+                Html.div [
                     prop.key "slider"
-                    prop.testId "table-timeline"
-                    prop.className "timeline"
-                    prop.type' "range"
-                    prop.min 0
-                    prop.max timeline.Last
-                    prop.value timeline.Cursor
-                    prop.custom ("data-cursor", timeline.Cursor)
-                    prop.custom ("data-last", timeline.Last)
-                    prop.onChange (fun (frame: int) -> dispatch (CursorMoved frame))
+                    prop.className "timeline-track"
+                    prop.children [
+                        Html.input [
+                            prop.key "input"
+                            prop.testId "table-timeline"
+                            prop.className "timeline"
+                            prop.type' "range"
+                            prop.min 0
+                            prop.max timeline.Last
+                            prop.value timeline.Cursor
+                            prop.custom ("data-cursor", timeline.Cursor)
+                            prop.custom ("data-last", timeline.Last)
+                            prop.onChange (fun (frame: int) -> dispatch (CursorMoved frame))
+                        ]
+                        reviewMarks timeline marks
+                    ]
                 ]
                 Html.span [
                     prop.key "at"
@@ -188,6 +229,9 @@ module TablePanel =
         ]
 
     /// 局边界那一排（票 75）：一局一枚，点下去就是把游标挪到那一局的**开局帧**。
+    ///
+    /// 它与上面那几枚复盘标记（票 105）是两件事：这一排是**牌谱自带的结构**（几局），
+    /// 那几枚是**这一席值得看的那几手**；前者点得动，后者只是招子。
     ///
     /// **不另立一条消息**：跳局就是拖到那一帧（`CursorMoved`），游标怂一条路。
     let private kyokuRow (timeline: Timeline) (dispatch: TableMsg -> unit) =
@@ -213,7 +257,7 @@ module TablePanel =
     /// **没有「下一局」那枚按钮**：局间那一步就写在牌谱里，回放自己走过去；
     /// 想直接去某一局的走局边界那一排（它拖的仍然是同一个游标）。
     /// **暂停与倍速照旧**：回放与 Live 共用同一份 `Playback`，没有第二套定时器。
-    let private replayControls (model: TableModel) (dispatch: TableMsg -> unit) =
+    let private replayControls (model: TableModel) (marks: ReviewMark list) (dispatch: TableMsg -> unit) =
         let playRow =
             Html.div [
                 prop.key "play"
@@ -235,7 +279,7 @@ module TablePanel =
             // 票 75 那段「把刚落定那一手的记录原文印出来」的应急形态（`table-replay-record`）
             // **已经换成牌桌上的思考气泡**（票 76）：记录本来就该贴在说那句话的那一席旁边，
             // 而不是堆在控制条下面。`Timeline.Record` 还在（票 75 的用例钉着它）。
-            | Some timeline -> [ timelineRow timeline dispatch; kyokuRow timeline dispatch ]
+            | Some timeline -> [ timelineRow timeline marks dispatch; kyokuRow timeline dispatch ]
 
         // 导入牌谱 JSON（票 78）：牌谱从外面进来的第二条路。**挂在回放这一页**——
         // 导入的下场就是一份回放，而 `table-no-bubbles` 那句话指的就是这里。
@@ -278,10 +322,13 @@ module TablePanel =
         ]
 
     /// 控制条。**牌从哪来决定摆哪几个按钮**（票 71），而播放本身两边共用一份实现。
-    let private controls (model: TableModel) (dispatch: TableMsg -> unit) =
+    ///
+    /// **复盘那几枚标记只给回放**（票 105）：Live 那一页根本没有时间轴
+    /// （`TableState.timeline` 在那边恒是 None，票 75 定的），没有轴就没有地方标。
+    let private controls (model: TableModel) (marks: ReviewMark list) (dispatch: TableMsg -> unit) =
         match TableState.live model with
         | Some live -> hostControls model live dispatch
-        | None -> replayControls model dispatch
+        | None -> replayControls model marks dispatch
 
     /// 配桌那一排（票 72）：**对局长度 / 赤宝牌 / 食断**，加上**种子与重开**（票 83 收过来的）。
     ///
@@ -436,11 +483,11 @@ module TablePanel =
     /// **它紧贴牌桌上沿**，不做视口吸底：吸底会盖住牌桌下沿，而那正是自家手牌那一排
     /// ——「按一下、看结果」看的就是它。**两屏共用这一个出口**（首页回放与 `?table=1`），
     /// 分岔在它里面（`controls`）而不在页面装配上。
-    let internal ops (model: TableModel) (dispatch: TableMsg -> unit) =
+    let internal ops (model: TableModel) (marks: ReviewMark list) (dispatch: TableMsg -> unit) =
         Html.div [
             prop.className "ops"
             prop.testId "table-ops"
-            prop.children [ controls model dispatch; viewpoints model dispatch ]
+            prop.children [ controls model marks dispatch; viewpoints model dispatch ]
         ]
 
     // ---- 视图：四席绑定与模型档案（票 73） ----

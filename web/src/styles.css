@@ -1059,13 +1059,51 @@ input[type="range"] {
   flex-wrap: wrap;
 }
 
-/* `.controls input` 把输入框钉在 8rem 宽（种子框要的），而滑块要占满剩下的位置。 */
-.replay-controls input.timeline {
-  width: auto;
+/* `.controls input` 把输入框钉在 8rem 宽（种子框要的），而滑块要占满剩下的位置。
+   滑块外面那一层盒子（`.timeline-track`，票 105）只为一件事存在：
+   复盘那几枚标记要与滑块**同一根坐标系**，而绝对定位得有一个参系。 */
+.replay-controls .timeline-track {
+  position: relative;
+  display: flex;
   flex: 1 1 14rem;
   min-width: 10rem;
+}
+
+.replay-controls input.timeline {
+  width: 100%;
   padding: 0;
   cursor: pointer;
+}
+
+/* 时间轴上那几枚**复盘标记**（票 105）：值得看的那几手各落在轴上哪一点。
+   画成**一道细墨线**而不是圆点：一整场二三十枚挤在一根轴上，圆点会连成一串珠子。
+   **靠靠靖而不是朱红**（票 93 立的调色板纪律：朱红是赤牌・立直・兜底与警示）
+   ——它标的是「这一手有东西可比」，不是「你错了」；靖青也正是「你正在看这里」那一条的颜色，
+   两者说的都是「看这儿」。
+   **不接鼠标**（`pointer-events: none`）：它盖在滑块上面，接了就把拖动挡住了；
+   要跳到那一手的路子只有复盘那一列里那一枚按钮（票 76 的 `RecordOpened`）。
+   **左右各缩回半个滑块头**：range 的滑块头在两端各占一半宽度，不缩的话
+   末帧那一枚会比滑块头真止住的地方靠右八个像素。它只是**目测对齐**：
+   那一枚到底是哪一手、第几帧，由 `data-timeline-mark` 与 `data-timeline-mark-frame`
+   说了算（闸门读的是它们，不是像素）。 */
+.timeline-marks {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: -0.1rem;
+  height: 0.4rem;
+  pointer-events: none;
+}
+
+.timeline-mark {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--indigo);
+  opacity: 0.7;
 }
 
 /* 「第 191 手・南4·2局」比「第 3 手・东1局」宽：不钉住的话滑块会在拖动中途伸缩，
@@ -1434,4 +1472,21 @@ input[type="range"] {
   margin: 0.2rem 0 0;
   font-size: 0.92em;
   color: var(--ink-soft);
+}
+
+/* —— 复盘：只看值得看的那几手（票 105）——
+   筛选那一句跟在那段说明下面，比它再淡一档：它说的是「这一列现在摆了几条」，
+   不是牌谱本身。**它必须在那一列上面**：筛掉了多少要在看到那几条之前就读到，
+   否则人以为这一局只打了二十几手。 */
+
+.review-filter {
+  margin: 0.2rem 0 0;
+  font-size: 0.92em;
+  color: var(--ink-soft);
+}
+
+/* 那一枚开关与「回到原处」同在抬头那一排（`.bubble-head button` 已经给了内边距）：
+   它不隐不藏——默认拨在「只看值得看的那几手」上，人得一眼看得到怎么拨回全部。 */
+.review-filter-toggle {
+  white-space: nowrap;
 }

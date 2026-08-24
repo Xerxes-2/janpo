@@ -154,6 +154,7 @@ module TablePage =
     /// **不做视口吸底**：吸底那一条会盖住牌桌下沿，而那正是自家手牌那一排。
     let private layout
         (model: TableModel)
+        (review: ReviewPanel.ReviewView)
         (live: LiveTable option)
         (dispatch: TableMsg -> unit)
         (intro: ReactElement list)
@@ -170,10 +171,12 @@ module TablePage =
                 // 标签页上与页面上不该各说各的。改品牌语先改那一行，再抄过来。
                 (Html.h1 "janpo —— 浏览器里的 LLM 日麻竞技场" :: intro)
                 @ setup
-                @ [ TablePanel.ops model dispatch; board model dispatch ]
+                // 时间轴上那几枚标记（票 105）跟着控制条一起下去：**它们与复盘那一列同源**
+                // （同一次 `Review.focused`），因此不会出现「轴上标一批、列里摆另一批」。
+                @ [ TablePanel.ops model review.Marks dispatch; board model dispatch ]
                 // 复盘那一块（票 90）：**只在终局后出现**，判据在 `Review.shown` 里。
                 // 摆在牌桌**下面**：点一条标注就是把牌桌摆回那一手，两件东西要在同一屏上（票 83 同一条标准）。
-                @ ReviewPanel.at model dispatch
+                @ review.Panel
             )
         ]
 
@@ -181,8 +184,8 @@ module TablePage =
     ///
     /// **没有配桌与模型面板**：第一眼不该是一张表单（票 35 的「默认视图只该有牌桌」同一条标准）。
     /// 想自己开一桌的人走那条链接去 `?table=1`——Host 那一侧访客得摸得到。
-    let private homePage (model: TableModel) (dispatch: TableMsg -> unit) =
-        layout model None dispatch [
+    let private homePage (model: TableModel) (review: ReviewPanel.ReviewView) (dispatch: TableMsg -> unit) =
+        layout model review None dispatch [
             Html.p [
                 prop.className "intro"
                 prop.testId "home-intro"
@@ -202,8 +205,13 @@ module TablePage =
     /// 视角、危险度——**东西一样不少**（票 83 只换了它们的先后：配桌收到上面，操作贴着牌桌）。
     ///
     /// **默认暂停**（`Playback.initial`）：要点、要读牌桌的那几道无头闸门全靠这一条。
-    let private hostPage (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
-        layout model (Some live) dispatch [
+    let private hostPage
+        (model: TableModel)
+        (review: ReviewPanel.ReviewView)
+        (live: LiveTable)
+        (dispatch: TableMsg -> unit)
+        =
+        layout model review (Some live) dispatch [
             // **一行就够**（票 83 交给票 82 的那件）：这一段的读者是**主持人自己**，
             // 他每开一次这一页都要从它头上跳过去——而一整屏只有 800px，四行说明占了 82px。
             // **首页那两段不动**（`homePage`）：那一段是写给头一回来的访客的。
@@ -236,9 +244,14 @@ module TablePage =
     let Page () =
         let model, dispatch = React.useElmish (init, update, [||])
 
+        // 复盘那一块与时间轴上那几枚标记（票 105）：**一处算、两处消费**。
+        // 这一句摆在这里（而不是面板自己的组件里），是因为它两个消费点一个在牌桌上面
+        // （`TablePanel.ops` 的时间轴）、一个在牌桌下面（复盘），而它们要标的是同一批手。
+        let review = ReviewPanel.useReview (model, dispatch)
+
         let page =
             match TableState.live model with
-            | Some live -> hostPage model live dispatch
-            | None -> homePage model dispatch
+            | Some live -> hostPage model review live dispatch
+            | None -> homePage model review dispatch
 
         React.Fragment(page :: devSurface model)

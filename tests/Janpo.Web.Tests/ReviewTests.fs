@@ -1103,3 +1103,302 @@ module ReviewTests =
 
         // 阳性对照：这五种情形真的各印出了一串数（空表那一种除外，它本来就只有一句话）。
         Assert.True(numbers > 15, $"这一条该核过十几个数，实到 {numbers} 个")
+
+    // ---- 值得看的那几手：筛选那一格与时间轴上那几枚标记（票 105） ----
+    //
+    // **阈值不是拍的**（判据 14）：`Review` 里那个常数是在真人牌谱语料上量出来的
+    // （111 份 × 四席 × 69,318 个决策点，报告 105 §1）。这一族用例因此**把它钉住**：
+    // 0.79 与 0.80 两侧各一条，改动那个常数就有人当场喊。
+    //
+    // **CI 里强 AI 那一行画不出来**（那份 6 MB 不入版本控制，ADR-0006 边界 6），
+    // 因此「它很确定而你打了别的」这一条判据的执行者**只有这一侧**——浏览器那一趟
+    // 在 CI 里只跑得到「引擎的试打表里还有更好的换法」那一半（报告 107 §1 记的同一条）。
+
+    /// 给某一手造一行强 AI：`its` 是它选的那一条，`candidates` 是上游那一列。
+    let private strongFor (note: ReviewNote) (its: int) (candidates: (int * float) list) : ReviewStrong =
+        match Review.strongOf note (answeredWith (Some its) candidates 3) with
+        | Some row -> row
+        | None -> failwith $"第 {note.Turn} 手该换得出一行强 AI"
+
+    /// 这一手那一包里的几条 id，与他自己打的那一条（两样缺一样就跳过这一手）。
+    let private optionsOf (note: ReviewNote) : (int list * int) option =
+        note.Package
+        |> Option.bind (fun package ->
+            DecisionPackage.tryId note.Played package
+            |> Option.map (fun played -> DecisionPackage.options package |> List.map ActionOption.id, played))
+
+    [<Fact>]
+    let ``它很确定而你打的排在后面：阈值两侧与排第几四种，各断言一次`` () =
+        let note, package, ids = handWithOptions ()
+
+        let played =
+            match DecisionPackage.tryId note.Played package with
+            | Some id -> id
+            | None -> failwith "他打的那一手必然在那一包里"
+
+        let elsewhere = ids |> List.filter (fun id -> id <> played)
+
+        // 六种情形，逐条摆明白（第三列是期望）。**0.79 / 0.80 两条钉的就是那个阈值本身**。
+        let cases =
+            [
+                "上游没给分布", Review.strongOf note (answered (Some elsewhere[0]) 5), false
+                "你就是它挑的那一条（排第 1）",
+                Review.strongOf note (answeredWith (Some played) [ played, 0.95; elsewhere[0], 0.03 ] 2),
+                false
+                "你排第 2（它很确定，但你就在它后一条）",
+                Review.strongOf note (answeredWith (Some elsewhere[0]) [ elsewhere[0], 0.95; played, 0.03 ] 2),
+                false
+                "你排第 3",
+                Review.strongOf
+                    note
+                    (answeredWith (Some elsewhere[0]) [ elsewhere[0], 0.95; elsewhere[1], 0.03; played, 0.01 ] 3),
+                true
+                "你不在它那几条里，而它刚好没过阈值（0.79）",
+                Review.strongOf note (answeredWith (Some elsewhere[0]) [ elsewhere[0], 0.79; elsewhere[1], 0.2 ] 2),
+                false
+                "你不在它那几条里，而它刚好过了阈值（0.80）",
+                Review.strongOf note (answeredWith (Some elsewhere[0]) [ elsewhere[0], 0.80; elsewhere[1], 0.2 ] 2),
+                true
+            ]
+
+        for which, row, expected in cases do
+            match row with
+            | Some row ->
+                Assert.Equal(expected, Review.notable row)
+
+                // 那一格上 DOM 的词（`data-review-worth`）与这一条判据是同一件事：
+                // 用例手里这一手没有更好的换法，因此只有 strong 与空串两种。
+                let bare = { note with Better = [] }
+                Assert.Equal((if expected then "strong" else ""), Review.worth (Some row) bare)
+                Assert.Equal(expected, Review.worthwhile (Some row) bare)
+
+                // **`notable` 蕴含 `Differs`**：排第三或不在候选里的那一手，必然不是它挑的那一条。
+                if Review.notable row then
+                    Assert.True(row.Differs, $"{which}：这一行既然值得看，它与你打的就该是两手")
+            | None -> failwith $"{which}：包里那一条 id 该换得出一行"
+
+        // 判据 3：两侧各真的走到过（六种里两真四假）。
+        let counted (want: bool) =
+            cases |> List.filter (fun (_, _, expected) -> expected = want) |> List.length
+
+        Assert.Equal(2, counted true)
+        Assert.Equal(4, counted false)
+
+    [<Fact>]
+    let ``筛选真的筛掉了东西：那几百条里剩下的每一条都过得了判据，被筛掉的每一条都过不了`` () =
+        let replay =
+            TablePage.home ()
+            |> fst
+            |> step (DemoLoaded(Ok demo))
+            |> step (ViewpointPicked(Viewpoint.Seated(seat 1)))
+
+        // 两桌：首页那份真牌谱（四席都是模型），与故意每一手都打最差的那一桌。
+        let batches =
+            [
+                "首页那份回放的座位 1", replay |> notesOf 1
+                "真人打最差那一桌", settledWorst.Force() |> notesOf 0
+            ]
+
+        for where, notes in batches do
+            // **强 AI 那一叠不在场时只剩第一条判据**（CI 里就是这一档）。
+            let focused = Review.focused Map.empty notes
+            let dropped = notes |> List.filter (fun note -> not (List.contains note focused))
+
+            Assert.NotEmpty focused
+            Assert.NotEmpty dropped
+
+            // 剩下的每一条都有更好的换法；被筛掉的每一条都没有。
+            for note in focused do
+                Assert.False(List.isEmpty note.Better, $"{where}第 {note.Turn} 手留下来了，却一条更好的换法都没有")
+                // 那几 MB 不在场时，点亮它们的只可能是引擎那一半判据。
+                Assert.Equal("better", Review.worth None note)
+
+            for note in dropped do
+                Assert.True(List.isEmpty note.Better, $"{where}第 {note.Turn} 手被筛掉了，却列得出更好的换法")
+                Assert.Equal("", Review.worth None note)
+
+            // 顺序与手序照旧（筛选只是少摆几条，不重排）。
+            Assert.Equal<int list>(
+                focused |> List.map (fun note -> note.Turn) |> List.sort,
+                focused |> List.map (fun note -> note.Turn)
+            )
+
+            // 时间轴上那几枚标记 = 这一列（一处算、两处消费）。
+            let marks = Review.marks focused
+
+            Assert.Equal<int list>(
+                focused |> List.map (fun note -> note.Turn),
+                marks |> List.map (fun mark -> mark.Turn)
+            )
+
+            Assert.Equal<int list>(
+                focused |> List.map (fun note -> note.Frame),
+                marks |> List.map (fun mark -> mark.Frame)
+            )
+
+        // **筛选得有意义**：首页那一席一整场一百多手，留下来的不到一半
+        // （量出来是 122 手里 22 手，报告 105 §2）——否则「精选」只是换个说法把整列再摆一遍。
+        let notes = replay |> notesOf 1
+        let kept = Review.focused Map.empty notes |> List.length
+        Assert.True(kept * 2 < List.length notes, $"一整场 {List.length notes} 手里留下了 {kept} 手：这不叫筛选")
+
+    [<Fact>]
+    let ``时间轴上那几枚标记与分歧那几手逐手对齐：由强 AI 点亮的那几枚一枚不多、一枚不少`` () =
+        let notes =
+            TablePage.home ()
+            |> fst
+            |> step (DemoLoaded(Ok demo))
+            |> step (ViewpointPicked(Viewpoint.Seated(seat 1)))
+            |> notesOf 1
+
+        // 造一叠回执：**四种情形轮着来**（你排第 1 / 第 2 / 第 3 / 不在它那几条里），
+        // 于是「分歧」这一族里既有值得看的，也有不值得看的——两边的计数都不会是 0。
+        let rows =
+            notes
+            |> List.indexed
+            |> List.choose (fun (index, note) ->
+                optionsOf note
+                |> Option.bind (fun (ids, played) ->
+                    match ids |> List.filter (fun id -> id <> played) with
+                    | first :: second :: _ ->
+                        let row =
+                            match index % 4 with
+                            | 0 -> strongFor note played [ played, 0.9; first, 0.06; second, 0.02 ]
+                            | 1 -> strongFor note first [ first, 0.9; played, 0.06; second, 0.02 ]
+                            | 2 -> strongFor note first [ first, 0.9; second, 0.06; played, 0.02 ]
+                            | _ -> strongFor note first [ first, 0.5; second, 0.3 ]
+
+                        Some(note.Turn, row)
+                    | _ -> None))
+
+        let table = Map.ofList rows
+        let focused = Review.focused table notes
+        let marks = Review.marks focused
+        let disagreeing = Review.disagreeing (rows |> List.map snd) |> Set.ofList
+
+        // 那两个数说的是同一件事（面板抬头读的是后者）。
+        Assert.Equal(Set.count disagreeing, Review.disagreements (rows |> List.map snd))
+
+        let better =
+            notes
+            |> List.filter (fun note -> not (List.isEmpty note.Better))
+            |> List.map (fun note -> note.Turn)
+            |> Set.ofList
+
+        // **逐枚对齐**：每一枚标记要么是「引擎的数上有更好的换法」，要么落在分歧那几手里。
+        for mark in marks do
+            Assert.True(
+                Set.contains mark.Turn better || Set.contains mark.Turn disagreeing,
+                $"第 {mark.Turn} 手被标在时间轴上，却既没有更好的换法、也不是分歧"
+            )
+
+        // **由强 AI 点亮的那几枚 = {分歧 ∧ 它很确定而你排在后面}**，一枚不多、一枚不少。
+        let lit =
+            marks
+            |> List.map (fun mark -> mark.Turn)
+            |> Set.ofList
+            |> Set.filter (fun turn -> not (Set.contains turn better))
+
+        let expected =
+            rows
+            |> List.filter (fun (_, row) -> Review.notable row)
+            |> List.map fst
+            |> Set.ofList
+            |> Set.filter (fun turn -> not (Set.contains turn better))
+
+        Assert.Equal<Set<int>>(expected, lit)
+
+        // 那一格上 DOM 的词与两条判据逐手对得上：四种情形（both / better / strong / 空串）
+        // 在这一整场里各真的出现过（判据 3），而且「非空串」那几条恰好是这一列。
+        let worths =
+            notes |> List.map (fun note -> Review.worth (Map.tryFind note.Turn table) note)
+
+        for word in [ "both"; "better"; "strong"; "" ] do
+            Assert.True(List.contains word worths, $"一整场里一手「{word}」都没有：那一支等于没跑")
+
+        Assert.Equal<int list>(
+            focused |> List.map (fun note -> note.Turn),
+            List.zip notes worths
+            |> List.filter (fun (_, worth) -> worth <> "")
+            |> List.map (fun (note, _) -> note.Turn)
+        )
+
+        // 判据 3：这几种情形各真的走到过几次——为 0 的那一种，这一条什么都没证明。
+        let notable =
+            rows |> List.filter (fun (_, row) -> Review.notable row) |> List.length
+
+        let quiet = Set.count disagreeing - notable
+
+        Assert.True(Set.count better > 0, "一手「有更好的换法」都没有：那一半判据等于没跑")
+        Assert.True(notable > 0, "一手「它很确定而你排在后面」都没有：那一半判据等于没跑")
+        Assert.True(quiet > 0, "分歧那几手全被点亮了：那条判据没有收紧任何东西")
+        // **收紧是这一票的全部意义**：分歧那一族里被点亮的应当是少数。
+        Assert.True(notable * 2 < Set.count disagreeing, $"分歧 {Set.count disagreeing} 手里点亮了 {notable} 手：没收紧")
+
+    [<Fact>]
+    let ``筛选那一格默认开着，拨得动，而且只改这一列摆几条`` () =
+        let model =
+            TablePage.home ()
+            |> fst
+            |> step (DemoLoaded(Ok demo))
+            |> step (ViewpointPicked(Viewpoint.Seated(seat 1)))
+            |> step (CursorMoved 200)
+
+        // 默认只看值得看的那几手（票面：一整场一百多条排成一列，人得自己一条条扫）。
+        Assert.True(model.ReviewFiltered)
+
+        let all = model |> step ReviewFilterToggled
+        Assert.False(all.ReviewFiltered)
+        Assert.True((all |> step ReviewFilterToggled).ReviewFiltered)
+
+        // **它不碰别的**：游标没动、摊开的那一手没变、标注一条不少。
+        Assert.Equal(
+            TablePage.timeline model |> Option.map (fun timeline -> timeline.Cursor),
+            TablePage.timeline all |> Option.map (fun timeline -> timeline.Cursor)
+        )
+
+        Assert.Equal(Review.opened model, Review.opened all)
+
+        Assert.Equal<int list>(
+            notesOf 1 model |> List.map (fun note -> note.Turn),
+            notesOf 1 all |> List.map (fun note -> note.Turn)
+        )
+
+    /// 筛选那一句上那两个数的来源（票 105）：**只有这两格**。
+    ///
+    /// 阈值那个数**不印在页面上**，因此这张表里没有它的位置——真要印，就得在这里
+    /// 与 `verify-review.mjs` 那一侧各写一格来源（票 107 立的白名单）。
+    let private filterSources (total: int) (kept: int) : Sourced list =
+        [
+            fromInt "这一席落定了几手（ReviewNote 的条数）" total
+            fromInt "值得看的有几手（Review.focused 的条数）" kept
+        ]
+
+    [<Fact>]
+    let ``筛选那一句同样一个自造的数都不出：四种措辞里都只有「几手」与「显示几手」`` () =
+        // 四种措辞 × 两组数：筛选开着 / 关掉 × 问过强 AI / 没问过，外加「一手都没剩」那一支。
+        let cases =
+            [
+                "筛选开着、没问过强 AI", ReviewFilter.toDisplay true false 122 22, 122, 22
+                "筛选开着、问过强 AI", ReviewFilter.toDisplay true true 122 25, 122, 25
+                "筛选关掉", ReviewFilter.toDisplay false true 122 25, 122, 25
+                "一手都没剩", ReviewFilter.toDisplay true true 7 0, 7, 0
+            ]
+
+        let numbers =
+            cases
+            |> List.sumBy (fun (which, said, total, kept) -> traced $"筛选那一句（{which}）" (filterSources total kept) said)
+
+        Assert.Equal(8, numbers)
+
+        for which, said, _, _ in cases do
+            // 那一句里同样不许出现度量词与「评分」这类口径（票 90/93/103 的老边界）。
+            for word in forbidden do
+                Assert.DoesNotContain(word, said)
+
+            Assert.DoesNotContain("暂无", said)
+            Assert.False(said.Contains "%", $"{which}：筛选那一句里出现了百分比——一写成百分比，下一步就是拿它当分数")
+
+        // 那一枚按钮上**一个数都没有**（同一件事不在两处各写一个数）。
+        for filtered in [ true; false ] do
+            Assert.Empty(numerals (ReviewFilter.toggle filtered))

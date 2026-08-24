@@ -35,6 +35,17 @@
 //   ⑬ **同一手问两遍给同一答案**（可复现），分歧手数照**规则**再数一遍（判据 8）；
 //      算不动时（CI 的常规趟：那 6 MB 不在场）**整行不出现**，而票 90 那几栏一条不少。
 //
+// 票 105 加的那一条**三程共用**（复盘画出来那一刻就量，判据 20）：
+//   ⑧ **只看值得看的那几手，并在时间轴上标出它们**：默认筛选开着，这一列只摆
+//      闸门**照规则自己数出来的**那几手（引擎的试打表里有帕累托占你那一张的换法，
+//      或者强 AI 头一条的概率 ≥ 0.8 而你排到第三、或根本不在它那几条里）；
+//      那一句「N 手里显示 M 手」里**两个数逐个溯源**（同票 107）；
+//      时间轴上那几枚与这一列**逐手对齐**（手序与帧号），拨回「看全部」之后
+//      条数回来而轴上一枚不少（票 90/93/103/107 那几条逐项对拍就在这一态下跑）；
+//      上帝视角下一枚标记都没有（阴性对照）。**CI 里只量得到引擎那一半判据**：
+//      强 AI 那一半要那份 6 MB 在场，因此只在本机演习那一档才开口
+//      （那一半在 dotnet 那一侧另有执行者：`ReviewTests` 票 105 那几条）。
+//
 // 票 107 加的那一条**三程共用**（逐行对拍那一步里，因此两程各跑一遍）：
 //   ⑯ **逐数溯源**：复盘画出来的那几句里的**每一个数**都指得回引擎那一份的一格
 //      （手序 / 这一手本身 / 向听 / 有效牌枚数与种数 / 第几安全 / 换打那张与它多几枚，
@@ -79,7 +90,7 @@ import {
   instantiate as instantiateProbe,
 } from "../../probe/akagi-wasm/probe.js";
 import { ASSET, assetPresent, PUBLIC_ASSET } from "./baseline-asset.mjs";
-import { failure, isEntry, mark, runStandalone, tick } from "./browser-lane.mjs";
+import { failure, isEntry, mark, markerSince, runStandalone, tick } from "./browser-lane.mjs";
 import { plantSeating } from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
 
@@ -154,6 +165,8 @@ function panel(page) {
         turn: num(row, "data-review-turn"),
         frame: num(row, "data-review-frame"),
         kind: row.getAttribute("data-review-kind"),
+        // 这一手为什么值得看（票 105）：better / strong / both / 空串。
+        worth: row.getAttribute("data-review-worth"),
         shanten: num(row, "data-review-shanten"),
         after: num(row, "data-review-shanten-after"),
         delta: num(row, "data-review-delta"),
@@ -192,6 +205,13 @@ function panel(page) {
       hint: at("table-review-hint") !== null,
       seat: num(section, "data-review-seat"),
       said: num(section, "data-review-notes"),
+      // 只看值得看的那几手（票 105）：拨在哪边、值得看的有几手、那一句说了什么。
+      // **`kept` 与画出来的行数是两件事**：拨回「看全部」只改后者。
+      filter: section.getAttribute("data-review-filter"),
+      kept: num(section, "data-review-kept"),
+      filterLine: said("review-filter"),
+      filterShown: num(at("review-filter"), "data-review-shown"),
+      toggle: at("review-filter-toggle")?.textContent?.trim() ?? "",
       open: section.getAttribute("data-review-open"),
       strong: section.querySelectorAll("[data-review-strong]").length,
       strongState: head === null ? null : head.getAttribute("data-review-strong-state"),
@@ -204,6 +224,27 @@ function panel(page) {
       intro: said("review-intro"),
       text: section.textContent ?? "",
       notes,
+    };
+  });
+}
+
+/**
+ * 时间轴上那几枚复盘标记（票 105）：哪几手、各钉在第几帧。
+ *
+ * **读的是 `data-*` 而不是像素**：一枚标记在屏幕上实宽两个像素，拿坐标去对齐的闸门
+ * 只会量到浏览器的滑块头有多宽；这一条要铉的是「标的是哪几手」。
+ */
+function timelineMarks(page) {
+  return page.evaluate(() => {
+    const rail = document.querySelector('[data-testid="table-timeline-marks"]');
+    if (rail === null) return { present: false, said: null, marks: [] };
+    return {
+      present: true,
+      said: Number.parseInt(rail.getAttribute("data-marks") ?? "", 10),
+      marks: [...rail.querySelectorAll("[data-timeline-mark]")].map((each) => ({
+        turn: Number.parseInt(each.getAttribute("data-timeline-mark"), 10),
+        frame: Number.parseInt(each.getAttribute("data-timeline-mark-frame"), 10),
+      })),
     };
   });
 }
@@ -375,6 +416,156 @@ function dominates(played, candidate) {
     (both(candidate.ukeire, played.ukeire) && candidate.ukeire > played.ukeire) ||
     (both(candidate.order, played.order) && candidate.order < played.order);
   return notWorse && better;
+}
+
+/**
+ * 「它很确定而你打的排在后面」那一条里的两个常数（票 105）。
+ *
+ * **它们是 `Review.telling` / `Review.trailing` 的另一份，故意的**（判据 6：
+ * 右侧不许是同一个实现）：这一侧照**规则**自己数一遍，于是一旦有人只改了 F# 那一处的
+ * 阈值，这一道当场红——那正是一道闸门该做的事。这两个数怎么来的写在报告 105 §1。
+ */
+const TELLING = 0.8;
+const TRAILING = 3;
+
+/**
+ * 照**规则**自己数一遍「值得看的那几手」（票 105）。
+ *
+ * 两条，或的关系：① 引擎的试打表里真有一张帕累托占优你打的那一张（`dominates`）；
+ * ② 强 AI 那一行里它头一条的概率 ≥ `TELLING`，而你打的排到第 `TRAILING` 或根本不在里面。
+ *
+ * `strong` 是**闸门自己问出来的那一叠**（`asked()` 的 `notes`，另一条路）；
+ * CI 里那份 6 MB 不在场，传 `null`，于是只剩第①条——与页面那一侧那一刻的处境一样。
+ */
+function worthwhile(expected, strong) {
+  const better = new Set();
+  const notable = new Set();
+
+  for (const each of expected.notes) {
+    if (each.kind === "dahai") {
+      const yours = each.trials.find((trial) => trial.pai === each.pai);
+      if (yours !== undefined && each.trials.some((trial) => dominates(yours, trial))) {
+        better.add(each.turn);
+      }
+    }
+  }
+
+  for (const each of strong ?? []) {
+    const ps = each.candidates.map((choice) => choice.p);
+    if (ps.length === 0) continue;
+    const at = each.candidates.findIndex((choice) => choice.action_id === each.playedId);
+    if (ps[0] >= TELLING && (at === -1 || at + 1 >= TRAILING)) notable.add(each.turn);
+  }
+
+  const turns = expected.notes
+    .map((each) => each.turn)
+    .filter((turn) => better.has(turn) || notable.has(turn));
+
+  return { better, notable, turns, kept: new Set(turns) };
+}
+
+/**
+ * **只看值得看的那几手**（票 105 的⑧）：这一列摆的那几条、那一句里的两个数、
+ * 以及时间轴上那几枚标记，**逐手**与闸门照规则数出来的那一套对。
+ *
+ * `marks` 传 `null` 表示这一程根本没有时间轴（Live 那一页，票 75）。
+ */
+function focused(where, shown, marks, expected, rule) {
+  const problems = [];
+  const drawn = shown.notes.map((note) => note.turn);
+  const on = shown.filter === "on";
+  const total = expected.notes.length;
+
+  if (shown.kept !== rule.kept.size) {
+    problems.push(
+      `${where}：面板说值得看的有 ${shown.kept} 手，照规则数出来的是 ${rule.kept.size} 手` +
+        `（引擎那一半 ${rule.better.size} 手、强 AI 那一半 ${rule.notable.size} 手）`,
+    );
+  }
+
+  const want = on ? rule.turns : expected.notes.map((each) => each.turn);
+
+  if (drawn.join(" ") !== want.join(" ")) {
+    const extra = drawn.filter((turn) => !want.includes(turn));
+    const missing = want.filter((turn) => !drawn.includes(turn));
+    problems.push(
+      `${where}（筛选${on ? "开着" : "关掉"}）：这一列画了 ${drawn.length} 条，该是 ${want.length} 条` +
+        `（多出来的：${extra.slice(0, 5).join("、") || "无"}；漏掉的：${missing.slice(0, 5).join("、") || "无"}）`,
+    );
+  }
+  // **逐手核「是哪一条判据点亮了它」**：只比并集的话，一条判据被改坠而另一条
+  // 刚好盖住同几手时，闸门会一声不响（实测：阈值 0.8 改 0.7，并集一数不变）。
+  for (const note of shown.notes) {
+    const wanted = rule.better.has(note.turn)
+      ? rule.notable.has(note.turn)
+        ? "both"
+        : "better"
+      : rule.notable.has(note.turn)
+        ? "strong"
+        : "";
+    if (note.worth !== wanted) {
+      problems.push(
+        `${where} 第 ${note.turn} 手：页面说它值得看是因为「${note.worth || "（都不占）"}」，` +
+          `照规则该是「${wanted || "（都不占）"}」`,
+      );
+    }
+  }
+
+  if (shown.filterShown !== drawn.length) {
+    problems.push(
+      `${where}：那一句说这一列摆了 ${shown.filterShown} 条，实际画了 ${drawn.length} 条`,
+    );
+  }
+
+  // ⑥ 同一条判据（票 107）：那一句里**只该有两个数**——这一席落定了几手、
+  // 其中值得看的有几手。阈值那个数不在页面上，因此这张表里也没有它的位置。
+  const printed = numerals(shown.filterLine);
+  const sources = [
+    ["这一席落定了几手", [String(total)]],
+    ["值得看的有几手（照规则数出来的）", [String(rule.kept.size)]],
+  ];
+  const wanted = sources.flatMap(([, digits]) => digits);
+
+  if (printed.join(" ") !== wanted.join(" ")) {
+    problems.push(
+      `${where}：筛选那一句「${shown.filterLine}」印出来的数是 [${printed.join("，")}]，` +
+        `而指得回去的只有 [${wanted.join("，")}]（${sources.map(([at, digits]) => `${at} = ${digits.join("")}`).join("；")}）`,
+    );
+  }
+  if (shown.toggle === "" || /\d/.test(shown.toggle)) {
+    problems.push(`${where}：那一枚开关上写的是「${shown.toggle}」（它该在，而且不该再摆一个数）`);
+  }
+
+  // 时间轴上那几枚：**与值得看的那几手逐手对齐**（手序与帧号两样都对），
+  // **而且不跟着那一枚开关变**：拨回「看全部」只是多摆几条，值得看的仍旧是那几手。
+  if (marks !== null) {
+    if (!marks.present) {
+      problems.push(`${where}：时间轴上根本没有那一条标记带（票 105 要把值得看的那几手标在轴上）`);
+    } else {
+      if (marks.said !== marks.marks.length) {
+        problems.push(`${where}：轴上说有 ${marks.said} 枚标记，实际画了 ${marks.marks.length} 枚`);
+      }
+      if (marks.marks.map((mark) => mark.turn).join(" ") !== rule.turns.join(" ")) {
+        problems.push(
+          `${where}：轴上标的是第 [${marks.marks.map((mark) => mark.turn).join("，")}] 手，` +
+            `照规则值得看的是第 [${rule.turns.join("，")}] 手——两处标的不是同一批手`,
+        );
+      }
+      // 一枚标记钉在第几帧：与复盘那一条自己说的那一帧逐枚相同。
+      // **帧号本身真不真另有人铉**：第⑧条点开一条标注时拿游标量过（而那一条正是
+      // 从这几枚里挑的），因此这一句量的是「两处指的是同一帧」。
+      for (const mark of marks.marks) {
+        const note = shown.notes.find((note) => note.turn === mark.turn);
+        if (note !== undefined && mark.frame !== note.frame) {
+          problems.push(
+            `${where}：第 ${mark.turn} 手那一枚标在第 ${mark.frame} 帧，而复盘那一条说它落定在第 ${note.frame} 帧`,
+          );
+        }
+      }
+    }
+  }
+
+  return problems;
 }
 
 /**
@@ -689,7 +880,46 @@ async function humanLeg(lane, { budgetMs, peek }) {
       return problems;
     }
 
-    const { problems: mismatches, counts } = compare("真人那一桌", shown, expected);
+    // ⑧ **只看值得看的那几手**（票 105）：默认就是筛选开着的，于是上面那一叠 `shown`
+    // 量到的就是筛选后的那一列。Live 那一页没有时间轴（票 75），因此不量标记。
+    //
+    // **那一句的钩先取**（`markerSince`，票 106）：在这一项开始之前记下清单有多长，
+    // 否则印那一句时现取就是一个恒真式。
+    const focusMark = markerSince(problems);
+    const rule = worthwhile(expected, null);
+    problems.push(...focused("真人那一桌", shown, null, expected, rule));
+
+    if (shown.filter !== "on") {
+      problems.push(`复盘默认该只摆值得看的那几手，面板说的是「${shown.filter}」`);
+    }
+    if (rule.kept.size === 0 || rule.kept.size >= expected.notes.length) {
+      problems.push(
+        `真人那一桌：一整场 ${expected.notes.length} 手里值得看的数出 ${rule.kept.size} 手：` +
+          "筛选那一条这一趟等于没跑（判据 3）",
+      );
+    }
+
+    console.log(
+      `真人那一桌：只看值得看的那几手 ${focusMark()}` +
+        `（${expected.notes.length} 手里显示 ${shown.notes.length} 手；那一句：「${shown.filterLine}」）`,
+    );
+
+    // 拨回「看全部」：票 90/93/103/107 那几条逐项对拍在这一态下跑（**一条不少**）。
+    if (
+      !(await clicked(
+        page,
+        "review-filter-toggle",
+        problems,
+        "筛掉了就要有一枚拨得回去的开关（票 105）",
+      ))
+    ) {
+      return problems;
+    }
+
+    const whole = await panel(page);
+    problems.push(...focused("真人那一桌（看全部）", whole, null, expected, rule));
+
+    const { problems: mismatches, counts } = compare("真人那一桌", whole, expected);
     problems.push(...mismatches);
     console.log(
       `真人那一桌：${counts.rows} 条逐项对拍 ${tick(mismatches.length === 0)}` +
@@ -715,7 +945,8 @@ async function humanLeg(lane, { budgetMs, peek }) {
     }
 
     // ⑤ 点某一手：牌桌摆出那一刻的快照，按「回到原处」回得来（Live 侧没有时间轴）。
-    const jump = shown.notes.find((note) => note.kind === "dahai");
+    // 拿的是拨回「看全部」之后那一叠（`whole`）：此刻 DOM 里摆着的就是它。
+    const jump = whole.notes.find((note) => note.kind === "dahai");
     const before = (await page.getByTestId("table-latest").textContent()).trim();
     const why = "每一条标注都该点得开（票 90 的第三条验收）";
 
@@ -777,6 +1008,16 @@ async function replayLeg(lane) {
       problems.push("上帝视角下页面一句话都没说：人因此不知道坐下来就看得到复盘");
     }
 
+    // ⑧ 的**阴性对照**（票 105）：上帝视角没有主语，时间轴上因此一枚标记都没有
+    // ——标记是「**这一席**值得看的那几手」，没有主语就没有它们。
+    const godMarks = await timelineMarks(page);
+    if (godMarks.present && godMarks.marks.length !== 0) {
+      problems.push(
+        `上帝视角下时间轴上已经标了 ${godMarks.marks.length} 枚：这一屏还没有主语，` +
+          "那几枚标的是哪一席值得看的手？",
+      );
+    }
+
     // ⑦ 坐到座位 1：那一席的逐手复盘出来了（**复盘不是真人专属**）。
     await page.getByTestId(`table-view-${WATCHED}`).click();
     await page.getByTestId("table-review").waitFor({ timeout: 20000 });
@@ -793,7 +1034,63 @@ async function replayLeg(lane) {
       return problems;
     }
 
-    const { problems: mismatches, counts } = compare("首页那份牌谱", shown, expected);
+    // ⑧ **只看值得看的那几手 + 时间轴上那几枚**（票 105）。
+    // 这一程是 CI 里唐一量得到这一条的地方（那份 6 MB 不在场，因此只剩引擎那一半判据）。
+    const focusMark = markerSince(problems);
+    const rule = worthwhile(expected, null);
+    const marks = await timelineMarks(page);
+
+    problems.push(...focused(`首页座位 ${WATCHED}`, shown, marks, expected, rule));
+
+    if (shown.filter !== "on") {
+      problems.push(`复盘默认该只摆值得看的那几手，面板说的是「${shown.filter}」`);
+    }
+    if (rule.kept.size === 0 || rule.kept.size >= expected.notes.length) {
+      problems.push(
+        `首页座位 ${WATCHED}：一整场 ${expected.notes.length} 手里值得看的数出 ${rule.kept.size} 手：` +
+          "筛选与标记那几条这一趟等于没跑（判据 3）",
+      );
+    }
+    // **筛得有意义**：留下来的不到一半，否则「精选」只是把整列换个说法再摆一遍。
+    if (rule.kept.size * 2 >= expected.notes.length) {
+      problems.push(
+        `首页座位 ${WATCHED}：${expected.notes.length} 手里留下了 ${rule.kept.size} 手——这不叫筛选`,
+      );
+    }
+
+    console.log(
+      `首页座位 ${WATCHED}：只看值得看的那几手、时间轴上逐手标着它们 ${focusMark()}` +
+        `（${expected.notes.length} 手里显示 ${shown.notes.length} 手、轴上 ${marks.marks.length} 枚；` +
+        `那一句：「${shown.filterLine}」）`,
+    );
+
+    // 拨回「看全部」：条数回来、**轴上那几枚一枚不少**（开关只改这一列摆几条），
+    // 票 90/93/103/107 那几条逐项对拍在这一态下跑。
+    if (
+      !(await clicked(
+        page,
+        "review-filter-toggle",
+        problems,
+        "筛掉了就要有一枚拨得回去的开关（票 105）",
+      ))
+    ) {
+      return problems;
+    }
+
+    const whole = await panel(page);
+    const wholeMarks = await timelineMarks(page);
+    problems.push(...focused(`首页座位 ${WATCHED}（看全部）`, whole, wholeMarks, expected, rule));
+
+    if (
+      wholeMarks.marks.map((mark) => mark.turn).join(" ") !==
+      marks.marks.map((mark) => mark.turn).join(" ")
+    ) {
+      problems.push(
+        "拨回「看全部」之后轴上那几枚变了：那一枚开关改的是「这一列摆几条」，不是「哪几手值得看」",
+      );
+    }
+
+    const { problems: mismatches, counts } = compare("首页那份牌谱", whole, expected);
     problems.push(...mismatches);
     console.log(
       `首页座位 ${WATCHED}：${counts.rows} 条逐项对拍 ${tick(mismatches.length === 0)}` +
@@ -814,9 +1111,13 @@ async function replayLeg(lane) {
     const origin0 = await cursor();
     // 挑一条落在游标**前面**的标注：跳过去才看得出游标真的动了（票 86 那一课：
     // 往前跑的回放早晚会路过原处，往回跳才分得出“回来了”与“又播到了”）。
-    const jump = shown.notes
-      .filter((note) => note.kind === "dahai" && note.frame + 30 < Number(origin0))
-      .at(-1);
+    //
+    // **优先挑轴上标着的那几手**（票 105）：那一条跳完之后游标停在第几帧是量得出来的，
+    // 于是那一枚标记钉在哪一帧就有了一个与面板无关的锚点（否则帧号只是两处 DOM 互相印证）。
+    const reachable = whole.notes.filter(
+      (note) => note.kind === "dahai" && note.frame + 30 < Number(origin0),
+    );
+    const jump = reachable.filter((note) => rule.kept.has(note.turn)).at(-1) ?? reachable.at(-1);
 
     if (jump === undefined) {
       problems.push(`游标停在第 ${origin0} 帧，它前面一条可点的标注都没有：这一条什么都证不了`);
@@ -838,8 +1139,17 @@ async function replayLeg(lane) {
     }
 
     const still = await panel(page);
-    if (!still.present || still.notes.length !== shown.notes.length) {
+    if (!still.present || still.notes.length !== whole.notes.length) {
       problems.push("跳过去之后复盘面板变了样：复盘读的是整份牌谱，不是游标停在哪儿");
+    }
+
+    // 跳到那一帧之后，那一枚标记钉的就是游标停住的这一帧（票 105）。
+    const marked = wholeMarks.marks.find((mark) => mark.turn === jump.turn);
+    if (marked !== undefined && String(marked.frame) !== moved) {
+      problems.push(
+        `第 ${jump.turn} 手那一枚标在第 ${marked.frame} 帧，而点开它之后游标停在第 ${moved} 帧` +
+          "——轴上那一枚与它自己那一手不在同一处",
+      );
     }
 
     if (
@@ -878,11 +1188,13 @@ async function replayLeg(lane) {
 
     // 那一枚按钮那一句上只得有一个数：**这一席落定了几手**（票 107 同一条判据；
     // 没人按那一枚时那一段里既没有毫秒也没有字节数，因此它此刻是一个硬期望）。
+    // **它说的是整场那几手，不是筛完剩下的那几手**（票 105）：按下去是逐手问一整场，
+    // 写成筛完的数就是在说一件不会发生的事。期望值取引擎那一侧那份。
     const asking = numerals(shown.strongText).join(" ");
-    if (asking !== String(shown.notes.length)) {
+    if (asking !== String(expected.notes.length)) {
       problems.push(
         `没人按那一枚时，强 AI 那一段印出来的数是 [${asking}]，` +
-          `而那一句只该说得出「这 ${shown.notes.length} 手」：「${shown.strongText}」`,
+          `而那一句只该说得出「这 ${expected.notes.length} 手」：「${shown.strongText}」`,
       );
     }
   } finally {
@@ -1093,7 +1405,25 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
       problems.push(`引擎读不动首页那份牌谱：${expected.error}`);
       return problems;
     }
-    const { problems: mismatches } = compare("问过强 AI 之后", shown, expected);
+    // ⑧ 的后一半（票 105）：**问过之后，强 AI 那一半判据才真正开口**。
+    // 这一段在 CI 里量到的仍旧只有引擎那一半（那份 6 MB 不在场），
+    // 本机演习那一档才量得到完整的那一套（下面 `--asset` 那一段）。
+    const filterMark = markerSince(problems);
+    const beforeMarks = await timelineMarks(page);
+
+    if (
+      !(await clicked(
+        page,
+        "review-filter-toggle",
+        problems,
+        "筛掉了就要有一枚拨得回去的开关（票 105）",
+      ))
+    ) {
+      return problems;
+    }
+
+    const whole = await panel(page);
+    const { problems: mismatches } = compare("问过强 AI 之后", whole, expected);
     problems.push(...mismatches);
 
     if (shown.strongState !== "ready") {
@@ -1112,9 +1442,17 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
       if (shown.text.includes("暂无")) {
         problems.push("它用不了时页面写了「暂无」：没有的东西不占位（票 90/92/93 同一个规矩）");
       }
+      // 算不动那一路里，值得看的那几手只剩引擎那一半判据（与第二程量到的一模一样）。
+      const rule = worthwhile(expected, null);
+      problems.push(...focused("算不动那一路（看全部）", whole, beforeMarks, expected, rule));
+
       console.log(
         `（这一趟站点上没有那份 6 MB 产物：量的是「算不动就整行不出现」那一路，` +
           `页面说的是「${shown.strongText}」；请求发出去了 ${fetched} 次）`,
+      );
+      console.log(
+        `算不动那一路：值得看的那几手只剩引擎那一半判据 ${filterMark()}` +
+          `（${expected.notes.length} 手里 ${rule.kept.size} 手、轴上 ${beforeMarks.marks.length} 枚）`,
       );
       return problems;
     }
@@ -1131,7 +1469,9 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
       return problems;
     }
 
-    const rows = new Map(shown.notes.map((note) => [note.turn, note]));
+    // **逐行那几条读的是「看全部」那一叠**（票 105 拨过一次开关）：筛选开着时这一列
+    // 只摆值得看的那几条，而 ⑪⑫⑬⑭⑮ 要逐手对拍一整场。
+    const rows = new Map(whole.notes.map((note) => [note.turn, note]));
     const counts = {
       rows: 0,
       diffs: 0,
@@ -1351,11 +1691,76 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
     }
 
     // 页面自己抬头那两个数与逐行数出来的必须一致。
-    if (shown.strongRows !== shown.notes.filter((note) => note.strong !== null).length) {
-      problems.push(`抬头说有 ${shown.strongRows} 行，实际画了 ${shown.strong} 行`);
+    if (whole.strongRows !== whole.notes.filter((note) => note.strong !== null).length) {
+      problems.push(`抬头说有 ${whole.strongRows} 行，实际画了 ${whole.strong} 行`);
     }
-    if (shown.strongDiffs !== counts.diffs) {
-      problems.push(`抬头说 ${shown.strongDiffs} 手与你不同，照规则数出来的是 ${counts.diffs} 手`);
+    if (whole.strongDiffs !== counts.diffs) {
+      problems.push(`抬头说 ${whole.strongDiffs} 手与你不同，照规则数出来的是 ${counts.diffs} 手`);
+    }
+
+    // ⑧（本机演习那一档才跑得到）：**强 AI 那一半判据真的开了口**（票 105）。
+    //
+    // 拨回「只看值得看的那几手」，拿闸门**自己问出来的那一叠**（`mine.notes`，另一条路）
+    // 照规则数一遍：这一列摆哪几条、轴上标哪几枚、那一句里两个数多少，逐手对。
+    // **由强 AI 点亮的那几枚必然落在分歧那几手里**（票面：逐手对齐，不是看着差不多）。
+    const focusedMark = markerSince(problems);
+    const withStrong = worthwhile(expected, mine.notes);
+
+    if (await clicked(page, "review-filter-toggle", problems, "那一枚开关拨得回去（票 105）")) {
+      const picked = await panel(page);
+      const pickedMarks = await timelineMarks(page);
+      problems.push(...focused("问过强 AI 之后", picked, pickedMarks, expected, withStrong));
+
+      // 逐手对齐：不是「引擎那一半」点亮的每一枚，都得是分歧那几手里的一手，
+      // **而且恰好是那几手里「它很确定而你排在后面」的那几手**（一枚不多、一枚不少）。
+      const differing = new Set(
+        mine.notes
+          .filter((each) => each.id !== null && each.playedId !== each.id)
+          .map((each) => each.turn),
+      );
+      const lit = pickedMarks.marks
+        .map((mark) => mark.turn)
+        .filter((turn) => !withStrong.better.has(turn));
+      const wanted = [...withStrong.notable]
+        .filter((turn) => !withStrong.better.has(turn))
+        .sort((a, b) => a - b);
+
+      for (const turn of lit) {
+        if (!differing.has(turn)) {
+          problems.push(
+            `第 ${turn} 手被强 AI 那一半判据点亮在轴上，可它根本不在分歧那几手里` +
+              "——「它很确定而你打了别的」蕴含「不同」",
+          );
+        }
+      }
+      if (lit.join(" ") !== wanted.join(" ")) {
+        problems.push(
+          `由强 AI 点亮的是第 [${lit.join("，")}] 手，照规则该是第 [${wanted.join("，")}] 手`,
+        );
+      }
+
+      // 判据 3：这两半各真的开过几次？为 0 的那一半，这一趟等于没跑。
+      if (withStrong.better.size === 0) {
+        problems.push("一手「引擎的试打表里还有更好的换法」都没有：那一半判据这一趟等于没跑");
+      }
+      if (withStrong.notable.size === 0) {
+        problems.push(
+          "一手「它很确定而你排在后面」都没有：票 105 那条新判据这一趟等于没跑（判据 3）",
+        );
+      }
+      // **收紧是这一票的全部意义**：分歧占一整场的一半，点亮的只能是其中少数。
+      if (withStrong.notable.size * 2 >= differing.size) {
+        problems.push(
+          `分歧 ${differing.size} 手里点亮了 ${withStrong.notable.size} 手：那一条判据没收紧任何东西`,
+        );
+      }
+
+      console.log(
+        `只看值得看的那几手（问过强 AI）${focusedMark()}` +
+          `：${expected.notes.length} 手里显示 ${picked.notes.length} 手、轴上 ${pickedMarks.marks.length} 枚` +
+          `（引擎那一半 ${withStrong.better.size} 手、强 AI 那一半 ${withStrong.notable.size} 手，` +
+          `其中只靠强 AI 的 ${wanted.length} 手；分歧一共 ${differing.size} 手）`,
+      );
     }
 
     // ⑥ **逐位对拍**（票 103 面点名的那条）：抽到的那几手拿 `probe/akagi-wasm` 的 node
@@ -1482,7 +1887,7 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
         `页面上那几个概率与 wasm 直接印的严格相等 ${strongMark}（其中 ${literal} 个连字面都一样）`,
     );
     console.log(
-      `代价：按下去到有东西看共 ${wallMs} ms；页面那一边 ${shown.strongMs} ms / ${shown.strongRows} 行（它自己报的那一句：${shown.strongText.replace(/\s+/g, " ")}）；` +
+      `代价：按下去到有东西看共 ${wallMs} ms；页面那一边 ${whole.strongMs} ms / ${whole.strongRows} 行（它自己报的那一句：${whole.strongText.replace(/\s+/g, " ")}）；` +
         `闸门这一边重建投影 ${Math.round(mine.planMs)} ms、逐手问 ${Math.round(mine.askMs)} ms` +
         `（${mine.notes.length} 手，其中抽到的那几手多问了三遍）`,
     );
@@ -1495,7 +1900,7 @@ async function strongLeg(lane, { godEvery, sampleEvery }) {
     // **把页面上那几句原文印出来**：这一票唯一真正危险的事是「替它编一句人话」，
     // 而那件事只有人读得出来。三种各挑一行（你打的排第一 / 排在后面 / 根本不在里面）。
     const quote = (why, pick) => {
-      const found = shown.notes.find((note) => note.strongPs.length > 0 && pick(note));
+      const found = whole.notes.find((note) => note.strongPs.length > 0 && pick(note));
       if (found !== undefined) console.log(`　页面上那一行（${why}）：${found.strongText}`);
     };
 

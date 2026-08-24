@@ -525,6 +525,13 @@ type TableModel = {
     /// **它同时抱着「点开之前停在哪儿」**（票 86 的 `Origin`）：回放里点开会把游标搬走，
     /// 没人记下原处的话就只能停在跳过去那一处——主人试玩时报的就是它。
     Opened: Opened option
+    /// 复盘那一列此刻是不是**只摆值得看的那几手**（票 105）。**默认是**：
+    /// 一整场一百多条排成一列，人得自己一条条扫（票 90 与票 93 各记过一次这条 nitpick）。
+    ///
+    /// **它是一个开关，不是一份名单**：哪几手值得看是 `Review.worthwhile` 现算的（引擎那几个数
+    /// 加强 AI 那一行），把那份名单存在这里就是第二条算路。筛掉了多少由
+    /// `ReviewFilter.toDisplay` 当场说出来（票面：不许静静地少显示）。
+    ReviewFiltered: bool
     /// 「导入牌谱 JSON」最近一次失败的原因（票 78）；没失败过、或后来导成了一次是 None。
     ///
     /// **不落进 `ReplayTable.Failed`**：导入失败不该把正在播的那份回放轰掉——
@@ -564,6 +571,9 @@ type TableMsg =
     | RecordOpened of turn: int option
     /// 开 / 关牌桌上的危险度排序（票 25）。
     | DangerToggled
+    /// 复盘那一列：只看值得看的那几手 / 看全部（票 105）。
+    /// **不另存一份名单**：它只拨一个开关（`TableModel.ReviewFiltered`）。
+    | ReviewFilterToggled
     /// 这一局看完了，开下一局。
     | KyokuAdvanced
     /// 把某一席交给谁（票 73）：均匀随机 / 有主见 / 某份模型档案。
@@ -2135,6 +2145,8 @@ module TableState =
             ShowDanger = false
             // 还没点开任何一手的全文面板（票 76）。
             Opened = None
+            // 复盘默认只摆值得看的那几手（票 105）；它只在终局之后看得见。
+            ReviewFiltered = true
             // 导入入口不在这一页（票 78），这一格恒为 None。
             ImportFault = None
         },
@@ -2157,6 +2169,7 @@ module TableState =
             Viewpoint = Viewpoint.God
             ShowDanger = false
             Opened = None
+            ReviewFiltered = true
             // 还没导过任何东西（票 78）。
             ImportFault = None
         },
@@ -2226,6 +2239,7 @@ module TableState =
         | ViewpointPicked _
         | RecordOpened _
         | DangerToggled
+        | ReviewFilterToggled
         | SeatBound _
         | SeatEdited _
         | ProfileOpened _
@@ -2352,6 +2366,14 @@ module TableState =
             {
                 model with
                     ShowDanger = not model.ShowDanger
+            },
+            Cmd.none
+        // 复盘那一列摆几条（票 105）。**它不碰游标、不碰摄开的那一手**：
+        // 筛选改的是「这一列摆几条」，不是「你正在看哪一手」。
+        | ReviewFilterToggled ->
+            {
+                model with
+                    ReviewFiltered = not model.ReviewFiltered
             },
             Cmd.none
         | DemoLoaded paifu -> model |> demoLoaded paifu

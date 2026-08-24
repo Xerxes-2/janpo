@@ -125,6 +125,18 @@ type ReviewStrong = {
     PlayedLabel: string
 }
 
+/// 时间轴上那一枚标记（票 105）：**值得看的那一手落在第几帧**。
+///
+/// **它不是第二份判据**，是 `Review.focused` 那一列的投影：时间轴那一段只需要两个整数
+/// （哪一手、第几帧），把整条 `ReviewNote` 搬过去等于让一个滑块认识复盘。
+/// **一处算、两处消费**：复盘那一列摆哪几条与轴上标哪几枚，出自同一次 `Review.focused`。
+type ReviewMark = {
+    /// 那一手的手序（`ReviewNote.Turn`）。
+    Turn: int
+    /// 那一手**落定之后**那一帧的帧号（`ReviewNote.Frame`）：标记就钉在轴上的这一点。
+    Frame: int
+}
+
 /// 复盘面板此刻该画什么（票 90）。**三态是三个 case**（判据 12：拒绝理由各有各的 case）：
 /// 「还没打完」与「打完了但没有主语」在页面上是两句完全不同的话，混成一个空表就分不出了。
 [<RequireQualifiedAccess>]
@@ -235,6 +247,46 @@ module ReviewStrong =
                 | None -> $"你打的{strong.PlayedLabel}：不在这 {strong.CandidatesTotal} 条里"
 
             $"{head}　{counted}：{listed}　{yours}"
+
+/// 复盘那一列此刻摆几条（票 105）：**筛掉了多少要说出来**（票面原话：不许静静地少显示）。
+///
+/// **两句话里的数是同两个**（`total` / `kept`，顺序也一样）：筛选开着与关掉时页面上的话不同，
+/// 而「这一句里的每一个数指得回哪一格」这件事两态共用一张来源表（票 107 的逐数溯源）。
+[<RequireQualifiedAccess>]
+module ReviewFilter =
+
+    /// 筛选那一格给机器看的那一半（`data-review-filter`）；人读的是下面那句话。
+    let toWire (filtered: bool) : string = if filtered then "on" else "off"
+
+    /// 那一枚按钮上写什么。**不带数**：它旁边那句话已经把两个数说清了，
+    /// 按钮上再摆一个就是同一件事的第二处（票 86 记过的「同一帧两个数」同一族）。
+    let toggle (filtered: bool) : string = if filtered then "看全部" else "只看值得看的那几手"
+
+    /// 筛选那一句。**判据照实写出来**：读者要看得出被藏起来的那些手是按什么藏的，
+    /// 否则「显示 22 手」只是一个没有来历的数。
+    ///
+    /// **没问过强 AI 时不提它那一条**（`consulted`）：那几 MB 没拉之前，第二条判据
+    /// 一手都筛不到，写出来就是在声称一件此刻没有执行体的事（判据 2；
+    /// 同票 90/93 那条「没有的东西不占位」）。
+    ///
+    /// **阈值那个数不印在页面上**：它是这一层自己的一个旋钮（`Review` 里量出来的那个常数），
+    /// 不是引擎或上游那一份里的哪一格——印出来就得给它编一个来源（票 107 的逐数溯源）。
+    /// 「头两条」写成汉字也是为这件事：那一句里**只该有 `total` 与 `kept` 两个数**，
+    /// 四种措辞都不例外（因此两处来源表各只摆两格就够了）。
+    let toDisplay (filtered: bool) (consulted: bool) (total: int) (kept: int) : string =
+        // 两条判据里的第二条只在真问过之后才算数。
+        let judged =
+            if consulted then
+                "两条判据：引擎的试打表里还有更好的换法，或者强 AI 给自己那一手的概率过了阈值、而你打的不在它头两条里。"
+            else
+                "判据是引擎的试打表里还有更好的换法；问过强 AI 之后还有第二条。"
+
+        if not filtered then
+            $"这一列摆着全部 {total} 手，其中值得看的有 {kept} 手（时间轴上标着的就是它们）。"
+        elif kept = 0 then
+            $"只看值得看的那几手：{total} 手里显示 {kept} 手——这一席这一场没有一手落进判据。按「看全部」摆出其余那些。"
+        else
+            $"只看值得看的那几手：{total} 手里显示 {kept} 手。{judged}"
 
 /// 一条标注说出来是什么样。**面板只画这几句，一条规则都不判**（同 `HumanLine` / `AgentLine`）。
 [<RequireQualifiedAccess>]
@@ -514,11 +566,102 @@ module Review =
         | Some _, None
         | None, _ -> None
 
+    /// 分歧那几手的**手序**（升序）。
+    ///
+    /// **它是「几手不同」那个数的来源**（`disagreements` 就是它的长度）：面板抬头那一句
+    /// 与时间轴上那几枚标记因此数的是同一件事，不会一边说 64 手、另一边标出 63 枚。
+    let disagreeing (rows: ReviewStrong list) : int list =
+        rows
+        |> List.filter (fun row -> row.Differs)
+        |> List.map (fun row -> row.Turn)
+        |> List.sort
+
     /// 分歧手数（面板抬头那一句与闸门读它）。**它不是分数**：
     /// 分母是“问出来了几手”而不是“你打了几手”，也不成百分比——
     /// 一旦写成百分比，下一步就是拿它当分数（票面边界：不造总分）。
-    let disagreements (rows: ReviewStrong list) : int =
-        rows |> List.sumBy (fun row -> if row.Differs then 1 else 0)
+    let disagreements (rows: ReviewStrong list) : int = disagreeing rows |> List.length
+
+    // ---- 值得看的那几手（票 105） ----
+
+    /// 「它很确定」那一头的阈值：**上游给它自己那一手的那个数**（`candidates[0].p`）要过它。
+    ///
+    /// **这个数是量出来的，不是拍的**（判据 14：先量再说）。两次实测：
+    ///
+    /// - **真人牌谱语料**（`tests/fixtures/paifu/mjai/` 111 份 × 四席 = 69,318 个决策点，
+    ///   与报告 103 量的是同一批点）：你打的与它头一条**不同**的占 23.7%，
+    ///   那几手的 `p0` 中位 0.5627、p75 0.7210、p95 0.9229。**取 0.8 大约落在它们的前五分之一**。
+    ///   一局一席（半庄）落进这一条的：中位 2 手、p75 3 手、最多 8 手，19% 的席位一手都没有。
+    /// - **换成 0.9**：46% 的席位一手都没有——那条判据就成了摆设；
+    ///   **换成 0.6**：中位 5 手、最多 20 手，与「有分歧」那一半的毛病同族（票 103 实测
+    ///   一整场 122 手里分歧 64 手，**一半以上**）。
+    ///
+    /// **分布上没有断崖**（0.75 / 0.8 / 0.85 分别命中 1147 / 876 / 642 个决策点，平滑下降）：
+    /// 这是一个旋钮，不是一条自然边界。取 0.8 的判据是「一局一席剩几手」——**几手，不是一半**。
+    [<Literal>]
+    let private telling = 0.8
+
+    /// 你那一手在它那一列里排到第几才算「排得很后」：**第三或根本不在这几条里**。
+    ///
+    /// 上游只给 top-3（报告 103），因此「第 3」就是那一列的末位；
+    /// 真人牌谱语料上第 1 占 76.3%、第 2 占 14.4%、第 3 占 4.7%、不在里面占 4.5%。
+    [<Literal>]
+    let private trailing = 3
+
+    /// 强 AI 那一行值不值得看：**它很确定，而你打的排在很后面**（票 105 的第三条筛选判据）。
+    ///
+    /// **它比「有分歧」窄得多**：分歧那一半在一整场里占一半（票 103 实测 122 手里 64 手），
+    /// 光按分歧筛等于把一半的手改叫「精选」。
+    ///
+    /// **`notable` 蕴含 `Differs`**：排第三或不在候选里的那一手，必然不是它头一条挑的那一手
+    /// （`Differs` 比的是同一包里的 id，`Rank` 也是）——因此时间轴上每一枚由这一条点亮的标记，
+    /// 都落在 `disagreeing` 数出来的那几手里。
+    ///
+    /// **上游没给分布时恒 false**（老产物、或它这一手交不出候选）：那时「它有多确定」这件事
+    /// 我们根本没拿到，拿缺席当「它很确定」就是编一个数。
+    let notable (strong: ReviewStrong) : bool =
+        match strong.Candidates with
+        | [] -> false
+        | head :: _ ->
+            head.P >= telling
+            && (match strong.Yours with
+                | Some yours -> yours.Rank >= trailing
+                | None -> true)
+
+    /// 这一条标注**为什么**值得看（票 105 的筛选判据）。**两条，或的关系**：
+    ///
+    /// - `better`：**引擎的试打表里还有更好的换法**（`Better` 非空 = 你打的那张被帕累托占优）
+    ///   ——零外部依赖，那几 MB 不在场时它照样筛得动（CI 里跑得到的就是这一半）；
+    /// - `strong`：**强 AI 那一行 `notable`**（要那份产物在场）；两样都占就是 `both`。
+    ///
+    /// **为什么交的是一个词而不是一个布尔**：这一格上 DOM（`data-review-worth`），
+    /// 于是闸门得以**逐手**核「是哪一条判据点亮了它」；只交布尔的话，两条判据里
+    /// 任一条被改坠而另一条刚好盖住它的那几手，闸门一声不响（实测过：把阈值从 0.8
+    /// 改成 0.7，多出来的那两手本来就已经因为 `better` 在列里，并集一数不变——报告 105 §4 红-2）。
+    ///
+    /// **「与强 AI 分歧」本身不在这两条里**（票面第一条本来写的是它）：量出来一整场
+    /// 122 手里分歧 64 手，筛完还剩一半——那不是导航，是换个说法把整列再摆一遍。
+    /// 收紧成 `notable` 之后，同一场里只靠强 AI 点亮的只有个位数（报告 105 §2）。
+    let worth (strong: ReviewStrong option) (note: ReviewNote) : string =
+        match not (List.isEmpty note.Better), strong |> Option.exists notable with
+        | true, true -> "both"
+        | true, false -> "better"
+        | false, true -> "strong"
+        | false, false -> ""
+
+    /// 这一条标注值不值得看。**它就是上面那一格空不空**（不另写一遍判据：
+    /// 写两遍就会有一天一处说值得看、另一处说不值得）。
+    let worthwhile (strong: ReviewStrong option) (note: ReviewNote) : bool = worth strong note <> ""
+
+    /// 这一席**值得看的那几手**（顺序与手序照旧）。
+    ///
+    /// **它同时是时间轴上那几枚标记的来源**（`marks`）：复盘那一列摆哪几条与轴上标哪几枚
+    /// 出自同一次调用，因此两处不可能各标各的。
+    let focused (rows: Map<int, ReviewStrong>) (notes: ReviewNote list) : ReviewNote list =
+        notes |> List.filter (fun note -> worthwhile (Map.tryFind note.Turn rows) note)
+
+    /// 时间轴上那几枚标记：**上面那一列的投影**（哪一手、第几帧）。
+    let marks (notes: ReviewNote list) : ReviewMark list =
+        notes |> List.map (fun note -> { Turn = note.Turn; Frame = note.Frame })
 
     // ---- 这一屏此刻给不给看 ----
 
