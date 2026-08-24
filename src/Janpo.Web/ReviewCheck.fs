@@ -29,9 +29,13 @@ let private optional (encode: 'a -> IEncodable) : 'a option -> IEncodable =
 
 /// 一条试打：牌、进退向、有效牌枚数与危险度的**安全度序**（0 最安全）。
 /// 闸门按这三项推「哪几张比你打的那张更好」。
+///
+/// `shanten` 是**打完它之后**那个绝对向听数：票 107 的逐数溯源要拿它认领
+/// 「向听更好（1 向听）」那一句里的那个数——拿 `delta` 去倒推等于闸门自己算了一遍。
 let private trialEncoder (trial: DahaiScaffold) : IEncodable =
     Encode.object [
         "pai", Encode.string (Tile.toMjai trial.Pai)
+        "shanten", Encode.int (Shanten.value trial.Shanten)
         "delta", Encode.int trial.ShantenDelta
         "ukeire", optional (Ukeire.total >> Encode.int) trial.Ukeire
         "kinds", optional (Ukeire.kindCount >> Encode.int) trial.Ukeire
@@ -149,7 +153,7 @@ let expected (text: string) (index: int) : string =
         | Error error -> failure (ReplayError.toDisplay error)
         | Ok kyokus ->
             // **抛不出去**：闸门那一侧的契约是一份失败清单，一条 `page.evaluate` 里抛出来的异常
-            // 会把十七趟一起搞挂（票 86/87/88 各写下过同一课）。下面那一句 `failwith` 走不到
+            // 会把同一条跑道上其余那几趟一起搞挂（票 86/87/88 各写下过同一课）。下面那一句 `failwith` 走不到
             // （这份牌谱刚从同一个引擎里导出来），真走到了就当一句中文原因交回去。
             try
                 // 逐手推进：走的是引擎自己的 `step`，与页面那一侧的 `Table.replay` 各走各的。

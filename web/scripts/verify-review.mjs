@@ -35,6 +35,14 @@
 //   ⑬ **同一手问两遍给同一答案**（可复现），分歧手数照**规则**再数一遍（判据 8）；
 //      算不动时（CI 的常规趟：那 6 MB 不在场）**整行不出现**，而票 90 那几栏一条不少。
 //
+// 票 107 加的那一条**三程共用**（逐行对拍那一步里，因此两程各跑一遍）：
+//   ⑯ **逐数溯源**：复盘画出来的那几句里的**每一个数**都指得回引擎那一份的一格
+//      （手序 / 这一手本身 / 向听 / 有效牌枚数与种数 / 第几安全 / 换打那张与它多几枚，
+//      加上面板抬头那一句的座位号与手数）——**多一个数就红**，不论它叫「总分」
+//      「期望打点」还是行尾一个光秃秃的 `82`。旧那道逐项对拍是逐**字段**比，
+//      它证明「这几个数没被改」而不证明「没有第五个数被加上去」
+//      （报告 104 的红-7b：往每一行末尾拼一个「总分 82」，整套 `ci.sh` 全绿）。
+//
 // 票 103 在第三程上又加两条（**它有多确定**）：
 //   ⑭ **候选分布两条路各自问一遍**：页面上那一行的 id 与概率，与闸门拿另一份重建的投影
 //      问出来的逐条相同；上游那份分布的形状（降序、落在 [0,1]、**和 ≤ 1**、条数 ≤ 3）
@@ -56,8 +64,13 @@
 // --sample-every N（第⑮条每隔几手抽一手去 node 那侧重问）、
 // --asset（本机演习：那份产物不在就当场报错，而不是静静地走降级那一路）。
 //
+// **强 AI 那一行上那几个数（概率 / 几条 / 排第几）不在这里溯源**：CI 里那一行根本画不出来
+// （那份 6 MB 不入版本控制），写在这里等于一条永远执行不到的断言（判据 3）。
+// 它的执行者在 dotnet 那一侧：`ReviewTests.强 AI 那一行同样一个自造的数都不出……`（票 107）。
+//
 // **把①按红的做法**（判据 1，票面点名）：把 `Review.settled` 那道判断去掉
 // （例如 `let settled (_: TableModel) : bool = true`），重编 Fable 再跑这一趟。红的原文在报告 90 里。
+// **把⑯按红的做法**：往 `Review.figures` 末尾拼一个 `总分 {82 + note.Turn % 17}`（报告 107 的红-1）。
 
 import { readFileSync } from "node:fs";
 import {
@@ -122,6 +135,8 @@ function panel(page) {
       return raw === null || raw === "" ? null : Number.parseInt(raw, 10);
     };
 
+    const said = (testId) => at(testId)?.textContent?.trim() ?? "";
+
     const notes = [...section.querySelectorAll("[data-review-turn]")].map((row) => {
       const advice = row.querySelector("[data-review-advice]");
       const strong = row.querySelector("[data-review-strong]");
@@ -184,10 +199,145 @@ function panel(page) {
       strongDiffs: head === null ? null : num(head, "data-review-strong-diffs"),
       strongMs: head === null ? null : num(head, "data-review-strong-ms"),
       strongText: head?.textContent?.trim() ?? "",
+      // 抬头那一句与那一段说明（票 107 逐数溯源要量它们）。
+      title: said("review-at"),
+      intro: said("review-intro"),
       text: section.textContent ?? "",
       notes,
     };
   });
+}
+
+/**
+ * 一句话里的**每一个数**（含小数与正负号）。
+ *
+ * **它认的是「数」不是「词」**：措辞怎么改都不动它，而凭空多印一个数
+ * ——不论它叫「总分」「期望打点」还是根本没有名字（行尾一个光秃秃的 `82`）——就多出一项。
+ */
+function numerals(said) {
+  return said.match(/[+-]?\d+(?:\.\d+)?/g) ?? [];
+}
+
+/** 一个向听数印出来那一句里的数：**听牌与和了一个数都没有**。 */
+function shantenNumerals(value) {
+  return value >= 1 ? [String(value)] : [];
+}
+
+/** 一张牌印出来那一句里的数（`8p` → 「8筒」有一个 8；字牌是「东」，一个数都没有）。 */
+function tileNumerals(mjai) {
+  const found = /^([1-9])[mps]/.exec(mjai);
+  return found === null ? [] : [found[1]];
+}
+
+/**
+ * 第二句上那几个数的来源：**逐格都是引擎那一份脚手架**（`ReviewCheck.expected`）。
+ *
+ * 它按的是渲染那一头的**分支**（形态读不出来一个数都不给 / 这一手没打牌只有向听 /
+ * 打了牌那三样），**不是拿页面上那一句反推**——拿被检查那句话当期望值等于用同一份数据证明它自己（判据 8）。
+ */
+function figureSources(each) {
+  if (each.shanten === null) return [];
+  const before = ["打之前的向听（Scaffold.Shanten）", shantenNumerals(each.shanten)];
+  if (each.after === null) return [before];
+
+  const sources = [before, ["打之后的向听（DahaiScaffold.Shanten）", shantenNumerals(each.after)]];
+
+  if (each.ukeire !== null) {
+    sources.push(["有效牌枚数（Ukeire.total）", [String(each.ukeire)]]);
+    sources.push(["有效牌种数（Ukeire.kindCount）", [String(each.kinds)]]);
+  }
+  if (each.danger !== null) {
+    sources.push(["这一手第几安全（Danger.Rank）", [String(each.rank)]]);
+  }
+
+  return sources;
+}
+
+/**
+ * 第三句上那几个数的来源：**每一条候选逐格都是引擎那一条试打**。
+ *
+ * 列的是哪几张上面那一段已经照规则核过（帕累托占优）；这里只问**它们各自印出了哪几个数**。
+ * 试打表里找不着那一张时回 `null`：那一条上面已经报过一句，这里不再报第二遍。
+ */
+function adviceSources(note, each, yours) {
+  if (note.advice === null) return [];
+  const sources = [];
+
+  for (const pai of note.candidates) {
+    const trial = each.trials.find((trial) => trial.pai === pai);
+    if (trial === undefined || yours === undefined) return null;
+
+    sources.push(["换打的那一张（DahaiScaffold.Pai）", tileNumerals(pai)]);
+    if (trial.ukeire !== null) {
+      sources.push(["那一张的有效牌枚数（Ukeire.total）", [String(trial.ukeire)]]);
+      // **多出来的枚数才写那个号**：一边算不出来、或者两边一样多时那一格根本不印。
+      if (yours.ukeire !== null && trial.ukeire !== yours.ukeire) {
+        const gain = trial.ukeire - yours.ukeire;
+        sources.push(["比你打的那张多几枚（UkeireGain）", [gain > 0 ? `+${gain}` : String(gain)]]);
+      }
+    }
+    if (trial.delta < yours.delta) {
+      sources.push([
+        "那一张打完之后的向听（DahaiScaffold.Shanten）",
+        shantenNumerals(trial.shanten),
+      ]);
+    }
+  }
+
+  return sources;
+}
+
+/**
+ * **逐数溯源**（票 107）：这一行画出来的每一个数，逐个指得回引擎那一份的一格。
+ *
+ * 旧那道逐项对拍是**逐字段**比（向听 / 进退向 / 有效牌 / 危险度各一条），它证明「这几个数没被改」，
+ * **不证明「没有第五个数被凭空加上去」**——票 104 往每一行末尾拼了一个「总分 82」，
+ * 整套 `ci.sh` 全绿（报告 104 的红-7b）。这一条换一个问法：**这个数是谁的**。
+ *
+ * 多一个数、少一个数、哪一格印错了值，都在这里当场红；**它不问那个数叫什么**。
+ */
+function traced(at, note, each) {
+  const problems = [];
+  const yours = each.trials.find((trial) => trial.pai === each.pai);
+
+  const lines = [
+    [
+      "抬头",
+      note.headline,
+      [
+        ["这一手的手序（Table.Turns）", [String(each.turn)]],
+        ["这一手本身（Action.toDisplay）", numerals(each.label)],
+      ],
+    ],
+    ["第二句", note.figures, figureSources(each)],
+    ["第三句", note.adviceText, adviceSources(note, each, yours)],
+  ];
+
+  let numbers = 0;
+
+  for (const [which, said, sources] of lines) {
+    if (sources === null) continue;
+    const expected = sources.flatMap(([, digits]) => digits);
+    const printed = numerals(said);
+
+    if (printed.join(" ") !== expected.join(" ")) {
+      const table = sources
+        .map(
+          ([where, digits]) =>
+            `${where} = ${digits.length === 0 ? "（没有数）" : digits.join("、")}`,
+        )
+        .join("；");
+      problems.push(
+        `${at}的${which}「${said}」印出来的数是 [${printed.join("，")}]，` +
+          `而指得回引擎那一份的只有 [${expected.join("，")}]（${table}）`,
+      );
+      continue;
+    }
+
+    numbers += printed.length;
+  }
+
+  return { problems, numbers };
 }
 
 /**
@@ -235,7 +385,16 @@ function dominates(played, candidate) {
  */
 function compare(where, shown, expected) {
   const problems = [];
-  const counts = { rows: 0, ukeire: 0, danger: 0, better: 0, best: 0, gain: 0 };
+  const counts = {
+    rows: 0,
+    ukeire: 0,
+    danger: 0,
+    better: 0,
+    best: 0,
+    gain: 0,
+    numbers: 0,
+    untraced: 0,
+  };
 
   if (shown.notes.length !== expected.notes.length) {
     problems.push(
@@ -246,6 +405,24 @@ function compare(where, shown, expected) {
   }
   if (shown.said !== expected.notes.length) {
     problems.push(`${where}：面板说有 ${shown.said} 条，实际画了 ${shown.notes.length} 条`);
+  }
+
+  // ⑯ **逐数溯源**（票 107）先从面板自己那两句起：抬头上只得有座位号与手数，
+  // 而那一段说明是一句定话：**一个数都不该有**（在这儿印一个「平均 82」同样是造分）。
+  const titleNumbers = numerals(shown.title).join(" ");
+  const titleSources = [String(expected.seat), String(expected.notes.length)].join(" ");
+
+  if (titleNumbers !== titleSources) {
+    problems.push(
+      `${where}：面板抬头「${shown.title}」印出来的数是 [${titleNumbers}]，` +
+        `而指得回引擎那一份的只有 [${titleSources}]（复盘对着哪一席、这一席落定了几手）`,
+    );
+  }
+  if (numerals(shown.intro).length !== 0) {
+    problems.push(
+      `${where}：复盘那一段说明里出现了数（${numerals(shown.intro).join("，")}）：` +
+        "它是一句定话，每一个数都得指得回引擎那一份的一格（票 107）",
+    );
   }
 
   for (const [index, note] of shown.notes.entries()) {
@@ -278,6 +455,12 @@ function compare(where, shown, expected) {
 
     if (each.ukeire !== null) counts.ukeire += 1;
     if (each.danger !== null) counts.danger += 1;
+
+    // ⑯ 这一行画出来的每一个数，逐个指回引擎那一份的一格（票 107）。
+    const tracedRow = traced(at, note, each);
+    problems.push(...tracedRow.problems);
+    counts.numbers += tracedRow.numbers;
+    counts.untraced += tracedRow.problems.length;
 
     // 「更好的候选」那一栏：照规则自己推一遍。
     if (each.kind !== "dahai") {
@@ -513,7 +696,14 @@ async function humanLeg(lane, { budgetMs, peek }) {
         `（有效牌 ${counts.ukeire} 条、危险度 ${counts.danger} 条、` +
         `更好的候选 ${counts.better} 条、最优之一 ${counts.best} 条、差 10 枚以上 ${counts.gain} 条）`,
     );
+    console.log(
+      `真人那一桌：画出来的 ${counts.numbers} 个数逐个指得回引擎那一份的一格 ` +
+        `${tick(counts.untraced === 0)}（一个自造的合成数都不出，票 107）`,
+    );
 
+    if (counts.numbers === 0) {
+      problems.push("一整场下来一个数都没溯过源：逐数溯源那一条这一趟等于没跑（判据 3）");
+    }
     if (counts.better === 0) {
       problems.push("一整场下来一条「更好的候选」都没出现：那一栏的断言这一趟等于没跑（判据 3）");
     }
@@ -610,6 +800,14 @@ async function replayLeg(lane) {
         `（有效牌 ${counts.ukeire} 条、危险度 ${counts.danger} 条、` +
         `更好的候选 ${counts.better} 条、最优之一 ${counts.best} 条）`,
     );
+    console.log(
+      `首页座位 ${WATCHED}：画出来的 ${counts.numbers} 个数逐个指得回引擎那一份的一格 ` +
+        `${tick(counts.untraced === 0)}（一个自造的合成数都不出，票 107）`,
+    );
+
+    if (counts.numbers === 0) {
+      problems.push("首页那一席一个数都没溯过源：逐数溯源那一条这一趟等于没跑（判据 3）");
+    }
 
     // ⑧ 点某一手 → 游标跳过去 → 关掉回原处（票 86 立的回程规矩）。
     const cursor = () => attr(page, "table-timeline", "data-cursor");
@@ -676,6 +874,16 @@ async function replayLeg(lane) {
           `复盘面板里出现了「${word}」：没有的东西不占位，也不造总分（票 90/93 的边界）`,
         );
       }
+    }
+
+    // 那一枚按钮那一句上只得有一个数：**这一席落定了几手**（票 107 同一条判据；
+    // 没人按那一枚时那一段里既没有毫秒也没有字节数，因此它此刻是一个硬期望）。
+    const asking = numerals(shown.strongText).join(" ");
+    if (asking !== String(shown.notes.length)) {
+      problems.push(
+        `没人按那一枚时，强 AI 那一段印出来的数是 [${asking}]，` +
+          `而那一句只该说得出「这 ${shown.notes.length} 手」：「${shown.strongText}」`,
+      );
     }
   } finally {
     await page.close();

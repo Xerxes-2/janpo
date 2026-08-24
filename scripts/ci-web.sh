@@ -39,6 +39,12 @@ NO_BROWSER="${JANPO_NO_BROWSER:-0}"
 echo "== 同一事实只许一处真源（趟数 / 产物路径）=="
 bash "$(dirname "$0")/check-single-source.sh"
 
+# 票 107（接 106 留下的那一项）：叙述行里那个勾**必须由数据决定**。
+# 106 把 9 处无条件打印的 `✓` 改成由成败决定、并在 `browser-lane.mjs` 上留下三个助手，
+# **但那条约定当时没有执行者**（它只活在文档里，判据 2）。这一道就是那个执行者。
+echo "== 叙述行里的勾都由数据决定（写死的勾等于没有勾）=="
+bash "$(dirname "$0")/check-narration.sh"
+
 # 票 106 第三件：**Apache-2.0 §4 的义务不该挂在一条不常跑的路上**。
 # 从前只有 Pages 那条路上的 `check-pages-dist.sh` 会因为少了许可件而红，
 # 于是今天谁删掉 `web/public/third-party/` 都跑得过 `./scripts/ci.sh`。

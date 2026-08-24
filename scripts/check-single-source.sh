@@ -29,7 +29,16 @@ fail() {
 # 哪几份就在这条跑道上（写死一份名单的话，这道闸门自己就成了第二处真源）。
 # `verify-invariants.mjs` / `verify-baseline.mjs` 这些不在跑道上的不受这一条管——
 # 它们文件头里的「几趟」说的是它们自己那条路，不是这条跑道。
-lane_files=(scripts/ci-web.sh web/scripts/verify-browser.mjs web/scripts/browser-lane.mjs)
+# `ReviewCheck.fs` 是 `verify-review.mjs` 的 F# 那一半（它就在这条跑道上，注释里同样会
+# 提「抛出去会把其余那几趟一起搞挂」）；票 106 被禁止碰 `Review*.fs`，那句「十七趟」因此漂到了
+# 票 107 才改掉。把它一并盯上，否则下一句写死的趟数又只能靠自觉（判据 2）。
+lane_files=(
+  scripts/ci-web.sh
+  web/scripts/verify-browser.mjs
+  web/scripts/browser-lane.mjs
+  src/Janpo.Web/ReviewCheck.fs
+)
+lane_fixed=${#lane_files[@]}
 while read -r imported; do
   [[ -z "$imported" ]] && continue
   lane_files+=("web/scripts/$imported")
@@ -39,8 +48,8 @@ done < <(sed -n 's|^import .* from "\./\(verify-[a-z-]*\.mjs\)";$|\1|p' web/scri
 # 因此再数一遍：`verify-browser.mjs` 里有几行 import 指着 `./verify-*.mjs`，
 # 上面就得算出几份——对不上说明那条 sed 的形状假设过期了。
 imports="$(grep -cE 'from "\./verify-[a-z-]+\.mjs"' web/scripts/verify-browser.mjs)"
-(((${#lane_files[@]} - 3) == imports)) ||
-  fail "verify-browser.mjs 里有 $imports 行 import 指着 ./verify-*.mjs，这道闸门只算出 $((${#lane_files[@]} - 3)) 份：名单退化了，跑道上有文件没被扫"
+(((${#lane_files[@]} - lane_fixed) == imports)) ||
+  fail "verify-browser.mjs 里有 $imports 行 import 指着 ./verify-*.mjs，这道闸门只算出 $((${#lane_files[@]} - lane_fixed)) 份：名单退化了，跑道上有文件没被扫"
 
 # 「三趟」「十七趟」「18 趟」「第十四道」都算写死；汉字的「一趟」「两趟」「几趟」不算——
 # 它们是量词不是计数（阿拉伯数字一律算，因为「1 趟」在这几份文件里从来没有过）。

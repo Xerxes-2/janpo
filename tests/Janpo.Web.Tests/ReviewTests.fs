@@ -2,6 +2,7 @@ namespace Janpo.Web.Tests
 
 open System
 open System.IO
+open System.Text.RegularExpressions
 open Xunit
 open Thoth.Json.Newtonsoft
 open Janpo
@@ -809,3 +810,296 @@ module ReviewTests =
             Assert.DoesNotContain("E", wire)
 
         Assert.Equal("0.5961328", ReviewStrong.probabilityToWire 0.5961328)
+
+    // ---- 复盘上一个自造的合成数都不出（票 107） ----
+    //
+    // 旧那几条逐项对拍是逐**字段**比（向听 / 进退向 / 有效牌 / 危险度各一条 `Assert.Equal`）：
+    // 它们证明「这几个数没被改」，**不证明「没有第五个数被凭空加上去」**——票 104 往每一条标注
+    // 末尾拼了一个「总分 82」，整套 `ci.sh` 全绿（报告 104 的红-7b）；当时守着它的只有
+    // 一张**词的黑名单**（`forbidden` 与那一条「里面没有『暂无』」），换个词就穿过去了。
+    //
+    // 这一族换一个问法：**这个数是谁的**。黑名单留着当第二道（便宜、拦得住措辞），
+    // 这里守的是溯源。**浏览器那一侧同形的一份在 `web/scripts/verify-review.mjs` 的⑥**
+    // （量的是真画出来那一刻的 DOM，判据 20）；两份各写各的，**强 AI 那一行只有这一侧有执行者**
+    // ——CI 里那份 6 MB 不在场，页面上那一行根本画不出来（判据 3）。
+
+    /// 一句话里的**每一个数**（含小数与正负号）。
+    ///
+    /// **这一族用例认的是「数」不是「词」**：措辞怎么改都不动它，而凭空多印一个数
+    /// ——不论它叫「总分」「期望打点」还是根本没有名字（行尾一个光秃秃的 `82`）——就多出一项。
+    /// 从前守这件事的只有一张词的黑名单（`forbidden`），换个词就穿过去了（票 104 的红-7b）。
+    let private numerals (said: string) : string list =
+        Regex.Matches(said, @"[+-]?\d+(?:\.\d+)?")
+        |> Seq.map (fun each -> each.Value)
+        |> List.ofSeq
+
+    /// 一个印在复盘上的数：它是引擎（或上游）那一份里的**哪一格**，以及那一格印出来长什么样。
+    type private Sourced = { Where: string; Said: string }
+
+    let private fromValue (where: string) (said: string) : Sourced = { Where = where; Said = said }
+
+    let private fromInt (where: string) (value: int) : Sourced = { Where = where; Said = string value }
+
+    /// 向听那一格：**听牌与和了印出来一个数都没有**（`0 向听` / `-1 向听` 都不是人话）。
+    let private fromShanten (where: string) (shanten: Shanten) : Sourced =
+        let value = Shanten.value shanten
+
+        {
+            Where = where
+            Said = (if value >= 1 then string value else "")
+        }
+
+    /// 概率那一格（票 103）：两位小数，两头各一句界。
+    ///
+    /// **用例自己写的一份**（判据 6）：拿 `ReviewStrong.probabilityToDisplay` 当期望，
+    /// 等于用同一份实现证明它自己——那样它里面凭空多印一个数也照样绿。
+    let private fromProbability (where: string) (p: float) : Sourced =
+        let said =
+            if p > 0.0 && p < 0.005 then
+                "<0.01"
+            elif p < 1.0 && p >= 0.995 then
+                ">0.99"
+            else
+                p.ToString("F2", Globalization.CultureInfo.InvariantCulture)
+
+        { Where = where; Said = said }
+
+    /// **逐数溯源**：这一句话里印出来的每一个数，逐个等于那张来源表里的那一格。
+    ///
+    /// 多一个数、少一个数、哪一格印错了值，都在这里当场红；**它不问那个数叫什么**
+    /// ——「总分」「期望打点」与一个光秃秃的 `82` 在这条判据下是同一件事。
+    /// 返回这一句核过几个数（判据 3：闸门要报得出自己开了几次口）。
+    let private traced (where: string) (sources: Sourced list) (said: string) : int =
+        let expected = sources |> List.collect (fun each -> numerals each.Said)
+        let printed = numerals said
+
+        if expected <> printed then
+            let table =
+                sources
+                |> List.map (fun each -> $"{each.Where} = 「{each.Said}」")
+                |> String.concat "；"
+
+            let left = String.concat "，" printed
+            let right = String.concat "，" expected
+
+            failwith $"{where}「{said}」印出来的数是 [{left}]，而指得回引擎那一份的只有 [{right}]（{table}）"
+
+        List.length printed
+
+    /// 抬头那一句上那几个数的来源：手序，与这一手本身（牌名里那个数字）。
+    let private headSources (note: ReviewNote) : Sourced list =
+        [
+            fromInt "这一手的手序（ReviewNote.Turn ← Table.Turns）" note.Turn
+            fromValue "这一手本身（Action.toDisplay note.Played）" (Action.toDisplay note.Played)
+        ]
+
+    /// 第二句上那几个数的来源：**逐格都是 `DecisionPackage.scaffold` 那一份**。
+    let private figureSources (note: ReviewNote) : Sourced list =
+        let ukeire (trial: DahaiScaffold) =
+            trial.Ukeire
+            |> Option.map (fun ukeire ->
+                [
+                    fromInt "有效牌枚数（Ukeire.total）" (Ukeire.total ukeire)
+                    fromInt "有效牌种数（Ukeire.kindCount）" (Ukeire.kindCount ukeire)
+                ])
+            |> Option.defaultValue []
+
+        let danger (trial: DahaiScaffold) =
+            trial.Danger
+            |> Option.map (fun danger -> [ fromInt "这一手第几安全（Danger.Rank）" danger.Rank ])
+            |> Option.defaultValue []
+
+        match note.Scaffold, note.Trial with
+        | None, _ -> []
+        | Some scaffold, None -> [ fromShanten "打之前的向听（Scaffold.Shanten）" scaffold.Shanten ]
+        | Some scaffold, Some trial ->
+            [
+                fromShanten "打之前的向听（Scaffold.Shanten）" scaffold.Shanten
+                fromShanten "打之后的向听（DahaiScaffold.Shanten）" trial.Shanten
+            ]
+            @ ukeire trial
+            @ danger trial
+
+    /// 第三句上那几个数的来源：**每一条候选逐格都是引擎那一条试打**。
+    let private candidateSources (candidate: ReviewCandidate) : Sourced list =
+        let total =
+            candidate.Ukeire
+            |> Option.map (fun total -> [ fromInt "那一张的有效牌枚数（Ukeire.total）" total ])
+            |> Option.defaultValue []
+
+        // **多出来的枚数才写那个号**（`ReviewCandidate.toDisplay` 那三支）：一边算不出来、
+        // 或者两边一样多时，那一格根本不印。
+        let gain =
+            match candidate.Ukeire, candidate.UkeireGain with
+            | Some _, Some gain when gain > 0 -> [ fromValue "比你打的那张多几枚（UkeireGain）" $"+{gain}" ]
+            | Some _, Some gain when gain < 0 -> [ fromInt "比你打的那张多几枚（UkeireGain）" gain ]
+            | _, _ -> []
+
+        let advances =
+            if candidate.Advances then
+                [ fromShanten "那一张打完之后的向听（DahaiScaffold.Shanten）" candidate.Shanten ]
+            else
+                []
+
+        [ fromValue "换打的那一张（ReviewCandidate.Pai）" (Tile.toDisplay candidate.Pai) ]
+        @ total
+        @ gain
+        @ advances
+
+    /// 第三句整句：那几条候选按页面上的顺序一条接一条。
+    let private adviceSourcesOf (note: ReviewNote) : Sourced list =
+        note.Better |> List.collect candidateSources
+
+    /// 强 AI 那一行上那几个数的来源（票 93/103）：**逐格都是上游那一份，这一层照抄**。
+    ///
+    /// 一旦有人把几条候选加权成一个「确定度分」印上去，那个数在这张表里没有一格认领它，
+    /// 这一条当场红——**概率不是理由**，加权出来的更不是（票 103 的硬边界）。
+    let private strongSources (row: ReviewStrong) : Sourced list =
+        let head = [ fromValue "它选的那一条叫什么（ActionOption.label）" row.Label ]
+
+        let counted =
+            if List.length row.Candidates = row.CandidatesTotal then
+                [ fromInt "上游一共给了几条（BaselineAnswer.CandidatesTotal）" row.CandidatesTotal ]
+            else
+                [
+                    fromInt "上游一共给了几条（BaselineAnswer.CandidatesTotal）" row.CandidatesTotal
+                    fromInt "这一包里认得出几条（Candidates 的条数）" (List.length row.Candidates)
+                ]
+
+        let listed =
+            row.Candidates
+            |> List.collect (fun choice ->
+                [
+                    fromValue "那一条叫什么（ActionOption.label）" choice.Label
+                    fromProbability "上游给它的那个数（BaselineChoice.P）" choice.P
+                ])
+
+        let yours =
+            match row.Yours with
+            | Some choice ->
+                [
+                    fromValue "你那一手叫什么（ReviewNote.Label）" row.PlayedLabel
+                    fromProbability "上游给你那一手的那个数（BaselineChoice.P）" choice.P
+                    fromInt "你那一手在上游那一列里排第几（ReviewChoice.Rank）" choice.Rank
+                ]
+            | None ->
+                [
+                    fromValue "你那一手叫什么（ReviewNote.Label）" row.PlayedLabel
+                    fromInt "上游一共给了几条（BaselineAnswer.CandidatesTotal）" row.CandidatesTotal
+                ]
+
+        // **分布为空时整句退回票 93 那一句**：那时后面三段一格都没有。
+        match row.Candidates with
+        | [] -> head
+        | _ -> head @ counted @ listed @ yours
+
+    [<Fact>]
+    let ``复盘上一个自造的合成数都不出：那三句话里的每一个数都指得回引擎那一份的一格`` () =
+        // 三桌凑齐三种情形：每手打最优（那一栏恒是「最优之一」）、每手打最差
+        // （候选那几个数才有得核）、首页那份回放（副露与立直那几种不打牌的手）。
+        let replay =
+            TablePage.home ()
+            |> fst
+            |> step (DemoLoaded(Ok demo))
+            |> step (ViewpointPicked(Viewpoint.Seated(seat 1)))
+
+        let batches =
+            [
+                "真人打最优那一桌", settledFirst.Force() |> notesOf 0
+                "真人打最差那一桌", settledWorst.Force() |> notesOf 0
+                "首页那份回放的座位 1", replay |> notesOf 1
+            ]
+
+        let tracedNote (where: string) (note: ReviewNote) : int =
+            let at = $"{where}第 {note.Turn} 手"
+
+            let advice =
+                ReviewNote.advice note
+                |> Option.map (traced $"{at}的第三句" (adviceSourcesOf note))
+                |> Option.defaultValue 0
+
+            traced $"{at}的抬头" (headSources note) (ReviewNote.headline note)
+            + traced $"{at}的第二句" (figureSources note) (ReviewNote.figures note)
+            + advice
+
+        let numbers =
+            batches
+            |> List.sumBy (fun (where, notes) -> notes |> List.sumBy (tracedNote where))
+
+        // 判据 3：这几种情形各真的走到过几次？为 0 的那一种，这一条等于没跑。
+        let notes = batches |> List.collect snd
+
+        let counted (predicate: ReviewNote -> bool) : int =
+            notes |> List.filter predicate |> List.length
+
+        let withUkeire =
+            counted (fun note -> note.Trial |> Option.exists (fun trial -> Option.isSome trial.Ukeire))
+
+        let withDanger =
+            counted (fun note -> note.Trial |> Option.exists (fun trial -> Option.isSome trial.Danger))
+
+        let withBetter = counted (fun note -> not (List.isEmpty note.Better))
+
+        let withGain =
+            counted (fun note ->
+                note.Better
+                |> List.exists (fun each -> each.UkeireGain |> Option.exists (fun gain -> gain <> 0)))
+
+        let withAdvances =
+            counted (fun note -> note.Better |> List.exists (fun each -> each.Advances))
+
+        let notDahai = counted (fun note -> Option.isNone note.Trial)
+
+        // 听牌与和了那几手：那一格印出来一个数都没有（`fromShanten` 的空串那一支）。
+        let noShantenNumber =
+            counted (fun note -> note.Scaffold |> Option.exists (fun each -> Shanten.value each.Shanten <= 0))
+
+        Assert.True(List.length notes > 200, $"这三桌该有两百多手，实到 {List.length notes} 手")
+        Assert.True(numbers > 600, $"这一条该核过几百个数，实到 {numbers} 个")
+        Assert.True(withUkeire > 0, "一手带有效牌的都没有：那两格等于没核")
+        Assert.True(withDanger > 0, "一手带危险度的都没有：那一格等于没核")
+        Assert.True(withBetter > 0, "一条「更好的候选」都没列出来：第三句那几个数等于没核")
+        Assert.True(withGain > 0, "一条带「多几枚」的候选都没有：那一格等于没核")
+        Assert.True(withAdvances > 0, "一条「向听更好」的候选都没有：那一格等于没核")
+        Assert.True(notDahai > 0, "一手不打牌的都没有：第二句那另一支等于没核")
+        Assert.True(noShantenNumber > 0, "一手听牌或和了形的都没有：向听那一格的空串那一支等于没核")
+
+    [<Fact>]
+    let ``强 AI 那一行同样一个自造的数都不出：条数、概率、排第几逐个指得回上游那一份`` () =
+        let note, package, ids = handWithOptions ()
+
+        let played =
+            match DecisionPackage.tryId note.Played package with
+            | Some id -> id
+            | None -> failwith "他打的那一手必然在那一包里"
+
+        let elsewhere = ids |> List.filter (fun id -> id <> played)
+
+        let rowOf (answer: BaselineAnswer) : ReviewStrong =
+            match Review.strongOf note answer with
+            | Some row -> row
+            | None -> failwith "包里那一条 id 该换得出一行"
+
+        let outside =
+            elsewhere
+            |> List.truncate 3
+            |> List.mapi (fun index id -> id, 0.5 / float (index + 1))
+
+        let rows =
+            [
+                "你打的排第 2",
+                rowOf (answeredWith (Some elsewhere[0]) [ elsewhere[0], 0.62; played, 0.35; elsewhere[1], 0.03 ] 3)
+                "你打的不在那几条里", rowOf (answeredWith (Some elsewhere[0]) outside 3)
+                "中间一条这一包里认不出来", rowOf (answeredWith (Some ids[0]) [ ids[0], 0.7; List.max ids + 7, 0.2; ids[1], 0.1 ] 3)
+                "末一条小到两位小数写不出来",
+                rowOf (answeredWith (Some ids[0]) [ ids[0], 0.5961328; ids[1], 0.40268; ids[2], 0.0010278977 ] 3)
+                "上游没给分布（逐字退回票 93 那一句）", rowOf (answered (Some elsewhere[0]) 5)
+            ]
+
+        let numbers =
+            rows
+            |> List.sumBy (fun (which, row) ->
+                traced $"强 AI 那一行（{which}）" (strongSources row) (ReviewStrong.toDisplay row))
+
+        // 阳性对照：这五种情形真的各印出了一串数（空表那一种除外，它本来就只有一句话）。
+        Assert.True(numbers > 15, $"这一条该核过十几个数，实到 {numbers} 个")
