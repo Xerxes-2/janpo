@@ -1277,13 +1277,66 @@ module TableState =
             // 「看不懂牌的模型」准备的——替一个强 AI 代打时宁可取最保守的那一手。
             Table.apply (Fallback.action ScaffoldTier.Bare consult.Package) table, Some reason
 
-    /// 作废一次过期的问话时，记在账上的那句中文（票 108）。
+    /// **把在飞的那几次问话从表上摘下来记进账**——三条路共用的那一段
+    /// （票 108 的剪枝、票 109 的**撤票**与**开下一局**）。
     ///
-    /// **它说的是判据本身**：包里的 id 就是问出去那一刻合法动作集的下标，
-    /// 而引擎此刻给这一席的那一列已经不是那一份——人要从这句话里读得出
-    /// 「为什么这一笔花销没有对应的一手」。
-    let private voidReason (seat: Seat) : string =
-        $"问出去之后座位 {Seat.index seat} 这一手已经翻篇（引擎此刻给它的合法动作集与包里那一列对不上）：这一次问话作废，没有落子。"
+    /// **三条路只差两个参数**：挑哪几份（`doomed`）、为什么（`cause`）。各写一遍的话，
+    /// 「回执已经到了的那几份当场就知道花了多少」与「强 AI 基线那几份没有账单」
+    /// 这两件事就要在三处各记得一次。
+    ///
+    /// **摘下来的不是丢掉，是记一笔账**（`Table.voidAsk`）：那一次问话真的调了 provider、
+    /// 真的计了费。**但它不留一条声称落了子的 `DecisionRecord`**——那一手没有发生；
+    /// 手序不动、事件流不动。回执还在飞时 token 那几个数还不知道，
+    /// 等它回来在 `Answered` 里补（`Table.creditVoid`）。
+    ///
+    /// **那几席就此重新可问**：`step` 看的是 `Awaiting` / `Consulting`（`flying`）。
+    let private harvested
+        (cause: VoidCause)
+        (doomed: DecisionPackage -> bool)
+        (table: Table)
+        (live: LiveTable)
+        : LiveTable * Table =
+        let asking, deadAsks =
+            live.Awaiting |> List.partition (fun each -> not (doomed each.Package))
+
+        let consulting, deadConsults =
+            live.Consulting |> List.partition (fun each -> not (doomed each.Package))
+
+        // 作废发生在哪一手之后：`voidAsk` 只往账上追加，手序不动，因此这一格整批同一个数。
+        // **跨局时它就是「补到哪一局的账上」那个锚**（票 109）：`Table.Turns` 跨局累计，
+        // 开下一局不把它归零，于是一笔作废永远记在**它真的发生的那一刻**上。
+        let turn = table.Turns
+
+        let voided (ticket: int) (seat: Seat) (usage: Usage option) : VoidedAsk = {
+            Ticket = ticket
+            Turn = turn
+            Seat = seat
+            Cause = cause
+            Usage = usage
+        }
+
+        // 回执已经回来了的那几份，当场就知道花了多少；还在飞的那几份等它回来再补（`Answered`）。
+        //
+        // 强 AI 基线那几份记在**同一本账**上，**只是它没有账单**（那一席在本机跑）：
+        // 分成两本的话，「这一桌剪掉过几次问话」就要从两处各数一遍再相加，而那两份计数会漂。
+        let harvest =
+            (deadAsks
+             |> List.map (fun each ->
+                 let usage = each.Answer |> Option.bind (fun answer -> answer.Usage)
+                 voided each.Ticket (Awaiting.seat each) usage))
+            @ (deadConsults
+               |> List.map (fun each -> voided each.Ticket (Consult.seat each) None))
+
+        let table =
+            (table, harvest) ||> List.fold (fun table ask -> Table.voidAsk ask table)
+
+        {
+            live with
+                Table = Ok table
+                Awaiting = asking
+                Consulting = consulting
+        },
+        table
 
     /// **把过期的那几份问话剪掉**（票 92 立在强 AI 基线那一侧，票 108 补上模型席这一侧）。
     ///
@@ -1301,48 +1354,63 @@ module TableState =
     ///
     /// **那一席就此重新可问**：`step` 看的是 `Awaiting` / `Consulting`（`flying`），
     /// 剔掉之后轮到它就再问一次，拿的是此刻那份新包。
+    ///
+    /// **它是兜底，不是语义**（票 109）：它只看得见「合法动作集变了没有」，
+    /// 而**拨座位那一刻动作集往往没变**——那一条要由 `rebound` 当场撤下来。
     let private swept (table: Table) (live: LiveTable) : LiveTable * Table =
-        let current (package: DecisionPackage) = stillCurrent table package
+        let expired (package: DecisionPackage) = not (stillCurrent table package)
+        harvested VoidCause.Expired expired table live
 
-        let asking, expiredAsks =
-            live.Awaiting |> List.partition (fun each -> current each.Package)
+    /// **现在坐这一席的是谁**（名牌上那句话）。
+    ///
+    /// **取自坐法那一份唯一的出处**（`SeatingPlan.nameplates`），不在这里另拼一句：
+    /// 两份写法迟早对不上，而账上那句话与牌桌上那枚名牌说的应当是同一件事。
+    let private taker (seat: Seat) (seating: SeatingPlan) : string =
+        SeatingPlan.nameplates seating
+        |> Seat.tryItem seat
+        // 座位越界（不该发生）：宁可只报座位号，也不编一个选手名出来。
+        |> Option.defaultValue $"座位 {Seat.index seat}"
 
-        let consulting, expiredConsults =
-            live.Consulting |> List.partition (fun each -> current each.Package)
+    /// **人把某一席拨给了别人：那一席在飞的那一票当场撤回**（票 109）。
+    ///
+    /// **这是语义，不是等它回来再剪**：`swept` 那道按「合法动作集是不是还是当下」判，
+    /// 而**拨座位那一刻牌桌根本没有往前走**（动作集一个字节都没变），它因此剪不掉；
+    /// 于是回执赶在他出手之前回来时，**模型替坐在桌边的那个人打了一手**（票 108 §⑦ 第 4 条）。
+    ///
+    /// **拨给别的模型也一样作废**：provider / key / 人格都可能换了，
+    /// 旧回执是**上一份配置**答的——它答的不是这一席此刻的那个人，
+    /// 而牌谱开头那一列 `names` 是导出那一刻由**此刻的配桌**推导出来的
+    /// （`Table.events` → `Roster.names`，不是逐手录下的）：那一手因此会记在新那一位名下。
+    ///
+    /// `taker` 是现在坐这儿的那一位（名牌上那句话）：**不许静默作废**，
+    /// 人要从账上那句话里读得出「拨给了谁」。
+    let private rebound (seat: Seat) (taker: string) (live: LiveTable) : LiveTable =
+        match live.Table with
+        // 牌桌都开不起来时一份在飞的问话都没有（`step` 要 `Ok` 才问得出去）：没有事情发生。
+        | Error _ -> live
+        | Ok table ->
+            let his (package: DecisionPackage) = DecisionPackage.seat package = seat
+            harvested (VoidCause.Rebound taker) his table live |> fst
 
-        // 作废发生在哪一手之后：`voidAsk` 只往账上追加，手序不动，因此这一格整批同一个数。
-        let turn = table.Turns
-
-        let voided (ticket: int) (seat: Seat) (usage: Usage option) : VoidedAsk = {
-            Ticket = ticket
-            Turn = turn
-            Seat = seat
-            Reason = voidReason seat
-            Usage = usage
-        }
-
-        // 回执已经回来了的那几份，当场就知道花了多少；还在飞的那几份等它回来再补（`Answered`）。
-        //
-        // 强 AI 基线那几份记在**同一本账**上，**只是它没有账单**（那一席在本机跑）：
-        // 分成两本的话，「这一桌剪掉过几次问话」就要从两处各数一遍再相加，而那两份计数会漂。
-        let expired =
-            (expiredAsks
-             |> List.map (fun each ->
-                 let usage = each.Answer |> Option.bind (fun answer -> answer.Usage)
-                 voided each.Ticket (Awaiting.seat each) usage))
-            @ (expiredConsults
-               |> List.map (fun each -> voided each.Ticket (Consult.seat each) None))
-
-        let table =
-            (table, expired) ||> List.fold (fun table ask -> Table.voidAsk ask table)
-
-        {
-            live with
-                Table = Ok table
-                Awaiting = asking
-                Consulting = consulting
-        },
-        table
+    /// **开下一局：在飞的那几次问话作废，而不是从账上消失**（票 109）。
+    ///
+    /// **名字取自「翻篇」**（同 `swept` 是「剪」、`rebound` 是「换人」）：
+    /// 这一局连同它在飞的那几次问话一起翻过去了。
+    ///
+    /// 票 108 把这一处交了回来：那时它写的是 `Awaiting = []` / `Consulting = []`，
+    /// **同一张牌桌、同一本账**（`Table.usage` 跨局累计），那一票的钱就此蒸发。
+    ///
+    /// **口径（票 109 判的）**：开局把在飞的问话作废，**算花掉的钱**——
+    /// 钱真的付了（provider 调过、token 计过费），而账单报的是**花掉的总额**（票 79 / 108 的口径）。
+    /// 否则同一笔花销算不算数，取决于「哪一条路先发现它过期」——而人看不见那件事。
+    ///
+    /// **无条件作废，不问 `stillCurrent`**：开下一局就是「牌桌把在飞的一切都走过去了」。
+    /// 改成有条件的话会多出一条路：一份旧包活过局界、在下一局里落了子。
+    let private turned (live: LiveTable) : LiveTable =
+        match live.Table with
+        // 同 `rebound`：牌桌开不起来时一份在飞的问话都没有。
+        | Error _ -> live
+        | Ok table -> harvested VoidCause.NextKyoku (fun _ -> true) table live |> fst
 
     /// 已经答上来的回执，按引擎问答的正序落下去（票 74）。
     ///
@@ -2471,16 +2539,18 @@ module TableState =
         | KyokuAdvanced ->
             model
             |> onLive (fun _ live ->
+                // **在飞的那几次问话作废，而不是从账上消失**（票 109，详理由写在 `turned` 上）：
+                // 从前这两格写的是 `Awaiting = []` / `Consulting = []`，而开下一局是**同一张牌桌**
+                // （`Table.usage` 跨局累计），那一票的钱就此蒸发。
+                let live = turned live
+
                 {
                     live with
                         Table = Result.map Table.nextKyoku live.Table
                         // 一局一定型（票 46）：开下一局时面板上改过的人格与模板在这里生效。
                         Pinned = loosened live
-                        Awaiting = []
-                        // 强 AI 基线在飞的那几次同理作废（票 92）；它的兵底计数同样跨局累计。
-                        Consulting = []
                         // 「替你过了几次」跨局累计（同 `Table.fallbacks`），因此开下一局时不清。
-                        // 在飞的问话作废（票号从此对不上），别让「在想」挂成孤儿；
+                        // 在飞的问话已经作废（票号从此对不上），别让「在想」挂成孤儿；
                         // 说过话 / 兜底那两态**粘着不掉**（那是上一局末手的事实，人还想看）。
                         Agent =
                             live.Agent
@@ -2494,14 +2564,27 @@ module TableState =
         | SeatBound(seat, choice) ->
             model
             |> onLive (fun _ live ->
+                let before = (SeatingPlan.bindingAt seat live.Seating).Choice
                 let seating = live.Seating |> SeatingPlan.bind seat choice
+
+                // **换人就撤票**（票 109，理由写在 `rebound` 上）：那一席在飞的那一票当场作废，
+                // 不等它回来再剪——`swept` 那道按「合法动作集是不是还是当下」判，
+                // 而拨座位那一刻动作集往往没变，因此它剪不掉。
+                //
+                // **拨到它已经绑着的那一项不算换人**：面板上点一下当前那一项同样发一条 `SeatBound`，
+                // 而那一下什么都没改——误撤一票就是白花一次钱、白等一趟。
+                let revoked =
+                    if before = choice then
+                        live
+                    else
+                        rebound seat (taker seat seating) live
 
                 // 拨到强 AI 基线的那一下就是去拉那几 MB（票 92；ADR-0006 边界 1）：
                 // **不预取、不按重开才拉**——人拨完下一步就是开桌，那 208 ms（本机）
                 // 藏得进那一次点击的等待里。
                 let bound, loading =
                     started {
-                        live with
+                        revoked with
                             Seating = seating
                             // 只把换了人的这一席归零：别席的状态是别席的事实（票 74 按座位各一份）。
                             Agent = live.Agent |> Seat.mapAt seat (fun _ -> AgentStatus.Idle)

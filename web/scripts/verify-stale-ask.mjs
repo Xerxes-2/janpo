@@ -19,6 +19,15 @@
 //   ⑤ **没落子**：整页一个思考气泡都没有（气泡读的是决策记录）——那一手没有发生，
 //      因此不许有一条声称落了子的记录。④⑤ 合起来就是「花了钱、没落子」这件真实情形。
 //
+// **票 109 往里加了两条（⑥⑦）**，它俩钉的是「撤票是语义、剪枝只是兜底」：
+//
+//   ⑥ **拨那一下当场撤票**：人把那一席拨给自己的那一瞬间（**牌桌一手都还没走**），
+//      在飞的那一席就清空了——不是等他打完一手再被剪枝剔下来（剪枝那一道按
+//      「合法动作集是不是还是当下」判，而拨座位那一刻动作集往往没变，它因此剪不掉）；
+//   ⑦ **回执赶在他出手之前回来也不落子**：第二程把那一席还给模型、等它被重新问出去、
+//      趁它在飞再拨给自己，然后**他一下都不点**地等那份鬼回执回来：河里一张牌不许多、
+//      那一手仍旧摆在他面前、而那一趟的钱同样落到账上。**量点就停在那一刻**（判据 20）。
+//
 // 跑法：`cd web && pnpm run fable && pnpm run verify:stale-ask`
 // 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 //
@@ -201,6 +210,24 @@ export async function verifyStaleAsk(lane, options = {}) {
     const seated = await snapshot(page);
     console.log(`拨给自己了：在飞的席「${seated.asking}」　他此刻点得动 ${seated.mine} 处`);
 
+    // ⑥ **撤票是语义**（票 109）：拨那一下当场作废，而不是等它回来再剪。
+    // **量点就在这一刻**（判据 20）：牌桌一手都还没走（下面那一句先核它），
+    // 因此剪枝那一道在这一刻什么都剪不掉——清空了就只能是撤票干的。
+    if (seated.latest !== flying.latest) {
+      problems.push(
+        `拨那一下之前牌桌就已经往前走了（上一手「${flying.latest}」→「${seated.latest}」）：` +
+          "⑥ 那一条在空转——它要钉的是「牌桌没动而在飞的席清了」",
+      );
+    }
+
+    if (seated.asking !== "") {
+      problems.push(
+        `人把那一席拨给自己之后，在飞的问话还挂着（data-asking-seats="${seated.asking}"）：` +
+          "拨座位那一刻合法动作集往往没变，剪枝那一道因此剪不掉它——" +
+          "撤票得是语义（这一席交给了别人，旧回执就不算它的答复）",
+      );
+    }
+
     // ---- 他自己打一手：牌桌翻篇，那份在飞的问话就此过期 ----
     const first = await playHuman(page, { hands: 1, budgetMs: 20000 });
     const expired = await snapshot(page);
@@ -269,10 +296,85 @@ export async function verifyStaleAsk(lane, options = {}) {
       );
     }
 
+    // ---- ⑦ 回执**赶在他出手之前**回来：那一手仍旧是他的（票 109）----
+    //
+    // 前面那一程量的是「他打完一手之后」；这一程量的是票 108 §⑦ 第 4 条明写的那个洞：
+    // **他一下都没点**的时候回执回来了。从前包还对得上（`stillCurrent` 为真），
+    // 于是模型替坐在桌边的那个人打了一手。
+    //
+    // **走单步而不是播放**：一下一手，于是「趁它在飞拨座位」不靠时序碰运气；
+    // 拨完之后牌桌本来就停在他那一手上（轮到他），正好等得起那几秒。
+    await page.getByTestId(`table-seat-${SEAT}-profile-0`).click();
+
+    const reasked = Date.now();
+    let steps = 0;
+
+    while (steps < 40 && !(await snapshot(page)).asking.includes(String(SEAT))) {
+      await page.getByTestId("table-step").click();
+      steps += 1;
+    }
+
+    const flyingAgain = await snapshot(page);
+    console.log(`还给模型之后又问出去了（单步 ${steps} 下）：在飞的席「${flyingAgain.asking}」`);
+
+    if (!flyingAgain.asking.includes(String(SEAT))) {
+      problems.push(`把那一席还给模型之后，单步 ${steps} 下都没把它重新问出去：⑦ 那几条无从开口`);
+    }
+
+    await page.getByTestId(`table-seat-${SEAT}-human`).click();
+    await page.getByTestId("table-human").waitFor({ timeout: budgetMs });
+
+    const seized = await snapshot(page);
+
+    if (seized.asking !== "") {
+      problems.push(`第二次拨给自己之后，在飞的问话还挂着（data-asking-seats="${seized.asking}"）`);
+    }
+
+    // **他一下都不点**，就在这儿等那份鬼回执回来（睡够 + 一点余量）。
+    const remaining = delayMs + 2500 - (Date.now() - reasked);
+    if (remaining > 0) await page.waitForTimeout(remaining);
+
+    const settled = await snapshot(page);
+    console.log(
+      `他一下没点、鬼回执已经回来：河里 ${seized.kawa} → ${settled.kawa} 张　账单 ${after.tokens} → ${settled.tokens} tok　` +
+        `他此刻点得动 ${settled.mine} 处　气泡 ${settled.bubbles} 个　Fault ${settled.fault ?? "无"}`,
+    );
+
+    if (settled.kawa !== seized.kawa) {
+      problems.push(
+        `回执赶在他出手之前回来，替他打了一手（河 ${seized.kawa} → ${settled.kawa}）：` +
+          "那一席已经是他的了，牌谱里那一手却会记在模型名下",
+      );
+    }
+
+    if (settled.mine === 0) {
+      problems.push("那一手已经不在他手上了（他一处都点不动）：鬼回执把他那一手顶掉了");
+    }
+
+    if (settled.fault !== null) {
+      problems.push(`引擎拒了一个动作：「${settled.fault}」——那是鬼回执拿旧包落子的下场`);
+    }
+
+    if (settled.bubbles !== 0) {
+      problems.push(`牌桌上长出了 ${settled.bubbles} 个思考气泡：被撤的那一次问话没有落成一手`);
+    }
+
+    // 被撤的那一趟同样**花了钱**：账单要比第一只鬼那时又长一截。
+    if (!(settled.tokens > after.tokens)) {
+      problems.push(
+        `第二趟问话的 token 没落到账上（${after.tokens} → ${settled.tokens}）：` +
+          "撤票与剪枝同一本账——钱真的付了，只是那一手没发生",
+      );
+    }
+
     console.log("");
     console.log(
       `${mark(problems)} 过期问话这一道：剪得掉、牌桌没停、旧包没落子、` +
         `账上那 ${after.tokens} tok 还在、气泡 ${after.bubbles} 个`,
+    );
+    console.log(
+      `${mark(problems)} 换人撤票这一道（票 109）：拨那一下当场清表、` +
+        `他一下没点而鬼回执一手没落（河 ${settled.kawa} 张不变）、账上又多了 ${settled.tokens - after.tokens} tok`,
     );
   } finally {
     await context.close();

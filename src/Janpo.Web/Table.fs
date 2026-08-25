@@ -13,6 +13,30 @@ type Turn = {
     Fallback: string option
 }
 
+/// 一次问话**为什么**作废（票 108 立了头一条，票 109 补上另外两条）。
+///
+/// **三种各是一个 case，不落进一个万能分支**（判据 12：错的诊断比没有诊断更贵）：
+/// 它们的起因、能不能避免、以及「这一席还该不该被重新问」都不一样，
+/// 而人在账单上看到一笔没落子的花销时问的第一句话就是「为什么」。
+///
+/// **它不带 token、不带时刻**：那两样在 `VoidedAsk` 上；这里只回答「为什么」。
+[<RequireQualifiedAccess>]
+type VoidCause =
+    /// **问出去之后这一手翻篇了**（票 108）：引擎此刻给这一席的合法动作集与包里那一列
+    /// 对不上，包里的 id 因此指着另一条动作。这一条是**兜底**——牌桌绕过了那份问话往前走,
+    /// 而没有任何一处语义说过要撤它。
+    | Expired
+    /// **这一席在问话在飞时换了人**（票 109）：人在面板上把它拨给了自己、拨给了别的模型，
+    /// 或者拨回了 bot。`taker` 是**现在坐这儿的那一位**（名牌上那句话）。
+    ///
+    /// **它是语义而不是兜底**：回执是**上一份配置**答的（provider / key / 人格都可能换了），
+    /// 它答的不是这一席此刻的那个人——哪怕合法动作集一个字节都没变，它也不算这一席的答复。
+    /// 不撤的下场票 108 §⑦ 第 4 条写着：回执赶在他出手之前回来时，**模型替他打了一手**。
+    | Rebound of taker: string
+    /// **开下一局**（票 109）：这一局连同它在飞的那几次问话一起翻篇，票号从此对不上。
+    /// 与前两条同一本账——**同一张牌桌、同一本账**（`Table.usage` 跨局累计）。
+    | NextKyoku
+
 /// 一次**花了钱、没落子**的问话（票 108）。
 ///
 /// **它刻意不是一条 `DecisionRecord`**：那一手根本没有发生。包里的 id 是按**问出去那一刻**
@@ -35,12 +59,29 @@ type VoidedAsk = {
     Turn: int
     /// 被问的那一席。
     Seat: Seat
-    /// 作废的原因（中文，给人看）。**不许静默作废**（同票 23 给兜底定的那条规矩）。
-    Reason: string
+    /// **为什么**作废。**不许静默作废**（同票 23 给兜底定的那条规矩）——
+    /// 给人看的那句中文由它加座位算出来（`VoidedAsk.reason`），**不另存一份**：
+    /// 存一句现成的话，改措辞的人就得记得同时改历史里那几条。
+    Cause: VoidCause
     /// 这一次问话的 token 账单。回执还没回来、provider 不报用量、
     /// 或者被问的根本不是模型席（强 AI 基线在本机跑，一分钱都不花）时是 None。
     Usage: Usage option
 }
+
+/// 作废那一笔的拆解。
+[<RequireQualifiedAccess>]
+module VoidedAsk =
+
+    /// 给人看的那句话：**为什么这一笔花销没有对应的一手**。
+    ///
+    /// **三种起因各说各的**（`VoidCause`），措辞的唯一出处就是这里。
+    let reason (ask: VoidedAsk) : string =
+        let seat = Seat.index ask.Seat
+
+        match ask.Cause with
+        | VoidCause.Expired -> $"问出去之后座位 {seat} 这一手已经翻篇（引擎此刻给它的合法动作集与包里那一列对不上）：这一次问话作废，没有落子。"
+        | VoidCause.Rebound taker -> $"座位 {seat} 在这一次问话在飞时换了人（现在是{taker}）：这一次问话作废，没有落子——回执是上一份配置答的，它答的不是这一席此刻的那个人。"
+        | VoidCause.NextKyoku -> $"开下一局时座位 {seat} 这一次问话还在飞：这一局连同它一起翻篇，这一次问话作废，没有落子。"
 
 /// 牌桌的推进（票 22）。**局面只有一份，就是引擎的那份**：手牌、河、副露、点数、供托
 /// 全部由投影从 `State` 读出来（ADR-0002：状态是 fold 出来的，不是存下来的），
@@ -199,6 +240,21 @@ module Table =
     /// 「账单上那几个数里，有几笔是没落子的」。
     let paidVoids (table: Table) : VoidedAsk list =
         table.Voided |> List.filter (fun ask -> Option.isSome ask.Usage)
+
+    /// **撤票**：因为这一席换了人而撤下来的那几票（票 109）。
+    ///
+    /// **它与「剪枝」（`VoidCause.Expired`）是两件事**，因此数得分开：剪枝是兜底
+    /// （牌桌已经绕过那份问话往前走了，谁也没说要撤它），撤票是语义（人把这一席交给了别人）。
+    /// 阴性对照量的就是这一个数——**没换人的一局里它必须是 0**（判据 20）。
+    ///
+    /// **逐 case 穷举**：`VoidCause` 加了新的一种时，编译器会把这里指出来。
+    let revoked (table: Table) : VoidedAsk list =
+        table.Voided
+        |> List.filter (fun ask ->
+            match ask.Cause with
+            | VoidCause.Rebound _ -> true
+            | VoidCause.Expired
+            | VoidCause.NextKyoku -> false)
 
     /// 某座位此刻的观测（票 29a）：**取自增量维护的那条掩蔽流**，不重头 fold。
     /// 座位不在这个规则集里时是 None。
