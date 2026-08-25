@@ -110,11 +110,14 @@ module RiichiProperties =
     let ``立直成立之后那家只剩自摸和、暗杠与摸切，宣言牌那一手只剩仍然听牌的打法`` (state: GameState) =
         match GameState.phase state with
         | AwaitingDahai phase ->
+            // `None` 那一支**不是兜底而是失败支**（票 114）：等着打牌的那一席必然取得到，
+            // 而空的 `keeps` 会让「宣言牌那一手只剩仍然听牌的打法」在下面变成一句
+            // 「一张都不许打」——那是另一条断言，不是这一条。
             let keeps =
                 match GameState.player phase.Actor state with
                 | Some player ->
                     RiichiState.tenpaiDahai kindSet (PlayerState.nakiCount player) (PlayerState.hand player)
-                | None -> []
+                | None -> failwith $"{phase.Actor} 正等着打牌，这一席必然取得到"
 
             match riichiOf phase.Actor state with
             | RiichiState.Accepted _ ->

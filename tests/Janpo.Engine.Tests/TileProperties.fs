@@ -15,8 +15,13 @@ module TileProperties =
     let ``任意合法记法解析再打印得回原串`` (ValidTileNotation notation) =
         Tile.parse notation |> Result.map Tile.toMjai = Ok notation
 
+    /// 两句话，**各有各的执行者**（票 114）：前半句「什么串都不抛异常」由纯随机串与近似记法守着，
+    /// 后半句「能解析出来的，原串本身就是规范形」由掺进来的合法记法守着。
+    ///
+    /// 喂 `NonNull<string>` 时后半句没人守：随机串解析不出一张牌，`Ok` 那一支 300 个样本
+    /// 一次也没进过，整条属性等价于 `fun _ -> true`（票 113 §3.1 量出来的那一条）。
     [<Property>]
-    let ``解析任意字符串都返回值而不抛异常`` (NonNull(text: string)) =
+    let ``解析任意字符串都返回值而不抛异常`` (TileNotationCandidate text) =
         match Tile.parse text with
         | Ok tile -> Tile.toMjai tile = text // 能解析出来的，原串本身就是规范形
         | Error _ -> true

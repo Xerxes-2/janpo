@@ -89,6 +89,18 @@ module HumanAssistTests =
         | Some clock -> clock
         | None -> failwith "这一刻该有一记倒计时在走"
 
+    /// 没轮到他的那一手：**这一局终了就开下一局，否则只走一手**。
+    ///
+    /// 提成具名助手是为了给**换局那一支一个执行者**（票 114）：它原本写在下面那条
+    /// 走手循环里，而那一趟六次到点全发生在同一局里，于是 `KyokuAdvanced` 那一支
+    /// 一趟都没被求值过（票 113 §3.1）。分支留着（局真终了时它是对的），
+    /// 执行者是本文件末尾那条具名用例。
+    let private advancedOrNext (model: TableModel) : TableModel =
+        if Table.isKyokuEnded (tableOf model) then
+            step KyokuAdvanced model
+        else
+            step Advanced model
+
     // ---- 第三个锚点：模型跨界拿到的那一份 JSON ----
 
     /// 决策包**编出去的那一份**里，逐条试打的那几个数（票 24 起 Agent 层读的就是它）。
@@ -515,8 +527,12 @@ module HumanAssistTests =
             // 后面没有动作跟着（票 85 那条截断牌谱的老账）。**这与到点那一手无关**，
             // 因此把边界挑在一手打牌刚落定处：两边在同一个边界上比才算数。
             let rec walk (moves: int) (fired: int) (model: TableModel) : int * TableModel =
+                // **上限出口是失败支不是兜底**（票 114）：从这里出去就意味着这一趟没停在
+                // 「一次到点摸切刚落定」那个边界上，而下面拿牌谱对拍的前提就是那个边界；
+                // 静静把 `fired, model` 交出去的话，`fired >= 6` 那一句照样能绿（到点够了、
+                // 只是最后一手不是打牌），而两边比的已经不是同一个边界了。
                 if moves > 300 || Option.isSome (Table.result (tableOf model)) then
-                    fired, model
+                    failwith $"走了 {moves} 手还没停在一次到点摸切刚落定处（到点 {fired} 次）：这一趟走飞了"
                 else
                     match TablePage.humanTurn model with
                     | Some package ->
@@ -527,13 +543,7 @@ module HumanAssistTests =
                             fired + 1, played
                         else
                             walk (moves + 1) (fired + 1) played
-                    | None ->
-                        let table = tableOf model
-
-                        if Table.isKyokuEnded table then
-                            walk (moves + 1) fired (step KyokuAdvanced model)
-                        else
-                            walk (moves + 1) fired (step Advanced model)
+                    | None -> walk (moves + 1) fired (advancedOrNext model)
 
             let fired, model = walk 0 0 model
             Assert.True(fired >= 6, $"这一段里只到点了 {fired} 次")
@@ -561,3 +571,52 @@ module HumanAssistTests =
 
         // 超时那几手**一条决策记录都不留**（他与 bot 席同级，票 87 定的）。
         Assert.Empty table.Decisions
+
+    /// `advancedOrNext` **换局那一支的执行者**（票 114）：上面那条走手循环六次到点全落在同一局里，
+    /// 于是它一趟都没被求值过（票 113 §3.1 甲档那一行）。这一条直接把牌桌推到「这一局真的终了」
+    /// 那一刻——**量点停在这儿**（判据 20）：局中抓一把只会走另一支。
+    [<Fact>]
+    let ``没轮到他的那一手：局中只走一手，这一局终了就开下一局`` () =
+        // 他坐亲，开局第一手就轮到他：先让时限吃掉那一手，牌桌这才轮得到别人
+        // （`Advanced` 在他那一手上本来就不动，拿它做阳性对照会量到一个假的 0）。
+        let rec untilOthers (moves: int) (model: TableModel) : TableModel =
+            if Option.isNone (TablePage.humanTurn model) then
+                model
+            elif moves > 20 then
+                failwith "连走 20 手还没轮到别家"
+            else
+                untilOthers (moves + 1) (step (HumanTicked((tableOf model).Turns)) model)
+
+        let model = seated ScaffoldTier.Bare 1 |> untilOthers 0
+
+        // 阳性对照（局中那一支）：走一手就只走一手，局面还是这一局。
+        let before = tableOf model
+        Assert.False(Table.isKyokuEnded before)
+        let stepped = tableOf (advancedOrNext model)
+        Assert.Equal(before.Turns + 1, stepped.Turns)
+        Assert.Equal((GameState.context before.State).Kyoku, (GameState.context stepped.State).Kyoku)
+
+        // 推到这一局终了：轮到他就让时限吃掉那一手，其余交给同一个 `advancedOrNext`。
+        let rec played (moves: int) (model: TableModel) : TableModel =
+            if Table.isKyokuEnded (tableOf model) then
+                model
+            elif moves > 400 then
+                failwith "这一局在预算内没打完"
+            elif Option.isSome (TablePage.humanTurn model) then
+                played (moves + 1) (step (HumanTicked((tableOf model).Turns)) model)
+            else
+                played (moves + 1) (advancedOrNext model)
+
+        let ended = played 0 model
+        let closed = tableOf ended
+        Assert.True(Table.isKyokuEnded closed)
+
+        // 换局那一支：下一局真的开了——**这一局不再是终了状态**，而结算面板那几条读法清了空。
+        let opened = tableOf (advancedOrNext ended)
+        Assert.False(Table.isKyokuEnded opened)
+        Assert.Empty opened.Readings
+        Assert.True(Option.isNone opened.Latest)
+        // 场况往前走了：不连庄就换局数，连庄就多一本场——两条路都不许原地不动。
+        let context = GameState.context closed.State
+        let next = GameState.context opened.State
+        Assert.True((next.Kyoku, next.Honba) <> (context.Kyoku, context.Honba), "开了下一局，场况却一个字没动")

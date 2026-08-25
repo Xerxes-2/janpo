@@ -93,10 +93,13 @@ module ObservationProperties =
     let ``任意局面任意座位，观测的河与那一家的河逐张一致`` (state: GameState) =
         observationsOf state
         |> List.forall (fun (seat, observation) ->
+            // `None` 那一支**不是兜底而是失败支**（票 114）：四个座位在任何局面上都取得到那一家，
+            // 静静地当他没河的话，「他家的河逐张一致」在座位丢了的那一刻会**假绿**
+            // （两边都是空河）。它零次是「这一趟绿的」的必然结果，不再是「有断言没人守」。
             let kawaOf (target: Seat) =
                 match GameState.player target state with
                 | Some player -> PlayerState.kawa player
-                | None -> []
+                | None -> failwith $"{target} 这一席在任何局面上都取得到，取不到就是局面自己坏了"
 
             let selfMatches =
                 observation.Self.Kawa |> List.map (fun entry -> entry.Pai) = kawaOf seat

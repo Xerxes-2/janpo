@@ -17,6 +17,10 @@ module TableTests =
     /// 19 票挑的那个种子：单局以荣和终，整场打满 6 局（两次连庄）。
     let private seed = 1177
 
+    /// **不连庄那一支的执行者**（票 114）：种子 1 的东 1 局荒牌流局、四家一个听牌的都没有，
+    /// 于是亲流れ。只喂 1177 的话「不连庄就进下一局」那一句一趟都不会被求值（票 113 §3.1）。
+    let private nonRenchanSeed = 1
+
     let private table (seed: int) : Table =
         match Table.start ruleset seed with
         | Ok table -> table
@@ -102,26 +106,41 @@ module TableTests =
 
     [<Fact>]
     let ``下一局由引擎定场况：连庄看 KyokuEnd，本场与供托由 Game 结转`` () =
-        let ended = table seed |> toKyokuEnd 400
-        let next = Table.nextKyoku ended
+        // **两颗种子各走一支**：1177 的东 1 以亲家荣和终（连庄），1 的东 1 荒牌流局且亲没听
+        // （亲流れ）。从前只喂 1177，于是「不连庄就进下一局」那一句一趟都没被求值过（票 114）。
+        //
+        // 这两颗种子摊在前头而不是写进最后那一行：普查工具只收**成员自己那个方法
+        // 行段内**的行（`assertion-census.fsx` 的 `membersIn`），而闭包里的断言只有在
+        // 成员自己先有一个序列点时才落在那个行段里——否则下面那几条断言就从普查表里
+        // 消失了，而本票要的恰恰是它们的次数（票 114）。
+        let seeds = [ seed; nonRenchanSeed ]
 
-        let before = GameState.context ended.State
-        let after = GameState.context next.State
+        let renchanAt (seed: int) : bool =
+            let ended = table seed |> toKyokuEnd 400
+            let next = Table.nextKyoku ended
 
-        let renchan =
-            match GameState.kyokuEnd ended.State with
-            | Some kyokuEnd -> KyokuEnd.isRenchan before.Oya kyokuEnd
-            | None -> failwith "这一局应当已经终了"
+            let before = GameState.context ended.State
+            let after = GameState.context next.State
 
-        if renchan then
-            Assert.Equal(before.Kyoku, after.Kyoku)
-            Assert.Equal(before.Honba + 1, after.Honba)
-        else
-            Assert.Equal(before.Kyoku + 1, after.Kyoku)
+            let renchan =
+                match GameState.kyokuEnd ended.State with
+                | Some kyokuEnd -> KyokuEnd.isRenchan before.Oya kyokuEnd
+                | None -> failwith "这一局应当已经终了"
 
-        Assert.Equal<int list>(GameState.scores ended.State, after.Scores)
-        Assert.True(next.Latest |> Option.isNone)
-        Assert.Empty(next.Readings)
+            if renchan then
+                Assert.Equal(before.Kyoku, after.Kyoku)
+                Assert.Equal(before.Honba + 1, after.Honba)
+            else
+                Assert.Equal(before.Kyoku + 1, after.Kyoku)
+
+            Assert.Equal<int list>(GameState.scores ended.State, after.Scores)
+            Assert.True(next.Latest |> Option.isNone)
+            Assert.Empty(next.Readings)
+            renchan
+
+        // **防空转**（判据 3）：两支各真的走过一次。这一行红了就说明有一支又落回零次了
+        // ——而那正是这条用例从前的样子。
+        Assert.Equal<bool list>([ true; false ], seeds |> List.map renchanAt)
 
     [<Fact>]
     let ``这一局还没终就不许开下一局`` () =

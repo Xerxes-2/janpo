@@ -248,8 +248,11 @@ module HumanCallTests =
         Assert.Equal(None, HumanSeat.pass dahai)
         Assert.NotEmpty(HumanSeat.dahaiOptions dahai)
 
-        for button in HumanSeat.buttons dahai do
-            Assert.DoesNotContain(button.Kind, [ "chi"; "pon"; "daiminkan"; "none" ])
+        // 这一手牌桌下面那一排是**空的**：开局第一手既不听牌也没四张，立直 / 暗杠 /
+        // 自摸 / 九种九牌一条都谈不上。**从前这儿是一个空 `for` 里的 `DoesNotContain`**
+        // （一趟都没求值过，票 113 §3.1）；空表本身才是这一手该钉的事，而「凡是出牌那一手
+        // 都没有吃 / 碰 / 大明杠」那一句在下一条用例里走整场（票 114）。
+        Assert.Empty(HumanSeat.buttons dahai)
 
         // 响应那一手：一张牌都打不出去（打牌不在合法动作集里），而「过」必在。
         let model, _ = until "pon" 1
@@ -264,6 +267,56 @@ module HumanCallTests =
         for pai in Tile.all do
             for tsumogiri in [ true; false ] do
                 Assert.Equal(None, HumanSeat.dahai pai tsumogiri respond)
+
+    [<Fact>]
+    let ``一整场里凡是该他出牌那一手：那一排没有吃 / 碰 / 大明杠，也没有「过」`` () =
+        // 上一条只核得动**开局那一手**，而那一手那一排是空的——于是「不许出现吃 / 碰 /
+        // 大明杠」那一句从来没被求值过（票 113 §3.1 量到的那一条）。这一条走整场：
+        // 凡是该他出牌的那几十手逐手核，而且**数他真核过几枚按钮**。
+        //
+        // 「该他出牌那一手」的判据是**打牌在合法动作集里**，不是「没有过」
+        // ——后者正是这一条要断言的那一句，拿它挑局面就成了拿结论当前提。
+        //
+        // 三场：种子 1 与 2 各一场一路「过」，外加种子 2 那一场**碰得了就碰**
+        // ——加杠要先有一组碰摆在牌桌上（`walking` 那段注释），一路「过」的路上摆不出来。
+        // 这一行摊在闭包前头是有用意的：普查工具只收**成员自己那个方法行段内**的行，
+        // 成员自己先有一个序列点，下面闭包里那几条断言才量得到（票 114）。
+        let games = [ false, 1; false, 2; true, 2 ]
+
+        let scan (greedy: bool, seed: int) : int * int =
+            let pick = walking greedy
+
+            let rec walk (moves: int) (hands: int, row: int) (rng: Rng, model: TableModel) : int * int =
+                if moves > 3000 then
+                    failwith "这一场该在 3000 步之内打完"
+                elif Option.isSome (Table.result (tableOf model)) then
+                    hands, row
+                else
+                    match TablePage.humanTurn model with
+                    | Some package when HumanSeat.dahaiOptions package |> List.isEmpty |> not ->
+                        let buttons = HumanSeat.buttons package
+
+                        // 「过」是**响应阶段的东西**：该他出牌那一手一枚都不许有。
+                        Assert.Equal(None, HumanSeat.pass package)
+
+                        for button in buttons do
+                            Assert.DoesNotContain(button.Kind, [ "chi"; "pon"; "daiminkan"; "none" ])
+
+                        walk (moves + 1) (hands + 1, row + List.length buttons) (moved pick (rng, model))
+                    | Some _
+                    | None -> walk (moves + 1) (hands, row) (moved pick (rng, model))
+
+            walk 0 (0, 0) (Rng.ofSeed (seed * 7919 + 13), humanAt seed)
+
+        let scanned = games |> List.map scan
+        let hands = scanned |> List.sumBy fst
+        let buttons = scanned |> List.sumBy snd
+
+        // 防空转（判据 3）：出牌那几十手真的逐手核了，**而且那一排真的摆出过按钮**
+        // （立直宣言 / 暗杠 / 加杠 / 自摸那几枚）——`buttons = 0` 的话上面那条逐枚断言
+        // 仍旧是个空循环，与从前那一版没有分别。
+        Assert.True(hands > 100, $"这三场只核了 {hands} 手出牌，太少了")
+        Assert.True(buttons > 8, $"这三场里出牌手那一排一共只摆过 {buttons} 枚按钮：逐枚那一句还在空转")
 
     [<Fact>]
     let ``响应阶段整桌等着他：单步与定时器都推不动，他按了那一条「过」才走`` () =
@@ -515,10 +568,12 @@ module HumanCallTests =
             let played = step (HumanPlayed pass.Id) crowd
             let asked = step Advanced played
 
-            match (liveOf asked).Awaiting with
-            | [] -> asked
-            | _ -> answerAll asked
-            |> settled
+            // **他先点之后那一席模型必被问**（`Advanced` 那一下就是问出去那一记）。
+            // 从前这儿是一句 `| [] -> asked` 的兜底，一趟都没求值过（票 113 §3.1）；
+            // 它静静放行的那一种下场恰恰是**这一条用例比的不是同一件事**：模型压根没答，
+            // 两条路的事件流当然一样。现在它是一条每趟都开口的断言（票 114）。
+            Assert.NotEmpty (liveOf asked).Awaiting
+            answerAll asked |> settled
 
         // **头跳 / 双响的顺序不因谁先答而变**：同一轮里同样两份答复，两种到达顺序
         // 跑出来的事件流逐条相同。

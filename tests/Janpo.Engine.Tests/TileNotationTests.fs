@@ -140,3 +140,20 @@ module TileNotationTests =
         Assert.Equal("白", Tile.toDisplay (parsed "5z"))
         Assert.Equal("发", Tile.toDisplay (parsed "6z"))
         Assert.Equal("中", Tile.toDisplay (parsed "7z"))
+
+    /// 候选记法生成器里那份「近似记法」的**自证**（票 114）：它们逐条都不是规范形，
+    /// 因此 `Tile.parse` 只要收下其中任何一条，`解析任意字符串都返回值而不抛异常`
+    /// 那条属性的 `Ok` 支就会当场红（`toMjai` 出来的必然是规范形，与原串对不上）。
+    ///
+    /// **这条判据不许拿 `Tile.parse` 自己来判**：拿被测物筛输入，放宽了它就自己把证据丢掉。
+    [<Fact>]
+    let ``生成器里那份近似记法逐条都不是规范形`` () =
+        let canonical = Set.ofList TileNotationSamples.canonical
+
+        let overlap =
+            TileNotationSamples.nearMisses
+            |> List.filter (fun text -> Set.contains text canonical)
+
+        Assert.Equal<string list>([], overlap)
+        // 防空转：这份表真的有料（空表也会让上面那一条绿）。
+        Assert.True(List.length TileNotationSamples.nearMisses > 100, "近似记法那份表太薄了")

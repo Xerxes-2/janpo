@@ -530,7 +530,10 @@ module StaleAskTests =
 
         let poke (model: TableModel) : TableModel =
             match (liveOf model).Awaiting with
-            | [] -> model
+            // **空表那一支是失败支不是兜底**（票 114）：`playGame` 只在匹配到非空那一支里
+            // 叫它，真空了就是那边改坏了——而静静返回 `model` 的话，下面那句
+            // 「撤票 0 次」会因为**一下都没戳过**而假绿（那正是它自己防的那一种空转）。
+            | [] -> failwith "poke 只在问话在飞时被调用（`playGame` 已经先匹配过非空）"
             | entry :: _ ->
                 let seat = Awaiting.seat entry
                 let choice = (SeatingPlan.bindingAt seat (liveOf model).Seating).Choice
