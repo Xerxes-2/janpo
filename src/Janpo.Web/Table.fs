@@ -13,6 +13,35 @@ type Turn = {
     Fallback: string option
 }
 
+/// 一次**花了钱、没落子**的问话（票 108）。
+///
+/// **它刻意不是一条 `DecisionRecord`**：那一手根本没有发生。包里的 id 是按**问出去那一刻**
+/// 的合法动作集编的号，而这一席此刻的合法动作集已经换了一份——拿它落子要么落错一手、
+/// 要么当场被引擎拒（`Table.Fault`，牌桌就此停住）。留一条声称落了子的记录是句假话：
+/// 气泡会替它编一句理由，回放会把它按手序摆到别人那一手上。
+///
+/// **但钱是真花掉的**：provider 调过、token 计过费。因此它记在这里而不是被抹掉——
+/// 账单（`Table.usage`）报的是**花掉的总额**，不是「落了子的那几手的总额」。
+/// 「花了钱、没落子」是一种真实情形，这个类型就是说得出它的那个记录。
+type VoidedAsk = {
+    /// 那一次问话的票号（`LiveTable.Ticket` 那一本账，跨席唯一）。
+    ///
+    /// **它是「回执晚回来时该把账补在哪一条」的键**：作废那一刻回执常常还在飞，
+    /// token 那几个数要等它回来才知道（`Table.creditVoid`）。
+    Ticket: int
+    /// 作废时这一桌已经落定了几手（`Table.Turns`）。**它不是「第几手」**——
+    /// 这一次问话没有落成一手，只是发生在这一手之后。`DecisionRecord.Turn` 那个号
+    /// 是手序的锚，这一个只是给人定位用的时刻。
+    Turn: int
+    /// 被问的那一席。
+    Seat: Seat
+    /// 作废的原因（中文，给人看）。**不许静默作废**（同票 23 给兜底定的那条规矩）。
+    Reason: string
+    /// 这一次问话的 token 账单。回执还没回来、provider 不报用量、
+    /// 或者被问的根本不是模型席（强 AI 基线在本机跑，一分钱都不花）时是 None。
+    Usage: Usage option
+}
+
 /// 牌桌的推进（票 22）。**局面只有一份，就是引擎的那份**：手牌、河、副露、点数、供托
 /// 全部由投影从 `State` 读出来（ADR-0002：状态是 fold 出来的，不是存下来的），
 /// 这里一个牌局字段都不复制。
@@ -57,6 +86,14 @@ type Table = {
     ///
     /// **它不是第二份 prompt**：每手的尾部在各自的记录里，前缀由这一段加事件流重算得出来。
     Prompting: Prompting
+    /// 作废掉的那几次问话，**按作废顺序**（票 108）。
+    ///
+    /// **它与 `Decisions` 是一本账的两半**：那边是「花了钱、落了子」，这边是
+    /// 「花了钱、没落子」。**两边都进 `usage`**（账单报的是花掉的总额），
+    /// **只有那边进牌谱**（牌谱记的是这一场真的发生过什么）。
+    ///
+    /// **跨局累计**（同 `Decisions` / `fallbacks`），只在重开一桌时随整张牌桌一起没了。
+    Voided: VoidedAsk list
     /// 引擎拒绝了某个动作。**不该发生**（提交的动作都取自合法动作集），
     /// 落在这里就停住不再推进，把话说给人看，而不是静静地卡住。
     Fault: string option
@@ -128,6 +165,7 @@ module Table =
                 Turns = 0
                 Decisions = []
                 Prompting = Prompting.empty
+                Voided = []
                 Fault = None
             })
 
@@ -140,15 +178,27 @@ module Table =
         table.Decisions
         |> List.sumBy (fun record -> if Option.isSome record.Fallback then 1 else 0)
 
-    /// 这一桌到此刻为止的 token 账单（票 29b）：**逐条决策记录累加**，不另存一份。
+    /// 这一桌到此刻为止的 token 账单（票 29b）：**逐条累加，不另存一份**。
     /// **跨局累计**，与 `fallbacks` 同一个做法（两份计数只会漂，裁决 26-6）。
     ///
     /// 它是「前缀可缓存的 prompt 真的省下钱了没有」的记账：`CacheRead` 占输入侧的比例
     /// 就是缓存命中率（`Usage.cacheHitPercent`）。
+    ///
+    /// **作废掉的那几次问话也在里面**（票 108 的 `Voided`）：那几次真的调了 provider、
+    /// 真的计了费，只是没落成一手。账单报的是**花掉的总额**——把它们抹掉，
+    /// 页面上那几个数就成了「落了子的那几手的总额」，而人付的是前一个。
     let usage (table: Table) : Usage =
-        table.Decisions
-        |> List.choose (fun record -> record.Usage)
+        (table.Decisions |> List.choose (fun record -> record.Usage))
+        @ (table.Voided |> List.choose (fun ask -> ask.Usage))
         |> List.fold Usage.add Usage.zero
+
+    /// **花了钱、没落子**的那几次问话（票 108）：作废的问话里带着账单的那些。
+    ///
+    /// **不是每一条作废都花过钱**：强 AI 基线那一席在本机跑（一分钱都不花），
+    /// 回执还没回来的那几条也还不知道花了多少。这个取值器答的是
+    /// 「账单上那几个数里，有几笔是没落子的」。
+    let paidVoids (table: Table) : VoidedAsk list =
+        table.Voided |> List.filter (fun ask -> Option.isSome ask.Usage)
 
     /// 某座位此刻的观测（票 29a）：**取自增量维护的那条掩蔽流**，不重头 fold。
     /// 座位不在这个规则集里时是 None。
@@ -258,6 +308,31 @@ module Table =
 
     /// 选手自己决出来的一手，**没有可审计的推理**（随机座位）。
     let apply (action: Action) (table: Table) : Table = played None action table
+
+    /// 作废一次问话（票 108）：**花了钱、没落子**。
+    ///
+    /// **它不走 `played`**：那一手没有发生，因此手序不动、事件流不动、
+    /// 一条决策记录都不留——留下的只是这一笔花销与它的原因。
+    let voidAsk (ask: VoidedAsk) (table: Table) : Table = {
+        table with
+            Voided = table.Voided @ [ ask ]
+    }
+
+    /// 作废掉那一票的回执晚回来了：把它的 token 补进账（票 108）。
+    ///
+    /// **座位与票号都要对上**（票 74 那条规矩，作废之后照样成立）；对不上就原样返回
+    /// ——重开过一桌、开过下一局的那几份回执本来就不属于这张牌桌。
+    /// **重复补同一票是幂等的**（覆盖那一格，不是累加）。
+    let creditVoid (ticket: int) (seat: Seat) (usage: Usage option) (table: Table) : Table = {
+        table with
+            Voided =
+                table.Voided
+                |> List.map (fun ask ->
+                    if ask.Ticket = ticket && ask.Seat = seat then
+                        { ask with Usage = usage }
+                    else
+                        ask)
+    }
 
     /// 问过模型的那一手：动作加它的决策记录（票 26），以及那一手带来的 prompt 前置（票 31）。
     ///
@@ -423,6 +498,9 @@ module Table =
                     Turns = 0
                     Decisions = []
                     Prompting = paifu.Prompting
+                    // 回放里没有作废的问话（票 108）：动作全在牌谱里，没人要出手，
+                    // 也因此没有任何一次问话可作废。
+                    Voided = []
                     Fault = None
                 }
 

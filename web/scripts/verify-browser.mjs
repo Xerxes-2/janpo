@@ -36,6 +36,7 @@ import { verifyReview } from "./verify-review.mjs";
 import { verifySeats } from "./verify-seats.mjs";
 import { verifySetup } from "./verify-setup.mjs";
 import { verifyShare } from "./verify-share.mjs";
+import { verifyStaleAsk } from "./verify-stale-ask.mjs";
 import { verifyToolSearch } from "./verify-toolsearch.mjs";
 import { verifyTracer } from "./verify-tracer.mjs";
 
@@ -190,6 +191,17 @@ const gates = [
     name: "四 LLM 同桌：一份档案坐两席（人格各不同）、断电演习只塌那一席、老配置迁得过来",
     how: "node scripts/verify-seats.mjs",
     run: (lane) => verifySeats(lane),
+  },
+  // 票 108（接票 92 §⑧ 第 2 条挂在报告里的那一条）：**模型席那条路上的过期问话**。
+  // 竞态不靠时序碰运气：假端点先睡六秒，而人在这几秒里把那一席**拨给了自己**，
+  // 于是那几手由真人打了出去（不经 `drain` 那条顺序），牌桌绕过在飞的那份问话往前走。
+  // 五条：拨完那一下之后在飞的席当场清空、牌桌没停（定时器照续）、鬼回执回来时
+  // 引擎没被塞进一条旧动作（没有 `table-fault`）、**账单上那几个 token 还在**、
+  // 而**气泡一个都没长出来**——后两条合起来就是「花了钱、没落子」这件真实情形。
+  {
+    name: "过期问话：拨完当场剪掉、牌桌没停、旧包没落子，而那一笔 token 还在账上",
+    how: "node scripts/verify-stale-ask.mjs",
+    run: (lane) => verifyStaleAsk(lane),
   },
   // 票 76：思考气泡。**两个本机假端点**（一个好好答话、一个只回越界 id）真跑几手，
   // 于是三态里的两态都在真语料上走得到：气泡里的字必须一字不差是端点回的那句

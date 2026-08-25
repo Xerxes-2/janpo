@@ -1277,6 +1277,73 @@ module TableState =
             // 「看不懂牌的模型」准备的——替一个强 AI 代打时宁可取最保守的那一手。
             Table.apply (Fallback.action ScaffoldTier.Bare consult.Package) table, Some reason
 
+    /// 作废一次过期的问话时，记在账上的那句中文（票 108）。
+    ///
+    /// **它说的是判据本身**：包里的 id 就是问出去那一刻合法动作集的下标，
+    /// 而引擎此刻给这一席的那一列已经不是那一份——人要从这句话里读得出
+    /// 「为什么这一笔花销没有对应的一手」。
+    let private voidReason (seat: Seat) : string =
+        $"问出去之后座位 {Seat.index seat} 这一手已经翻篇（引擎此刻给它的合法动作集与包里那一列对不上）：这一次问话作废，没有落子。"
+
+    /// **把过期的那几份问话剪掉**（票 92 立在强 AI 基线那一侧，票 108 补上模型席这一侧）。
+    ///
+    /// **一份在飞的问话会过期**，是因为牌桌会绕过它往前走：人在它在飞时把那一席
+    /// 拨给了自己（`SeatBound`），于是那几手由真人打了出去（`HumanPlayed` / `HumanTicked`
+    /// 走的是 `handOf`，不经 `drain` 那条顺序）。留着它有两个下场，**两个都真演过**：
+    ///
+    /// - `drain` **按座位**找在飞的那一份，于是这一席下一次被问到时拿**旧包**落子：
+    ///   同一个 id 指的已经是另一条动作，引擎当场拒（`Table.Fault`），牌桌就此停死；
+    /// - 在那之前 `waiting` 一直为真（`Awaiting` 非空），定时器不续，牌桌停在那儿不动。
+    ///
+    /// **剔下来的不是丢掉，是记一笔账**（`Table.voidAsk`）：那一次问话真的调了 provider、
+    /// 真的计了费。**但它不留一条声称落了子的 `DecisionRecord`**——那一手没有发生。
+    /// 回执还在飞时 token 那几个数还不知道，等它回来在 `Answered` 里补（`Table.creditVoid`）。
+    ///
+    /// **那一席就此重新可问**：`step` 看的是 `Awaiting` / `Consulting`（`flying`），
+    /// 剔掉之后轮到它就再问一次，拿的是此刻那份新包。
+    let private swept (table: Table) (live: LiveTable) : LiveTable * Table =
+        let current (package: DecisionPackage) = stillCurrent table package
+
+        let asking, expiredAsks =
+            live.Awaiting |> List.partition (fun each -> current each.Package)
+
+        let consulting, expiredConsults =
+            live.Consulting |> List.partition (fun each -> current each.Package)
+
+        // 作废发生在哪一手之后：`voidAsk` 只往账上追加，手序不动，因此这一格整批同一个数。
+        let turn = table.Turns
+
+        let voided (ticket: int) (seat: Seat) (usage: Usage option) : VoidedAsk = {
+            Ticket = ticket
+            Turn = turn
+            Seat = seat
+            Reason = voidReason seat
+            Usage = usage
+        }
+
+        // 回执已经回来了的那几份，当场就知道花了多少；还在飞的那几份等它回来再补（`Answered`）。
+        //
+        // 强 AI 基线那几份记在**同一本账**上，**只是它没有账单**（那一席在本机跑）：
+        // 分成两本的话，「这一桌剪掉过几次问话」就要从两处各数一遍再相加，而那两份计数会漂。
+        let expired =
+            (expiredAsks
+             |> List.map (fun each ->
+                 let usage = each.Answer |> Option.bind (fun answer -> answer.Usage)
+                 voided each.Ticket (Awaiting.seat each) usage))
+            @ (expiredConsults
+               |> List.map (fun each -> voided each.Ticket (Consult.seat each) None))
+
+        let table =
+            (table, expired) ||> List.fold (fun table ask -> Table.voidAsk ask table)
+
+        {
+            live with
+                Table = Ok table
+                Awaiting = asking
+                Consulting = consulting
+        },
+        table
+
     /// 已经答上来的回执，按引擎问答的正序落下去（票 74）。
     ///
     /// **落子顺序是引擎待答的头一家，不是回执到达的先后**：回放重建响应阶段就是按
@@ -1300,16 +1367,10 @@ module TableState =
         else
             match live.Table with
             | Error _ -> live
-            | Ok table ->
-                // **先把过期的那几份问话剪掉**（票 92）：响应阶段可能在别席答完之后当场散掉
-                // （有人碰了），于是那一席的待答整条消失。留着它有两个下场：
-                // 它的 id 是按**旧**的合法动作集编的号，等这一席下次被问到时拿旧包落子，
-                // 引擎当场拒；而在那之前 `waiting` 一直为真，牌桌就停在那儿不动。
-                // 判据是「合法动作集逐条相同」——**动作集变了，同一个 id 就是另一条动作**。
-                let live = {
-                    live with
-                        Consulting = live.Consulting |> List.filter (fun each -> stillCurrent table each.Package)
-                }
+            | Ok current ->
+                // **先把过期的那几份问话剪掉**（票 92 / 108，两侧逐字同一条判据）：
+                // 剔下来的记成一笔「花了钱、没落子」，而不是丢掉（理由写在 `swept` 上）。
+                let live, table = swept current live
 
                 match Table.pending table with
                 // 走不到：在飞的都是这一轮的待答席，收齐之前引擎不会翻篇。真走到就停下。
@@ -2513,9 +2574,20 @@ module TableState =
                     |> List.exists (fun each -> each.Ticket = ticket && Awaiting.seat each = seat)
 
                 if not expected then
-                    // 过期或错位的回执（重开过一桌、开过下一局、座位与票号对不上）：丢掉。
+                    // 过期或错位的回执（重开过一桌、开过下一局、座位与票号对不上）：**不落子**。
                     // **四席各判各的**（票 74）：座位与票号要与同一份 `Awaiting` 对上。
-                    model, Cmd.none
+                    //
+                    // **但钱不能从账上消失**（票 108）：这一票如果是 `drain` 剔下来的那一种（过期作废），
+                    // 它真的调过 provider、真的计过费，只是那一手没发生——把 token 补到那一条作废记录上
+                    // （`Table.creditVoid`，座位与票号同样要对上）。其余对不上的那几种在这张牌桌上
+                    // 压根没有那一条记录，于是这一句对它们恰好是个空操作。
+                    model
+                    |> onLive (fun _ live ->
+                        {
+                            live with
+                                Table = live.Table |> Result.map (Table.creditVoid ticket seat answer.Usage)
+                        },
+                        Cmd.none)
                 else
                     // 先把回执记在那一票上，再按引擎的顺序落（`drain` 的注释说了为什么不按到达顺序）。
                     let noted = {

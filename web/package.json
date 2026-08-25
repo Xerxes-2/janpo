@@ -31,6 +31,7 @@
     "verify:export": "node scripts/verify-export.mjs",
     "verify:redaction": "node scripts/verify-redaction.mjs",
     "verify:seats": "node scripts/verify-seats.mjs",
+    "verify:stale-ask": "node scripts/verify-stale-ask.mjs",
     "verify:setup": "node scripts/verify-setup.mjs",
     "verify:share": "node scripts/verify-share.mjs",
     "verify:toolsearch": "node scripts/verify-toolsearch.mjs",

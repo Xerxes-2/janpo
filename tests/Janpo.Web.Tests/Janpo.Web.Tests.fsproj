@@ -46,6 +46,8 @@
     <!-- 牌谱从外面进来的两条路（票 78）：分享链接的载荷与导入的 JSON，三种失法与阈值。 -->
     <Compile Include="ImportShareTests.fs" />
     <Compile Include="PaifuExportTests.fs" />
+    <!-- 模型席那条路上的过期问话（票 108）：一份在飞的问话会拿旧包落子。 -->
+    <Compile Include="StaleAskTests.fs" />
   </ItemGroup>
 
   <!-- 首页那份 Demo Paifu（ADR-0003 的**产品资产**，不是测试固件）。拷进输出目录是为了
