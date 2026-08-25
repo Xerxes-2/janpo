@@ -100,14 +100,20 @@ else
     "核发布件的那一处"
   expect_one .github/workflows/pages.yml "BASELINE_WASM: web/public/$asset" \
     "Pages 那条流水线；YAML 在解析期就要这个值"
+  expect_one .github/workflows/ci.yml "BASELINE_WASM: web/public/$asset" \
+    "CI 里强 AI 基线那个 job（票 115）；YAML 同上"
+  expect_one scripts/ci-baseline.sh "asset=\"web/public/$asset\"" \
+    "强 AI 基线那一档的关卡；bash，本机要能单跑"
 
   # **第六处冒出来的时候要有人喊一声**（判据 4：覆盖不到的做成代码里的一个值）。
   # 下面这份名单里的每一份都已经被上面钉过、或者只是在文里提它一嘴（报告 / 说明 / 用例的措辞）；
   # 新出现一份没在名单上的，就是又多了一处会漂的路径。
   known=(
+    .github/workflows/ci.yml
     .github/workflows/pages.yml
     scripts/build-baseline-wasm.sh
     scripts/check-pages-dist.sh
+    scripts/ci-baseline.sh
     web/scripts/baseline-asset.mjs
     web/src/baseline/wasm.ts
     web/public/baseline/README.md
@@ -126,6 +132,20 @@ else
   # 那几处指的必须真是同一个字面量：站点那一侧与仓库那一侧只差一个 `web/public/` 前缀。
   grep -qF -- "\"$asset\"" web/src/baseline/wasm.ts ||
     fail "wasm.ts 的 ASSET_FILE 读出来是「$asset」，却在文件里对不上：这道闸门自己读错了"
+fi
+
+# ── ③′ 那份产物的**缓存键**：两条流水线共用一条缓存 ────────────────────────
+#
+# CI 那个 `baseline` job（票 115）与 Pages 那条流水线取的是**同一条缓存**：谁先造都算，
+# 而那取决于两边算出同一个键。键里那一长串 `hashFiles` **在 YAML 里收不成一处**
+# （workflow 解析期就要这个值，那时既没 checkout 也没 shell），于是**钉在一起**。
+# 两边一旦漂了：不会有任何东西变红，只会您各造各的、各存各的，而那正是判据 2 那一族。
+ci_key="$(sed -n "s/^ *digest='\${{ hashFiles(\(.*\)) }}'$/\1/p" .github/workflows/ci.yml)"
+pages_key="$(sed -n "s/^ *digest='\${{ hashFiles(\(.*\)) }}'$/\1/p" .github/workflows/pages.yml)"
+if [[ -z "$ci_key" || -z "$pages_key" ]]; then
+  fail "两条流水线里至少一边读不出那一行 \`digest='\${{ hashFiles(…) }}'\`：形状变了，这一道自己失明了"
+elif [[ "$ci_key" != "$pages_key" ]]; then
+  fail "CI 与 Pages 算缓存键的那一串 hashFiles 不一样：两边会各存各的一份强 AI 基线产物（票 115）"
 fi
 
 # ── ③ 页脚那条声明的落点 ──────────────────────────────────────────────────────

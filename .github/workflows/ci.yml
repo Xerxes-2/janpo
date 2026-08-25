@@ -1,9 +1,15 @@
 name: CI
 
 # 这份 workflow 是与本地同一条关卡的声明：
-# CI 与本地跑的都是 `scripts/ci.sh`（**逐字同一份**，「本地绿 = 远端绿」靠的就是这个），
-# 唯一区别是 CI 把它放进 nix dev shell 里跑，
+# CI 与本地跑的都是仓库里那几份 `scripts/ci*.sh`（**逐字同一份**，「本地绿 = 远端绿」靠的就是这个），
+# 唯一区别是 CI 把它们放进 nix dev shell 里跑，
 # 工具版本因此以 flake.lock 为准，而不是跑批机器上装了什么。
+#
+# 两个 job **并行**跑两种形态，加起来才是全的（票 115）：
+#   * `ci`       —— `scripts/ci.sh`，那 6 MB 的强 AI 基线产物**不在场**那一路
+#                   （ADR-0006 边界 6：它不入版本控制；拉不动它的用户看到的也是这一路）。
+#   * `baseline` —— `scripts/ci-baseline.sh`，那份产物**在场**那一路（由 Actions 缓存喂）。
+#     票 113 量出来：不跑它的话 `verify-review.mjs` 里 strongLeg 整段在 CI 里一次也不开口。
 on:
   push:
   pull_request:
@@ -36,17 +42,12 @@ jobs:
       # 没有私有 flake，而 FlakeHub Cache 只对付费账号开放。那句 info 是预期内的，不是配置漏了。
       - uses: DeterminateSystems/nix-installer-action@v22
 
-      # 工具链缓存（票 45）。缓存的是 **/nix 本身**（GitHub Actions 自带的缓存，不是任何第三方
-      # 缓存服务，因此不需要账号、不需要 secret；没有它 CI 也照跑，只是每次重新拉一遍工具链）。
-      # 为什么不是二进制缓存（magic-nix-cache / Cachix / FlakeHub Cache）：那三家缓存的是
+      # 【实测后拆掉】曾在这里挂 GitHub 自带缓存存 **/nix 本身**（票 45）。
+      # 调度器实测冷热两跑后拆除：缓存 restore 花 20 秒、而冷拉工具链只要 18 秒——**净亏**。
+      # 也别改挂二进制缓存（magic-nix-cache / Cachix / FlakeHub Cache）：那三家缓存的是
       # **我们自己构建出来的** store path，而本仓库一个 nix 包都不构建，整份 dev shell
-      # （135 条路径 / 下载 463 MiB / 解开 1.5 GiB）全部来自 cache.nixos.org
-      # ——magic-nix-cache 的 `upstream-cache` 语义还明说了「来自上游缓存的路径不缓存」，
-      # 也就是对我们这种用法**一个字节都不会缓存**。详见 45 号票报告。
-      #
-      # 缓存键跟着 flake.nix / flake.lock 走：工具链没改就一直命中；改了就冷跑一次再存新的一份。
-      # 不给 restore 前缀是有意的——那样缓存内容永远严格等于「这份 flake.lock 的工具链」，
-      # 不会一代代把旧工具链驮着走。要强制冷跑：改这两个文件，或去 Actions → Caches 删掉那条。
+      # 全部来自 cache.nixos.org——magic-nix-cache 的 `upstream-cache` 语义还明说了
+      # 「来自上游缓存的路径不缓存」。详见 45 号票报告 §8。**别再加，除非先量。**
 
       # 单独一步预热，为的是**能读出数字**：这一步的耗时就是「拉工具链」的耗时，
       # 缓存命中时它是几秒，未命中时它是几分钟。混在下面那步里就再也分不出来了。
@@ -60,3 +61,82 @@ jobs:
       # 实在没浏览器的环境可 JANPO_NO_BROWSER=1 跳过浏览器那两道（其余关卡照跑）。
       - name: fantomas --check、构建五个工程、跑测试、JS 侧关卡
         run: nix develop --command ./scripts/ci.sh
+
+  # ★★ 强 AI 基线那一档（票 115）：那份 6 MB 的产物**在场**时才跑得起来的那几条。
+  #
+  # **为什么另起一个 job，而不是接在上面那个后面**——三条，都是量过的（报告 115）：
+  #
+  #   ① **未命中那一趟不该落在关键路径上**。在 runner 上造那 6 MB 实测 **91 s**
+  #      （Pages 那条流水线 2026-08-19 唯一那一次未命中的真数）。接在主 job 后面，
+  #      它就会落在「只改了一行文档」那种提交上；并行起来，这一条 job 命中时估 ~110 s、
+  #      未命中估 ~200 s，**两种都短于主 job 的中位 296 s，于是 CI 的总墙钟不变**。
+  #   ② **两种形态各有各的断言，换不了**。产物不在场时才跑得到「算不动就整行不出现」那几条
+  #      （普查实测 4 条），产物在场时才跑得到 `strongLeg` 整段（实测 52 条，
+  #      加 `verify-baseline.mjs --asset` 那一趟共 60 条）。主 job 因此**不改成有产物的形态**。
+  #   ③ **摘得掉**：这整块删掉（或给它加一行 `if: false`），CI 当场回到 115 号票之前的形态，
+  #      主 job 一个字不动。这就是它的退路。
+  #
+  # 它**是一道真闸门**：拿不到那份产物就红。与 Pages 那条「造不出来不阻断部署」不同是故意的：
+  # 那边权衡的是「整站发不发得出去」，这边权衡的是「那 60 条断言跑没跑」
+  # ——而本票要治的病就是「它们不跑，而没有任何东西变红」（判据 3）。
+  baseline:
+    runs-on: ubuntu-latest
+    env:
+      # 那份产物在仓库里的位置。与 `pages.yml` 那一行同一个理由：取与存两步各引用它，
+      # 两处写法不会漂；而它与别处那几处路径由 `scripts/check-single-source.sh` 逐处对字面（票 106）。
+      BASELINE_WASM: web/public/baseline/janpo-baseline.wasm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      # 键单独算一步，为的是那三行门神：**`hashFiles` 一个文件都匹配不上时不报错，它返回空字符串**
+      # （票 101 用 act 跑出过这一幕：键退化成 `baseline-wasm-Linux-`）。键一旦退化成常量，
+      # 「上游 pin 或 crate 改了就要重造」这条不变量会**静静地失效**，这条 job 从此拿旧产物当新的测。
+      #
+      # **这一长串 `hashFiles` 与 `pages.yml` 里那一行必须逐字相同**（两边共用同一条缓存：
+      # 谁先造都算，不必各造一遍）。YAML 里收不成一处（workflow 解析期就要这个值），
+      # 收不成就**钉在一起**：`scripts/check-single-source.sh` 每趟 CI 拿两边逐字对，漂了当场红。
+      - name: 算强 AI 基线产物的缓存键
+        id: baseline-key
+        shell: bash
+        run: |
+          digest='${{ hashFiles('scripts/build-baseline-wasm.sh', 'probe/akagi-wasm/fetch-upstream.sh', 'probe/akagi-wasm/crate/Cargo.toml', 'probe/akagi-wasm/crate/Cargo.lock', 'probe/akagi-wasm/crate/src/**', 'probe/akagi-wasm/crate/.cargo/config.toml') }}'
+          if [[ -z "$digest" ]]; then
+            echo "hashFiles 一个文件都没匹配上：造产物那几份输入的路径改了？这一步不能放行，" >&2
+            echo "否则缓存键会退化成常量，这条 job 会拿一份照旧源码造的产物一直测下去。" >&2
+            exit 1
+          fi
+          echo "key=baseline-wasm-${{ runner.os }}-$digest" >> "$GITHUB_OUTPUT"
+
+      - name: 取上次造好的强 AI 基线产物
+        id: baseline-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.BASELINE_WASM }}
+          key: ${{ steps.baseline-key.outputs.key }}
+
+      # 不进 nix dev shell：需要的 rustup/cargo **runner 镜像自带**，而把 Rust 塞进 `flake.nix`
+      # 会给每一趟 CI 都添上约 470 MiB 下载（票 101 量过）。与 `pages.yml` 那一步同一份脚本。
+      #
+      # `timeout-minutes` 是个上界：这一步要拉上游与 crates.io，**网络挂死时别拖着一个 runner 干燒**。
+      # 它实测 91 s，给到 10 分钟是四倍余地。
+      - name: 造强 AI 基线那份产物（缓存没命中才跑）
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        run: ./scripts/build-baseline-wasm.sh
+
+      # `continue-on-error`，两个理由：① 同一次推 main 会同时起 CI 与 Pages 两条流水线，
+      # 两边都没命中时会**抢存同一个键**；② 来自 fork 的 PR 拿的是只读令牌，压根存不了缓存。
+      # 两种情形存不进去都只意味着下一趟重造一次（并行路上，人看不见），
+      # 不该因此把一条闸门报成红的。
+      - name: 存起来给下一次用
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.BASELINE_WASM }}
+          key: ${{ steps.baseline-cache.outputs.cache-primary-key }}
+
+      # 跑什么、为什么它与 `ci.sh` 是两种形态而不是两级严格程度，写在 `scripts/ci-baseline.sh` 的文件头上。
+      - name: 强 AI 基线那一档的关卡（复盘里强 AI 那一列 + 它真坐一席打完一局）
+        run: nix develop --command ./scripts/ci-baseline.sh

@@ -24,6 +24,7 @@ dotnet tool restore    # 装 Fantomas 与 Fable（dotnet local tool，版本在 
 ```sh
 ./scripts/ci.sh                       # CI 的全部关卡：dotnet 侧 + JS 侧，一条命令两侧全绿
 ./scripts/ci-web.sh                   # 只跑 JS 侧（Biome、tsc、Agent 层用例、prompt 语义不变量、Fable、Vite，再加浏览器内那几道）
+./scripts/ci-baseline.sh              # 强 AI 基线那一档（那 6 MB 的产物**在场**那一路；不在就自己造一份，要 cargo）
 dotnet build janpo.slnx               # 构建解决方案里的全部工程
 dotnet test janpo.slnx                # 跑测试（xunit + FsCheck）
 dotnet fantomas .                     # 格式化（提交前必跑）
@@ -185,6 +186,7 @@ tests/fixtures/golden/   黄金用例的**数据**（两侧读同一份），用
 tests/fixtures/paifu/    真实牌谱固件（离线对拍用），样本扩大走环境变量不改代码
 scripts/ci.sh            CI 关卡，本地与 CI 同一份
 scripts/ci-web.sh        JS 侧的关卡（道数与清单看脚本头部注释），被 ci.sh 调，也能单跑
+scripts/ci-baseline.sh   强 AI 基线那一档的关卡（与 ci.sh 是**两种形态**不是两级严格程度，理由写在脚本头）
 scripts/fsi/             `dotnet fsi` 探针：引用已编译的引擎 DLL 直调真实 API
 flake.nix                dev shell（dotnet SDK + node/pnpm + uv）
 .editorconfig            Fantomas 的 F# 格式规则（Web 工程另开 stroustrup，因为 Feliz 是嵌套 DSL）
