@@ -31,6 +31,18 @@
 // **它不进 `ci.sh`**：理由与 dotnet 那一份同——它答的是「断言够不够硬」，
 // 那是收尾时问一次的问题。账算在报告 `113-assertion-census.md` §7。
 
+//
+// **这件工具的取景框有两处会骗人**（票 114 撞见，写在这儿免得下一个复量的人误读）：
+//
+//   1. **模块级私有助手的行不在任何成员行段里**，因此**不出现在普查表上**——
+//      它不是「没被求值」，是这份工具收不到它。票 114 第 ⑦ 条（`advancedOrNext` 的换局支）
+//      就是这种：普查表上看不见，原始 coverlet 数据里看得见（`runs/*-*.json`）。
+//   2. **写进闭包里的断言，只有在成员自己先有一个序列点时才落进行段**——
+//      否则**整段从表上消失**，看起来像「问题没了」。
+//      改测试的写法之后复量，如果某几行凭空不见了，先怀疑这一条，别当成修好了。
+//
+// 两条都不是 bug，是「按行段取景」的固有边界。要越过它得换一套取景（例如按 IL 方法收），
+// 那是另一件工具的事——**判据 4：抓不住的写出来。**
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
