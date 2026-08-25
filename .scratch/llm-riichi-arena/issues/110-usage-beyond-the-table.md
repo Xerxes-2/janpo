@@ -10,9 +10,9 @@
 
 顺带第三件（产品口味 + 闸门）：**账单行要不要印「其中几笔没落子」**。
 
-**Blocked by:** 109（同一块地：`Table` / `TableState` 的账那一段）
+**Blocked by:** ~~109~~、~~111~~（都已集成）
 
-**Status:** blocked
+**Status:** ready-for-agent
 
 ## 这一票先想清楚，再动手
 
