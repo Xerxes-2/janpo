@@ -256,6 +256,17 @@ module Table =
             | VoidCause.Expired
             | VoidCause.NextKyoku -> false)
 
+    /// 账单里那几笔没落子的花销里，**因为换人而撤下来的**那几笔（票 110）。
+    ///
+    /// **它是账单行上第二个数的唯一来源**（票 107 的逐数溯源：印上去的每一个数
+    /// 都要指得回一处具名的来源），第一个数是 `paidVoids`。**两处不是同一处**：
+    /// 这一个只数「人拨座位撤下来的」（`VoidCause.Rebound`），那一个数全部三种起因。
+    ///
+    /// **它是 `revoked` 与 `paidVoids` 的交**，不另写一道谓词：账单行拆的是**钱**，
+    /// 因此两个数都只数已经上了账的那几笔——回执还在飞的那几笔还不知道花了多少。
+    let paidRevoked (table: Table) : VoidedAsk list =
+        revoked table |> List.filter (fun ask -> Option.isSome ask.Usage)
+
     /// 某座位此刻的观测（票 29a）：**取自增量维护的那条掩蔽流**，不重头 fold。
     /// 座位不在这个规则集里时是 None。
     let observation (seat: Seat) (table: Table) : Observation option =

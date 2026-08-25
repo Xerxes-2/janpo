@@ -35,6 +35,15 @@
 //      票 109 那一版这儿是靠「单步 1 下」走过去的：`SeatBound` 从来不发定时器，
 //      于是人在自动播放中途拨一下座位，这一桌就停在那儿等他再按一下。
 //
+// **票 110 在尾上接了一条（⑨）**，它钉的是「这笔账人看不看得见」：
+//
+//   ⑨ **账单行自己说得出其中几笔没落子**：④⑤ 只证明「钱在账上、没有气泡」，
+//      而人看着那一行只看得到一个变大了的总额。两个量点（第一只鬼之后 1 与 1、
+//      第二只之后 2 与 2）合起来才说得了那两个数是**数出来的**；
+//      那一句还得说出「导出的牌谱不带这几笔」——作废的问话不进牌谱（票 110 的判断），
+//      而人正是在这一行上按下「导出牌谱」的。另一头（牌谱进来那一侧说得出自己缺了什么）
+//      在 `verify-inbound.mjs`。
+//
 // 跑法：`cd web && pnpm run fable && pnpm run verify:stale-ask`
 // 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 //
@@ -96,6 +105,10 @@ function snapshot(page) {
       latest: at("table-latest")?.textContent?.trim() ?? "",
       kawa: document.querySelectorAll('[data-testid$="-kawa"] [data-pai]').length,
       tokens: Number.parseInt(attr("table-usage", "data-prompt-tokens") ?? "0", 10),
+      // 账单里那几笔**花了钱、没落子**的（票 110）：闸门读这两条，人读那一行中文。
+      voidAsks: Number.parseInt(attr("table-usage", "data-void-asks") ?? "-1", 10),
+      voidRebound: Number.parseInt(attr("table-usage", "data-void-rebound") ?? "-1", 10),
+      usageText: at("table-usage")?.textContent?.trim() ?? "",
       bubbles: document.querySelectorAll('[data-testid$="-bubble"]').length,
       fault: at("table-fault")?.textContent?.trim() ?? null,
       mine: document.querySelectorAll("[data-dahai-id], [data-human-action-id]").length,
@@ -287,6 +300,29 @@ export async function verifyStaleAsk(lane, options = {}) {
       );
     }
 
+    // ⑨ **账单行自己说得出这几笔**（票 110）：④⑤ 只证明「钱在账上、没有气泡」，
+    // 而人看着那一行只看得到一个变大了的总额——**其中有几笔没落子，页面得说出来**。
+    // **量点就在这一刻**（判据 20）：鬼回执刚补完账，那一笔既在账上、又没有对应的一手。
+    if (after.voidAsks !== 1 || after.voidRebound !== 1) {
+      problems.push(
+        `账单行没说出那一笔没落子的花销（data-void-asks=${after.voidAsks}、` +
+          `data-void-rebound=${after.voidRebound}，该是 1 与 1）：` +
+          "账单总额诚实了，人却看不见其中有几笔是花了钱没落子的",
+      );
+    }
+
+    // 人看的就是这一句（判据 7：看得见这类验收要把那句话真的摆出来）。
+    console.log(`账单行此刻写着：${after.usageText}`);
+
+    for (const fragment of ["其中 1 笔花了钱没落子", "1 笔是换人撤的", "导出的牌谱不带这几笔"]) {
+      if (!after.usageText.includes(fragment)) {
+        problems.push(
+          `账单行那一句里没有「${fragment}」，它此刻写着：${after.usageText}` +
+            "——人是在这一行上按下「导出牌谱」的，导出之后账少一块这件事得在这儿说",
+        );
+      }
+    }
+
     // ⑤ 没落子：气泡读的是决策记录，作废的那一次不许留下一条声称落了子的记录。
     if (after.bubbles !== 0) {
       problems.push(
@@ -388,6 +424,16 @@ export async function verifyStaleAsk(lane, options = {}) {
       );
     }
 
+    // ⑨ 的第二个量点（票 110）：**那两个数跟着账一起长**。
+    // 两笔都是换人撤的，因此这一刻是 2 与 2——它与上一处那对 1 与 1 合起来
+    // 才证明这两个数是**数出来的**，不是写死的。
+    if (settled.voidAsks !== 2 || settled.voidRebound !== 2) {
+      problems.push(
+        `第二笔没落子的花销没进账单行（data-void-asks=${settled.voidAsks}、` +
+          `data-void-rebound=${settled.voidRebound}，该是 2 与 2）`,
+      );
+    }
+
     console.log("");
     console.log(
       `${mark(problems)} 过期问话这一道：剪得掉、牌桌没停、旧包没落子、` +
@@ -400,6 +446,10 @@ export async function verifyStaleAsk(lane, options = {}) {
     console.log(
       `${mark(problems)} 撤票之后自己动起来这一道（票 111）：把那一席还给模型之后人一下没按，` +
         `牌桌自己在 ${reasked - handedBack} ms 内把它重新问了出去（从前要敲一下「单步」）`,
+    );
+    console.log(
+      `${mark(problems)} 账单行说得出这几笔这一道（票 110）：${settled.voidAsks} 笔花了钱没落子、` +
+        `其中 ${settled.voidRebound} 笔是换人撤的，那一行还说了「导出的牌谱不带这几笔」`,
     );
   } finally {
     await context.close();

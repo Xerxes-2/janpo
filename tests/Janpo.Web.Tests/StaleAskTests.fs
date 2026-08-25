@@ -1,6 +1,8 @@
 namespace Janpo.Web.Tests
 
 open Xunit
+open Thoth.Json.Core
+open Thoth.Json.Newtonsoft
 open Janpo
 open Janpo.Web
 
@@ -903,3 +905,171 @@ module StaleAskTests =
         Assert.Equal(Usage.add before billed, Table.usage credited)
         Assert.Equal(1, List.length (Table.paidVoids credited))
         Assert.Equal(1, List.length credited.Decisions)
+
+    // ================= 票 110：这笔账出不了牌桌 =================
+    //
+    // 票 108 / 109 立下的那本账（`Table.Voided`）说得出「花了钱、没落子」，**但它只活在
+    // 这台浏览器里**：`Paifu` 里没有它的位置，于是导出 / 分享 / 回放之后，账单比现场少那几笔。
+    //
+    // **这一票的判断是「不进牌谱」**（理由写在 `reports/110-usage-beyond-the-table.md` 最前面，
+    // 一句话：作废的问话是**这一次会话的事实**，不是这一桌的事实——三种起因里两种是坐在
+    // 这台浏览器前的人按的那一下，第三种是一趟 HTTP 与牌桌时钟的竞态；同一份事件流换个人
+    // 打开，这几笔一笔都复现不出来，`Table.replay` 里 `Voided = []` 就是它的形状）。
+    //
+    // **判断本身要有执行体**，否则它只是报告里的一段话（判据 2）。下面四条就是那个执行体：
+    //
+    // 1. 导出再导入一趟（真编码器 + 真解码器）：牌谱的 wire 上**没有一格**放得下这笔账，
+    //    回放那一桌的账**恰好少了那两笔**——将来谁把它塞进牌谱，这一条当场红；
+    // 2. **没说出来的缺失就是骗人**：回放那一行必须自己说出「牌谱只带得走落了子的那几手的账」，
+    //    而且**不许在回放里编一个「几笔没落子」的数**（那件事牌谱压根没告诉它）；
+    // 3. Live 那一行印得出那两个数，且**两个数各有各的来源**（票 107 的逐数溯源）：
+    //    语料刻意造成 2 与 1 —— 两个数同源、或者同一个数印两遍，这一条都红；
+    // 4. 阴性对照：一笔作废都没有的那一桌，账单行**逐字**还是票 108 之前那一句。
+
+    /// **一桌三笔账**：一手真落定的决策记录 + 两笔付了钱的作废（一笔换人撤的、一笔翻篇作废的）。
+    ///
+    /// **两个数刻意不同（2 与 1）**：账单行上那两个数要是同源的，或者同一个数印了两遍，
+    /// 上面第 3 条当场红。三笔的账单是同一份假回执（`billed`），因此总额是三倍——
+    /// **常量摆在断言里**，不拿被测那一侧的表达式当期望值（判据 18）。
+    let private threeCharges () : TableModel =
+        let asked = TablePage.initial RulesetDraft.initial llmSeat |> fst |> step Advanced
+        let ghost = awaitingOf asked
+        let seat = Awaiting.seat ghost
+
+        // ① 换人撤票（票 109）：拨给自己那一刻当场作废，回执晚回来把钱补进账。
+        let credited =
+            asked
+            |> step (SeatBound(seat, SeatChoice.Human))
+            |> step (Answered(seat, ghost.Ticket, chose (firstId ghost.Package)))
+
+        // ② 真落定的一手：把那一席还给模型，它答上来、落成一手，留下一条决策记录。
+        let asked =
+            credited
+            |> step (SeatBound(seat, SeatChoice.Profile profile.Name))
+            |> untilAsked
+
+        let second = awaitingOf asked
+
+        let moved =
+            asked |> step (Answered(seat, second.Ticket, chose (firstId second.Package)))
+
+        // ③ 翻篇作废（票 108 / 111）：把用过的那份旧包原样挂回在飞表里，走 `drain` 剪掉它，
+        // 回执再晚回来把钱补进账。**构造法与票 111 那一条逐字同一个**（`reflown`）。
+        let again = untilAsked moved
+
+        again
+        |> reflown second
+        |> step Advanced
+        |> step (Answered(seat, second.Ticket, chose (firstId second.Package)))
+
+    /// 账单行那一句里该有的一段话。**红的时候要看得见它此刻到底写着什么**（`Assert.Contains`
+    /// 只会说一句「没找到子串」，而这一族用例抄进报告的就是红的原文）。
+    let private saying (fragment: string) (said: string) : unit =
+        Assert.True(said.Contains fragment, $"账单行那一句里没有「{fragment}」，它此刻写着：{said}")
+
+    /// 一份牌谱**真走一趟导出与导入**（同一个编码器、同一个解码器，与页面那两条路一字不差），
+    /// 回来的是逐帧的回放那一屏与它的末帧。
+    let private roundTripped (paifu: Paifu) : TableModel * Table =
+        let json = Paifu.encoder paifu |> Encode.toString 0
+
+        match Decode.fromString Paifu.decoder json with
+        | Error message -> failwith $"导出的牌谱应当读得动，却得到「{message}」"
+        | Ok decoded ->
+            let imported = TablePage.home () |> fst |> step (ImportLoaded(Ok decoded))
+
+            match imported.Source with
+            | Source.Replay(ReplayTable.Ready(frames, _, _)) -> imported, List.last frames
+            | other -> failwith $"导入之后该是逐帧的回放，却是 {other}"
+
+    [<Fact>]
+    let ``牌谱带不走这笔账：导出再导入一趟，少的正是那两笔没落子的花销`` () =
+        let model = threeCharges ()
+        let table = tableOf model
+
+        // 现场这一桌：一条决策记录 + 两笔付了钱的作废，账单是三份同样的回执。
+        Assert.Equal(1, List.length table.Decisions)
+        Assert.Equal(2, table |> Table.paidVoids |> List.length)
+        Assert.Equal([ billed; billed; billed ] |> List.fold Usage.add Usage.zero, Table.usage table)
+
+        let paifu = Table.paifu (rosterOf model) table
+        let json = Paifu.encoder paifu |> Encode.toString 0
+
+        // **牌谱的 wire 上没有一格放得下这笔账**：顶层就这五样。
+        // 谁往里加第六样（例如一个 `voided` 数组），这一句当场红——而那是 ADR-0002 的修订，
+        // 该走的是提案，不是顺手加个字段。
+        match Decode.fromString (Decode.keyValuePairs (Decode.succeed ())) json with
+        | Error message -> failwith $"导出的牌谱应当读得动，却得到「{message}」"
+        | Ok pairs ->
+            Assert.Equal<string list>(
+                [ "version"; "ruleset"; "events"; "decisions"; "prompting" ],
+                pairs |> List.map fst
+            )
+
+        let _, last = roundTripped paifu
+
+        // 回放那一桌：一条决策记录照旧带得走，**两笔作废一笔都带不走**。
+        Assert.Equal(1, List.length last.Decisions)
+        Assert.Equal<VoidedAsk list>([], last.Voided)
+
+        // **账少的正是那两笔**：现场三份、牌谱一份。
+        Assert.Equal(billed, Table.usage last)
+        Assert.NotEqual(Table.usage table, Table.usage last)
+
+        // **出牌桌的第三条路（URL 分享）连一个会被误读的数都没有**：`stripAudit` 把决策记录
+        // 整段抹掉（票 77），于是那一屏一个 token 都数不出来、账单行压根不长出来
+        // （`AgentLine.usageLine` 在 0 tok 时不占位）——**没有数就没有要声明的缺失**。
+        let _, shared = roundTripped (Paifu.stripAudit paifu)
+        Assert.Empty shared.Decisions
+        Assert.Equal(0, Usage.promptTokens (Table.usage shared))
+
+    [<Fact>]
+    let ``回放那一行自己说出账少了一块：而且不许编一个「几笔没落子」的数`` () =
+        let model = threeCharges ()
+        let imported, last = roundTripped (Table.paifu (rosterOf model) (tableOf model))
+
+        let said = TablePage.usageSaid imported last
+
+        // **没说出来的缺失就是骗人**：拿到这份牌谱的人得知道这个数是「落了子的那几手」的合计。
+        said |> saying "牌谱只带得走落了子的那几手的账"
+
+        // **但不许编一个数**：牌谱压根没告诉它有几笔作废（那正是这一票判「不进牌谱」的后果），
+        // 页面上因此一个「其中 N 笔」都不许出现。
+        Assert.DoesNotContain("其中", said)
+        Assert.Equal(0, last |> Table.paidVoids |> List.length)
+
+    [<Fact>]
+    let ``账单行说得出「其中几笔没落子」：两个数各有各的来源`` () =
+        let model = threeCharges ()
+        let table = tableOf model
+
+        let said = TablePage.usageSaid model table
+
+        // 那两个数：账上没落子的两笔，其中换人撤的一笔。
+        said |> saying "其中 2 笔花了钱没落子"
+        said |> saying "1 笔是换人撤的"
+
+        // **导出之前就把话说在明处**：人是在这一行上按下「导出牌谱」的。
+        said |> saying "导出的牌谱不带这几笔"
+
+        // **逐数溯源**（票 107）：印上去的那两个数各指得回一处具名来源，
+        // 而两处**不是同一处**——语料刻意造成 2 与 1，同源就当场红。
+        Assert.Equal(2, table |> Table.paidVoids |> List.length)
+        Assert.Equal(1, table |> Table.paidRevoked |> List.length)
+
+    [<Fact>]
+    let ``阴性对照：一笔作废都没有的那一桌，账单行一个字都不多`` () =
+        let asked = TablePage.initial RulesetDraft.initial llmSeat |> fst |> step Advanced
+        let awaiting = awaitingOf asked
+
+        let played =
+            asked
+            |> step (Answered(Awaiting.seat awaiting, awaiting.Ticket, chose (firstId awaiting.Package)))
+
+        let table = tableOf played
+
+        // 阳性对照：这一桌真的花过钱、真的落定了那一手（否则下面那一句在量一行空话）。
+        Assert.Equal(1, List.length table.Decisions)
+        Assert.Equal<VoidedAsk list>([], table.Voided)
+
+        // **逐字**还是票 108 之前那一句（期望值是常量，不是被测那一侧的表达式）。
+        Assert.Equal("这一桌累计：输入 2156 tok（缓存命中 1344，62%）、输出 96 tok", TablePage.usageSaid played table)

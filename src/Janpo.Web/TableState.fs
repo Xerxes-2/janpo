@@ -2101,6 +2101,33 @@ module TableState =
             |> Option.map (fun frame -> List.isEmpty frame.Decisions)
             |> Option.defaultValue false
 
+    /// 账单行那一句（票 110）。**这一行的数在两种来源下说的是两件事，因此这里分两支**：
+    ///
+    /// - **Live**：`Table.usage` 报的是**花掉的总额**（票 79 长出那一行账单，「花掉的总额」这句口径是票 108 / 109 立的），
+    ///   里面含着那几笔「花了钱、没落子」的作废问话。人是在这一行上按下「导出牌谱」的，
+    ///   因此**导出之后账会少一块这件事要在这里说出来**，连同那两个数一起。
+    /// - **回放 / 导入**：作废的问话**不进牌谱**（票 110 的判断：它是这一次会话的事实，
+    ///   不是这一桌的事实），于是这一行报的是「落了子的那几手的合计」。
+    ///   **没说出来的缺失就是骗人**，所以它自己得说出来；而它**说不出有几笔**
+    ///   ——牌谱压根没告诉它——因此这一支一个「其中 N 笔」都不编。
+    ///
+    /// **一笔付了钱的作废都没有时，Live 那一支逐字还是票 108 之前那一句**：没有缺口就不必解释。
+    let usageSaid (model: TableModel) (table: Table) : string =
+        let said = "这一桌累计：" + Usage.toDisplay (Table.usage table)
+
+        match model.Source with
+        | Source.Live _ ->
+            match table |> Table.paidVoids |> List.length with
+            // 一笔付了钱的作废都没有：这一行的数就是那几手的合计，导出之后一分不少。
+            | 0 -> said
+            | paid ->
+                // 两个数各取自一处具名的取值器（票 107 的逐数溯源），不在这里现数一遍。
+                let rebound = table |> Table.paidRevoked |> List.length
+                said + $"——其中 {paid} 笔花了钱没落子（{rebound} 笔是换人撤的），导出的牌谱不带这几笔。"
+        // **牌谱没告诉它有几笔作废**（那正是本票的判断），因此这一支不编任何数：
+        // 它只说得出「这个数是什么的合计」，以及「当时花掉的可能比它多」。
+        | Source.Replay _ -> said + "——牌谱只带得走落了子的那几手的账，当时花掉的只多不少。"
+
     /// 第 `turn` 手**落定之后**那一帧的帧号（票 76）。
     ///
     /// 判据两条缺一不可：手数正好是 `turn + 1`，**且它真落定了一手**（`Latest` 不是 None）

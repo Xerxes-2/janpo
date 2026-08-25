@@ -13,6 +13,9 @@
 //      自动播、拖到末帧与主持人那一桌一致；再导一份**带决策记录**的（引擎现打 + 拌一条
 //      带 thinking 的记录）：**气泡有话**、气泡里就是那句 thinking——这是与分享链接的
 //      关键差别（推理不上 URL），两种来源各验一次；
+//      带记录那份还带着 token 账单，因此它顺带钉票 110 那件：**牌谱里的账只算落了子的
+//      那几手**（作废的问话不进牌谱），而导入那一屏得**自己把这件事说出来**、
+//      且不许编一个「几笔没落子」的数（它无从知道）；
 //   4. **坏输入三连**：不是 JSON / 缺字段的牌谱 / 中间某局断掉的事件流，各断言一次
 //      「有中文错误且页面还活着」（正在播的那份回放一帧不动）。
 //
@@ -52,6 +55,10 @@ const audit = {
   attempts: 1,
   latency_ms: 1873,
   applied: 1,
+  // **带一份真的 token 账单**（票 110）：牌谱带得走的就是落了子的那几手的账，
+  // 而作废的问话（花了钱、没落子）不进牌谱——导入那一屏因此得自己说出这件事。
+  // 没这一格的话账单行压根不会长出来（一个 token 都没花时它不占位）。
+  usage: { input: 812, output: 96, cache_read: 1344, cache_write: 0 },
 };
 
 /**
@@ -504,6 +511,36 @@ export async function verifyInbound(lane) {
       }
       if ((await home.getByTestId("table-no-bubbles").count()) !== 0) {
         problems.push("带记录的牌谱导进来了，页面上却还挂着「这一局没有思考气泡」");
+      }
+
+      // **牌谱里的账少一块，进来那一屏得自己说出来**（票 110）。
+      // 作废的问话是**这一次会话的事实**，不进牌谱；于是拿到牌谱的人看到的这个数
+      // 只是「落了子的那几手」的合计，而当时花掉的只多不少。
+      // **没说出来的缺失就是骗人**，而这一头（牌谱进来）正是人读到那个数的地方；
+      // 另一头（Live 那桌导出之前印出那两个数）在 `verify-stale-ask.mjs` 的 ⑨。
+      const usage = home.getByTestId("table-usage");
+      if ((await usage.count()) === 0) {
+        problems.push(
+          "导入的牌谱里那条记录带着 token 账单，页面上却一行账都没有（table-usage）：" +
+            "下面那几条在空转",
+        );
+      } else {
+        const usageText = (await usage.textContent()) ?? "";
+        if (!usageText.includes("牌谱只带得走落了子的那几手的账")) {
+          problems.push(
+            `导入那一屏的账单行没说出自己缺了一块：「${usageText.trim()}」` +
+              "——作废的问话不进牌谱，拿到牌谱的人无从知道当时还花掉了多少",
+          );
+        }
+        // **不许在回放里编一个数**：牌谱压根没告诉它有几笔作废。
+        const invented = await usage.getAttribute("data-void-asks");
+        if (usageText.includes("其中") || invented !== "0") {
+          problems.push(
+            `导入那一屏编出了一个「几笔没落子」的数（data-void-asks=${invented}）：` +
+              `「${usageText.trim()}」——牌谱里没有这一格，它无从知道`,
+          );
+        }
+        console.log(`导入那一屏的账单行：${usageText.trim()}`);
       }
     }
 

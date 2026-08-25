@@ -126,6 +126,9 @@ module TablePage =
     /// 这份牌谱一条决策记录都没有吗（票 76）。实现与理由见 `TableState.recordless`。
     let recordless (model: TableModel) : bool = TableState.recordless model
 
+    /// 账单行那一句（票 110）。实现与理由见 `TableState.usageSaid`。
+    let usageSaid (model: TableModel) (table: Table) : string = TableState.usageSaid model table
+
     // ---- 视图 ----
 
     /// 牌桌那一格。**两种来源共用这一份**（票 71）：Live 画正在打的那一桌，

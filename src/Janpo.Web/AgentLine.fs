@@ -12,7 +12,10 @@ open Janpo
 /// **头一行只属于 Live**（票 71）：回放里没有在飞的问话，写一句「四家都是……选手」
 /// 就是句错话——那一局的选手是**当时**坐那一桌的人，写在牌谱里。
 /// 因此它收的是 `LiveTable` 而不是 `TableModel`：类型就拦住了这件事。
-/// 后一行（token 账单）两种来源共用：它数的是牌谱里的决策记录，回放一份 LLM 牌谱时同样算得出来。
+/// 后一行（token 账单）两种来源共用一份实现，**但那个数在两边说的不是同一件事**（票 110）：
+/// Live 那一桌是**花掉的总额**（决策记录 + 作废的问话，票 108 / 109），
+/// 一份牌谱 fold 出来的那一桌只数得出牌谱里那几条决策记录——**作废的问话不进牌谱**。
+/// 两边各说各的那两句话在 `TableState.usageSaid`。
 ///
 /// **视角那道闸门同样拦头一行**（票 81）：坐到座位 N 上时它只列那一席——
 /// 从前那句「座位 N 的模型选完了：……」把别席的理由连同气泡一起漏了出去。
@@ -166,7 +169,12 @@ module AgentLine =
     ///
     /// 一个 token 都还没花掉时不占位（四家随机选手的那一桌永远不长出这一行）。
     /// `data-*` 那几项给无头验收读。
-    let internal usageLine (table: Table) =
+    /// **这一行说的话分两种**（票 110），它收 `TableModel` 就是为了分得出来：
+    /// Live 那一桌报的是**花掉的总额**（含那几笔「花了钱、没落子」的作废问话）；
+    /// 一份牌谱 fold 出来的那一桌报的是**牌谱里那几手的合计**——作废的问话不进牌谱
+    /// （票 110 的判断），**差的那一块因此得在这一行上自己说出来**。
+    /// 那两句话的措辞只有一处（`TableState.usageSaid`），这里只负责画。
+    let internal usageLine (model: TableModel) (table: Table) =
         let usage = Table.usage table
 
         if Usage.promptTokens usage = 0 then
@@ -181,6 +189,11 @@ module AgentLine =
                     prop.custom ("data-cache-read", string usage.CacheRead)
                     prop.custom ("data-cache-write", string usage.CacheWrite)
                     prop.custom ("data-cache-percent", string (Usage.cacheHitPercent usage))
-                    prop.text ("这一桌累计：" + Usage.toDisplay usage)
+                    // 账单里那几笔**花了钱、没落子**的，以及其中换人撤下来的那几笔（票 110）。
+                    // **两个数各取自一处具名的取值器**（票 107 的逐数溯源）：
+                    // 人读的是后面那句中文，闸门读这两条。
+                    prop.custom ("data-void-asks", string (table |> Table.paidVoids |> List.length))
+                    prop.custom ("data-void-rebound", string (table |> Table.paidRevoked |> List.length))
+                    prop.text (TableState.usageSaid model table)
                 ]
             ]
