@@ -28,6 +28,13 @@
 //      趁它在飞再拨给自己，然后**他一下都不点**地等那份鬼回执回来：河里一张牌不许多、
 //      那一手仍旧摆在他面前、而那一趟的钱同样落到账上。**量点就停在那一刻**（判据 20）。
 //
+// **票 111 把⑦ 开场那个绕法拆了，它自己就是一条断言（⑧）**：
+//
+//   ⑧ **撤票之后牌桌自己动起来**：把那一席还给模型之后，**人一下都不按**
+//      （没有「单步」、没有第二次「播放」），那一席自己又被问了出去。
+//      票 109 那一版这儿是靠「单步 1 下」走过去的：`SeatBound` 从来不发定时器，
+//      于是人在自动播放中途拨一下座位，这一桌就停在那儿等他再按一下。
+//
 // 跑法：`cd web && pnpm run fable && pnpm run verify:stale-ask`
 // 它也是 `verify-browser.mjs` 里的一趟（跑道上那几趟共用一个浏览器与一台服务器）。
 //
@@ -302,23 +309,37 @@ export async function verifyStaleAsk(lane, options = {}) {
     // **他一下都没点**的时候回执回来了。从前包还对得上（`stillCurrent` 为真），
     // 于是模型替坐在桌边的那个人打了一手。
     //
-    // **走单步而不是播放**：一下一手，于是「趁它在飞拨座位」不靠时序碰运气；
-    // 拨完之后牌桌本来就停在他那一手上（轮到他），正好等得起那几秒。
+    // **⑧ 就在这一下上**（票 111）：票 109 那一版这儿是一个敲「单步」的 `while` 循环
+    // ——`SeatBound` 从来不发定时器，拨完座位没有任何东西去重新问那一席，
+    // 闸门只好替牌桌推一把，而**那正是这一趟要验的事**（同 `playHuman` 里
+    // 「不能在这里改点单步」那句）。现在它自己走：拨那一下把牌桌按它此刻的
+    // 播放状态重新推一记（`roused`），人一下都不必按。
+    //
+    // **它同时是 ⑦ 的开场**：问出去之后牌桌本来就停在那儿等回执（`waiting`），
+    // 因此「趁它在飞拨座位」不靠时序碰运气——那几秒里牌桌一手都不会走。
+    const handedBack = Date.now();
     await page.getByTestId(`table-seat-${SEAT}-profile-0`).click();
 
+    // 20 s 是慷慨的上限：8× 那一档一记定时器 60 ms，本机实测拨完到问出去约 90 ms。
+    // **不用 `budgetMs`（90 s）**：这一条红的时候是「它压根不会自己走」，早点说出来。
+    const selfAsked = await page
+      .locator(`[data-testid="table-agent"][data-asking-seats*="${SEAT}"]`)
+      .waitFor({ timeout: 20000 })
+      .then(
+        () => true,
+        () => false,
+      );
+
     const reasked = Date.now();
-    let steps = 0;
-
-    while (steps < 40 && !(await snapshot(page)).asking.includes(String(SEAT))) {
-      await page.getByTestId("table-step").click();
-      steps += 1;
-    }
-
     const flyingAgain = await snapshot(page);
-    console.log(`还给模型之后又问出去了（单步 ${steps} 下）：在飞的席「${flyingAgain.asking}」`);
+    console.log(`还给模型之后它自己又问了出去（人一下没按）：在飞的席「${flyingAgain.asking}」`);
 
-    if (!flyingAgain.asking.includes(String(SEAT))) {
-      problems.push(`把那一席还给模型之后，单步 ${steps} 下都没把它重新问出去：⑦ 那几条无从开口`);
+    if (!selfAsked || !flyingAgain.asking.includes(String(SEAT))) {
+      problems.push(
+        `把那一席还给模型之后，牌桌自己没把它重新问出去（data-asking-seats="${flyingAgain.asking}"）：` +
+          "撤完票那一席就该被重新问了，而拨座位那一下不续定时器的话，" +
+          "人在自动播放中途拨一下座位这一桌就停在这儿等他再按一下（⑧）；下面 ⑦ 那几条也因此无从开口",
+      );
     }
 
     await page.getByTestId(`table-seat-${SEAT}-human`).click();
@@ -375,6 +396,10 @@ export async function verifyStaleAsk(lane, options = {}) {
     console.log(
       `${mark(problems)} 换人撤票这一道（票 109）：拨那一下当场清表、` +
         `他一下没点而鬼回执一手没落（河 ${settled.kawa} 张不变）、账上又多了 ${settled.tokens - after.tokens} tok`,
+    );
+    console.log(
+      `${mark(problems)} 撤票之后自己动起来这一道（票 111）：把那一席还给模型之后人一下没按，` +
+        `牌桌自己在 ${reasked - handedBack} ms 内把它重新问了出去（从前要敲一下「单步」）`,
     );
   } finally {
     await context.close();

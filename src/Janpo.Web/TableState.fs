@@ -965,6 +965,9 @@ module TableState =
     /// 等着的时候定时器只会把牌桌空转一遍；
     /// 那一手由 `Answered`（模型）或 `HumanPlayed`（真人）接着开动。
     /// **「还有在飞的就不续」只管定时器**：该问的席照问（票 74，见 `step`）。
+    ///
+    /// **拨座位那一下也走这里**（票 111 的 `roused`）：换人当场撤票之后，
+    /// 那一席就又该被问了，而在那之前没有任何一记定时器去问它。
     let private tick (model: TableModel) (playback: Playback) : Cmd<TableMsg> =
         match live model with
         | Some live when waiting (rosterFor model.Ruleset live) live -> Cmd.none
@@ -1628,7 +1631,8 @@ module TableState =
     /// 落完一手之后：接着播还是停下来。
     ///
     /// **等回执（或等真人点那一下）的那段不续定时器**（但仍然是 `Playing`）：
-    /// 定时器只会把牌桌空转一遍，真正把它接着开动的是 `Answered` / `HumanPlayed`。
+    /// 定时器只会把牌桌空转一遍，真正把它接着开动的是 `Answered` / `HumanPlayed`
+    /// （票 111 起还有第三种：拨座位当场撤票之后由 `roused` 接着推）。
     /// **真人因此与模型席完全同级**：他出完手，这一桌照旧按播放状态往下走（票 87）。
     /// 一局终了也停下来：结算面板正摆在那里。
     let private resume (cmd: Cmd<TableMsg>) (model: TableModel) : TableModel * Cmd<TableMsg> =
@@ -1641,6 +1645,33 @@ module TableState =
                     Playback = Playback.pause model.Playback
             },
             cmd
+
+    /// **拨完座位之后，把牌桌按它此刻的播放状态重新推一记**（票 111）。
+    ///
+    /// 票 109 让「换人」当场撤票（`rebound`），可 `SeatBound` **从来不发定时器**：
+    /// 撤完之后没有任何东西去重新问那一席，于是**人在自动播放中途拨一下座位，
+    /// 这一桌就停在那儿等他再按一下**（票 109 报告 §⑦ 第 5 条；浏览器那一趟当时是靠
+    /// 「单步 1 下」绕过去的）——「拨一下座位」不该变成「顺手把牌桌按停了」。
+    ///
+    /// **它不改播放状态**（`Playback.resumed` 收的就是此刻那个 bool）：停着的桌拨完还是停着
+    /// （`schedule` 在暂停时什么都不发）——**「撤票要重开动」不等于「拨座位就开始播放」**，
+    /// 阴性对照量的正是这一条。
+    ///
+    /// **非换一个世代不可**：拨那一下时在飞的那记定时器（若有）必须作废，
+    /// 否则它与这里新发的一记一起被认下，牌桌从此**双倍速**走（票 78 按红过一次的那个坑）。
+    /// 世代号只有 `Playback` 那几条迁移换得了，而这一下要的正是「播放状态原样、世代换新」。
+    ///
+    /// **轮到真人时它一记都不发**（`tick` 里那道 `waiting`）：轮到他就等他，
+    /// 不许替他打（票 87/88/89）——接着开动这一桌的是他按下去的那一下（`HumanPlayed`）。
+    let private roused (model: TableModel) (cmd: Cmd<TableMsg>) : TableModel * Cmd<TableMsg> =
+        match model.Source with
+        // 回放那一侧根本没有配桌可拨（`SeatBound` 在那边本来就没有事情发生）：
+        // 在那一侧续定时器反而会把正在自动播的那份回放推成双倍速。
+        | Source.Replay _ -> model, cmd
+        | Source.Live _ ->
+            let playback = Playback.resumed model.Playback.Playing model.Playback
+            let woken = { model with Playback = playback }
+            woken, Cmd.batch [ cmd; tick woken playback ]
 
     // ---- 回放（票 71） ----
 
@@ -2592,6 +2623,9 @@ module TableState =
                     }
 
                 bound, Cmd.batch [ save (fun () -> Store.writeSeating seating); loading ])
+            // **拨完这一下，牌桌按它此刻的播放状态接着走**（票 111，理由写在 `roused` 上）：
+            // 撤完票那一席就又该被问了，而票 109 那一版没有任何一记定时器去问它。
+            ||> roused
         | SeatEdited(seat, field, value) ->
             model
             |> onLive (fun _ live ->

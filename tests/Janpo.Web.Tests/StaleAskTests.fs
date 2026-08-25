@@ -20,6 +20,11 @@ open Janpo.Web
 /// 修法与票 92 给强 AI 基线那一侧的**逐字同一条判据**（`stillCurrent`）：
 /// 合法动作集逐条相同才算还在当下。**剪掉的那一份不是丢掉，是记一笔账**——
 /// 它真的调了 provider、真的计了费（`Table.Voided`），但**不留一条声称落了子的决策记录**。
+///
+/// **上面那一幕今天走不到了**（票 109）：拨座位那一刻当场撤票（`VoidCause.Rebound`），
+/// 于是剪枝（`VoidCause.Expired`）退成了纵深防御的最后一道。**它因此需要一个自己的执行者**
+/// （票 111，本文件末尾那一条）：一条永远执行不到的断言，与一条从不失败的断言危害相同
+/// ——没有执行者就分不清「从不发生」与「发生了被静默吞掉」（判据 3）。
 module StaleAskTests =
 
     let private profile: ModelProfile =
@@ -209,9 +214,10 @@ module StaleAskTests =
             Assert.Equal(ghost.Ticket, voided.Ticket)
             Assert.Equal(seat, voided.Seat)
             Assert.Contains("作废", VoidedAsk.reason voided)
-            // **票 109 把这一笔的起因往前挪了一步**：从前它是他打完一手之后被**剪枝**
-            // 剔下来的（`Expired`），现在是人拨那一下当场**撤**下来的（`Rebound`）。
-            // 这一条用例钉的那两件事（钱还在、没有假记录）一字未变。
+            // **这一条走的是撤票那条路**：`ghosted` 靠的就是人拨那一下，因此起因是 `Rebound`
+            // ——不是剪枝（`Expired`）剔下来的，剪枝那一道在拨座位那一刻什么都剪不掉
+            // （合法动作集没变），它自己的执行者在本文件末尾那一条（票 111）。
+            // **两条路一本账**，而这一条用例钉的是账本身（钱还在、没有假记录）。
             match voided.Cause with
             | VoidCause.Rebound _ -> ()
             | other -> failwith $"拨座位那一下该当场撤票，实际记成了 {other}"
@@ -643,3 +649,257 @@ module StaleAskTests =
         // 两票都是「换人撤票」，一手都没落成。
         Assert.Equal(2, revocations credited)
         Assert.Empty table.Decisions
+
+    // ================= 票 111：撤票之后，牌桌自己动起来 =================
+    //
+    // 票 109 让「换人」当场撤票，可 `SeatBound` **从来不发定时器**：撤完之后没有任何东西
+    // 去重新问那一席（它 §⑦ 第 5 条交回来的就是这一件），于是**人在自动播放中途拨一下座位，
+    // 这一桌就停在那儿等他再按一下**——浏览器那一趟当时是靠「单步 1 下」走过去的。
+    //
+    // 三条各钉一件：**播着的桌自己接着走**、**停着的桌不许凭空开动**、
+    // **轮到真人就等他**（票 87/88/89 立的规矩，撤票不许把它破掉）。
+
+    /// **在自动播放中**推到那一席被问出去为止：按下「播放」，让定时器一记一记地回来。
+    ///
+    /// **一步都不许改用「单步」**（`Advanced` 顺手把播放按停了）：这一族用例要验的
+    /// 正是「这一桌自己转不转得动」，替它推一把就把被验的那件事推没了。
+    let private playingUntilAsked (model: TableModel) : TableModel =
+        let rec loop (left: int) (model: TableModel) =
+            match (liveOf model).Awaiting with
+            | _ :: _ -> model
+            | [] when left <= 0 -> failwith "预算内那一席没被问出去"
+            | [] -> loop (left - 1) (model |> step (Ticked model.Playback.Generation))
+
+        loop 200 (model |> step PlayToggled)
+
+    [<Fact>]
+    let ``撤票之后那一席自己被重新问：拨座位不许把自动播放按停`` () =
+        let asked =
+            TablePage.initial RulesetDraft.initial twoProfiles |> fst |> playingUntilAsked
+
+        let ghost = awaitingOf asked
+        let seat = Awaiting.seat ghost
+        Assert.True(asked.Playback.Playing, "这一趟要在自动播放中拨座位，牌桌此刻该是播着的")
+
+        // 拨给别的模型：那一票当场撤回（票 109）。**撤完这一席就又该被问了**，
+        // 而票 109 那一版没有任何一记定时器去问它。
+        let bound = asked |> step (SeatBound(seat, SeatChoice.Profile rival.Name))
+        Assert.Equal<int list>([], flyingTickets bound)
+        Assert.Equal(1, revocations bound)
+
+        // ① **拨完那一下，这一桌自己续上了一记定时器**——「它还转不转得动」的执行者就是它
+        // （`effects` 数的是这一条消息发出去几个效果体，落 localStorage 那一记恒占一个）。
+        let scheduled = effects (SeatBound(seat, SeatChoice.Profile rival.Name)) asked
+
+        Assert.True(
+            (scheduled = 2),
+            $"撤完票没有任何东西去重新问那一席：拨那一下只发了 {scheduled} 个效果体（落 localStorage 那一记），于是牌桌停在这儿等人再按一下——「拨一下座位」成了「顺手把牌桌按停了」"
+        )
+
+        // ② 而且它是**新那一记**：拨那一下之前在飞的定时器必须当场作废，否则它与新的一记
+        // 一起被认下，牌桌从此双倍速走（票 78 按红过一次的那个坑）。
+        Assert.True(bound.Playback.Playing, "拨一下座位不该改播放状态")
+
+        Assert.False(
+            Playback.accepts asked.Playback.Generation bound.Playback,
+            "拨座位那一下没换世代：拨之前在飞的那记定时器还认得下，它与新发的一记一起走 = 双倍速"
+        )
+
+        Assert.Equal(0, effects (Ticked asked.Playback.Generation) bound)
+
+        // ③ 那一记回来时，那一席按**新那份配置**被重新问了出去——人一下都没按
+        // （没有「单步」、没有第二次「播放」）。**它不能单独成立**：拨那一下要是压根没发
+        // 定时器，这一句就成了替牌桌推一把（①② 守的正是这件事）。
+        let woke = bound |> step (Ticked bound.Playback.Generation)
+        let fresh = awaitingOf woke
+
+        Assert.True(fresh.Ticket > ghost.Ticket, $"撤完票没人去重新问那一席：在飞的还是旧那一票（{ghost.Ticket}）")
+
+        Assert.Equal(seat, Awaiting.seat fresh)
+        Assert.Equal(rival.Model, fresh.Config.Model)
+
+    [<Fact>]
+    let ``阴性对照：本来停着的那一桌，拨一下座位不会凭空开动`` () =
+        // **「撤票要重开动」不等于「拨座位就开始播放」**：单步过来的这一桌停着，
+        // 拨完那一下还得停着——人没按过「播放」。
+        let asked =
+            TablePage.initial RulesetDraft.initial twoProfiles |> fst |> step Advanced
+
+        let ghost = awaitingOf asked
+        let seat = Awaiting.seat ghost
+        Assert.False(asked.Playback.Playing, "单步过来的这一桌该是停着的")
+
+        let bound = asked |> step (SeatBound(seat, SeatChoice.Profile rival.Name))
+
+        // 撤票照旧（这一条阴性对照量的是「开动」，不是「撤票」）。
+        Assert.Equal<int list>([], flyingTickets bound)
+        Assert.Equal(1, revocations bound)
+
+        Assert.False(bound.Playback.Playing, "拨一下座位把这一桌开动了：撤票要重开动，不等于拨座位就开始播放")
+        // 只剩落 localStorage 那一记，一记定时器都没发。
+        let sent = effects (SeatBound(seat, SeatChoice.Profile rival.Name)) asked
+
+        Assert.True((sent = 1), $"停着的那一桌拨一下座位发了 {sent} 个效果体（该只有落 localStorage 那一记）：它把一张本来停着的牌桌凭空开动了")
+
+        // 停着就是停着：这一刻牌桌上没有任何东西会自己动。
+        let idle = bound |> step (Ticked bound.Playback.Generation)
+        Assert.Equal((tableOf bound).Turns, (tableOf idle).Turns)
+        Assert.Equal<int list>([], flyingTickets idle)
+
+        // **阳性对照停在同一处量点上**（判据 20）：同一张牌桌、同一下拨动，
+        // 播着的时候那一记定时器是真发得出来的——否则这条阴性对照只是在量一张停着的桌。
+        let playing = asked |> step PlayToggled
+        Assert.True(playing.Playback.Playing, "按下「播放」之后该是播着的")
+        let scheduled = effects (SeatBound(seat, SeatChoice.Profile rival.Name)) playing
+
+        Assert.True((scheduled = 2), $"同一下拨动在播着的桌上也只发了 {scheduled} 个效果体：上面那几句阴性对照在空转——它们量的地方压根就不会发定时器")
+
+    [<Fact>]
+    let ``撤票之后拨给真人：轮到他就等他，牌桌不许替他打`` () =
+        let asked =
+            TablePage.initial RulesetDraft.initial llmSeat |> fst |> playingUntilAsked
+
+        let ghost = awaitingOf asked
+        let seat = Awaiting.seat ghost
+
+        let bound = asked |> step (SeatBound(seat, SeatChoice.Human))
+        Assert.Equal<int list>([], flyingTickets bound)
+        Assert.True(Option.isSome (TablePage.humanTurn bound), "把那一席拨给自己之后，这一手就该轮到他了")
+
+        // **轮到他就等他**（票 87/88/89）：这一下一记定时器都不许发——那一记回来只会
+        // 把牌桌空转一遍，而真正接着开动这一桌的是他自己按下去的那一下。
+        let handed = effects (SeatBound(seat, SeatChoice.Human)) asked
+
+        Assert.True(
+            (handed = 1),
+            $"拨给真人那一下发了 {handed} 个效果体（该只有落 localStorage 那一记）：轮到他就该等他，多发的那一记只会把牌桌在他头上空转一遍（票 87/88/89）"
+        )
+
+        // **但这一桌并没有被按停**：他出完手照旧接着播（票 87：真人与模型席完全同级）。
+        Assert.True(bound.Playback.Playing, "他坐下来不等于把这一桌按停了")
+
+        // 就算真有一记定时器回来，也不许替他打一手。
+        let woke = bound |> step (Ticked bound.Playback.Generation)
+        Assert.Equal((tableOf bound).Turns, (tableOf woke).Turns)
+        Assert.Empty (tableOf woke).Decisions
+        Assert.True(Option.isSome (TablePage.humanTurn woke), "定时器替他打了一手：轮到他就该等他（票 87/88/89）")
+
+        // 他自己出手之后，这一桌自己往下走。
+        match TablePage.humanTurn woke with
+        | None -> failwith "这一手该还等着他点"
+        | Some package ->
+            Assert.True(effects (HumanPlayed(firstId package)) woke > 0, "他出完手这一桌没有接着开动")
+
+            let his = woke |> step (HumanPlayed(firstId package))
+            Assert.Equal((tableOf woke).Turns + 1, (tableOf his).Turns)
+
+    // ================= 票 111：`VoidCause.Expired` 那条兜底分支的执行者 =================
+    //
+    // 票 108 那道剪枝（`swept`／`stillCurrent`）在票 109 之后**执行次数归 0**：唯一走得到
+    // 「牌桌绕过一份在飞的问话往前走」的那条路是拨座位，而拨座位现在当场撤票（`Rebound`）。
+    // 判据 3 说执行次数为 0 的断言与永远不失败的断言危害相同——**分不清「从不发生」
+    // 与「发生了被静默吞掉」**。调度器的裁定是：**留着那条分支，但给它一个单元级的执行者。**
+    //
+    // 下面这一条就是那个执行者：它**在单元层把那个状态构造出来**（今天从页面上走不到，
+    // 报告里逐条写了为什么），走 `drain` 那条路，钉三件事——剪得掉、账上记的是 `Expired`、
+    // 而且**一条决策记录都不多**。
+
+    /// **把那份在飞的问话原样挂回牌桌上**（票 111）。
+    ///
+    /// 这是这一族用例里唯一一处直接摆弄 `LiveTable` 的地方，理由说在明处：
+    /// **今天没有一条页面上的路走得到「一份在飞的问话 + 牌桌已经绕过它往前走了」**
+    /// ——拨座位那一条现在当场撤票（票 109），别的路都在 `drain` 里先剪过一道。
+    /// 而那条兜底分支守的是**将来**新长出来的绕行路，因此它的执行者只能在这一层构造。
+    let private reflown (ghost: Awaiting) (model: TableModel) : TableModel =
+        match model.Source with
+        | Source.Replay _ -> failwith "这几条用例跑的是 `?table=1` 那一页，它必然是 Live"
+        | Source.Live live ->
+            { model with
+                Source =
+                    Source.Live
+                        { live with
+                            Awaiting = ghost :: live.Awaiting
+                        }
+            }
+
+    /// 引擎此刻给这一席的合法动作集；这一刻不待答它时是 None。
+    let private optionsFor (seat: Seat) (table: Table) : Action list option =
+        Table.pendings table
+        |> List.tryFind (fun choice -> choice.Seat = seat)
+        |> Option.map (fun choice -> choice.Actions)
+
+    [<Fact>]
+    let ``牌桌绕过一份在飞的问话往前走：剪枝剔掉它，账上记一笔「过期」`` () =
+        let asked = TablePage.initial RulesetDraft.initial llmSeat |> fst |> step Advanced
+        let ghost = awaitingOf asked
+        let seat = Awaiting.seat ghost
+
+        // 那一票答上来、落成了一手，牌桌往前走：**这份包从此是旧的**（包里的 id 是
+        // 合法动作集的下标，动作集变了同一个 id 就是另一条动作）。
+        let moved =
+            asked |> step (Answered(seat, ghost.Ticket, chose (firstId ghost.Package)))
+
+        Assert.Empty (liveOf moved).Awaiting
+        Assert.Equal(1, List.length (tableOf moved).Decisions)
+
+        // 推到那一席又被问一次：这一份新包量的就是「引擎此刻给这一席的合法动作集」。
+        let again = untilAsked moved
+        let fresh = awaitingOf again
+        Assert.True(fresh.Ticket > ghost.Ticket, "这一席该被重新问过一次了")
+
+        // 把旧那一份原样挂回在飞表里：这就是那条兜底分支守的那个状态
+        // ——同一席上一旧一新两份包，而旧那份指着已经翻篇的那一手。
+        let stale = again |> reflown ghost
+
+        // **阳性对照**：它是「合法动作集变了」那一种，不是「这一席根本不在待答之列」那一种
+        // ——后者也剪得掉，但那不是这条分支要守的情形，拿它验就是在验另一件事。
+        let stalePackage =
+            DecisionPackage.options ghost.Package |> List.map ActionOption.action
+
+        match optionsFor seat (tableOf stale) with
+        | None -> failwith "这一刻该轮到那一席出手，否则这一条验的是另一种过期（那一席不在待答之列）"
+        | Some current ->
+            Assert.Equal<Action list>(current, DecisionPackage.options fresh.Package |> List.map ActionOption.action)
+            Assert.NotEqual<Action list>(current, stalePackage)
+
+        // 走 `drain` 那条路（`Advanced` → `step` → `drain` 顶上那一道剪枝）。
+        let swept = stale |> step Advanced
+        let table = tableOf swept
+
+        // ① 剪掉的只是旧那一份：新那一票原样在飞。**判据是「合法动作集还是不是当下」**，
+        // 不是一刀全剪（一刀全剪的话这一席手里那一票也没了，钱白花、路白走）。
+        Assert.Equal<int list>([ fresh.Ticket ], flyingTickets swept)
+
+        // ② 账上留下一笔，起因是**过期**（不是撤票、不是开下一局）。
+        match table.Voided with
+        | [ voided ] ->
+            Assert.Equal(ghost.Ticket, voided.Ticket)
+            Assert.Equal(seat, voided.Seat)
+            Assert.Equal(VoidCause.Expired, voided.Cause)
+            Assert.Contains("翻篇", VoidedAsk.reason voided)
+            // 回执还在飞：花了多少还不知道。
+            Assert.Equal(None, voided.Usage)
+        | many -> failwith $"该正好剪掉一份过期的问话，实际 {List.length many} 笔"
+
+        // **它不是撤票**：两个数分得开（`Table.revoked` 只数换人那一种）。
+        Assert.Equal<VoidedAsk list>([], Table.revoked table)
+
+        // ③ **那一手没有发生**：手序不动、事件流不动、决策记录一条都不多
+        // （那一条是前面真答上来、真落定的那一手留下的）。
+        Assert.Equal((tableOf stale).Turns, table.Turns)
+        Assert.Equal<Event list>(GameState.events (tableOf stale).State, GameState.events table.State)
+        Assert.Equal(1, List.length table.Decisions)
+        Assert.True(Option.isNone table.Fault, $"剪掉一份过期问话不该让引擎拒什么：{table.Fault}")
+
+        // 那一笔的回执晚回来了：**钱还在账上**（provider 调过、token 计过费），
+        // 而它仍旧不落一条声称落了子的记录。
+        let before = Table.usage table
+
+        let late =
+            swept |> step (Answered(seat, ghost.Ticket, chose (firstId ghost.Package)))
+
+        let credited = tableOf late
+
+        Assert.Equal(Usage.add before billed, Table.usage credited)
+        Assert.Equal(1, List.length (Table.paidVoids credited))
+        Assert.Equal(1, List.length credited.Decisions)
