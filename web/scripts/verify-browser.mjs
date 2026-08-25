@@ -31,6 +31,7 @@ import { verifyGolden } from "./verify-golden.mjs";
 import { verifyHome } from "./verify-home.mjs";
 import { verifyHuman } from "./verify-human.mjs";
 import { verifyInbound } from "./verify-inbound.mjs";
+import { verifyPlayback } from "./verify-playback.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
 import { verifyReview } from "./verify-review.mjs";
 import { verifySeats } from "./verify-seats.mjs";
@@ -112,6 +113,18 @@ const gates = [
     name: "牌桌上人看得见的八项 + 副露的位置就是来源（真对局）",
     how: "node scripts/verify-board.mjs",
     run: (lane) => verifyBoard(lane),
+  },
+  // 票 112：**一秒真的走了几手**。在这一趟之前全仓库没有一处断言量过播放速度本身——
+  // 世代号那道锁（票 78 修掉的「双倍速」）只有「旧世代的 `Ticked` 发不出效果体」这条
+  // 值层面的间接证据，页面上一秒走几手从来没人数过。
+  // 量点是**DOM 上那一步画出来的那一刻**，判据是**手/秒**（不是相邻两手的间隔中位数：
+  // 两条定时器链错开 δ 一起跑时中位数落在两者之间，而每秒走的手数实实在在翻了倍）。
+  // 回放那一页四档各量一段（时间轴的帧号是精确的手数计数器），Live 那一页量引擎真走的手；
+  // **两种来源各连点四下「暂停 / 播放 / 倍速」之后再量一段**——那几下正是票 78 那个坑的制造现场。
+  {
+    name: "一秒走了几手：四档的手/秒都落在设计值上，连点四下之后也没有第二条定时器链",
+    how: "node scripts/verify-playback.mjs",
+    run: (lane) => verifyPlayback(lane),
   },
   // 票 21：`tests/fixtures/golden/dual-target.json` 里每条用例的每个字段的每一行，
   // 在浏览器里跑出来都要与文件一致（跑的是 Fable 的输出本身）。
