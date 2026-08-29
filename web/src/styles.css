@@ -47,7 +47,15 @@
   --tile-face: #fdfaf3; /* 象牙白牌面 */
   --tile-edge: #b6a98f;
 
+  /* 正文黑体（票 117，主人意见③：「正文字体换成黑体更适合阅读」）。
+     纸面牌谱风不靠宋体撑：颜色、线条、牌面都没动，只换正文。
+     门面那一行（`janpo —— …`）仍留宋体，见下面 `h1`。 */
   font-family:
+    "Noto Sans CJK SC", "Source Han Sans SC", "Source Han Sans CN", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+
+  /* 门面那一行的宋体栈（与上面那份分开写，免得以后改一处动两处）。 */
+  --font-serif:
     "Noto Serif CJK SC", "Source Han Serif SC", "Source Han Serif CN", "Songti SC", SimSun, Georgia,
     "Times New Roman", serif;
 }
@@ -64,7 +72,9 @@ body {
   margin: 0 auto;
 }
 
+/* 门面那一行留宋体（票 117）：正文换黑体是为了读，而这一行不是拿来读的。 */
 h1 {
+  font-family: var(--font-serif);
   font-size: 1.4rem;
   letter-spacing: 0.02em;
   border-bottom: 1px solid var(--line);
