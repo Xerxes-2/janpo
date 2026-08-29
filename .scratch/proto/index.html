@@ -1,0 +1,554 @@
+<!doctype html>
+<!-- 原型 v4：明确要扔的（不进 src/、不接闸门、不进 ci.sh）。
+     v1 答「固定舞台能不能在 1280×800 装下终盘」——能。
+     v2 收「照雀魂 / 气泡可点开收 / 白板描边」。
+     v3 收「横牌图案要横 / 两侧空白」。
+     v4 收「把复盘搬进两侧」：
+       两列分工 —— 左 = 谁在打（名册 + 危险度图例）、右 = 这一手怎么看
+       （对局中 = 信息辅助；终局后 = 复盘）。
+       气泡改成从名册点开、**浮在牌桌上**的浮层（主人给的覆盖权用在这儿）。
+
+     硬约束（`ReviewShown` 三态，src/Janpo.Web/Review.fs）：
+       Hidden      —— 未终局：复盘整块不在 DOM 里（对局中给「换打会怎样」算作弊）
+       Unaddressed —— 终局但上帝视角：只说一句「切到某一席就看得了」
+       Notes       —— 终局 + 某一席：逐手标注
+     ∴ 复盘只画在「终局 + 座位视角」那一屏；play 那一屏不许出现它。
+     文案逐句抄 Review.fs 的渲染出口，不自造。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>janpo 骨架原型 v4（要扔的）</title>
+<style>
+  :root {
+    --paper: #f6f1e7;
+    --paper-deep: #eee5d2;
+    --ink: #2e2a24;
+    --ink-soft: #6b6154;
+    --vermilion: #b43a2c;
+    --indigo: #2f4b6e;
+    --line: #b6a98f;
+    --tile-face: #fbf8f0;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC",
+      "Microsoft YaHei", sans-serif;
+    overflow: hidden; /* 没有文档滚动 */
+  }
+
+  /* transform-origin 必须留默认 50% 50%（配 translate(-50%,-50%)）；
+     写成 0 0 会让 scale 把右下角顶出视口——v1 就这么坏的。 */
+  #stage {
+    position: absolute; left: 50%; top: 50%;
+    width: 1200px; height: 750px; background: var(--paper);
+  }
+
+  .topbar {
+    position: absolute; inset: 0 0 auto 0; height: 44px;
+    display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar h1 { margin: 0; font-size: 18px; font-weight: 600;
+    font-family: "Noto Serif CJK SC", "Songti SC", serif; }
+  .topbar .crumb { color: var(--ink-soft); font-size: 12px; }
+  .topbar .sp { flex: 1; }
+  .dorabar { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+  .dorabar .k { color: var(--ink-soft); }
+  button, .btn {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--tile-face); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 10px; cursor: pointer;
+  }
+  .btn.on { background: #e7ecf3; border-color: var(--indigo); color: var(--indigo); }
+  /* play 屏是上帝视角、review 屏是座位视角（Unaddressed 那一条逼出来的） */
+  #stage[data-phase="play"]   .v-seat,  #stage[data-phase="review"] .v-god { }
+  #stage[data-phase="play"]   .v-god  { background: #e7ecf3; border-color: var(--indigo); color: var(--indigo); }
+  #stage[data-phase="review"] .v-seat { background: #e7ecf3; border-color: var(--indigo); color: var(--indigo); }
+
+  .opsbar {
+    position: absolute; inset: auto 0 0 0; height: 46px;
+    display: flex; align-items: center; gap: 8px; padding: 0 14px;
+    border-top: 1px solid var(--line);
+  }
+  .track { position: relative; flex: 1; display: flex; align-items: center; }
+  .track input[type="range"] { width: 100%; accent-color: var(--indigo); }
+  /* 时间轴上那几枚标记 = 复盘那一列的投影（Review.marks：同一次调用，两处不会各标各的） */
+  .tick {
+    position: absolute; top: 2px; width: 2px; height: 8px;
+    background: var(--vermilion); border-radius: 1px; pointer-events: none;
+  }
+  #stage[data-phase="play"] .tick { display: none; }
+  .opsbar .pos { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+
+  /* == 牌桌 656×656，盘心 (328,328) == */
+  #board {
+    position: absolute; left: 272px; top: 46px; width: 656px; height: 656px;
+    background: var(--paper-deep); border: 1px solid var(--line); border-radius: 8px;
+  }
+
+  /* 中央盘：场况 + 四家「风位·点数」（照雀魂；名字不进来） */
+  #center {
+    position: absolute; left: 238px; top: 238px; width: 180px; height: 180px;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 6px;
+    display: grid; grid-template-columns: 42px 1fr 42px; grid-template-rows: 30px 1fr 30px;
+  }
+  #center .mid { grid-area: 2 / 2; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px; font-size: 11px; }
+  #center .kyoku { font-size: 19px; font-weight: 700; letter-spacing: 1px; }
+  #center .sub { color: var(--ink-soft); }
+  .score { display: flex; align-items: center; justify-content: center;
+    gap: 4px; font-size: 11px; overflow: hidden; }
+  .score[data-edge="n"] { grid-area: 1 / 2; border-bottom: 1px solid var(--line); }
+  .score[data-edge="s"] { grid-area: 3 / 2; border-top: 1px solid var(--line); }
+  .score[data-edge="w"] { grid-area: 2 / 1; border-right: 1px solid var(--line);
+    flex-direction: column; gap: 1px; }
+  .score[data-edge="e"] { grid-area: 2 / 3; border-left: 1px solid var(--line);
+    flex-direction: column; gap: 1px; }
+  .score .kaze { font-weight: 700; }
+  .score .pts { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .score.turn { background: #f3e7e3; }
+  .score.turn .kaze { color: var(--vermilion); }
+  .score.oya .kaze::after { content: "親"; font-size: 8px; margin-left: 1px;
+    color: var(--vermilion); font-weight: 400; }
+
+  /* == 牌 == */
+  .tile {
+    display: inline-block; background: var(--tile-face);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px; line-height: 0;
+  }
+  .tile img { width: 100%; height: 100%; display: block; }
+  .tile.tg { border-style: dashed; }
+  .tile.aka { border-color: var(--vermilion); }
+  .tile.haku { box-shadow: inset 0 0 0 2px var(--indigo); }
+
+  /* 横牌：v2 只换了**盒子**，里面的 img 还立着（牌面被压扁）。
+     SVG 本身 300×400，所以给 img 竖着的尺寸再 rotate(-90deg)；
+     转后的视觉宽高 = img 的高宽，正好填进横盒子的 content box。 */
+  .tile.called, .kawa .tile.side { position: relative; }
+  .tile.called img, .kawa .tile.side img {
+    position: absolute; top: 50%; left: 50%;
+    transform-origin: center; transform: translate(-50%, -50%) rotate(-90deg);
+  }
+  .meld .tile.called img { width: 18px; height: 24px; }
+  .kawa .tile.side img   { width: 22px; height: 29px; }
+
+  /* 席区：同一份 DOM 绕盘心转四向。top 428 + origin -100 ⇒ 支点 (328,328) */
+  .zone { position: absolute; left: 0; top: 428px; width: 656px; height: 228px;
+    transform-origin: 328px -100px; }
+  .zone[data-r="0"]   { transform: rotate(0deg); }
+  .zone[data-r="90"]  { transform: rotate(90deg); }
+  .zone[data-r="180"] { transform: rotate(180deg); }
+  .zone[data-r="270"] { transform: rotate(270deg); }
+  .kawa { position: absolute; left: 244px; top: 4px; width: 300px; height: 115px; }
+  .kawa .tile { position: absolute; width: 26px; height: 35px; }
+  .kawa .tile.side { width: 35px; height: 26px; }
+  .hand { position: absolute; left: 0; right: 0; top: 178px;
+    display: flex; justify-content: center; align-items: flex-end; gap: 2px; }
+  .hand .tile { width: 30px; height: 40px; }
+  .hand .tile.drawn { margin-left: 8px; }
+  .melds { position: absolute; right: 10px; top: 126px; display: flex; gap: 8px; direction: rtl; }
+  .meld { display: flex; align-items: flex-end; gap: 1px; direction: ltr; }
+  .meld .tile { width: 22px; height: 30px; }
+  .meld .tile.called { width: 30px; height: 22px; }
+
+  /* == 两列：左 = 谁在打，右 = 这一手怎么看 == */
+  /* 256 + 14 内边距 = 270 < 272（牌桌左边）：两列吃满 margin 而不碰牌桌。
+     这个宽度是**最长的真实模型名**定的，不是拍的：
+     `google/gemini-2.5-flash-preview` 在 11px 下要 166.4px，
+     `openai/gpt-4.1-mini-2025-04-14` 要 162.6px——取 12px 时两个都被截。 */
+  .col {
+    position: absolute; width: 256px; top: 58px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .col[data-col="left"]  { left: 14px;  bottom: 58px; }
+  .col[data-col="right"] { right: 14px; bottom: 58px; }
+  .card {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 4px; padding: 7px 9px; font-size: 12px; min-height: 0;
+  }
+  .card h3 {
+    margin: 0 0 5px; font-size: 11px; font-weight: 600; color: var(--ink-soft);
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  }
+  .card h3 .btn { font-size: 11px; padding: 1px 6px; }
+  .line { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
+  .line .k { color: var(--ink-soft); width: 52px; flex: none; }
+  .chips { display: flex; gap: 2px; }
+  .chips .tile { width: 17px; height: 23px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* 名册：全名不截（票 82 的 nameplate 那条：名字来自牌谱，不是档案名） */
+  /* 整行就是开那一席气泡的按钮：比在行尾再摆一枚 pill 省 43px，
+     而那 43px 正是名字被截的全部原因（`deepseek/deepseek-v4-flash` 差 0.2px）。 */
+  .roster .seat {
+    display: flex; align-items: center; gap: 5px; padding: 3px 0; width: 100%;
+    background: transparent; border: 0; border-radius: 3px;
+    border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
+    font: inherit; color: inherit; text-align: left; cursor: pointer;
+  }
+  .roster .seat:hover { background: color-mix(in srgb, var(--line) 18%, transparent); }
+  .roster .seat.on { background: #e7ecf3; }
+  .roster .seat:first-of-type { border-top: 0; }
+  .roster .kaze { font-weight: 700; flex: none; width: 24px; }
+  .roster .who { flex: 1; min-width: 0; overflow: hidden; font-size: 11px;
+    text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); }
+  .roster .seat.riichi .kaze::after {
+    content: "立"; font-size: 9px; color: var(--vermilion); margin-left: 1px; }
+  .roster .seat.turn .kaze { color: var(--vermilion); }
+  /* 收起态就是行尾这一个字 + 一个角标，不占牌桌一寸 */
+  .pill { flex: none; font-size: 11px; color: var(--indigo); white-space: nowrap; }
+  .pill.thinking { color: var(--ink-soft); }
+  .pill::after { content: " ▾"; color: var(--ink-soft); }
+  .seat.on .pill::after { content: " ▴"; }
+
+  /* 四色相纪律内（票 80）：靛蓝·墨·朱红三相分四档，没动第五个色相 */
+  .sw { width: 22px; height: 9px; border-radius: 2px; border: 1px solid var(--line); flex: none; }
+  .sw[data-d="genbutsu"] { background: var(--indigo); }
+  .sw[data-d="suji"]     { background: var(--ink-soft); }
+  .sw[data-d="musuji"]   { background: color-mix(in srgb, var(--vermilion) 55%, var(--paper)); }
+  .sw[data-d="dora"]     { background: var(--vermilion); }
+
+  /* == 复盘：导航（左）+ 当手全文（右）。只在 review 屏出现 == */
+  #stage[data-phase="play"]   [data-when="review"] { display: none; }
+  #stage[data-phase="review"] [data-when="play"]   { display: none; }
+  .card.grow { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .navlist { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -3px; padding: 0 3px; }
+  .nav {
+    display: flex; align-items: baseline; gap: 5px; width: 100%; text-align: left;
+    padding: 3px 5px; margin: 1px 0; font-size: 12px; cursor: pointer;
+    background: transparent; border: 1px solid transparent; border-radius: 3px;
+  }
+  .nav:hover { background: color-mix(in srgb, var(--line) 20%, transparent); }
+  .nav.sel { background: #e7ecf3; border-color: var(--indigo); }
+  .nav .turn { color: var(--ink-soft); flex: none; font-variant-numeric: tabular-nums; }
+  /* 值得看的两条判据各一枚点：better = 引擎试打表里有更好的换法；strong = 强 AI 那一条。
+     两条独立 ⇒ 两枚独立的点（both 就是两枚都亮），不合成第三种颜色。 */
+  .dots { flex: none; display: flex; gap: 2px; margin-left: auto; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: transparent;
+    border: 1px solid var(--line); }
+  .dot.better { background: var(--indigo); border-color: var(--indigo); }
+  .dot.strong { background: var(--vermilion); border-color: var(--vermilion); }
+  .detail { font-size: 12px; line-height: 1.6; }
+  .detail .hl { font-weight: 600; margin: 0 0 4px; }
+  .detail p { margin: 4px 0; }
+  .detail .strong { color: var(--ink); }
+  .detail .strong .tag { color: var(--vermilion); }
+  .fold { cursor: pointer; color: var(--ink-soft); font-size: 11px; }
+  .fold + .foldbody { display: none; color: var(--ink-soft); font-size: 11px;
+    line-height: 1.55; margin: 3px 0 0; }
+  .fold.open + .foldbody { display: block; }
+
+  /* == 气泡：从名册点开的**浮层**，浮在牌桌上（主人给的覆盖权用在这儿）==
+     收起态就是名册里那枚 pill（不占牌桌一寸）；展开态才盖牌。 */
+  .pop {
+    position: absolute; width: 300px; z-index: 6; display: none;
+    background: #fbf7ee; border: 1px solid var(--line);
+    border-left: 3px solid var(--ink-soft); border-radius: 4px;
+    padding: 5px 9px; font-size: 12px; line-height: 1.55;
+    box-shadow: 0 2px 10px rgba(46, 42, 36, 0.2);
+  }
+  .pop.open { display: block; }
+  .pop .who { color: var(--indigo); font-weight: 600; margin-right: 4px; }
+  .pop.thinking { border-style: dashed; }
+  .pop.thinking .who { color: var(--ink-soft); }
+  .pop::after {
+    content: ""; position: absolute; left: -6px; top: 12px;
+    width: 10px; height: 10px; background: inherit;
+    border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    transform: rotate(45deg);
+  }
+  /* left 固定（贴牌桌左边）；top 由 JS 对齐到它那一行名册——
+     写成固定槽位会让尾巴指在空处（第一版就差了 40–60px）。 */
+  .pop { left: 286px; top: 62px; }
+
+  /* == 配桌 = 弹出层。宽度 = 右 margin 宽 ⇒ 盖不到牌桌 == */
+  #cfg { display: none; }
+  .drawer {
+    position: absolute; right: 0; top: 44px; bottom: 46px; width: 272px;
+    background: var(--paper); border-left: 1px solid var(--line);
+    box-shadow: -8px 0 24px rgba(46, 42, 36, 0.18);
+    padding: 14px 16px; overflow: hidden; display: none; z-index: 10;
+  }
+  #cfg:checked ~ .drawer { display: block; }
+  .drawer h2 { margin: 0 0 10px; font-size: 14px; }
+  .drawer .row { display: flex; align-items: center; gap: 6px; margin: 7px 0;
+    font-size: 12px; flex-wrap: wrap; }
+  .drawer .row .k { color: var(--ink-soft); width: 54px; flex: none; }
+  .drawer select, .drawer input[type="text"] {
+    font: inherit; font-size: 12px; padding: 2px 6px;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--tile-face);
+    min-width: 0;
+  }
+  .drawer hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+</style>
+</head>
+<body>
+<div id="stage" data-phase="play">
+  <div class="topbar">
+    <h1>janpo</h1>
+    <span class="crumb" data-when="play">东1局・第 11 巡</span>
+    <span class="crumb" data-when="review">东风战・终局・南家 +12300</span>
+    <span class="sp"></span>
+    <span class="dorabar"><span class="k">宝牌</span>
+      <span class="tile" style="width:22px;height:29px"><img src="../../web/src/tiles/Sou3.svg" alt="三索"></span>
+    </span>
+    <span class="btn v-god">上帝视角</span><span class="btn v-seat">座位 0</span><span class="btn">危险度</span>
+    <label class="btn" for="cfg">配桌 ▾</label>
+  </div>
+
+  <div id="board">
+    <div id="center">
+      <div class="score" data-edge="n"><span class="kaze">西</span><span class="pts">31200</span></div>
+      <div class="score" data-edge="w"><span class="kaze">北</span><span class="pts">17800</span></div>
+      <div class="mid">
+        <div class="kyoku">东１局</div>
+        <div class="sub">0 本场・供托 2</div>
+        <div class="sub">余 44 张</div>
+      </div>
+      <div class="score" data-edge="e"><span class="kaze">南</span><span class="pts">26000</span></div>
+      <div class="score turn oya" data-edge="s"><span class="kaze">东</span><span class="pts">24000</span></div>
+    </div>
+  </div>
+
+  <!-- 左列：谁在打 -->
+  <div class="col" data-col="left">
+    <div class="card roster">
+      <h3><span>本桌</span><span>点数在中央盘</span></h3>
+      <button class="seat" data-pop="toimen"><span class="kaze">西</span><span class="who">kimi/kimi-k3</span><span class="pill">说</span></button>
+      <button class="seat riichi" data-pop="kami"><span class="kaze">北</span><span class="who">zhipu/glm-5-air</span><span class="pill">说</span></button>
+      <button class="seat riichi" data-pop="shimo"><span class="kaze">南</span><span class="who">openai/gpt-6-mini</span><span class="pill thinking">想…</span></button>
+      <button class="seat turn" data-pop="self"><span class="kaze">东</span><span class="who">deepseek/deepseek-v4-flash</span><span class="pill">说</span></button>
+    </div>
+
+    <div class="card" data-when="play">
+      <h3><span>危险度</span><span>启发式</span></h3>
+      <div class="line"><span class="sw" data-d="genbutsu"></span><span>现物（安全）</span></div>
+      <div class="line"><span class="sw" data-d="suji"></span><span>筋</span></div>
+      <div class="line"><span class="sw" data-d="musuji"></span><span>无筋</span></div>
+      <div class="line"><span class="sw" data-d="dora"></span><span>宝牌周边</span></div>
+    </div>
+
+    <!-- 复盘导航。文案抄 ReviewFilter.toDisplay / ReviewNote.headline -->
+    <div class="card grow" data-when="review">
+      <h3><span>复盘・座位 0</span><button class="btn">看全部</button></h3>
+      <div>只看值得看的那几手：122 手里显示 9 手。</div>
+      <div class="fold" data-fold>判据 ▾</div>
+      <div class="foldbody">两条判据：引擎的试打表里还有更好的换法，或者强 AI 给自己那一手的概率过了阈值、而你打的不在它头两条里。</div>
+      <div class="navlist"></div>
+      <div style="border-top:1px solid var(--line);padding-top:5px;margin-top:5px;color:var(--ink-soft);font-size:11px">
+        强 AI 逐手看过了：122 手里有 64 手与你不同。
+      </div>
+    </div>
+  </div>
+
+  <!-- 右列：这一手怎么看 -->
+  <div class="col" data-col="right">
+    <div class="card" data-when="play">
+      <h3><span>信息辅助</span><span>座位 0・东家</span></h3>
+      <div class="line"><span class="k">向听</span><span class="num">1 向听</span></div>
+      <div class="line"><span class="k">有效牌</span><span class="num">4 种 14 枚</span></div>
+      <div class="line"><span class="k"></span><span class="chips">
+        <span class="tile"><img src="../../web/src/tiles/Man2.svg" alt="二万"></span>
+        <span class="tile"><img src="../../web/src/tiles/Man5.svg" alt="五万"></span>
+        <span class="tile"><img src="../../web/src/tiles/Sou5.svg" alt="五索"></span>
+        <span class="tile"><img src="../../web/src/tiles/Sou8.svg" alt="八索"></span>
+      </span></div>
+      <div class="line"><span class="k">现物</span><span class="num">6 枚（对两家立直）</span></div>
+      <div class="line"><span class="k">无筋</span><span class="num">3 种</span></div>
+    </div>
+
+    <!-- 当手全文。逐句抄 ReviewNote.headline / figures / advice + ReviewStrong.toDisplay -->
+    <div class="card grow detail" data-when="review">
+      <h3><span>这一手</span><button class="btn">回到原处（正在看第 37 手）</button></h3>
+      <div style="flex:1;overflow-y:auto;min-height:0">
+        <p class="hl">第 37 手　手切1万</p>
+        <p>1向听 → 1向听　有效牌 39 枚 4 种　危险度 无筋（这一手第 3 安全）</p>
+        <p>更好的候选：打8筒（有效牌 39 枚，+18；危险度更低）、打9万（有效牌 39 枚；危险度更低（现物））</p>
+        <p class="strong"><span class="tag">〔强 AI〕</span>手切3索（与你不同）　它给了 3 条：手切3索 0.62、摸切9万 0.21、立直 0.11　你打的手切1万 0.21（第 2）</p>
+        <div class="fold" data-fold>这几行是怎么算的 ▾</div>
+        <div class="foldbody">这几行是引擎按你当时看得见的牌现算的（向听、有效牌、危险度），不是打分——「更好的候选」只列在这几个数上不比你差、至少一项更好的那几张。点某一手：牌桌摆出那一刻的快照（回放里时间轴跟着跳过去），按「回到原处」就回来。</div>
+
+        <!-- 当时它说的（`DecisionRecord.Reason`）。Review.fs 的注释把它写进了复盘的正文：
+             「模型席顺带把 DecisionRecord.Reason 与这几条标注排在同一根轴上」。
+             气泡里只有 72 字的那一句；全文在牌谱里，复盘才是它该出现的地方。 -->
+        <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:6px">
+          <div style="font-size:11px;color:var(--ink-soft);margin-bottom:3px">当时它说的</div>
+          <p style="margin:0;color:var(--ink-soft)">万子 234 已成形，筒子 45678 两面带宝牌，本手的选择在「押牌进张」与「回头守」之间。下家立直已 4 巡，河里两张筒子均为低牌，1万未过筋但万子壁上有两枚 4万被吃，安全度尚可。兼顾保留 8筒双碰的改良，先切 1万。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 气泡浮层：浮在牌桌上，由名册那几枚 pill 点开 -->
+  <div class="pop" data-seat="toimen"><span class="who">说</span>碰中打1索，役牌确定后全力向断幺进张，8索双碰改良可期。</div>
+  <div class="pop" data-seat="kami"><span class="who">说</span>追立：45678筒两面，宝牌2枚在手，打点与速度都够。</div>
+  <div class="pop thinking" data-seat="shimo"><span class="who">想…</span>（第 11 巡・在想）</div>
+  <div class="pop" data-seat="self"><span class="who">说</span>切8筒守住万子面子，立直家现物优先，保持形式听牌的退路。</div>
+
+  <div class="opsbar">
+    <button>播放</button><button>单步</button>
+    <span class="btn on">1×</span><span class="btn">2×</span><span class="btn">4×</span>
+    <div class="track"><input type="range" min="0" max="468" value="311" /></div>
+    <span class="pos" data-when="play">第 311 手・东1局</span>
+    <span class="pos" data-when="review">第 37 手・南2局</span>
+    <button data-when="play">复盘 ▸</button>
+    <button data-when="review">导出牌谱</button>
+  </div>
+
+  <input type="checkbox" id="cfg" />
+  <div class="drawer">
+    <h2>配桌</h2>
+    <div class="row"><span class="k">对局长度</span><span class="btn on">东风战</span><span class="btn">半庄战</span></div>
+    <div class="row"><span class="k">规则</span><span class="btn on">赤宝牌</span><span class="btn on">食断</span></div>
+    <div class="row"><span class="k">种子</span><input type="text" value="1177" size="8" /><button>重开</button></div>
+    <hr />
+    <div class="row"><span class="k">座位 0</span><select><option>均匀随机</option></select><select><option>裸奔</option></select></div>
+    <div class="row"><span class="k">座位 1</span><select><option>档案 1</option></select><select><option>裸奔</option></select></div>
+    <div class="row"><span class="k">座位 2</span><select><option>有主见</option></select><select><option>裸奔</option></select></div>
+    <div class="row"><span class="k">座位 3</span><select><option>我自己</option></select><select><option>裸奔</option></select></div>
+    <hr />
+    <div class="row"><span class="k">档案</span><select><option>档案 1</option></select><button>新建</button></div>
+    <div class="row"><span class="k">provider</span><select><option>deepseek</option></select></div>
+    <div class="row"><span class="k">模型</span><input type="text" value="deepseek-v4-flash" /></div>
+    <div class="row"><span class="k">API key</span><input type="text" placeholder="只存本机" /></div>
+  </div>
+</div>
+
+<script>
+  const T = (n) => `../../web/src/tiles/${n}.svg`;
+  const POOL = ["Man1","Man7","Pin2","Sou1","Sou9","Ton","Nan","Shaa","Pei","Haku","Hatsu","Man9","Pin1","Sou2","Man6","Pin3","Sou5","Man8","Pin7"];
+  function mk(n, riichiAt, tgAt) {
+    return Array.from({ length: n }, (_, i) => ({
+      t: POOL[(i * 7 + n) % POOL.length], side: i === riichiAt, tg: tgAt.includes(i),
+    }));
+  }
+  const seats = [
+    { r: 0,   kawa: mk(17, -1, [2, 9, 14]), hand: ["Man2","Man3","Man4","Pin4","Pin5-Dora","Pin6","Pin7","Pin8","Sou6","Sou7"], drawn: "Pin8", melds: [["Sou4","Sou5","Sou6"]] },
+    { r: 270, kawa: mk(18, 8, [1, 6, 11, 16]), hand: 13, melds: [] },
+    { r: 180, kawa: mk(16, -1, [3, 8]), hand: 7, melds: [["Chun","Chun","Chun"], ["Sou8","Sou8","Sou8","Sou8"]] },
+    { r: 90,  kawa: mk(19, 12, [4, 10, 15]), hand: 13, melds: [["Pin9","Pin9","Pin9"]] },
+  ];
+  function tile(name, cls) {
+    const s = document.createElement("span");
+    s.className = `tile ${cls || ""}`;
+    if (/^(Man|Pin|Sou)5-Dora$/.test(name)) s.classList.add("aka");
+    if (name === "Haku") s.classList.add("haku");
+    const img = document.createElement("img");
+    img.src = T(name); img.alt = name;
+    s.appendChild(img);
+    return s;
+  }
+  const board = document.getElementById("board");
+  for (const seat of seats) {
+    const z = document.createElement("div");
+    z.className = "zone"; z.dataset.r = seat.r;
+    const kawa = document.createElement("div");
+    kawa.className = "kawa";
+    let x = 0, row = 0, col = 0;
+    for (const k of seat.kawa) {
+      const el = tile(k.t, (k.side ? "side " : "") + (k.tg ? "tg" : ""));
+      el.style.left = x + "px"; el.style.top = row * 37 + "px";
+      x += k.side ? 37 : 28; col += 1;
+      if (col === 6 && row < 2) { row += 1; col = 0; x = 0; }
+      kawa.appendChild(el);
+    }
+    z.appendChild(kawa);
+    const hand = document.createElement("div");
+    hand.className = "hand";
+    const tiles = Array.isArray(seat.hand) ? seat.hand
+      : Array.from({ length: seat.hand }, (_, i) => POOL[(i * 3 + 1) % POOL.length]);
+    for (const t of tiles) hand.appendChild(tile(t));
+    if (seat.drawn) hand.appendChild(tile(seat.drawn, "drawn"));
+    z.appendChild(hand);
+    if (seat.melds.length) {
+      const ms = document.createElement("div");
+      ms.className = "melds";
+      for (const m of seat.melds) {
+        const g = document.createElement("div");
+        g.className = "meld";
+        m.forEach((t, i) => g.appendChild(tile(t, i === 0 ? "called" : "")));
+        ms.appendChild(g);
+      }
+      z.appendChild(ms);
+    }
+    board.appendChild(z);
+  }
+
+  // 复盘导航那一列：9 手（= 上面那句「122 手里显示 9 手」的 kept）。
+  // worth 三态照 Review.worth：better / strong / both（空串的那些在「看全部」时才出现）。
+  const NOTES = [
+    { turn: 8,  label: "摸切9筒", worth: "better" },
+    { turn: 15, label: "手切1索", worth: "both" },
+    { turn: 23, label: "立直",     worth: "strong" },
+    { turn: 31, label: "手切西",   worth: "better" },
+    { turn: 37, label: "手切1万", worth: "both", sel: true },
+    { turn: 52, label: "碰中",     worth: "strong" },
+    { turn: 68, label: "摸切5万", worth: "better" },
+    { turn: 84, label: "手切3索", worth: "both" },
+    { turn: 97, label: "杠8索",   worth: "strong" },
+  ];
+  const navlist = document.querySelector(".navlist");
+  for (const n of NOTES) {
+    const b = document.createElement("button");
+    b.className = "nav" + (n.sel ? " sel" : "");
+    b.innerHTML =
+      `<span class="turn">第 ${n.turn} 手</span><span>${n.label}</span>` +
+      `<span class="dots">` +
+      `<span class="dot ${n.worth === "better" || n.worth === "both" ? "better" : ""}"></span>` +
+      `<span class="dot ${n.worth === "strong" || n.worth === "both" ? "strong" : ""}"></span>` +
+      `</span>`;
+    b.addEventListener("click", () => {
+      for (const o of navlist.querySelectorAll(".nav")) o.classList.remove("sel");
+      b.classList.add("sel");
+    });
+    navlist.appendChild(b);
+  }
+  // 时间轴标记 = 上面那一列的投影（同一份 NOTES，不另算一遍）
+  const track = document.querySelector(".track");
+  for (const n of NOTES) {
+    const t = document.createElement("span");
+    t.className = "tick";
+    t.style.left = `calc(${(n.turn / 122) * 100}% - 1px)`;
+    track.appendChild(t);
+  }
+
+  // 气泡浮层：名册那枚 pill 点开／点收，随时；四席各自独立
+  const stageEl = document.getElementById("stage");
+  /** 把浮层对齐到触发它的那一行（屏幕坐标 → 舞台坐标，除掉 scale）。 */
+  function alignPop(pop, row) {
+    const st = stageEl.getBoundingClientRect();
+    const rr = row.getBoundingClientRect();
+    const s = st.width / 1200;
+    pop.style.top = `${(rr.top - st.top) / s - 4}px`;
+  }
+  // **一次只开一枚**：名册相邻两行只差 26px 而浮层高 ~45px，
+  // 同时开相邻两席会叠在一起（实测互相压 = 1）。一次一枚同时也治信息过载。
+  for (const row of document.querySelectorAll(".roster .seat")) {
+    const pop = document.querySelector(`.pop[data-seat="${row.dataset.pop}"]`);
+    row.addEventListener("click", () => {
+      const wasOpen = pop.classList.contains("open");
+      for (const o of document.querySelectorAll(".pop.open")) o.classList.remove("open");
+      for (const o of document.querySelectorAll(".roster .seat.on")) o.classList.remove("on");
+      if (!wasOpen) {
+        alignPop(pop, row);
+        pop.classList.add("open");
+        row.classList.add("on");
+      }
+    });
+  }
+  for (const f of document.querySelectorAll("[data-fold]"))
+    f.addEventListener("click", () => f.classList.toggle("open"));
+
+  const stage = document.getElementById("stage");
+  function fit() {
+    const s = Math.min(innerWidth / 1200, innerHeight / 750);
+    stage.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  fit();
+  addEventListener("resize", fit);
+</script>
+</body>
+</html>
