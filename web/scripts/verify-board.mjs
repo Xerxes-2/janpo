@@ -74,71 +74,76 @@ function readBoard(page) {
     const text = (node) => (node === null ? null : node.textContent.trim());
     const attr = (node, name) => (node === null ? null : node.getAttribute(name));
 
-    const seats = [...document.querySelectorAll('[data-testid="table-seats"] > [data-seat]')].map(
-      (node) => {
-        const seat = Number(node.getAttribute("data-seat"));
-        const pick = (suffix) => node.querySelector(`[data-testid="seat-${seat}-${suffix}"]`);
-        const hand = pick("hand");
-        const kawa = pick("kawa");
-        const naki = pick("naki");
-        const back = hand.querySelector(".tile.back");
-        const tsumogiri = kawa.querySelector('[data-tsumogiri="true"]');
-        const tegiri = kawa.querySelector('[data-tsumogiri="false"]');
+    // 票 117 把一席拆成两半：**牌在 `.zone`（那一层绕盘心转），名牌与气泡在 `.seat`（不转）**。
+    // 两半都带 `data-seat` / `data-seat-position`（同源，仍是 `Board.position` 的输出）。
+    // 这里以「牌那一半」为准列席，名牌那一半按座位号配对——
+    // 断言一条没改，只是从「一个节点里什么都有」改成「两个节点各管一半」。
+    const seats = [
+      ...document.querySelectorAll('[data-testid="table-seats"] .zone[data-seat]'),
+    ].map((node) => {
+      const seat = Number(node.getAttribute("data-seat"));
+      const plate = document.querySelector(`[data-testid="seat-${seat}"]`);
+      const pick = (suffix) => document.querySelector(`[data-testid="seat-${seat}-${suffix}"]`);
+      const hand = pick("hand");
+      const kawa = pick("kawa");
+      const naki = pick("naki");
+      const back = hand.querySelector(".tile.back");
+      const tsumogiri = kawa.querySelector('[data-tsumogiri="true"]');
+      const tegiri = kawa.querySelector('[data-tsumogiri="false"]');
 
-        const player = pick("player");
+      const player = pick("player");
 
-        return {
-          seat,
-          position: node.getAttribute("data-seat-position"),
-          riichi: node.getAttribute("data-riichi"),
-          // 名牌上「这一席是谁在打」（票 82）：人读的是那几个字，`data-player` 是同一件事
-          // 给机器看的那一半。
-          player: { text: text(player), data: attr(player, "data-player") },
-          marks: [...node.querySelectorAll(".seat-head .mark")].map((mark) => mark.textContent),
-          score: { text: text(pick("score")), data: attr(pick("score"), "data-score") },
-          junme: { text: text(pick("junme")), data: attr(pick("junme"), "data-junme") },
-          hand: {
-            data: hand.getAttribute("data-hand-count"),
-            hidden: hand.getAttribute("data-hand-hidden"),
-            label: text(hand.querySelector(".row-label")),
-            faces: hand.querySelectorAll("[data-pai]").length,
-            backs: hand.querySelectorAll(".tile.back").length,
-            // 牌背画得出来吗（票 32）：边框色与牌背图（票 80 起是 Back.svg，从前是斜纹底）缺一样就是一块看不见的牌。
-            backInk: back === null ? null : getComputedStyle(back).borderTopColor,
-            backPattern: back === null ? null : getComputedStyle(back).backgroundImage,
-            // 这一排牌**每一张画在哪儿、多大**（票 82 起读真坐标）：一手牌是不是一条线、
-            // 刚摸那张有没有摆开、左右两家的牌有没有真的转 90°，三条断言都读它。
-            // 从前只读 `.tile.drawn` 的 `margin-left`——那个数在竖排那两家恒为 0，
-            // 而「摆开了没有」本来就该按**画出来的间距**判，不该按某一条 CSS 属性判。
-            tiles: [...hand.querySelectorAll(".tile")].map((tile) => {
-              const rect = tile.getBoundingClientRect();
-              return {
-                x: rect.x + rect.width / 2,
-                y: rect.y + rect.height / 2,
-                w: rect.width,
-                h: rect.height,
-                drawn: tile.classList.contains("drawn"),
-              };
-            }),
-          },
-          kawa: {
-            data: kawa.getAttribute("data-kawa-count"),
-            label: text(kawa.querySelector(".row-label")),
-            tiles: kawa.querySelectorAll("[data-pai]").length,
-            tsumogiri: kawa.querySelectorAll('[data-tsumogiri="true"]').length,
-            tegiri: kawa.querySelectorAll('[data-tsumogiri="false"]').length,
-            marked: kawa.querySelectorAll("[data-tsumogiri]").length,
-            // 摸切与手切画得不一样吗：虚线 vs 实线（两者都是公开信息）。
-            tsumogiriStroke: tsumogiri === null ? null : getComputedStyle(tsumogiri).borderTopStyle,
-            tegiriStroke: tegiri === null ? null : getComputedStyle(tegiri).borderTopStyle,
-          },
-          naki: {
-            data: naki.getAttribute("data-naki-count"),
-            groups: naki.querySelectorAll("[data-naki]").length,
-          },
-        };
-      },
-    );
+      return {
+        seat,
+        position: node.getAttribute("data-seat-position"),
+        riichi: node.getAttribute("data-riichi"),
+        // 名牌上「这一席是谁在打」（票 82）：人读的是那几个字，`data-player` 是同一件事
+        // 给机器看的那一半。
+        player: { text: text(player), data: attr(player, "data-player") },
+        marks: [...plate.querySelectorAll(".seat-head .mark")].map((mark) => mark.textContent),
+        score: { text: text(pick("score")), data: attr(pick("score"), "data-score") },
+        junme: { text: text(pick("junme")), data: attr(pick("junme"), "data-junme") },
+        hand: {
+          data: hand.getAttribute("data-hand-count"),
+          hidden: hand.getAttribute("data-hand-hidden"),
+          label: text(hand.querySelector(".row-label")),
+          faces: hand.querySelectorAll("[data-pai]").length,
+          backs: hand.querySelectorAll(".tile.back").length,
+          // 牌背画得出来吗（票 32）：边框色与牌背图（票 80 起是 Back.svg，从前是斜纹底）缺一样就是一块看不见的牌。
+          backInk: back === null ? null : getComputedStyle(back).borderTopColor,
+          backPattern: back === null ? null : getComputedStyle(back).backgroundImage,
+          // 这一排牌**每一张画在哪儿、多大**（票 82 起读真坐标）：一手牌是不是一条线、
+          // 刚摸那张有没有摆开、左右两家的牌有没有真的转 90°，三条断言都读它。
+          // 从前只读 `.tile.drawn` 的 `margin-left`——那个数在竖排那两家恒为 0，
+          // 而「摆开了没有」本来就该按**画出来的间距**判，不该按某一条 CSS 属性判。
+          tiles: [...hand.querySelectorAll(".tile")].map((tile) => {
+            const rect = tile.getBoundingClientRect();
+            return {
+              x: rect.x + rect.width / 2,
+              y: rect.y + rect.height / 2,
+              w: rect.width,
+              h: rect.height,
+              drawn: tile.classList.contains("drawn"),
+            };
+          }),
+        },
+        kawa: {
+          data: kawa.getAttribute("data-kawa-count"),
+          label: text(kawa.querySelector(".row-label")),
+          tiles: kawa.querySelectorAll("[data-pai]").length,
+          tsumogiri: kawa.querySelectorAll('[data-tsumogiri="true"]').length,
+          tegiri: kawa.querySelectorAll('[data-tsumogiri="false"]').length,
+          marked: kawa.querySelectorAll("[data-tsumogiri]").length,
+          // 摸切与手切画得不一样吗：虚线 vs 实线（两者都是公开信息）。
+          tsumogiriStroke: tsumogiri === null ? null : getComputedStyle(tsumogiri).borderTopStyle,
+          tegiriStroke: tegiri === null ? null : getComputedStyle(tegiri).borderTopStyle,
+        },
+        naki: {
+          data: naki.getAttribute("data-naki-count"),
+          groups: naki.querySelectorAll("[data-naki]").length,
+        },
+      };
+    });
 
     const field = (testId) => document.querySelector(`[data-testid="${testId}"]`);
     const dora = field("table-dora");
@@ -213,12 +218,21 @@ function readLayout(page) {
     };
     return {
       anchor: document.querySelector('[data-testid="table-center"]').getAttribute("data-anchor"),
-      seats: [...document.querySelectorAll('[data-testid="table-seats"] > [data-seat]')].map(
-        (node) => ({
-          seat: Number(node.getAttribute("data-seat")),
-          position: node.getAttribute("data-seat-position"),
-          ...center(node),
-        }),
+      // **量的是那一家的手牌，不是席区本身**（票 117）。
+      // 四个席区都是 `inset: 0` 的同尺寸层、只差一个旋转角，
+      // 矩形一模一样（实测四家全报 y=1394、x=590）——拿它去问「谁在最下面」
+      // 会得到一个四家同值的答案，那不是「方位错了」，是**这条断言问错了对象**。
+      // 手牌的位置才是「这一家坐在哪一边」看得见的那件事。
+      seats: [...document.querySelectorAll('[data-testid="table-seats"] .zone[data-seat]')].map(
+        (node) => {
+          const seat = Number(node.getAttribute("data-seat"));
+          const hand = document.querySelector(`[data-testid="seat-${seat}-hand"]`);
+          return {
+            seat,
+            position: node.getAttribute("data-seat-position"),
+            ...center(hand ?? node),
+          };
+        },
       ),
     };
   });
@@ -305,6 +319,11 @@ function checkHandLine(seat, problems) {
   if (tiles.length < 2) return;
 
   const sideways = seat.position === "kamicha" || seat.position === "shimocha";
+  // 票 117：四席绕盘心 rotate(0/90/180/270)，「这一家自己的左→右」落到屏幕上
+  // **既要轴也要符号**——对家转了 180°、下家转了 270°，它们自己的左→右是倒着走的。
+  // 不变量没改（仍是「一手牌按自己的左→右摆成一条」），改的只是它到屏幕的映射。
+  const TOWARD = { self: 1, kamicha: 1, toimen: -1, shimocha: -1 };
+  const sign = TOWARD[seat.position] ?? 1;
   const along = sideways ? "y" : "x";
   const across = sideways ? "x" : "y";
   const line = sideways ? "列" : "行";
@@ -319,7 +338,7 @@ function checkHandLine(seat, problems) {
     );
 
   for (let index = 1; index < tiles.length; index += 1) {
-    if (!(tiles[index][along] > tiles[index - 1][along]))
+    if (!(tiles[index][along] * sign > tiles[index - 1][along] * sign))
       problems.push(
         `${where}第 ${index} 张没画在第 ${index - 1} 张后面` +
           `（${along}=${Math.round(tiles[index][along])} vs ${Math.round(tiles[index - 1][along])}）：` +

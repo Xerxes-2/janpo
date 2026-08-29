@@ -19,11 +19,15 @@ export const WHO = { 1: "下家", 2: "对家", 3: "上家" };
  * **左右两家竖着一列（y 递增）**——牌转了 90°，“左右”跟着转成了“上下”。
  * **两侧一律从上往下读**（不镜像）：屏幕前只有一个读者，四家都按同一个方向读才不会把一家读反。
  */
+/* 「副露方自己的左→右」落到屏幕坐标上是哪个方向——**由那一席转了多少度定**。
+   票 117 四席绕盘心 rotate(0/90/180/270) 之后，光有轴（x/y）不够，还要有**符号**：
+   对家转了 180°、下家转了 270°，它们自己的「左→右」在屏幕上是**倒着走**的。
+   不变量一个字没改（仍是「按副露方自己的左→右」），改的只是它到屏幕的映射。 */
 const RUN = {
-  self: { key: "x", said: "左→右", next: "右边" },
-  toimen: { key: "x", said: "左→右", next: "右边" },
-  kamicha: { key: "y", said: "上→下", next: "下边" },
-  shimocha: { key: "y", said: "上→下", next: "下边" },
+  self: { key: "x", sign: 1, said: "左→右", next: "右边" },
+  toimen: { key: "x", sign: -1, said: "左→右", next: "左边（对家转了 180°）" },
+  kamicha: { key: "y", sign: 1, said: "上→下", next: "下边（上家转了 90°）" },
+  shimocha: { key: "y", sign: -1, said: "上→下", next: "上边（下家转了 270°）" },
 };
 
 /**
@@ -33,9 +37,9 @@ const RUN = {
  */
 const STACK = {
   self: { key: "y", sign: -1, said: "上面" },
-  toimen: { key: "y", sign: -1, said: "上面" },
-  kamicha: { key: "x", sign: 1, said: "右边（上家那一侧的外侧）" },
-  shimocha: { key: "x", sign: -1, said: "左边（下家那一侧的外侧）" },
+  toimen: { key: "y", sign: 1, said: "下面（对家转了 180°，它的「上面」在屏幕下方）" },
+  kamicha: { key: "x", sign: 1, said: "右边（上家转了 90°，它的「上面」在屏幕右侧）" },
+  shimocha: { key: "x", sign: -1, said: "左边（下家转了 270°，它的「上面」在屏幕左侧）" },
 };
 
 /**
@@ -158,8 +162,8 @@ export function checkNakiGroups(groups) {
       missing.push(`${where}所在的那一家没写方位（data-seat-position=「${group.position}」）`);
     } else {
       for (let index = 1; index < group.slots.length; index += 1) {
-        const here = group.slots[index][run.key];
-        const before = group.slots[index - 1][run.key];
+        const here = group.slots[index][run.key] * run.sign;
+        const before = group.slots[index - 1][run.key] * run.sign;
         if (!(here > before))
           missing.push(
             `${where}第 ${index} 格没画在第 ${index - 1} 格${run.next}` +

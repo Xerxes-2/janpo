@@ -287,25 +287,20 @@ module TableBoard =
     /// `data-seat-position` 是方位给机器看的那一半，**样式读的也是它**：
     /// 属性写着下家却画在左边这种事因此不存在（闸门仍然两样都核：
     /// 属性对不对、以及画出来的坐标对不对）。
-    let private seatPanel
-        (seating: Seating)
-        (bubble: ReactElement list)
-        (play: Tile -> bool -> (int * string) option)
-        (dispatch: TableMsg -> unit)
-        (view: SeatView)
-        =
+    /// **一席分成两半（票 117）**：牌在转的那一半（`seatZone`），
+    /// 名牌与气泡在不转的那一半（`seatPlate`）。
+    ///
+    /// 四席绕盘心 `rotate(0/90/180/270)` 之后，**摆在旋转区里的字会跟着倒过来**。
+    /// 牌面转了照旧认得（真牌桌上就是这么摆的），而名字、点数、气泡里那段推理
+    /// 倒着就没法读——屏幕前只有**一个**读者，不是四个围坐的人。
+    ///
+    /// 拆法受一条现成约束钉死：`verify-bubbles` 靠 `bubble.closest(".seat")`
+    /// 数「气泡在不在它那一席的框里」。∴ **名牌那张卡片仍带 `.seat` 类、
+    /// 气泡仍在它里面**，那三条断言（矩形非空 / 气泡在框内 / 不压牌与中央）
+    /// 在新几何下原样成立，**一个字没改**。
+    let private seatPlate (seating: Seating) (bubble: ReactElement list) (view: SeatView) =
         let index = Seat.index view.Seat
         let position = Board.position seating.Ruleset seating.Anchor view.Seat
-
-        let handCount =
-            match view.Hand with
-            | HandView.Revealed(hand, _) -> List.length hand
-            | HandView.Concealed count -> count
-
-        let hidden =
-            match view.Hand with
-            | HandView.Revealed _ -> "false"
-            | HandView.Concealed _ -> "true"
 
         // 立直与一发那两枚多一个 class（票 80）：配色分工里「朱红 = 立直」，
         // 样式表才选得中它们——CSS 选不了文字内容。语义与文字一个都没动。
@@ -389,38 +384,79 @@ module TableBoard =
                             @ marks
                         )
                     ]
-                    tileRow
-                        $"seat-{index}-naki"
-                        "naki-row"
-                        [ prop.custom ("data-naki-count", List.length view.Naki) ]
-                        "副露"
-                        (view.Naki |> List.mapi (nakiGroup seating.Ruleset view.Seat))
-                    tileRow
-                        $"seat-{index}-hand"
-                        "hand"
-                        [
-                            prop.custom ("data-hand-count", handCount)
-                            // 他家的手牌是扣着的——**这不是渲染纪律而是投影的形状**（`HandView.Concealed`
-                            // 里根本没有牌面）。写出来是让闸门能拿它与“画出来几张牌背”对得上。
-                            prop.custom ("data-hand-hidden", hidden)
-                        ]
-                        $"手牌 {handCount}"
-                        (handTiles play dispatch view.Hand)
-                    tileRow
-                        $"seat-{index}-kawa"
-                        "kawa"
-                        [ prop.custom ("data-kawa-count", List.length view.Kawa) ]
-                        $"河 {List.length view.Kawa}"
-                        (kawaTiles view.Kawa)
                 ]
-                // 思考气泡（票 76）摆在三排牌的**外侧**：DOM 里它在最后，而四个方位的
-                // 纵向翻转（`data-seat-position`）会把它翻到朝桌心那一侧——与三排牌同一套规则，
-                // 因此不引入第二份方位（报告 44 §9.6 留的那个锚点）。
+                // 思考气泡（票 76）跟着名牌走，不进旋转区（票 117）：
+                // 它里面是一段要读的推理，跟着席区转 90°/180°/270° 就没法读了。
                 @ bubble
             )
         ]
 
+    /// 一席的**牌**（票 117）：副露、手牌、河。这一层绕盘心转四向。
+    ///
+    /// **四席同一份 DOM**：里面一律按「坐在下方那一家」摆，画到哪个方位
+    /// 只由 `data-seat-position` 定。∴ 方位不是四份布局，是**一份布局的四个角度**——
+    /// 旧那套三列 grid（左右两家竖着摆）靠的是四套不同的排法，
+    /// 那才是那一段「左→右在屏幕上就是上→下」说明字的来处。
+    let private seatZone
+        (seating: Seating)
+        (play: Tile -> bool -> (int * string) option)
+        (dispatch: TableMsg -> unit)
+        (view: SeatView)
+        =
+        let index = Seat.index view.Seat
+        let position = Board.position seating.Ruleset seating.Anchor view.Seat
+
+        let handCount =
+            match view.Hand with
+            | HandView.Revealed(hand, _) -> List.length hand
+            | HandView.Concealed count -> count
+
+        let hidden =
+            match view.Hand with
+            | HandView.Revealed _ -> "false"
+            | HandView.Concealed _ -> "true"
+
+        Html.div [
+            prop.key $"zone-{index}"
+            prop.className "zone"
+            prop.custom ("data-seat", index)
+            prop.custom ("data-seat-position", Position.toWire position)
+            prop.custom ("data-riichi", riichiWire view.Riichi)
+            prop.children [
+                tileRow
+                    $"seat-{index}-naki"
+                    "naki-row"
+                    [ prop.custom ("data-naki-count", List.length view.Naki) ]
+                    "副露"
+                    (view.Naki |> List.mapi (nakiGroup seating.Ruleset view.Seat))
+                tileRow
+                    $"seat-{index}-hand"
+                    "hand"
+                    [
+                        prop.custom ("data-hand-count", handCount)
+                        // 他家的手牌是扣着的——**这不是渲染纪律而是投影的形状**（`HandView.Concealed`
+                        // 里根本没有牌面）。写出来是让闸门能拿它与“画出来几张牌背”对得上。
+                        prop.custom ("data-hand-hidden", hidden)
+                    ]
+                    $"手牌 {handCount}"
+                    (handTiles play dispatch view.Hand)
+                tileRow
+                    $"seat-{index}-kawa"
+                    "kawa"
+                    [ prop.custom ("data-kawa-count", List.length view.Kawa) ]
+                    $"河 {List.length view.Kawa}"
+                    (kawaTiles view.Kawa)
+            ]
+        ]
+
     // ---- 视图：场况与结算 ----
+
+    /// 副露那一行的参照系（票 51）。它与牌桌布局那一句不是同一个参照系，因此必须各说各的：
+    /// 牌桌布局以**看牌桌的那个人**为准，副露里的左中右以**副露方自己**为准。
+    /// M1 传下来的第六条（相对方位必须显式声明参照系）在这里就是这一句。
+    /// 票 82 给它接了后半句：左右两家的那一排在屏幕上是竖的——**票 117 之后仍然成立**。
+    let private nakiLegend =
+        "副露：横放那张的位置就是来源，按副露方自己的左右算——最左＝上家、中间＝对家、最右＝下家（暗杠无源）；左右两家的牌侧着摆，那条「左→右」在屏幕上就是「上→下」"
 
     /// 场况里的一项。`marks` 是它给机器看的那一半（票 44），挂在带 testId 的那个元素上：
     /// 人读的是「东1局 2 本场」这句中文，闸门读的是 `data-honba`，两者对不上就报错。
@@ -501,9 +537,6 @@ module TableBoard =
         // 牌桌上不再写「来自X」之后，读者靠它才知道横放那张的位置该怎么读。
         // 票 82 给它接了后半句：左右两家的牌侧着摆之后，**那一排在屏幕上是竖的**。
         // 不接这一句的话，读者拿「最左」去对一列牌会当场读错来源。
-        let nakiLegend =
-            "副露：横放那张的位置就是来源，按副露方自己的左右算——最左＝上家、中间＝对家、最右＝下家（暗杠无源）；左右两家的牌侧着摆，那条「左→右」在屏幕上就是「上→下」"
-
         let frame =
             match board.Viewer with
             | Some seat -> $"坐在座位 {Seat.index seat}：自家在下、下家在右、对家在上、上家在左"
@@ -541,14 +574,25 @@ module TableBoard =
                         prop.testId "table-anchor"
                         prop.text frame
                     ]
-                    Html.p [
-                        prop.key "naki-legend"
-                        prop.className "table-anchor"
-                        prop.testId "table-naki-legend"
-                        prop.text nakiLegend
-                    ]
                 ]
             )
+        ]
+
+    /// 副露那一行的参照系（票 51 / 82），**摆在牌桌外沿而不是桌心**（票 117）。
+    ///
+    /// 它是**图例**，不是场况：桌心那一格写的是这一局此刻的事实（第几局、几本场、
+    /// 供托、剩余摸牌、宝牌指示牌），而这一句是「怎么读副露」的说明，读一次就够。
+    /// 摆在桌心会把那一格撑到压住四家的河。
+    ///
+    /// **没有删掉它**。票 117 的票面写着「标准几何自证方位，那段话就该消失」——
+    /// 那个前提是错的：后半句在**任何**四家围坐的布局里都成立（上家那一层转了 90°，
+    /// 他的副露行在屏幕上就是竖的），几何不会让它自证；前半句是 M1 第六条要求的
+    /// 参照系声明（相对方位必须显式声明参照系），更不能删。
+    let internal nakiLegendLine () =
+        Html.p [
+            prop.className "naki-legend"
+            prop.testId "table-naki-legend"
+            prop.text nakiLegend
         ]
 
     /// 点数授受一行：按座位升序的增减。
@@ -865,18 +909,37 @@ module TableBoard =
                                     | Some _
                                     | None -> fun _ _ -> None
 
+                                // 牌在转的那一层（票 117）：四席同一份 DOM，绕盘心转四向。
                                 [
-                                    for view in board.Seats ->
-                                        seatPanel
-                                            seating
-                                            (ThinkingBubble.at dispatch view.Seat (bubbleAt view.Seat))
-                                            (playAt view.Seat)
-                                            dispatch
-                                            view
+                                    Html.div [
+                                        prop.key "zones"
+                                        prop.className "zones"
+                                        prop.children (
+                                            [
+                                                for view in board.Seats ->
+                                                    seatZone seating (playAt view.Seat) dispatch view
+                                            ]
+                                            @ [ tableCenter (Option.isSome settled) board ]
+                                        )
+                                    ]
                                 ]
-                                @ [ tableCenter (Option.isSome settled) board ]
+                                // 名牌与气泡在不转的那一层：屏幕前只有一个读者。
+                                @ [
+                                    Html.div [
+                                        prop.key "plates"
+                                        prop.className "plates"
+                                        prop.children [
+                                            for view in board.Seats ->
+                                                seatPlate
+                                                    seating
+                                                    (ThinkingBubble.at dispatch view.Seat (bubbleAt view.Seat))
+                                                    view
+                                        ]
+                                    ]
+                                ]
                             )
                         ]
+                        nakiLegendLine ()
                     ]
                     // 真人那一排按钮（票 88）：**紧贴牌桌下沿**——自家手牌就在牌桌的下一排，
                     // 而「碰不碰」与「打哪张」是同一件事，两样东西不该隔着半屏。

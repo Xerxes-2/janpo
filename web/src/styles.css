@@ -42,6 +42,11 @@
   /* —— 牌 —— */
   /* 高:宽 = 2.35:1.75 ≈ 4:3，与 SVG 的 viewBox（300×400）同比：contain 时不留怪边。
      旋转 90° 的横放牌两侧各探出 (高−宽)/2 = 0.3rem，`.tile.taken` 的 margin 就是这个数。 */
+  /* 牌桌本体（票 117）：656px 的方桌，四席绕盘心转。名牌卡片摆在四边，各占 --plate。
+     票 119 接手固定舞台时**只换这两个变量**，几何一个字不动。 */
+  --board: 30rem;
+  --plate: 10rem;
+
   --tile-w: 1.75rem;
   --tile-h: 2.35rem;
   --tile-face: #fdfaf3; /* 象牙白牌面 */
@@ -291,81 +296,94 @@ input[type="range"] {
    摆到哪个格子里**只由 `data-seat-position` 决定**，而那个属性就是 `Board.position` 的输出
    （参照系是观测者，上帝视角退回起家）。样式与那个属性同源，因此不存在「属性写着下家、
    却画在左边」；闸门仍旧两样都核：属性对不对、画出来的坐标对不对。 */
+/* 票 117：三列 grid 换成**四席绕盘心旋转**。
+
+   旧那套里左右两家的牌是**竖着摆的一列**（四个方位四套排法），
+   那才是桌心那段「左→右在屏幕上就是上→下」说明字的来处——
+   主人意见④（提示冗余）与意见①（布局）是同一个病。
+
+   现在是**一份布局的四个角度**：每席一层铺满牌桌、里面一律按「坐在下方那一家」摆，
+   然后整层 `rotate(0/90/180/270)`。方位仍只由 `data-seat-position` 定（`Board.position`
+   的输出），因此不存在「属性写着下家、却画在左边」。 */
 .seats-board {
-  display: grid;
-  grid-template-areas:
-    "kamicha toimen shimocha"
-    "kamicha center shimocha"
-    "kamicha self shimocha";
-  /* 两侧按**牌**取宽（`auto` = 摆得下那几列牌），**剩下的横向全归中间那一列**：
-     对家与自家的 14 张手牌要一行摆得下（`minmax(31rem, ...)` 是那一行的下限）。
-     名牌与气泡那两块文字**不准决定这一侧有多宽**（见下面那条 max-width）：
-     没那一条时一个五十字的气泡把侧面撑到 506px、中间剩 57px，牌桌高 4231px（实测）。 */
-  grid-template-columns: auto minmax(31rem, 1fr) auto;
-  gap: 0.6rem;
-  margin-top: 1rem;
+  position: relative;
+  width: var(--board);
+  height: var(--board);
+  /* 上下左右各留出一条名牌宽：四张名牌卡片摆在牌桌外沿，
+     不留这一圈的话它们会压到上面的操作条与下面的图例。 */
+  /* 上下各留一张名牌的高。名牌里可能是 `deepseek/deepseek-v4-flash` 这样的长名，
+     留窄了它会顶到上面那排视角按钮上去——**不是压住，是拦住点击**
+     （playwright 报 `intercepts pointer events`，头一版就这么坏的）。 */
+  margin: 3.4rem auto;
 }
 
-.seats-board [data-seat-position="toimen"] {
-  grid-area: toimen;
-}
-
-.seats-board [data-seat-position="kamicha"] {
-  grid-area: kamicha;
-}
-
-.seats-board [data-seat-position="shimocha"] {
-  grid-area: shimocha;
-}
-
-.seats-board [data-seat-position="self"] {
-  grid-area: self;
-}
-
-/* 牌桌中央：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间。
-   比纸面凹一层（--paper-shade）：它是桌心，不是又一张卡片。
-
-   **各项横着排、放不下才换行**（票 82）：新几何下它在中间那一列里，宽度是一整手牌
-   （约 500px）而不再是三分之一。竖着排的话桌心会把上下两家推开两百多像素，
-   而那正是票 83 交下来的那一屏要省的。 */
-.table-center {
-  grid-area: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.2rem;
-  align-items: baseline;
-  justify-content: center;
-  border: 1px solid var(--line-strong);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.8rem;
+/* 副露图例（票 117）：摆在牌桌外沿，不占桌心。 */
+.naki-legend {
+  /* 静态说明文字，没人点它。自家名牌（带气泡）从牌桌下沿探下来时，
+     不写这一条它会**拦住气泡的点击**——playwright 报 `intercepts pointer events`。 */
+  pointer-events: none;
+  max-width: calc(var(--board) + var(--plate) * 2);
+  margin: 0 auto;
+  font-size: 0.8rem;
+  opacity: 0.75;
   text-align: center;
-  background: var(--paper-shade);
 }
 
-/* 方位的参照系（M1 第六条：相对方位必须显式声明参照系）。小字、淡色：它是脚注不是场况。
-   两句话各占满一行（票 82 把桌心改成横排之后）：它们是说明，不该与场况拼在同一行里。 */
-.table-anchor {
-  flex: 1 1 100%;
-  margin: 0;
-  font-size: 0.75rem;
-  opacity: 0.72;
+.zones {
+  position: absolute;
+  inset: 0;
 }
 
-/* 一家的三排牌**从外往内**摆：副露在最外、手牌居中、河贴着桌心。
-   上下两家靠翻转纵向顺序（自家那块整个 `column-reverse`），
-   左右两家靠**横向**顺序（票 82：它们的三排是三列）。 */
+/* 四席同一份 DOM，**只差一个角度**。下家在右、上家在左：
+   一层的内容靠底，顺时针转 90° 把底边送到左侧，∴ 上家 = 90°、下家 = 270°。 */
+.zone {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  /* 四层都铺满牌桌、层层相叠，**不写这一条时 DOM 里最后那层挡住所有点击**
+     （真人要点自家手牌，却被上家那一层拦住——playwright 报 `intercepts pointer events`）。
+     层本身不接事件，牌自己接。 */
+  pointer-events: none;
+}
+
+.zone[data-seat-position="self"] {
+  transform: rotate(0deg);
+}
+
+.zone[data-seat-position="kamicha"] {
+  transform: rotate(90deg);
+}
+
+.zone[data-seat-position="toimen"] {
+  transform: rotate(180deg);
+}
+
+.zone[data-seat-position="shimocha"] {
+  transform: rotate(270deg);
+}
+
+.plates {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .seat {
+  position: absolute;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  width: var(--plate);
   border: 1px solid var(--line);
   border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.5rem;
   background: var(--paper-raised);
-}
-
-.seat[data-seat-position="self"] {
-  flex-direction: column-reverse;
+  /* **卡片整体不接事件，只有气泡那枚按钮接**。卡片里除了气泡全是静态文字，
+     而它探出牌桌之后会盖住上下那两排按钮——不是压住，是**拦住点击**
+     （playwright 报 `intercepts pointer events`）。
+     靠留白躲开是躲不干净的：名牌里可能是 `deepseek/deepseek-v4-flash` 这样的长名，
+     换不换行、几行高都随内容变，留白得先猜它有多高（前两版分别猜错过一次）。 */
+  pointer-events: none;
 }
 
 .seat-head {
@@ -378,6 +396,57 @@ input[type="range"] {
 
 .seat-name {
   font-weight: 600;
+}
+
+/* 上下两家：**头部与气泡并排**，不上下叠。
+   真正把名牌撑高的是气泡（一句话上限 72 字，窄了就折四五行）——
+   而上下两家横向有整条牌桌那么宽，叠着摆是白费那条宽度。
+   矮一截直接换成一屏预算：上下各留 5rem 就够，从前要 6.5 + 12rem。 */
+.plates .seat[data-seat-position="self"],
+.plates .seat[data-seat-position="toimen"] {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: max-content;
+  /* **横向铺开到页面能给的宽度**，不是牌桌那么宽：气泡里一句话上限 72 字，
+     窄了折三四行、名牌就高出下方留白、探到页脚上去（页脚里那枚 MIT 链接会拦住点击）。
+     铺到 60rem 时那一句一行放得下，名牌只有一行高——**横向本来就有大把空地**
+     （页面 1280、牌桌 480，两侧各 400）。 */
+  max-width: min(60rem, 96vw);
+}
+
+.plates .seat[data-seat-position="self"] > .seat-head,
+.plates .seat[data-seat-position="toimen"] > .seat-head {
+  margin-bottom: 0;
+  flex: none;
+}
+
+.plates .seat[data-seat-position="self"] {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0.5rem;
+}
+
+.plates .seat[data-seat-position="toimen"] {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.5rem;
+}
+
+.plates .seat[data-seat-position="kamicha"] {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 0.5rem;
+}
+
+.plates .seat[data-seat-position="shimocha"] {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0.5rem;
 }
 
 /* 这一家相对观测者是第几家。**坐着看才写**：上帝视角没有观测者，那时参照系写在中央。 */
@@ -427,11 +496,77 @@ input[type="range"] {
   justify-content: start;
 }
 
-/* 上下两家的三排居中摆（真牌桌上手牌就在自己正前方）。 */
-.seat[data-seat-position="self"] .tiles,
-.seat[data-seat-position="toimen"] .tiles {
-  justify-content: center;
+/* 一层里的三排（均按「坐在下方那一家」摆）。
+   手牌靠左、副露靠右、**同一排**：真牌桌就是这么摆的，而且两者永远摆得下——
+   鸣一组手牌就短三张（1 组：10+1 组、满 4 组：1+4 组）。 */
+.zone .tiles {
+  position: absolute;
+  bottom: 0.3rem;
 }
+
+.zone .tiles.hand {
+  left: 0.4rem;
+}
+
+.zone .tiles.naki-row {
+  right: 0.4rem;
+}
+
+/* 河：每行 6 张、居中、**从桌心那一侧往外长**。
+   `top` 而不是 `bottom`：打得越多它该往**自家这侧**长，而不是把头一行顶进桌心。 */
+.zone .tiles.kawa {
+  /* 0.70 不是拍的：河带占 T..T+3行，四家的带围出的内洞 = (board−T) .. T，
+     宽 2T−board。T=0.635 时洞只有 178px，而桌心 275px —— 必然压上（头一版就这么坏的）。
+     T=0.70 → 洞 264px，桌心取 0.34×board=223px，留 20px 余量。 */
+  top: calc(var(--board) * 0.7);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: auto;
+}
+
+/* 牌桌中央：场况、供托与立直棒、剩余摸牌、宝牌指示牌——真牌桌上它们就摆在中间。
+   比纸面凹一层（--paper-shade）：它是桌心，不是又一张卡片。
+
+   **各项横着排、放不下才换行**（票 82）：新几何下它在中间那一列里，宽度是一整手牌
+   （约 500px）而不再是三分之一。竖着排的话桌心会把上下两家推开两百多像素，
+   而那正是票 83 交下来的那一屏要省的。 */
+.table-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(var(--board) * 0.34);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  align-items: baseline;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+  background: var(--paper-shade);
+}
+
+/* 方位的参照系（M1 第六条：相对方位必须显式声明参照系）。小字、淡色：它是脚注不是场况。
+   两句话各占满一行（票 82 把桌心改成横排之后）：它们是说明，不该与场况拼在同一行里。 */
+.table-anchor {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.72;
+}
+
+/* 一家的三排牌**从外往内**摆：副露在最外、手牌居中、河贴着桌心。
+   上下两家靠翻转纵向顺序（自家那块整个 `column-reverse`），
+   左右两家靠**横向**顺序（票 82：它们的三排是三列）。 */
+/* 名牌卡片（票 117）：名字、点数、巡目、记号、气泡。**这一层不转**。
+   四张卡片摆在牌桌四边，位置仍只由 `data-seat-position` 定（与牌那一层同源）。
+   保留 `.seat` 这个类名是硬约束：`verify-bubbles` 靠 `bubble.closest(".seat")`
+   数「气泡在不在它那一席的框里」。 */
+/* 名牌层与牌桌同框；四张卡片各自**贴着牌桌那一条边线**往外摆
+   （`top: 100%` 之类），因此**卡片多高都压不进牌桌**——
+   用固定 inset 时得先猜卡片有多高，猜小了就压牌（头两版分别压了 5 枚、2 枚）。 */
 
 /* —— 牌（票 80：牌看起来是牌）——
    一张牌 = 象牙白圆角牌框（这里画）+ CC0 SVG 牌面（`web/src/tiles/`，按 `data-pai` 逐张贴）。
@@ -458,6 +593,12 @@ input[type="range"] {
   font-size: 0.8rem;
   line-height: 1.3;
   color: transparent;
+}
+
+/* 席区那一层不接事件（见上），牌自己接。**摆在基础 `.tile` 之后**：
+   摆前面的话它比 `.tile` 特异性低，biome 的 noDescendingSpecificity 会拦。 */
+.zone .tile {
+  pointer-events: auto;
 }
 
 /* 牌面：mjai 记法（`Tile.toMjai`）→ FluffyStuff 的 `Regular/` 那一套。
@@ -958,6 +1099,15 @@ input[type="range"] {
   opacity: 1;
 }
 
+/* 牌桌上沿那两行状态字（「上一手：…」/「四家都是…」）：**行间收紧**（票 117）。
+   它们各自带着 16px 的上下边距，两行加起来 112 px——正是一屏预算差的那一截里最大的一块。
+   字号一个没动，只把行间从 16px 收到 5px。 */
+[data-testid="table-board"] > .latest,
+[data-testid="table-board"] > .agent {
+  margin-top: 0.3rem;
+  margin-bottom: 0.3rem;
+}
+
 /* 真人那一排响应动作（票 88）：吃 / 碰 / 杠 / 立直 / 和了 / 九种九牌，以及「过」。
    **紧贴牌桌下沿**（`.controls` 那条 1.5rem 上边距收掉一半）：自家手牌就在牌桌最下一排，
    鸣不鸣与打哪张是同一件事，视线不该在一屏之内来回甩。
@@ -1010,24 +1160,14 @@ input[type="range"] {
    这一档里**左右两家不竖排**（票 82）：四家拍成一列之后根本没有「左右」可言，
    一列 14 张只会把一屏拉成三屏。竖排那一整块写在 `@media (min-width: 40rem)` 里，
    因此这里一条都不必反写（分界线错开 0.01rem：两边都生效的话后写的那一段会赢）。 */
-@media (max-width: 39.99rem) {
-  .seats-board {
-    grid-template-areas:
-      "toimen"
-      "kamicha"
-      "center"
-      "shimocha"
-      "self";
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* 票 44 那两块 media query 在票 117 之后**整块作废，已删**（共 174 行）。
+   它们选的是 `.seat` 里的 `.naki-row` / `.hand` / `.kawa` / `.tile`——
+   而四席绕盘心之后**牌全搬进了 `.zone`，`.seat` 只剩名牌与气泡**，一条也选不中了。
+   其中 `max-width: calc(var(--tile-h) * 5)` 那条真约束由 `.seat { width: var(--plate) }` 接手。
 
-  .seat[data-seat-position="kamicha"] .kawa,
-  .seat[data-seat-position="kamicha"] .naki-row,
-  .seat[data-seat-position="shimocha"] .kawa,
-  .seat[data-seat-position="shimocha"] .naki-row {
-    align-self: flex-start;
-  }
-}
+   顺带认下票 119 的一半：`@media (max-width: 39.99rem)`（票 44 的窄屏竖排）
+   **本来就从没被渲染过一次**——仓库里最窄的闸门视口是 1180 px。
+   它与 README「也没有为手机屏幕适配」互相矛盾，删掉之后那句话离字面真话更近一步。 */
 
 /* —— 一条分界线（票 83）：「配这一桌」在上，「操作这一桌」贴着牌桌 ——
 
@@ -1188,6 +1328,12 @@ input[type="range"] {
   cursor: pointer;
 }
 
+/* 名牌卡片整体不接事件（见上），只有气泡这枚按钮接。
+   **摆在基础 `.bubble` 之后**：摆前面比它特异性低，biome 会拦。 */
+.seat .bubble {
+  pointer-events: auto;
+}
+
 /* 上下两家的三排牌是居中摆的（`.tiles`），气泡跟着居中才在同一条中轴上。 */
 .seat[data-seat-position="self"] .bubble,
 .seat[data-seat-position="toimen"] .bubble {
@@ -1287,162 +1433,6 @@ input[type="range"] {
    **这一整块摆在文件末尾**是有意的：它逐条覆盖上面那些基础规则（`.tile` / `.tiles` /
    `.row-label` / `.naki` / `.bubble`），写在它们前面的话样式表读起来是倒着的
    （Biome 的 `noDescendingSpecificity` 也会当场喊）。 */
-@media (min-width: 40rem) {
-  /* 三排变三列，从外往内：副露在身侧最外、手牌在面前、河推到桌心。
-     名牌占满上面一行、气泡占满下面一行（气泡仍旧与三列牌各占各的行，压不到牌上）。 */
-  .seat[data-seat-position="kamicha"],
-  .seat[data-seat-position="shimocha"] {
-    display: grid;
-    grid-template-areas:
-      "head head head"
-      "naki hand kawa"
-      "bubble bubble bubble";
-    grid-template-columns: auto auto auto;
-    /* 一整列的高度都是这一家的，牌摆在中间：真牌桌上人就坐在这一侧的正中。 */
-    align-content: center;
-    justify-content: center;
-  }
-
-  .seat[data-seat-position="shimocha"] {
-    grid-template-areas:
-      "head head head"
-      "kawa hand naki"
-      "bubble bubble bubble";
-  }
-
-  .seat[data-seat-position="kamicha"] > .seat-head,
-  .seat[data-seat-position="shimocha"] > .seat-head {
-    grid-area: head;
-  }
-
-  .seat[data-seat-position="kamicha"] > .naki-row,
-  .seat[data-seat-position="shimocha"] > .naki-row {
-    grid-area: naki;
-  }
-
-  .seat[data-seat-position="kamicha"] > .hand,
-  .seat[data-seat-position="shimocha"] > .hand {
-    grid-area: hand;
-  }
-
-  .seat[data-seat-position="kamicha"] > .kawa,
-  .seat[data-seat-position="shimocha"] > .kawa {
-    grid-area: kawa;
-  }
-
-  .seat[data-seat-position="kamicha"] > .bubble,
-  .seat[data-seat-position="shimocha"] > .bubble {
-    grid-area: bubble;
-  }
-
-  /* **牌才决定这一侧有多宽**：名牌那一行与气泡是折得断的文字，把它们按
-     「大约五张牌宽」折行；不管的话一句长理由就把上家那一列撑开，把中间挤成一条线。 */
-  .seat[data-seat-position="kamicha"] > .seat-head,
-  .seat[data-seat-position="shimocha"] > .seat-head,
-  .seat[data-seat-position="kamicha"] > .bubble,
-  .seat[data-seat-position="shimocha"] > .bubble {
-    max-width: calc(var(--tile-h) * 5);
-  }
-
-  /* 一排牌变成一列牌。**不换列**（`nowrap`）：一手 14 张折成两列就又读不出是一手牌了
-     ——这正是这一票要治的那条毛病（闸门读的是真坐标：一列牌的 x 必须同一个）。 */
-  .seat[data-seat-position="kamicha"] .tiles,
-  .seat[data-seat-position="shimocha"] .tiles {
-    flex-direction: column;
-    flex-wrap: nowrap;
-    align-items: center;
-    justify-content: start;
-    min-width: var(--tile-h);
-    min-height: 0;
-  }
-
-  /* 牌转 90°，布局盒子用 margin 补回来（见上面那段的算式）。 */
-  .seat[data-seat-position="kamicha"] .tile {
-    transform: rotate(90deg);
-    margin: -0.3rem 0.3rem;
-  }
-
-  .seat[data-seat-position="shimocha"] .tile {
-    transform: rotate(-90deg);
-    margin: -0.3rem 0.3rem;
-  }
-
-  /* 被鸣的那张仍旧与邻牌差 90°（票 38 占的那一维）：邻牌侧着，它就正着。
-     不用 180°（那会把牌面倒过来）：小到 28px 的牌面倒着时人读不出来。 */
-  .seat[data-seat-position="kamicha"] .tile.taken,
-  .seat[data-seat-position="shimocha"] .tile.taken {
-    transform: none;
-    margin: 0;
-  }
-
-  /* 刚摸那张的额外间距转成纵向（0.3rem − (−0.3rem) = 0.6rem，与上下两家同一个数）。 */
-  .seat[data-seat-position="kamicha"] .tile.drawn,
-  .seat[data-seat-position="shimocha"] .tile.drawn {
-    margin-top: 0.3rem;
-    margin-left: 0.3rem;
-  }
-
-  /* 河：每列 6 张（上下两家是每行 6 张，同一个数），列**朝桌心长**：
-     上家从左往右、下家从右往左（`direction: rtl` 只管列往哪边长）。 */
-  .seat[data-seat-position="kamicha"] .tiles.kawa,
-  .seat[data-seat-position="shimocha"] .tiles.kawa {
-    display: grid;
-    grid-template-columns: none;
-    grid-template-rows: auto repeat(6, auto);
-    grid-auto-flow: column;
-    align-content: start;
-  }
-
-  .seat[data-seat-position="shimocha"] .tiles.kawa {
-    direction: rtl;
-  }
-
-  /* 标题同样摆在方阵旁边，只是方阵竖了：它占头一行、横向占满。 */
-  .seat[data-seat-position="kamicha"] .tiles.kawa .row-label,
-  .seat[data-seat-position="shimocha"] .tiles.kawa .row-label {
-    grid-row: 1;
-    grid-column: 1 / -1;
-    align-self: start;
-  }
-
-  /* 三列的标题跟着牌竖起来：横着写的话一个「手牌 13」就比一列牌还宽。
-     `direction: ltr` 把下家那一侧的文字方向拨回来（rtl 只是拿来控制列往哪边长的）。 */
-  .seat[data-seat-position="kamicha"] .row-label,
-  .seat[data-seat-position="shimocha"] .row-label {
-    writing-mode: vertical-rl;
-    direction: ltr;
-    min-width: 0;
-  }
-
-  /* 一组副露也是一条纵向的小队；一家几组副露在身侧从上往下排。 */
-  .seat[data-seat-position="kamicha"] .naki,
-  .seat[data-seat-position="shimocha"] .naki {
-    flex-direction: column;
-    min-width: calc(var(--tile-h) + 0.3rem);
-    min-height: 0;
-    margin-right: 0;
-    margin-bottom: 0.4rem;
-  }
-
-  /* 加杠加上去的那张叠在当初碰来那张的**外侧**（按副露方自己的上下算）：
-     上家的外侧在右、下家的在左。DOM 里先写的仍是当初碰来那张（位置编码读的就是它）。 */
-  .seat[data-seat-position="kamicha"] .naki-slot {
-    flex-direction: row;
-  }
-
-  .seat[data-seat-position="shimocha"] .naki-slot {
-    flex-direction: row-reverse;
-  }
-
-  /* 左右两家那两列只有约 188 px，`deepseek/deepseek-v4-flash` 会在**字中间**断成
-     「deepseek/deepseek-v4-」+「flash」——难看得像坏了（票 82 自查时报的）。
-     字号小一档就一行放得下；`data-player` 与 textContent 一字不动，闸门读的是它们。
-     再长的名字仍会折行，但那是名字本身的问题，不是这一格的。 */
-  .seat[data-seat-position="kamicha"] .seat-player,
-  .seat[data-seat-position="shimocha"] .seat-player {
-    font-size: 0.82em;
-  }
-}
 
 /* —— 复盘：逐手对照标注（票 90）——
    一条标注三行：第几手（一枚按钮，点了牌桌就摆出那一刻）、引擎当时算的那几个数、
@@ -1535,5 +1525,18 @@ input[type="range"] {
 /* 那一枚开关与「回到原处」同在抬头那一排（`.bubble-head button` 已经给了内边距）：
    它不隐不藏——默认拨在「只看值得看的那几手」上，人得一眼看得到怎么拨回全部。 */
 .review-filter-toggle {
+  white-space: nowrap;
+}
+
+/* 三排的标题（`副露` / `手牌 13` / `河 11`）：**留在 DOM 里、从画面上撤下**（票 117）。
+   四席绕盘心转之后它们跟着转 90°/180°/270°，成了四圈倒着的小字——纯噪声。
+   **不许删**：闸门读它们（`.row-label` 配 `/河 (\d+)/`），删了就是放宽断言。
+   用 clip 而不是 `display: none`：textContent 照旧读得到，读屏也照旧念得出。 */
+.zone .row-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }

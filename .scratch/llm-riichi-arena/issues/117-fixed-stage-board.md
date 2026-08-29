@@ -22,7 +22,7 @@
 > ∴ **这一票只做牌桌几何**（仍在文档流里）；固定舞台、删两个 media query、
 > 无文档滚动那几条移到 **票 119**。
 
-**Status:** ready-for-human
+**Status:** done（报告：`run/reports/117-rotated-board.md`）
 
 ## 先读这段：原型量出来的数
 
