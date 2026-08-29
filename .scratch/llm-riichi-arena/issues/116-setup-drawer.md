@@ -11,7 +11,7 @@
 
 **Blocked by:** None
 
-**Status:** ready-for-human
+**Status:** done（报告：`run/reports/116-setup-drawer.md`）
 
 ## 先读这段：为什么票 83 没做，以及那时挡在哪
 

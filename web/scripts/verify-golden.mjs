@@ -14,6 +14,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
@@ -39,6 +40,7 @@ async function runInBrowser(lane, casesText) {
     });
 
     await page.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(page);
 
     const payload = await retryOnReload(() =>
       page.evaluate(async (text) => {

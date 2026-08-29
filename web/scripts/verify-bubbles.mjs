@@ -40,6 +40,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 /** 四个座位。 */
 const Seats = [0, 1, 2, 3];
@@ -291,6 +292,7 @@ async function fourSeatsLane(lane, pageOrigin, options) {
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
 
     // 换成探针挑好的种子（第一局第 2 手就有一轮多席同问），重开一桌。
+    await openSetup(page);
     await page.getByTestId("table-seed").fill(String(CONCURRENT_SEED));
     await page.getByTestId("table-restart").click();
     // 上帝视角（票 81）：这一程量的是四席各自的气泡，而 `?table=1` 默认坐在座位 0 上。
@@ -628,6 +630,7 @@ async function fourSeatsLane(lane, pageOrigin, options) {
       beforeTurns[seat] = Number.parseInt((await bubbleAt(page, seat))?.turn ?? "-1", 10);
     }
     // 换端点：票 73 之后端点住在**档案**里，得先把座位 0 那份档案摊开再改它的 base_url。
+    await openSetup(page);
     await page.getByTestId("table-profile-0").click();
     await page.getByTestId("table-profile-base-url").fill(bad.baseUrl);
     await playPause(page, "播放");
@@ -736,6 +739,7 @@ async function wallClockLane(lane, pageOrigin, options) {
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
 
     // 换成探针挑好的种子（第一局第 2 手就有一轮多席响应），重开一桌。
+    await openSetup(page);
     await page.getByTestId("table-seed").fill(String(CONCURRENT_SEED));
     await page.getByTestId("table-restart").click();
     // 上帝视角（票 81）：并发量的是「同时有几席在想」，坐座视角下最多只看得见一席；

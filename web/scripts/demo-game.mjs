@@ -28,7 +28,7 @@ import { dirname, resolve } from "node:path";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 /** 两份档案在库里的叫法。**只活在本机 localStorage**，牌谱里出现它们就是泄漏。 */
 const THINKER_PROFILE = "思考档";
@@ -109,6 +109,7 @@ export async function playDemoGame(lane, options) {
     });
 
     await page.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(page);
     await page.getByTestId("table-seed").fill(String(seed));
     await page.getByTestId("table-restart").click();
 

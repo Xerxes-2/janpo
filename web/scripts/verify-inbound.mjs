@@ -27,7 +27,7 @@
 import { readFileSync } from "node:fs";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 /** 拌进「带决策记录」那份牌谱的 thinking：一段只可能出现在审计数据里的字串。 */
 const THINKING = "先数向听：这手牌 2 向听，切 9 万最不亏——INBOUND-THINKING-MARK";
@@ -175,6 +175,7 @@ export async function verifyInbound(lane) {
     const host = await context.newPage();
     watch(host);
     await host.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(host);
 
     const { walked, kyokus, stuckAt } = await stepTurns(host, {
       limit: 30,

@@ -23,7 +23,7 @@
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepOnce } from "./table-drive.mjs";
+import { openSetup, stepOnce } from "./table-drive.mjs";
 
 /** 这一局走哪颗种子。挑它的过程见报告 44：`有主见` 档下它第 35 手就把八项全摆出来了。 */
 const SEED = 9;
@@ -609,6 +609,7 @@ function outcome(group) {
 async function checkNakiPositions(page, problems) {
   // 语料是**均匀随机**那一档（上面八项那一段把它切成了「有主见」）。
   // 票 73 之后四席各拨各的，因此这里逐席拨回去。
+  await openSetup(page);
   for (const index of [0, 1, 2, 3]) await page.getByTestId(`table-seat-${index}-random`).click();
   const said = [];
   // 防空转（票 82）：位置断言按方位取轴（左右两家竖着摆），因此**四个方位都得真核过**。
@@ -616,6 +617,7 @@ async function checkNakiPositions(page, problems) {
   const seenPositions = new Set();
 
   for (const corpus of NAKI_CORPUS) {
+    await openSetup(page);
     await page.getByTestId("table-seed").fill(String(corpus.seed));
     await page.getByTestId("table-restart").click();
 
@@ -725,6 +727,7 @@ export async function verifyBoard(lane) {
     });
 
     await page.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(page);
     await page.getByTestId("table-board").waitFor();
 
     // **先坐到座位 0**（票 82）：这一页的默认视角从此是上帝视角（票 81 交办的那一件），
@@ -735,6 +738,7 @@ export async function verifyBoard(lane) {
 
     // 四家都换成「有主见」那一档（票 42）：均匀随机几乎不立直（1996 场里 15 次），
     // 而立直、供托与立直棒这三项要立直才走得到。票 73 之后四席各拨各的，因此拨四次。
+    await openSetup(page);
     for (const index of [0, 1, 2, 3])
       await page.getByTestId(`table-seat-${index}-opinionated`).click();
     await page.getByTestId("table-seed").fill(String(SEED));

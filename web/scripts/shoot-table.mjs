@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
 import { hostPage, pageUrl, startDevServer } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -104,6 +105,7 @@ async function shape(page) {
 
 async function open(page, withSeed) {
   await page.goto(hostPage(pageUrl(server)), { waitUntil: "load" });
+  await openSetup(page);
   await page.getByTestId("table-seed").fill(String(withSeed));
   await page.getByTestId("table-restart").click();
 }

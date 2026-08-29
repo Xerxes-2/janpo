@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -114,6 +115,7 @@ export async function verifyRedaction(lane, options = {}) {
     console.log(`页面 ${pageOrigin}　端点 ${baseUrl}（会原样回显 key 的 401）　模型坐席 ${seat}`);
     console.log(`交给端点的那把假 key：${FAKE_KEY}`);
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
 

@@ -1029,6 +1029,43 @@ input[type="range"] {
   margin: 0 0 0.75rem;
 }
 
+/* 配桌默认收起（票 116）：收起前它占着第一屏 528 px 里的全部，
+   而 `?table=1` 打开那一刻牌桌顶边在 810 px、视口 800 ⇒ 一像素牌桌都看不见。
+   摘要行按票 83 给 `.panel-note > summary` 立的那副写法，但**不压小、不减淡**：
+   那一段是查阅用的，这一行是开局前要读的。 */
+.setup > summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+}
+
+/* 展开记号。**给 summary 设 display 会把浏览器默认那枚三角去掉**，
+   于是那一行看着完全不像可点的——第一版就这么坏的（截图上一眼看出来）。
+   因此自己画一枚，并让它随开合翻向：闸门读的就是这两个字符不同。 */
+.setup > summary .label::after {
+  content: " ▸";
+  color: var(--ink-soft);
+}
+
+.setup[open] > summary .label::after {
+  content: " ▾";
+}
+
+/* 摘要行摆的是**拨到的那一份**的值。拨好了还没按「重开」时染朱，
+   与那一排末尾 `table-rules` 那一格同一个判据：摘要上这几个值此刻并不是这一桌真在按的。 */
+.setup > summary .setup-digest {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.setup > summary .setup-digest[data-rules-pending="true"] {
+  color: var(--vermilion);
+  opacity: 1;
+}
+
 /* 规则三项 + 种子 + 重开在同一排（四样拨完都要按那枚「重开」）：窗口窄就换行，
    不把那句「什么时候生效」挤出去。 */
 .rules-row {

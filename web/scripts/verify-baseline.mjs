@@ -37,7 +37,7 @@ import { ASSET, assetPresent } from "./baseline-asset.mjs";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -454,6 +454,7 @@ async function credited(lane, url, missing) {
 
   try {
     // a. 拨上之前。
+    await openSetup(page);
     await page.getByTestId("table-seating").waitFor();
     if ((await page.getByTestId("table-baseline-credit").count()) !== 0) {
       missing.push("四家均匀随机的那一桌就摆着强 AI 基线那一句说明：它该是拨上去才出现的");

@@ -42,7 +42,7 @@ import {
   profileChoice,
 } from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 /**
  * CI 那一档灌进 localStorage 的那把 key（票 34）。**它是假的，且看一眼就知道是假的**——
@@ -137,12 +137,14 @@ export async function verifyExport(lane, options = {}) {
     }
 
     await page.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(page);
 
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
 
     // 换种子就是页面上那两下：填输入框 + 「重开」。种子 447 那一场终局时场上还剩着供托，
     // 也就是「局末点数」与「精算后点数」真的不同的那种场（票 39 的现场）。
     if (seed !== null) {
+      await openSetup(page);
       await page.getByTestId("table-seed").fill(String(seed));
       await page.getByTestId("table-restart").click();
       console.log(`种子换成 ${seed} 重开了一桌`);

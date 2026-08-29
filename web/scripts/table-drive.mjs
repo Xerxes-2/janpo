@@ -108,3 +108,26 @@ export async function stepOnce(page, { budgetMs = 30000 } = {}) {
   if (stuckAt !== null) throw new Error(`点了「单步」之后 ${budgetMs}ms 里牌桌没走动`);
   return walked === 1 && !closed;
 }
+
+/**
+ * 把「配桌」那一枚折叠摊开（票 116）。
+ *
+ * 配桌**默认收起**：收起前它占着 `?table=1` 第一屏 810 px 里的 528 px，
+ * 牌桌一像素都看不见。代价是闸门要点里面的控件时，那些控件在
+ * `display: none` 的容器里——playwright 会直接 `element is not visible` 超时
+ * （票 83 的探针自己撞过这一幕）。
+ *
+ * **这不是放宽断言**：断言一个字未动，只是在点之前多走一步展开。
+ * 走的是**真点击**（不是直接写 `el.open = true`）——那一步本来就是人要走的那一步。
+ *
+ * 幂等：已经开着就什么也不做。点了却没开就当场抛，
+ * 免得下游断言红在一个跟它无关的地方。
+ */
+export async function openSetup(page) {
+  const setup = page.getByTestId("table-setup");
+  await setup.waitFor({ state: "attached" });
+  if (await setup.evaluate((el) => el.open)) return;
+  await page.getByTestId("table-setup-summary").click();
+  if (!(await setup.evaluate((el) => el.open)))
+    throw new Error("配桌那一枚折叠点不开：点了摘要行之后 details.open 仍是 false");
+}

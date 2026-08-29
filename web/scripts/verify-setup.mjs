@@ -24,7 +24,7 @@
 import { readFileSync } from "node:fs";
 import { failure, isEntry, markerSince, runStandalone } from "./browser-lane.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 /** 一整场最多走几手（东风战约 250 手、半庄约 500，留足连庄的余量）。 */
 const TURN_LIMIT = 4000;
@@ -92,6 +92,97 @@ async function exportPaifu(page) {
 }
 
 /** 配桌那三项开关那一道。返回的是失败清单（空 = 绿）。 */
+/**
+ * 配桌那一枚折叠（票 116）。四条，各守一件：
+ *
+ *   ① **默认收着**——收起前它占着第一屏 810 px 里的 528 px，牌桌一像素看不见。
+ *   ② **点得开且点得收**——两个方向都真点一次（只验开的话，
+ *      一个收不回去的抽屉照样全绿）。
+ *   ③ **摘要行写的是那四项的值**——不是「配桌」两个字。只画一枚点
+ *      会让人看得出「有东西」却看不出「是什么」（同票 83 §2.1 那条判据）。
+ *   ④ **收着时里面那些真的没渲染**——拿 `checkVisibility()` 量。
+ *      **不能拿矩形是否为零代替**：Chrome 新版 `<details>` 收起用的是
+ *      `content-visibility: hidden` 而不是 `display: none`，子元素**点不到、却仍有布局**
+ *      （实测收起时四席那几行照旧 h=37、top 不变）。
+ */
+async function drawerProblems(page) {
+  const problems = [];
+  const setup = page.getByTestId("table-setup");
+  await setup.waitFor({ state: "attached" });
+
+  // **数的是摘要行以外那些**：摘要行自己在收着时本就该看得见，
+  // 把它也数进去的话「收着 = 0 个渲染」永远不成立（头一版就这么误报的）。
+  const state = async () =>
+    await setup.evaluate((el) => {
+      const inner = [...el.querySelectorAll("[data-testid]")].filter(
+        (e) => e.closest("summary") === null,
+      );
+      return {
+        open: el.open,
+        inside: inner.length,
+        shown: inner.filter((e) => e.checkVisibility()).length,
+      };
+    });
+
+  const shut = await state();
+  if (shut.inside === 0)
+    problems.push("配桌里一个带 testId 的元素都没扇到：这一条自己坏了，不是页面好了");
+  if (shut.open) problems.push("配桌一进页面就摊开着：它开局前用一次，不该占着整个第一屏");
+  if (shut.shown !== 0)
+    problems.push(`配桌收着，里面却还有 ${shut.shown} / ${shut.inside} 个元素渲染着`);
+
+  // 摘要行上那串值：四项逐项与页面在按的那份对得上。
+  const digest = (await page.getByTestId("table-setup-digest").textContent()).trim();
+  const wire = await page.getByTestId("table-rules").getAttribute("data-rules");
+  const [length, aka, kuitan] = (wire ?? "//").split("/");
+  const want = [
+    length === "tonpuusen" ? "东风战" : "半庄战",
+    `赤宝牌${aka === "on" ? "有" : "无"}`,
+    `食断${kuitan === "on" ? "有" : "无"}`,
+  ];
+  for (const piece of want)
+    if (!digest.includes(piece)) problems.push(`摘要行上没写「${piece}」（它写的是「${digest}」）`);
+  if (!/种子\s*\S+/.test(digest)) problems.push(`摘要行上没写种子（它写的是「${digest}」）`);
+
+  // 展开记号得看得出来，且开合两态不同。
+  // 给 summary 设 `display` 会把浏览器默认那枚三角去掉，于是那一行看着不像可点的
+  // （票 116 的头一版真这么坏过，是看截图看出来的，不是闸门报的）。
+  const marker = async () =>
+    await page
+      .getByTestId("table-setup-summary")
+      .evaluate((el) =>
+        getComputedStyle(el.querySelector(".label"), "::after").content.replace(/["']/g, "").trim(),
+      );
+  const shutMark = await marker();
+  if (shutMark === "" || shutMark === "none")
+    problems.push("摘要行上没有展开记号：那一行看着就不像可点的");
+
+  // 点得开。
+  await page.getByTestId("table-setup-summary").click();
+  const open = await state();
+  const openMark = await marker();
+  if (openMark === shutMark)
+    problems.push(`展开记号开合两态一模一样（都是「${shutMark}」）：看不出此刻是开着还是收着`);
+  if (!open.open) problems.push("点了摘要行，配桌没开");
+  if (open.shown === 0) problems.push("配桌开了，里面却一个元素也没渲染出来");
+
+  // 点得收。
+  await page.getByTestId("table-setup-summary").click();
+  const again = await state();
+  if (again.open) problems.push("再点一下摘要行，配桌收不回去");
+  if (again.shown !== 0) problems.push(`收回去了，里面却还有 ${again.shown} 个元素渲染着`);
+
+  // 印的得是**量到的**，不是期望的：头一版这里硬写着「默认收着」，
+  // 于是拿写死 `open` 的版本去试时它照旧印「默认收着」——一行会说谎的日志。
+  console.log(
+    `配桌折叠：一进页面 open=${shut.open}　扇到 ${shut.inside} 个 testId　` +
+      `渲染数 ${shut.shown} → 点一下 ${open.shown}（open=${open.open}）` +
+      ` → 再点一下 ${again.shown}（open=${again.open}）　` +
+      `记号「${shutMark}」→「${openMark}」　摘要行「${digest}」`,
+  );
+  return problems;
+}
+
 export async function verifySetup(lane) {
   const url = await lane.previewUrl();
   const context = await lane.newContext({ acceptDownloads: true });
@@ -105,6 +196,11 @@ export async function verifySetup(lane) {
     });
 
     await page.goto(hostPage(url), { waitUntil: "load" });
+
+    // ①’ 配桌那一枚折叠（票 116）。**必须在展开之前验**：默认收着是它的全部意义。
+    problems.push(...(await drawerProblems(page)));
+
+    await openSetup(page);
 
     // ① 默认那一桌：没拨过任何开关（这个 context 的 localStorage 是空的）。
     const fresh = await onPage(page);
@@ -139,6 +235,7 @@ export async function verifySetup(lane) {
     );
 
     // ③ 三项都拨到另一边，**先不按重开**：这一桌必须还按老规则算。
+    await openSetup(page);
     await page.getByTestId("table-length-hanchan").click();
     await page.getByTestId("table-akadora-off").click();
     await page.getByTestId("table-kuitan-off").click();
@@ -207,6 +304,7 @@ export async function verifySetup(lane) {
       ),
     );
     await page.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(page);
     const reopened = await onPage(page);
     if (reopened.rules !== "hanchan/off/off") {
       problems.push(`重新打开这一页，拨到的三项没了：印着「${reopened.rules}」`);

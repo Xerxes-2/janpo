@@ -56,6 +56,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, mark, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -209,6 +210,7 @@ export async function verifyStaleAsk(lane, options = {}) {
 
     console.log(`页面 ${pageOrigin}　答得慢的端点 ${baseUrl}（先睡 ${delayMs} ms 再答话）`);
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     // ---- 把那一手问出去，趁它在飞把那一席拨给自己 ----
     // **按下「播放」而不是「单步」**：这一趟要验的就是「牌桌还转不转得动」，

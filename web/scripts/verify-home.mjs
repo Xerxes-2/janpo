@@ -39,7 +39,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -85,6 +85,10 @@ const HOST_TEST_IDS = [
   "table-profiles",
   "table-seat-0-detail",
   "table-panel-note",
+  // 配桌收成默认收起之后新长出来的那两枚（票 116）：
+  // 摘要行本体与它上面那串值。首页没有配桌，这两枚也就不该在。
+  "table-setup-summary",
+  "table-setup-digest",
 ];
 
 /** 隔多久采第二次手数。1 秒够 2× 播三四手（`TableState.demoSpeed`），也不至于让 CI 变慢。 */
@@ -116,6 +120,21 @@ const ONE_SCREEN = { width: 1280, height: 800 };
  * 报告 82 §4 有整张表）——这一条钉的是**中盘那一屏**，不是终盘。
  */
 const ONE_SCREEN_TURNS = 32;
+
+/**
+ * **落地那一眼就看得见牌桌**（票 116）。在 `ONE_SCREEN` 里打开 `?table=1`、
+ * 一手都还没走、一下都还没滚时，牌桌顶边必须落在这个数以内。
+ *
+ * 票 116 之前是 **810 px**——视口 800，于是**一像素牌桌都看不见**，
+ * 而那 810 里 **528 px（65%）是配桌那一整块**。收成默认收起之后是 **307 px**。
+ * 420 px 取的是「第一屏的上半」：再往下就等于要人先滚一段才看得见牌。
+ *
+ * **它与下面那条「一屏」不是一回事**，两条各答一个问题：
+ * 那一条量的是「**走 32 手之后**，操作块顶边 → 牌桌底边」跨不跨得过一屏
+ * （答的是「按一下与看结果在同一屏」），从 `ops.top` 起算，
+ * **对人落地那一眼一个字也没说**——票 116 之前它绿着，而牌桌一像素也看不见。
+ */
+const BOARD_TOP_MAX_PX = 420;
 
 /**
  * 主持人那一页抬头那段说明的高度上限（票 82）。一行正文在这一页上是 27 px，
@@ -265,6 +284,37 @@ async function oneScreenProblems(lane, url) {
   try {
     await page.goto(`${url}/?table=1`, { waitUntil: "load" });
     await page.getByTestId("table-board").waitFor({ timeout: 15000 });
+
+    // 落地那一眼（票 116）：**走手之前、滚动之前**量，不能拿 `window.scrollY` 加回去——
+    // 要的就是视口坐标里那一眼。
+    const landing = await page.evaluate(() => {
+      const node = document.querySelector('[data-testid="table-board"]');
+      return node === null
+        ? null
+        : {
+            top: Math.round(node.getBoundingClientRect().top),
+            scrolled: Math.round(window.scrollY),
+          };
+    });
+    if (landing === null) {
+      said.push('?table=1 上没有牌桌（[data-testid="table-board"]）：落地那一眼无从量起');
+    } else {
+      if (landing.scrolled !== 0)
+        said.push(`?table=1 一打开就已经滚了 ${landing.scrolled} px：落地那一眼这一条量不准了`);
+      if (landing.top > BOARD_TOP_MAX_PX)
+        said.push(
+          `?table=1 打开那一刻牌桌顶边在 ${landing.top} px（上限 ${BOARD_TOP_MAX_PX} px），` +
+            `视口高 ${ONE_SCREEN.height} px：` +
+            (landing.top >= ONE_SCREEN.height
+              ? "一像素牌桌都看不见"
+              : `只露出 ${ONE_SCREEN.height - landing.top} px`) +
+            "——要人先滚一段才看得见牌（票 116）",
+        );
+      console.log(
+        `  落地那一眼：${ONE_SCREEN.width}×${ONE_SCREEN.height} 里牌桌顶边 ${landing.top} px` +
+          `（上限 ${BOARD_TOP_MAX_PX}），露出 ${Math.max(0, ONE_SCREEN.height - landing.top)} px`,
+      );
+    }
 
     const { walked } = await stepTurns(page, { limit: ONE_SCREEN_TURNS });
     if (walked < ONE_SCREEN_TURNS)
@@ -732,6 +782,7 @@ export async function verifyHome(lane) {
       missing.push("首页上没有一条去 `?table=1` 的路（访客摸不到 Host 那一侧）");
     } else {
       await link.click();
+      await openSetup(page);
       await page.getByTestId("table-llm-panel").waitFor({ timeout: 15000 });
 
       // **阳性对照**：上面那份名单里的每一个都得在主持人这一页上真的存在，

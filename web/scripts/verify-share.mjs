@@ -30,6 +30,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 /**
  * 拌进牌谱的那把 key（票 34 那把的同族）。**它是假的，且看一眼就知道是假的**——
@@ -201,6 +202,7 @@ export async function verifyShare(lane, options = {}) {
     });
 
     await page.goto(hostPage(url), { waitUntil: "load" });
+    await openSetup(page);
 
     const runs = [];
     for (const [label, lengthWire] of [

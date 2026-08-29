@@ -47,7 +47,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -321,6 +321,7 @@ async function bareLane(lane, pageOrigin, options) {
       ],
     });
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     console.log("");
     console.log(`第一程（阴性对照）：座位 ${ME} 是我自己、裸奔档，其余三家有主见 bot`);
@@ -445,6 +446,7 @@ async function assistedLane(lane, pageOrigin, options) {
       ],
     });
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
     // 危险度那一块拨开：它与辅助那几行读的是同一份脚手架，两处必须对得上。
     await page.getByTestId("table-danger").click();
 
@@ -571,6 +573,7 @@ async function clockLane(lane, pageOrigin, options) {
       seats: [{ choice: "human", tier: "bare" }, {}, {}, {}],
     });
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     console.log("");
     console.log("第三程（时限）：先不限时等 3 秒，再拨成 2 秒不动手");
@@ -774,6 +777,7 @@ async function toolSearchLane(lane, pageOrigin, options) {
       ],
     });
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     console.log("");
     console.log("第四程（票 94 那一档在面板上放开了）：座位 0 从裸奔拨到工具搜索，再打完一局");
@@ -797,6 +801,7 @@ async function toolSearchLane(lane, pageOrigin, options) {
       );
     }
 
+    await openSetup(page);
     await page.getByTestId("table-seat-0-tier").selectOption("tool_search");
     const picked = await page.inputValue('[data-testid="table-seat-0-tier"]');
     if (picked !== "tool_search") {

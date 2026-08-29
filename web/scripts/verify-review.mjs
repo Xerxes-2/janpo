@@ -95,6 +95,7 @@ import { ASSET, assetPresent, PUBLIC_ASSET } from "./baseline-asset.mjs";
 import { failure, isEntry, mark, markerSince, runStandalone, tick } from "./browser-lane.mjs";
 import { plantSeating } from "./seating.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 /** 真人坐这一席（东 1 局的亲：页面一打开就轮到他）。 */
 const ME = 0;
@@ -821,6 +822,7 @@ async function humanLeg(lane, { budgetMs, peek }) {
   try {
     await plantSeating(page, { profiles: [], seats: [{ choice: "human" }, {}, {}, {}] });
     await page.goto(hostPage(origin), { waitUntil: "domcontentloaded" });
+    await openSetup(page);
     await page.getByTestId("table-board").waitFor({ timeout: 15000 });
 
     // ① 对局中：先走几十步，再看整页上有没有复盘（**阴性对照**）。

@@ -33,7 +33,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, mark, runStandalone } from "./browser-lane.mjs";
 import { personaFor, plantSeating, preambleProblems, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -77,7 +77,7 @@ function startEndpoint(port, origin, args) {
  * **读的是真坐标**（`getBoundingClientRect`）：「一眼看得全」是个几何事实，DOM 里有这四行不算。
  */
 async function seatShape(page) {
-  return await page.evaluate(() => {
+  const shape = await page.evaluate(() => {
     const rows = [0, 1, 2, 3].map((index) => {
       const row = document.querySelector(`[data-testid="table-seat-${index}"]`);
       const mark = document.querySelector(`[data-testid="table-seat-${index}-detail"]`);
@@ -87,12 +87,32 @@ async function seatShape(page) {
         top: Math.round(rect.top),
         bottom: Math.round(rect.bottom),
         open: mark.closest("details").open,
+        // 真的渲染出来了吗。**不能拿矩形是否为零代替**：
+        // Chrome 新版 `<details>` 收起时用的是 `content-visibility: hidden`
+        // 而不是 `display: none`，子元素**点不到、却仍有布局**
+        // （实测收起时这四行照旧 h=37、top 不变）。
+        shown: row.checkVisibility(),
         custom: mark.getAttribute("data-seat-custom"),
         said: (mark.textContent ?? "").trim(),
       };
     });
     return { rows, viewport: window.innerHeight };
   });
+
+  // 票 116 把配桌收成了默认收起的 `<details>`，而四席在它里面。
+  // 收着时这四行**仍有布局**（Chrome 用 `content-visibility: hidden`，不是 `display: none`），
+  // 于是下面那条「四席同屏」会拿着**人看不见的那份布局**算出一个漂亮的数。
+  // 因此先拒掉没渲染的那一屏：**宁可红，不许空过**。
+  //
+  // 这一条写坏过一次：头一版量的是「矩形高度是不是 0」，
+  // 而 `content-visibility: hidden` 下高度照旧是 37——那条守卫永远不会触发。
+  const hidden = shape.rows.filter((row) => !row.shown);
+  if (hidden.length > 0)
+    throw new Error(
+      `座位那几行没渲染出来：${hidden.map((r) => `座位 ${r.seat}`).join("、")}` +
+        "——配桌大概还收着（票 116）。这一屏量不出密度，不许当成「都在同一屏里」。",
+    );
+  return shape;
 }
 
 /**
@@ -275,6 +295,7 @@ export async function verifySeats(lane, options = {}) {
 
     console.log(`页面 ${pageOrigin}　能答话的端点 ${goodUrl}　固定回 401 的端点 ${brokenUrl}`);
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     const readText = async (testId) => (await page.getByTestId(testId).textContent()).trim();
     const readAttr = async (testId, name) => await page.getByTestId(testId).getAttribute(name);
@@ -420,6 +441,7 @@ export async function verifySeats(lane, options = {}) {
     // ——那样量到的是「灌进去的那一份」，不是「页面自己存下来的那一份」（第一次跑就栽在这儿）。
     const reopened = await context.newPage();
     await reopened.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(reopened);
     await reopened.getByTestId("table-llm-panel").waitFor({ timeout: 15000 });
     const stored = await reopened.getByTestId("table-agent").getAttribute("data-seats");
     if (stored !== after) {
@@ -475,6 +497,7 @@ async function verifyMigration(lane) {
     }, legacyKey);
 
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
     await page.getByTestId("table-llm-panel").waitFor({ timeout: 15000 });
 
     console.log("");

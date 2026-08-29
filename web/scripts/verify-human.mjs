@@ -56,6 +56,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -625,6 +626,7 @@ async function tableLane(lane, pageOrigin, options) {
       `页面 ${pageOrigin}　座位 ${ME} 是我自己，座位 ${MODEL} ← ${model.baseUrl}，座位 2/3 是 bot`,
     );
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
 
     // ---- ① 视角按钮不在 DOM 里 ----
     const godCount = await page.getByTestId("table-view-god").count();
@@ -999,6 +1001,7 @@ async function closedLane(lane, pageOrigin, options) {
 
     // 种子写死：输入框 + 「重开」就是主持人自己开一桌的那条路（真人在座时曳光弹不给开，
     // 而那一块才是 `?dev=1` 的种子框——这里用的是配桌那一排上的）。
+    await openSetup(page);
     await page.getByTestId("table-seed").fill(String(CLOSED_SEED));
     await page.getByTestId("table-restart").click();
 

@@ -29,7 +29,7 @@ import { WHAT_IF_LIMIT } from "../src/agent/what-if.ts";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -133,6 +133,7 @@ export async function verifyToolSearch(lane, options = {}) {
     }
 
     await page.goto(hostPage(pageOrigin), { waitUntil: "load" });
+    await openSetup(page);
     await page.getByTestId("table-restart").click();
 
     const { walked, stuckAt } = await stepTurns(page, { limit: turns, budgetMs });

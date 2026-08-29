@@ -20,6 +20,7 @@ import { chromium } from "playwright-core";
 import { chromeExecutable, missingChrome } from "./chrome.mjs";
 import { PROFILE_NAME, personaFor, plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage, pageUrl, startPreview } from "./serve.mjs";
+import { openSetup } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -100,11 +101,13 @@ try {
   });
 
   await page.goto(hostPage(pageUrl(server)), { waitUntil: "load" });
+  await openSetup(page);
   // 上帝视角（票 81）：`?table=1` 默认坐在座位 0 上，而视角从此是一道信息闸门
   // ——模型坐别席（`--seats` 默认就是座位 1）时，不切的话下面读 `table-agent` 那几行量的是闸门。
   await page.getByTestId("table-view-god").click();
 
   if (seed !== null) {
+    await openSetup(page);
     await page.getByTestId("table-seed").fill(String(seed));
     await page.getByTestId("table-restart").click();
   }

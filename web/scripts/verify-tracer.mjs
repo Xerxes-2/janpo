@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone, tick } from "./browser-lane.mjs";
 import { checkNakiGroups, readNakiGroups } from "./naki-marks.mjs";
 import { hostPage } from "./serve.mjs";
-import { stepTurns } from "./table-drive.mjs";
+import { openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(webRoot, "..");
@@ -116,6 +116,7 @@ async function checkNaki(page, url) {
   // 断言一条没改：验的仍然是同一颗种子、同一批副露、同四条性质。
   await page.goto(hostPage(url), { waitUntil: "load" });
   await page.getByTestId("table-board").waitFor();
+  await openSetup(page);
   await page.getByTestId("table-seed").fill(String(NAKI_SEED));
   await page.getByTestId("table-restart").click();
   // 一手一手点「单步」，等牌桌真的走动了再点下一手（驱动在 `table-drive.mjs`）。

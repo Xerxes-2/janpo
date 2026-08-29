@@ -1,0 +1,21 @@
+
+===== home 1280×800 =====
+   41 px  top=   47  h1 .　「janpo —— 浏览器里的 LLM 日麻竞技场」
+   82 px  top=  104  p .intro #home-intro　「下面这一局是录下来的，正在自动回放——不用配置、不用 API key」
+   27 px  top=  202  p .intro　「自己开一桌 → 自带 API key，把一个座位交给模型，看它一手一」
+  221 px  top=  245  div .ops #table-ops　「暂停从头再放倍速1×2×4×8×上一步下一步第 5 手・东1局跳到东」
+  177 px  top=  245    └ div .replay-controls　「暂停从头再放倍速1×2×4×8×上一步下一步第 5 手・东1局跳到东」
+   36 px  top=  430    └ div .controls　「视角座位 0座位 1座位 2座位 3上帝视角危险度」
+  793 px  top=  482  div . #table-board　「上一手：座位 0 手切1筒这一桌累计：输入 15333 tok（缓存」
+   27 px  top= 1291  p .intro #table-review-hint　「这一场打完了：在上面那排视角里坐到某一席，就看得到那一席的逐手复盘（」
+
+===== table 1280×800 =====
+   41 px  top=   47  h1 .　「janpo —— 浏览器里的 LLM 日麻竞技场」
+   27 px  top=  104  p .intro #table-intro　「这一页是你自己开的一桌：下面把任一席交给一份模型档案（key 只填一」
+  528 px  top=  147  section .setup #table-setup　「对局长度东风战半庄战赤宝牌有无食断有无种子重开这一桌就是按这三项开的」
+   67 px  top=  147    └ div .controls rules-row　「对局长度东风战半庄战赤宝牌有无食断有无种子重开这一桌就是按这三项开的」
+  449 px  top=  226    └ section .llm-panel #table-llm-panel　「谁坐哪一席：选手·档位·（人格·模板）座位 0均匀随机有主见我自己强」
+  107 px  top=  687  div .ops #table-ops　「播放单步下一局导出牌谱复制分享链接倍速1×2×4×8×「复制分享链接」
+   64 px  top=  687    └ div .　「播放单步下一局导出牌谱复制分享链接倍速1×2×4×8×「复制分享链接」
+   36 px  top=  758    └ div .controls　「视角座位 0座位 1座位 2座位 3上帝视角危险度」
+  600 px  top=  810  div . #table-board　「还没走一手四家都是均匀随机的选手座位 0・东家均匀随机25000第 」

@@ -1010,11 +1010,53 @@ module TablePanel =
 
     /// 「配这一桌」那一整块（票 83）：规则三项 + 种子与重开一排，四席绑定与模型档案库一块。
     ///
-    /// **只属于 Live**（回放没有配桌，`TableState.rosterOf` 就是这么说的），而且**收在页面上半**：
-    /// 它开局前用一次，不该占着视线中心。开局之后一直在用的那一批在 `ops` 里，贴着牌桌。
+    /// **只属于 Live**（回放没有配桌，`TableState.rosterOf` 就是这么说的）。
+    ///
+    /// **默认收起（票 116）**。票 83 把它收到页面上半、并量出了病：
+    /// 收起前 `?table=1` 打开那一刻牌桌顶边在 810 px、视口 800
+    /// ⇒ **一像素牌桌都看不见**，而 810 里 528 px（65%）是这一块。
+    /// 它**开局前用一次**，不该占着整个第一屏。
+    ///
+    /// 折叠用的是票 83 给 `panelNote` 立的**同一副写法**（`Html.details`）：
+    /// **不进 model、不添消息、不碰 localStorage**。代价是折叠状态不持久
+    /// （刷新回到收起）——同票 83 §9 待审 ② 那笔账，仍不还。
+    ///
+    /// **摘要行写的是那四项的值**，不是「配桌」两个字：只画一枚点会让人
+    /// 看得出「有东西」却看不出「是什么」（同票 83 §2.1 那条判据的形状）。
+    /// 摘要里摆的是**拨到的那一份**（与里面那三排按钮一致），
+    /// 因此得把 `rulesPending` 也带出来：拨好了还没按「重开」时，
+    /// 摘要上那几个值并不是这一桌真在按的（同 `table-rules` 那一格的判据）。
     let internal setup (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
-        Html.section [
+        let pending = TableState.rulesPending model
+
+        let digest =
+            let seed = if live.SeedText = "" then "随机" else live.SeedText
+
+            String.concat "・" [
+                GameLength.toDisplay live.Rules.Length
+                $"赤宝牌{RulesetDraft.switchToDisplay live.Rules.Akadora}"
+                $"食断{RulesetDraft.switchToDisplay live.Rules.Kuitan}"
+                $"种子 {seed}"
+            ]
+
+        Html.details [
             prop.className "setup"
             prop.testId "table-setup"
-            prop.children [ rulesRow model live dispatch; llmPanel model live dispatch ]
+            prop.children [
+                Html.summary [
+                    prop.testId "table-setup-summary"
+                    prop.children [
+                        Html.span [ prop.key "label"; prop.className "label"; prop.text "配桌" ]
+                        Html.span [
+                            prop.key "digest"
+                            prop.className "setup-digest"
+                            prop.testId "table-setup-digest"
+                            prop.custom ("data-rules-pending", (if pending then "true" else "false"))
+                            prop.text (if pending then $"{digest}（拨好了，未重开）" else digest)
+                        ]
+                    ]
+                ]
+                rulesRow model live dispatch
+                llmPanel model live dispatch
+            ]
         ]
