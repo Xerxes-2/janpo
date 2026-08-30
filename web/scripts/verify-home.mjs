@@ -395,6 +395,279 @@ function opsProblems(shape, where, wantsSetup) {
  * 它断言的是「必须拿根字号缩放来实现」这个手段——76 与 53 那两个魔法数正是它逼出来的。
  * 「同一个 DOM、不因视口重排」如今由真布局的 grid 保证，闸门只问结果。
  */
+/**
+ * 把四席的牌**画出来的真盒子**读回来（票 139）。**它在页面里跑**，不许闭包引用模块作用域。
+ *
+ * 量盒子而不是 `--tile-w` 那个变量：变量改对了而牌没跟着变，正是判据 22 那一族
+ * （记录声称了一件事，而它的执行体不存在）。
+ * 左右两家的牌转了 90°，盒子的宽高因此对调：一律取**短边**当「牌宽」，
+ * 四席之间才比得起来（判据 24：换个实现手段、视觉一样，就不该红）。
+ */
+function readZones() {
+  const boxOf = (rects) =>
+    rects.length === 0
+      ? null
+      : {
+          l: Math.min(...rects.map((r) => r.left)),
+          r: Math.max(...rects.map((r) => r.right)),
+          t: Math.min(...rects.map((r) => r.top)),
+          b: Math.max(...rects.map((r) => r.bottom)),
+        };
+  const solidOf = (nodes) =>
+    [...nodes].map((one) => one.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+
+  return [...document.querySelectorAll('[data-testid="table-seats"] .zone[data-seat]')].map(
+    (zone) => {
+      const solid = solidOf(zone.querySelectorAll(".tile"));
+      // **一排一个框**（副露 / 手牌 / 河各一个）。整席取一个框是个**合数**：
+      // 一席的三排围成一个 L 形，四家的 L 形本来就套在一起——拿它去问
+      // 「压没压到邻席」永远是「压上了」，而那正是 M5 那张假绿表头一行的形状。
+      const rows = ["naki-row", "hand", "kawa"]
+        .map((kind) => ({
+          kind,
+          box: boxOf(solidOf(zone.querySelectorAll(`.tiles.${kind} .tile`))),
+        }))
+        .filter((row) => row.box !== null);
+      return {
+        seat: Number(zone.getAttribute("data-seat")),
+        position: zone.getAttribute("data-seat-position"),
+        tiles: solid.length,
+        short: solid.length === 0 ? 0 : Math.min(...solid.map((r) => Math.min(r.width, r.height))),
+        rows,
+        // 这一席的牌整体落在哪个框里（只用来问「牌越没越出牌桌」）。
+        box: boxOf(solid),
+      };
+    },
+  );
+}
+
+/**
+ * 「大一档」至少要大出这么多（票 139）。**写成比例而不是像素**：手机竖屏那一档
+ * 牌只有 6 px 宽，一个固定的「大 1 px」在那里既是废话又假红（实测大档 6.4 / 小档 5.4，
+ * 差正好 1.0 px 而设计上差着 15%）。
+ * 5% 是「看得出是两档」的下限，与今天定的 15%（小档 = 大档 × 0.85）之间留着余量：
+ * 闸门守的是「读者那一席明显更大」这件用户看得见的事，不是 0.85 这个具体的数。
+ */
+const TILE_TIER_MIN_RATIO = 1.05;
+
+/**
+ * 两档牌宽（票 139）：**屏幕前只有一个读者**——他看的那一席走大一档，其余三家小一档。
+ *
+ * 这一段的四条都停在**同一个量点**上（判据 21：阴阳两半共用一个量点）：
+ * 走完 32 手、四席的牌都摆出来那一刻，读每一张牌画出来的真盒子。
+ *
+ *   ① **扇到几个**：不是四席就红。四条断言全建在这张表上，表空了它们会一声不响地全绿
+ *      （M5 那张假绿表里「选择器扇空集」那一行）。
+ *   ② **所看那一席真的更大**：`data-seat-position="self"` 那一席的牌宽严格大于其余三家。
+ *      读的是 `Board.position` 的输出，∴ 视角一换大的那一档跟着换席，不另立一份判据。
+ *   ③ **牌不越出牌桌**：量的是「被关心的那件事」而不是一个合数——牌大了一档之后
+ *      先撞的就是这条边（M5 那张假绿表的头一行）。
+ *   ④ **两档之下没有一席的牌压到邻席**：票 132 修过一次的那个形状（实测重叠 46×62 px）。
+ *      两档一立，四条边在角上的让位量就不再是同一个数了，这条得跟着重新量。
+ */
+function tierProblems(at, shot) {
+  const said = [];
+  const zones = shot.zones ?? [];
+  if (zones.length !== 4) {
+    said.push(`两档牌宽：${at} 里量到 ${zones.length} 席（该有 4 席）——这一段整个空转了`);
+    return said;
+  }
+  const empty = zones.filter((one) => one.tiles === 0);
+  if (empty.length > 0) {
+    said.push(
+      `两档牌宽：${at} 里座位 ${empty.map((one) => one.seat).join("、")} 一张牌都没量到` +
+        "——牌还没摆出来就量，这一段量的是空桌",
+    );
+    return said;
+  }
+
+  const near = zones.find((one) => one.position === "self");
+  const far = zones.filter((one) => one.position !== "self");
+  if (near === undefined) {
+    said.push(`两档牌宽：${at} 里没有 data-seat-position="self" 那一席——大的那一档没有主语`);
+    return said;
+  }
+  for (const one of far) {
+    if (!(near.short > one.short * TILE_TIER_MIN_RATIO))
+      said.push(
+        `两档牌宽：${at} 里所看那一席（座位 ${near.seat}）的牌宽 ${near.short.toFixed(1)} px，` +
+          `而座位 ${one.seat}（${one.position}）是 ${one.short.toFixed(1)} px` +
+          `（要大出 ${Math.round((TILE_TIER_MIN_RATIO - 1) * 100)}% 以上）` +
+          "——所看那一席该大一档，其余三家小一档（票 139）",
+      );
+  }
+
+  if (shot.board !== null) {
+    for (const one of zones) {
+      const out = [
+        one.box.l < shot.board.left - 1 && "左",
+        one.box.r > shot.board.right + 1 && "右",
+        one.box.t < shot.board.top - 1 && "上",
+        one.box.b > shot.board.bottom + 1 && "下",
+      ].filter(Boolean);
+      if (out.length > 0)
+        said.push(
+          `两档牌宽：${at} 里座位 ${one.seat}（${one.position}）的牌探出了牌桌的${out.join("、")}边` +
+            `（牌 ${Math.round(one.box.l)},${Math.round(one.box.t)} → ` +
+            `${Math.round(one.box.r)},${Math.round(one.box.b)}；` +
+            `牌桌 ${Math.round(shot.board.left)},${Math.round(shot.board.top)} → ` +
+            `${Math.round(shot.board.right)},${Math.round(shot.board.bottom)}）`,
+        );
+    }
+  }
+
+  const named = { "naki-row": "副露", hand: "手牌", kawa: "河" };
+  const rows = zones.flatMap((zone) =>
+    zone.rows.map((row) => ({ seat: zone.seat, position: zone.position, ...row })),
+  );
+  if (rows.length === 0) said.push(`两档牌宽：${at} 里一排牌都没量到——「不压邻席」那一条空转了`);
+  for (let i = 0; i < rows.length; i += 1)
+    for (let j = i + 1; j < rows.length; j += 1) {
+      const a = rows[i];
+      const b = rows[j];
+      if (a.seat === b.seat) continue;
+      const ox = Math.min(a.box.r, b.box.r) - Math.max(a.box.l, b.box.l);
+      const oy = Math.min(a.box.b, b.box.b) - Math.max(a.box.t, b.box.t);
+      if (ox > 1 && oy > 1)
+        said.push(
+          `两档牌宽：${at} 里座位 ${a.seat}（${a.position}）的${named[a.kind]}压在` +
+            `座位 ${b.seat}（${b.position}）的${named[b.kind]}上` +
+            `（重叠 ${Math.round(ox)}×${Math.round(oy)} px）：四条边在角上撞车了（票 132 修过一次）`,
+        );
+    }
+  return said;
+}
+
+/**
+ * **牌与牌桌同比缩放，两档各量一条**（票 139）。
+ *
+ * 用户看得见的那件保证是：换一块屏，牌与牌桌的相对大小不变——牌桌大一圈牌就跟着大一圈，
+ * 结构不因缩放而改变（主人给 M5 的第一条纲要）。写死 rem 会当场违反它，
+ * 而那正是「牌桌救援 票 1」逮到过的那个缺陷（小桌上四席的牌互相压住）。
+ *
+ * **两条而不是一条**：大档与小档各有各的比例，只量一档的话另一档写死了也照旧全绿。
+ * 每条都报「拿几个视口比的」——比不到两个视口就是这条断言在空转。
+ * 容差按**一个半像素**折成比例（`1.5 / 牌桌边长`）：亚像素取整是真的，
+ * 而写成一个固定的小数会在窄档那种小牌桌上假红。
+ */
+function tierScaleProblems(seen) {
+  const said = [];
+  const tiers = [
+    { name: "大档（所看那一席）", pick: (zones) => zones.filter((one) => one.position === "self") },
+    { name: "小档（其余三家）", pick: (zones) => zones.filter((one) => one.position !== "self") },
+  ];
+  for (const tier of tiers) {
+    const points = [];
+    for (const one of seen) {
+      if (one.board === null) continue;
+      const side = one.board.right - one.board.left;
+      if (side <= 0) continue;
+      const picked = tier.pick(one.zones ?? []).filter((zone) => zone.tiles > 0);
+      if (picked.length === 0) continue;
+      points.push({
+        at: one.at,
+        side,
+        ratio: Math.min(...picked.map((zone) => zone.short)) / side,
+        slack: 1.5 / side,
+      });
+    }
+    if (points.length < 2) {
+      said.push(
+        `同比缩放：${tier.name}只量到 ${points.length} 个视口（要 ≥2 个才比得起来）——这条断言空转了`,
+      );
+      continue;
+    }
+    const base = points[0];
+    for (const point of points.slice(1)) {
+      const slack = Math.max(base.slack, point.slack);
+      if (Math.abs(point.ratio - base.ratio) > slack)
+        said.push(
+          `同比缩放：${tier.name}没跟着牌桌走——${base.at} 上牌宽是牌桌的 ` +
+            `${(base.ratio * 100).toFixed(2)}%（牌桌 ${Math.round(base.side)} px），` +
+            `${point.at} 上却是 ${(point.ratio * 100).toFixed(2)}%（牌桌 ${Math.round(point.side)} px）` +
+            `，差得比 ${(slack * 100).toFixed(2)}% 的取整容差还多`,
+        );
+    }
+  }
+  return said;
+}
+
+/**
+ * **视角一换，大的那一档跟着换席**（票 139）。
+ *
+ * 阳性与阴性钉在**同一个量点、同一下拨动**上（判据 21）：同一张牌桌、同一手，
+ * 上帝视角下大的是起家（座位 0），按一下「座位 2」之后大的必须是座位 2、而座位 0 变小。
+ * 阴性那半句（座位 0 不再是最大的）自己证明不了任何事——先让阳性那半句成立才算数。
+ *
+ * 挑**座位 2**而不是座位 0：坐到起家上时两个答案重合，那一按什么都没证明。
+ */
+async function focusFollowsViewpointProblems(lane, url) {
+  const said = [];
+  const page = await lane.newPage({ viewport: ONE_SCREEN });
+  const seat = 2;
+  try {
+    await page.goto(`${url}/?table=1`, { waitUntil: "load" });
+    await openSetup(page);
+    await page.getByTestId("table-setup-summary").click();
+    await stepTurns(page, { limit: ONE_SCREEN_TURNS }).catch(() => {});
+
+    const biggest = (zones) =>
+      zones.length === 0
+        ? null
+        : zones.reduce((best, one) => (one.short > best.short ? one : best), zones[0]);
+
+    const god = await page.evaluate(readZones);
+    if (god.length !== 4) {
+      said.push(`换视角：上帝视角下量到 ${god.length} 席（该有 4 席）——这一条空转了`);
+      return said;
+    }
+    const atGod = biggest(god);
+    if (atGod.seat !== 0)
+      said.push(
+        `换视角：上帝视角下最大的那一档在座位 ${atGod.seat}（该是起家 = 座位 0）——` +
+          "上帝视角的参照系是起家（Board.anchor）",
+      );
+
+    await page.getByTestId(`table-view-${seat}`).click();
+    const seated = await page.evaluate(readZones);
+    if (seated.length !== 4) {
+      said.push(`换视角：坐到座位 ${seat} 之后量到 ${seated.length} 席（该有 4 席）——这一条空转了`);
+      return said;
+    }
+    const atSeat = biggest(seated);
+    // 阳性：大的那一档真的搬到了坐着的那一席上。
+    if (atSeat.seat !== seat)
+      said.push(
+        `换视角：坐到座位 ${seat} 之后最大的那一档还在座位 ${atSeat.seat} 上` +
+          `（各席牌宽 ${seated.map((one) => `${one.seat}:${one.short.toFixed(1)}`).join(" ")}）——` +
+          "大的那一档该跟着视角走（与 TableState.viewpoint 同源）",
+      );
+    // 阴性：原来大的那一席（起家）真的缩回小档了。
+    const wasBig = seated.find((one) => one.seat === atGod.seat);
+    if (wasBig !== undefined && wasBig.seat !== seat && !(atSeat.short > wasBig.short))
+      said.push(
+        `换视角：坐到座位 ${seat} 之后座位 ${wasBig.seat} 还是 ${wasBig.short.toFixed(1)} px、` +
+          `不比新主语那一席（${atSeat.short.toFixed(1)} px）小——两席同时占着大档`,
+      );
+  } finally {
+    await page.close();
+  }
+  return said;
+}
+
+/** 「不压邻席」那一条在这一趟里两两比了多少对（判据 3：闸门要报得出自己开过几次口）。 */
+function crossSeatPairs(seen) {
+  return seen.reduce((total, one) => {
+    const rows = (one.zones ?? []).flatMap((zone) =>
+      zone.rows.map((row) => ({ seat: zone.seat, ...row })),
+    );
+    let count = 0;
+    for (let i = 0; i < rows.length; i += 1)
+      for (let j = i + 1; j < rows.length; j += 1) if (rows[i].seat !== rows[j].seat) count += 1;
+    return total + count;
+  }, 0);
+}
+
 async function stageProblems(lane, url) {
   const said = [];
   const seen = [];
@@ -432,6 +705,7 @@ async function stageProblems(lane, url) {
           ),
         };
       });
+      shot.zones = await page.evaluate(readZones);
       const at = `${viewport.width}×${viewport.height}`;
       if (shot.scrollY) said.push(`真布局：${at} 里出现了纵向文档滚动——长卷没死`);
       if (shot.scrollX) said.push(`真布局：${at} 里出现了横向文档滚动`);
@@ -461,6 +735,7 @@ async function stageProblems(lane, url) {
               `${Math.round(shot.board.right)},${Math.round(shot.board.bottom)}）——牌桌必须完整可见`,
           );
       }
+      said.push(...tierProblems(at, shot));
       seen.push({ at, ...shot });
     } finally {
       await page.close();
@@ -469,6 +744,7 @@ async function stageProblems(lane, url) {
 
   if (seen.length !== STAGE_VIEWPORTS.length)
     said.push(`真布局：只量到 ${seen.length} 个视口，该有 ${STAGE_VIEWPORTS.length} 个`);
+  said.push(...tierScaleProblems(seen));
   return { said, seen };
 }
 
@@ -1026,6 +1302,9 @@ export async function verifyHome(lane) {
     stage = await stageProblems(lane, url);
     missing.push(...stage.said);
 
+    // ⑭ 两档牌宽的第三件（票 139）：视角一换，大的那一档跟着换席。
+    missing.push(...(await focusFollowsViewpointProblems(lane, url)));
+
     // ④ 页脚照旧（票 37）：地址本身不在这里复述（真源在 `src/Janpo.Web/Footer.fs` 一处）。
     await page.goto(`${url}/`, { waitUntil: "load" });
     const footerLinks = await page
@@ -1076,6 +1355,23 @@ export async function verifyHome(lane) {
       `真布局 ✓（无文档滚动、牌桌完整可见）：${stage.seen
         .map((one) => `${one.at} 牌宽 ${one.tile.toFixed(1)}px`)
         .join("　")}`,
+    );
+    // **顺带把执行次数报出来**（判据 3：一条永远执行不到的断言与一条从不失败的断言一样坏）。
+    // 「跨席比了几对」是「不压邻席」那一条真开过几次口；为 0 就说明它在空转。
+    console.log(
+      `两档牌宽 ✓（所看那一席大一档、牌不越出牌桌、四席互不相压——跨席比了 ${crossSeatPairs(
+        stage.seen,
+      )} 对排；两档各自跟着牌桌同比缩放）：${stage.seen
+        .map((one) => {
+          const near = (one.zones ?? []).find((zone) => zone.position === "self");
+          const far = (one.zones ?? []).filter((zone) => zone.position !== "self");
+          const small = far.length === 0 ? 0 : Math.min(...far.map((zone) => zone.short));
+          return `${one.at} 大 ${(near?.short ?? 0).toFixed(1)}px / 小 ${small.toFixed(1)}px`;
+        })
+        .join("　")}`,
+    );
+    console.log(
+      "大的那一档跟着视角走 ✓（上帝视角下在起家；按一下「座位 2」之后搬到座位 2，起家缩回小档）",
     );
     console.log("页脚里有回仓库的外链与许可（MIT）✓");
     return [];
