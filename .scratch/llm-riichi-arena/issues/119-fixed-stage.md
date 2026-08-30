@@ -9,7 +9,7 @@
 
 **Blocked by:** 117
 
-**Status:** ready-for-human
+**Status:** done（报告：`run/reports/119-fixed-stage.md`）
 
 ## 做法已经验过了，不必再试
 

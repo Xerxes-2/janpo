@@ -136,6 +136,20 @@ const ONE_SCREEN_TURNS = 32;
  */
 const BOARD_TOP_MAX_PX = 420;
 
+/** 固定舞台（票 119）：要在这几个视口上都装得下，且**结构不因为缩放而改变**。
+    1366×768 是 16:9 那一档（最矮），390×844 是手机竖屏（缩到能看不能读，主人已裁）。 */
+const STAGE_VIEWPORTS = [
+  { width: 1280, height: 800 },
+  { width: 1440, height: 900 },
+  { width: 1366, height: 768 },
+  { width: 390, height: 844 },
+];
+
+/** 缩放对不对，看**根字号**：样式表里 204 个尺寸写的是 `rem`，全跟着它走。
+    两个视口之间牌宽的比，必须与根字号的比对得上——**对不上就说明有尺寸没走 `rem`**，
+    那正是「结构因为缩放而改变」的前兆。0.02 是取整与发丝线留的余量。 */
+const SCALE_TOLERANCE = 0.02;
+
 /**
  * 主持人那一页抬头那段说明的高度上限（票 82）。一行正文在这一页上是 27 px，
  * 40 px 是「一行 + 边距微调」，**写到两行就超**。
@@ -277,6 +291,100 @@ function opsProblems(shape, where, wantsSetup) {
  * 顺带量抬头那一段：主持人那一页的说明压到一行。
  * 两条都读**真坐标**，因此几何一退化当场就红——票 83 立那条 40 px 时用的是同一个办法。
  */
+/**
+ * 固定舞台（票 119）：**长卷死掉**这件事得有东西守着。
+ *
+ * 三条，都不是同义反复：
+ *   ① 任何视口上都**没有文档滚动**（横纵都算）——这是整票的目的。
+ *   ② 内容高不超过视口高——`body { overflow: hidden }` 会把溢出**裁掉**而不是让人滚，
+ *      光看「有没有滚动条」会漏掉「看不见」这种更坏的情形。
+ *   ③ **牌宽与根字号同比例缩放**。①② 只说「装得下」，装得下的办法可以是重排
+ *      （媒体查询把三列变一列也装得下）——而主人要的是**结构不变**。
+ *      ③ 才是那句话的执行者。
+ */
+async function stageProblems(lane, url) {
+  const said = [];
+  const seen = [];
+  for (const viewport of STAGE_VIEWPORTS) {
+    const page = await lane.newPage({ viewport });
+    try {
+      await page.goto(`${url}/?table=1`, { waitUntil: "load" });
+      await openSetup(page);
+      await page.getByTestId("table-setup-summary").click();
+      await stepTurns(page, { limit: ONE_SCREEN_TURNS }).catch(() => {});
+      const shot = await page.evaluate(() => {
+        const doc = document.documentElement;
+        const tile = document.querySelector(".zone .tile");
+        const board = document.querySelector('[data-testid="table-seats"]');
+        // **只量宽度由 CSS 的 `rem` 定死的东西**。`.ops`、`.page` 那种盒子的宽
+        // 由内容撑着（实测 `.page` 在 1280×800 上是 885 px，而它的 `max-width: 52rem`
+        // 只有 676 px——min-content 顶开了上限），拿它们去问「缩放有没有改结构」
+        // 会得到假红。头两版分别错在 `.ops` 与 `.page` 上。
+        return {
+          root: Number.parseFloat(getComputedStyle(doc).fontSize),
+          tile: tile ? tile.getBoundingClientRect().width : 0,
+          // **多量几处**：只量牌的话，「牌桌写死 px 而牌照旧缩放」这种坏法逃得掉
+          //（阴性对照第一版就没打中——那说明这条断言比我声称的弱）。
+          board: board ? board.getBoundingClientRect().width : 0,
+
+          scrollY: doc.scrollHeight > window.innerHeight + 1,
+          scrollX: doc.scrollWidth > window.innerWidth + 1,
+          contentH: Math.ceil(document.body.getBoundingClientRect().height),
+          // 横向也要量内容本身：`body { overflow: hidden }` 会把横向溢出一并藏起来，
+          // 只看 `scrollWidth` 的话「被裁掉」这种更坏的情形查不出来。
+          contentW: Math.ceil(
+            Math.max(...[...document.body.children].map((el) => el.getBoundingClientRect().right)),
+          ),
+        };
+      });
+      const at = `${viewport.width}×${viewport.height}`;
+      if (shot.scrollY) said.push(`固定舞台：${at} 里出现了纵向文档滚动——长卷没死`);
+      if (shot.scrollX) said.push(`固定舞台：${at} 里出现了横向文档滚动`);
+      if (shot.contentH > viewport.height)
+        said.push(
+          `固定舞台：${at} 里内容高 ${shot.contentH} px 超过视口 ${viewport.height} px——` +
+            `body 上那条 overflow:hidden 会把超出的部分裁掉，人连滚都滚不到`,
+        );
+      if (shot.contentW > viewport.width)
+        said.push(
+          `固定舞台：${at} 里内容宽 ${shot.contentW} px 超过视口 ${viewport.width} px——` +
+            `body 上那条 overflow:hidden 会把右边裁掉`,
+        );
+      if (shot.tile <= 0) said.push(`固定舞台：${at} 里一张牌都没量到（闸门空转了）`);
+      seen.push({ at, ...shot });
+    } finally {
+      await page.close();
+    }
+  }
+
+  // ③ 结构不变：任取两个视口，**每一处量到的尺寸**的比都要与根字号的比对得上。
+  const MEASURED = [
+    ["牌宽", "tile"],
+    ["牌桌", "board"],
+  ];
+  for (let index = 1; index < seen.length; index += 1) {
+    const a = seen[0];
+    const b = seen[index];
+    const wanted = b.root / a.root;
+    for (const [said_, key] of MEASURED) {
+      if (a[key] <= 0 || b[key] <= 0) {
+        said.push(`固定舞台：${said_}在 ${a.at} 或 ${b.at} 上量不到（闸门空转了）`);
+        continue;
+      }
+      const got = b[key] / a[key];
+      if (Math.abs(got - wanted) > SCALE_TOLERANCE)
+        said.push(
+          `固定舞台：从 ${a.at} 到 ${b.at}，根字号缩了 ${wanted.toFixed(3)} 倍而${said_}缩了 ` +
+            `${got.toFixed(3)} 倍——这一处没跟着根字号走，缩放改了结构`,
+        );
+    }
+  }
+
+  if (seen.length !== STAGE_VIEWPORTS.length)
+    said.push(`固定舞台：只量到 ${seen.length} 个视口，该有 ${STAGE_VIEWPORTS.length} 个`);
+  return { said, seen };
+}
+
 async function oneScreenProblems(lane, url) {
   const page = await lane.newPage({ viewport: ONE_SCREEN });
   const said = [];
@@ -468,6 +576,7 @@ export async function verifyHome(lane) {
   let dragCount = 0;
   let hostOps = null;
   let oneScreen = null;
+  let stage = null;
 
   try {
     page.on("pageerror", (error) => problems.push(`[pageerror] ${error.message}`));
@@ -815,6 +924,10 @@ export async function verifyHome(lane) {
     oneScreen = await oneScreenProblems(lane, url);
     missing.push(...oneScreen.said);
 
+    // ⑫ 固定舞台（票 119）：缩放不重排、长卷死掉。
+    stage = await stageProblems(lane, url);
+    missing.push(...stage.said);
+
     // ④ 页脚照旧（票 37）：地址本身不在这里复述（真源在 `src/Janpo.Web/Footer.fs` 一处）。
     await page.goto(`${url}/`, { waitUntil: "load" });
     const footerLinks = await page
@@ -860,6 +973,11 @@ export async function verifyHome(lane) {
     console.log(
       `一屏 ✓（${ONE_SCREEN.width}×${ONE_SCREEN.height} 里 ?table=1 走 ${ONE_SCREEN_TURNS} 手之后，「操作块 + 整张牌桌」跨 ` +
         `${oneScreen.shot.board.bottom - oneScreen.shot.ops.top} px；抬头一段 ${oneScreen.shot.intro.height} px）`,
+    );
+    console.log(
+      `固定舞台 ✓（缩放不重排、无文档滚动）：${stage.seen
+        .map((one) => `${one.at} 根字号 ${one.root.toFixed(2)}px 牌宽 ${one.tile.toFixed(1)}px`)
+        .join("　")}`,
     );
     console.log("页脚里有回仓库的外链与许可（MIT）✓");
     return [];

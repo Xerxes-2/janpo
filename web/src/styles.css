@@ -21,6 +21,33 @@
    - verify-bubbles：气泡与牌排、牌桌中央的矩形不许相交，且画在那一席的框里；
    - naki-marks：副露槽位从左往右、加杠那张叠在横放那张上面、sr-only 那句看不见。 */
 
+/* ── 固定舞台（票 119）─────────────────────────────────────────────
+   主人的意见①后半句：**「布局可以妥协成结构不因为缩放而改变」**。
+
+   做法：**只缩放根字号**。样式表里 204 个尺寸写的是 `rem`，它们全都跟着根字号走；
+   53 个 `px` 几乎全是 `1px solid` 的发丝线——**那些正是不该跟着缩放的东西**
+   （缩了会糊）。∴ 一条规则管全部，DOM 与其余 CSS **一个字不动**。
+
+   `100vw / 62` 是长度÷数值、仍是长度：视口 992 px 宽时它正好等于 16px。
+   两个方向取小者，于是**宽高哪边先到头就由哪边定**，长卷因此死掉。
+
+   62 = 舞台设计宽 992 px ÷ 16。60.5 = 设计高：`?table=1` 走 32 手、含页脚的实测
+   自然高度是 928 px（58 rem），**外加约 25 px 不跟着缩放的发丝线**——
+   十几条 `1px solid` 竖着叠起来就是这个数。头一版按 58 写，结果每个桌面视口都还差
+   25 px 溢出（而 `body { overflow: hidden }` 会把它**裁掉**而不是让人滚，更坏）。
+   ∴ 取 61.5。这个数是**闸门逼出来的**：我的临时探针量到 795 px 说装得下，
+   而闸门按真实驱动路径（开配桌→收起→走 32 手）量到 804 px——探针量的是另一个状态。
+   **这两个数是量出来的，不是拍的**：设计高每多 1 rem，1280×800 下的牌就小 1.7%。
+   ────────────────────────────────────────────────────────────── */
+html {
+  font-size: min(calc(100vw / 62), calc(100vh / 61.5));
+}
+
+/* 舞台之内不许有文档滚动——长卷死了，「操作条要不要吸底」那场争论也就失去了对象。 */
+body {
+  overflow: hidden;
+}
+
 :root {
   color-scheme: light;
 
@@ -83,7 +110,10 @@ h1 {
   font-size: 1.4rem;
   letter-spacing: 0.02em;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.3rem;
+  /* 行间收紧（票 119）：浏览器默认给 h1 上下各 0.67em＝共 30 px。
+     舞台要把整页塞进一屏，这 30 px 是白花的——字号一个没动。 */
+  margin: 0.2rem 0 0.5rem;
 }
 
 /* 靛青管链接（主人定的分工）。下划线留着：纸面上「可点」靠它说。 */
@@ -94,7 +124,8 @@ a {
 
 .intro {
   opacity: 0.8;
-  line-height: 1.7;
+  line-height: 1.5;
+  margin: 0.4rem 0;
 }
 
 /* —— 控件：纸上的按钮与输入框 ——
@@ -314,19 +345,32 @@ input[type="range"] {
   /* 上下各留一张名牌的高。名牌里可能是 `deepseek/deepseek-v4-flash` 这样的长名，
      留窄了它会顶到上面那排视角按钮上去——**不是压住，是拦住点击**
      （playwright 报 `intercepts pointer events`，头一版就这么坏的）。 */
-  margin: 3.4rem auto;
+  margin: 2.7rem auto 5rem;
 }
 
 /* 副露图例（票 117）：摆在牌桌外沿，不占桌心。 */
+.board {
+  position: relative;
+}
+
 .naki-legend {
+  /* **摆进牌桌左边距**（票 119）：那一侧有 176 px 空着，只有一张竖向居中的名牌。
+     它是图例不是正文流——占着纵向那 38 px 是白花的，而舞台要把整页塞进一屏。 */
+  position: absolute;
+  /* **相对居中的牌桌定位**，不是相对 `.board` 的左边（票 119）。
+     `.board` 的宽由内容撑着（实测 1280×800 上是 885 px，比它的 max-width 还宽），
+     `left: 0` 会把图例顶到视口最左、字被裁掉——**闸门没抓到，是看图看出来的**。 */
+  left: 50%;
+  margin-left: calc(var(--board) / -2 - 10.6rem);
+  bottom: 0.5rem;
+  width: 10rem;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  text-align: left;
   /* 静态说明文字，没人点它。自家名牌（带气泡）从牌桌下沿探下来时，
      不写这一条它会**拦住气泡的点击**——playwright 报 `intercepts pointer events`。 */
   pointer-events: none;
-  max-width: calc(var(--board) + var(--plate) * 2);
-  margin: 0 auto;
-  font-size: 0.8rem;
-  opacity: 0.75;
-  text-align: center;
+  opacity: 0.7;
 }
 
 .zones {
@@ -410,9 +454,9 @@ input[type="range"] {
   width: max-content;
   /* **横向铺开到页面能给的宽度**，不是牌桌那么宽：气泡里一句话上限 72 字，
      窄了折三四行、名牌就高出下方留白、探到页脚上去（页脚里那枚 MIT 链接会拦住点击）。
-     铺到 60rem 时那一句一行放得下，名牌只有一行高——**横向本来就有大把空地**
+     铺到 76rem 时那一句一行放得下，名牌只有一行高——**横向本来就有大把空地**
      （页面 1280、牌桌 480，两侧各 400）。 */
-  max-width: min(60rem, 96vw);
+  max-width: min(76rem, 96vw);
 }
 
 .plates .seat[data-seat-position="self"] > .seat-head,
@@ -1075,8 +1119,10 @@ input[type="range"] {
 /* 站点页脚（票 37）：回仓库与许可的那一行。**不抢牌桌的注意力**——小字、淡色、
    一条细线隔开。链接跟着全站走靛青（票 80 的配色分工），下划线照旧。 */
 .site-footer {
-  margin-top: 2rem;
-  padding-top: 0.75rem;
+  /* 2rem 的上留白在长卷里是呼吸，在舞台里是**直接换成牌的尺寸**（票 119）：
+     纵向每省 16 px 设计高，1280×800 下的牌就大 1.7%。 */
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
   border-top: 1px solid var(--line);
   font-size: 0.8rem;
   opacity: 0.8;
@@ -1104,8 +1150,8 @@ input[type="range"] {
    字号一个没动，只把行间从 16px 收到 5px。 */
 [data-testid="table-board"] > .latest,
 [data-testid="table-board"] > .agent {
-  margin-top: 0.3rem;
-  margin-bottom: 0.3rem;
+  margin-top: 0.1rem;
+  margin-bottom: 0.1rem;
 }
 
 /* 真人那一排响应动作（票 88）：吃 / 碰 / 杠 / 立直 / 和了 / 九种九牌，以及「过」。
@@ -1225,7 +1271,7 @@ input[type="range"] {
 
 /* 操作区：两三排控件是同一组，行间收紧。排完就是牌桌。 */
 .ops .controls {
-  margin: 0.4rem 0;
+  margin: 0.15rem 0;
   flex-wrap: wrap;
 }
 
@@ -1233,7 +1279,7 @@ input[type="range"] {
    又不该把牌桌推下去一整段。 */
 .ops .intro {
   font-size: 0.8rem;
-  margin: 0.25rem 0;
+  margin: 0.1rem 0;
   max-width: 60rem;
 }
 
@@ -1539,4 +1585,14 @@ input[type="range"] {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* 复盘那一块**盖在气泡上面**（票 119）。
+   固定舞台之后名牌与气泡是绝对定位、浮在牌桌两侧；终局后复盘面板铺开，
+   两者会叠上——而这一刻**复盘才是要看的那件事**，气泡说的是刚打完那一手。
+   不写这一条时下家的气泡会拦住「看全部」那枚开关（playwright 报
+   `intercepts pointer events`）。票 118 把气泡改成点开的浮层之后这一条可以重估。 */
+[data-testid="table-review"] {
+  position: relative;
+  z-index: 2;
 }
