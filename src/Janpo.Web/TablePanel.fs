@@ -1088,22 +1088,40 @@ module TablePanel =
             SeatingPlan.profileAt live.Editing live.Seating
             |> Option.defaultValue ModelProfile.initial
 
-        // 这一行的三格**名目走 `aria-label` 与 `placeholder`，不摆一枚常驻的标签**（票 120 的判据：
-        // 「能收进 title / 抽屉的就别常驻」）。两个理由，一个是量出来的：
+        // **前两格的名目摆回页面上**（票 143）。票 138 把它们挪进了 `aria-label` + `placeholder`，
+        // 为的是挤进票 120 那道 168 字的上限；可 **provider 是个 `<select>`、模型那格有默认值，
+        // 两格都不空 ⇒ placeholder 永远不显示**——头一回来的人看到的是「deepseek」
+        // 「deepseek-v4-flash」两个没有名字的框，而「头一回来的人一步就能开桌」正是这一行存在的理由。
         //
-        //  - 一整条顶栏只有一行的高度，三枚标签 + 三个框会把〔开打〕挤下去；
-        //  - `?table=1` 那一屏的字数上限是 168（票 120 的闸门，`verify-home` 的 ⑬）。
-        //    **那一屏今天一句散文都没有**——122 字全是控件名与牌桌上的数。
-        //    三枚标签 15 字 + 下面那句 45 字，摆全就是 182，当场红。
-        //    名目进属性之后是 167：**上限一分没动**，而人看得见的名目一个都没少
-        //    （占位符就写在框里，读屏读的是 `aria-label`）。
-        let field (testId: string) (kind: string) (name: string) (value: string) (which: ProfileField) =
+        // 票 143 把那道闸门改成**只数散文**（控件名与牌桌上的数是界面本身，人扫一眼就跳过去，
+        // 造成过载的是成段的说明文字），∴ 摆回名目一个字都不占那份预算。
+        // **`aria-label` 一并留着**：读屏那一侧不许退步（两者逐字相同，读屏念 `aria-label`）。
+        //
+        // **key 那一格照旧只靠占位符**：它是三格里唯一默认空着的，占位符真的显示得出来。
+        // 摆第三枚标签的代价是量过的：这一行靠 `flex-wrap` 换行，两枚标签把「一行放得下」的
+        // 窗口宽从 1015 px 推到 1115 px（`?table=1` 那几道闸门跑在 1280 px 上，仍是一行）；
+        // 第三枚只会把那个门槛再往上推，而它换来的名目那一格自己已经有了。
+        let named (name: string) (control: ReactElement) =
+            Html.label [
+                prop.key $"quick-named-{name}"
+                prop.className "field"
+                prop.children [
+                    Html.span [ prop.key "label"; prop.className "label"; prop.text name ]
+                    control
+                ]
+            ]
+
+        // `hinted`：名目要不要**再**写进占位符。摆了 `named` 那一枚标签的格子传 `false`
+        // ——否则那格空着时框外框内会同时写着「模型」。`aria-label` 与标签逐字相同，
+        // `verify-quickstart` 的 ⑦ 钉着这一条。
+        let field (testId: string) (kind: string) (name: string) (hinted: bool) (value: string) (which: ProfileField) =
             Html.input [
                 prop.key testId
                 prop.testId testId
                 prop.type' kind
                 prop.ariaLabel name
-                prop.placeholder name
+                if hinted then
+                    prop.placeholder name
                 prop.value value
                 prop.onChange (fun (value: string) -> dispatch (QuickEdited(which, value)))
             ]
@@ -1127,8 +1145,10 @@ module TablePanel =
                             ]
                     ]
                 ]
-                field "table-quick-model" "text" "模型" profile.Model ProfileField.Model
-                field "table-quick-key" "password" "API key" profile.ApiKey ProfileField.ApiKey
+                |> named "provider"
+                field "table-quick-model" "text" "模型" false profile.Model ProfileField.Model
+                |> named "模型"
+                field "table-quick-key" "password" "API key" true profile.ApiKey ProfileField.ApiKey
                 // **就地那一行小字**（票 138）：它紧跟在 key 那一格右边，不在折叠里、不在页脚。
                 Html.span [
                     prop.key "quick-key-note"

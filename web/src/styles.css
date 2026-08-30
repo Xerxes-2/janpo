@@ -2327,11 +2327,19 @@ input[type="range"] {
   margin-block: 0;
 }
 
-/* 三格都靠占位符与 `aria-label` 报名目，不摆常驻标签（理由写在 `TablePanel.quickStart` 上：
-   一行摆不下，且 `?table=1` 那一屏的字数上限一分未动）。因此把框放宽些——
-   占位符本身就是名目，8rem 装不下「deepseek-v4-flash」这样的真名。 */
+/* 框放宽些：8rem 装不下「deepseek-v4-flash」这样的真名。 */
 .quick-start input {
   width: 11rem;
+}
+
+/* 前两格的名目摆在框前面（票 143；理由写在 `TablePanel.quickStart` 上：
+   两格都不空 ⇒ 占位符永远不显示，头一回来的人看到的是两个没有名字的框）。
+   名目比框淡一档、小一号——它是标注，不该跟框抢眼；`white-space: nowrap`
+   让它不在自己内部折行（要换行的是整格，那由外层的 `flex-wrap` 管）。 */
+.quick-start > .field > .label {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .quick-start select {

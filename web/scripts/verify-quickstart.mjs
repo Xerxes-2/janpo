@@ -3,7 +3,7 @@
 // 在这一票之前，开桌的最短路径是七步：自己开一桌 → 配桌 → 新建档案 → provider → 模型 →
 // key → 把某席拨给档案 → 播放。这一道守的是那条路被压成了一步，**而且真开出了一桌**。
 //
-// 六条，各守一件：
+// 七条，各守一件：
 //
 //   ① **配桌收着也点得到那一行**——`table-quick-start` 在折叠外面（`checkVisibility()` 量），
 //      三格加一枚按钮全在。摆进折叠里的话「一步」当场又变回两步。
@@ -21,6 +21,11 @@
 //      两处各存一份的话「同一把 key 坐三席只填一次」就成了空话。
 //   ⑤ **key 去向那句小字就在 key 那一格旁边**，而且**与 `README.md` 里那一行逐字相同**
 //      ——同一件事不许有第二个说法（README 是这句话的出处）。
+//   ⑦ **前两格的名目摆在页面上，且与 `aria-label` 逐字相同**（票 143）：
+//      provider 是个 `<select>`、模型那格有默认值，**两格都不空 ⇒ placeholder 永远不显示**，
+//      票 138 那一版于是对着头一回来的人失去了名目。这一条钉两件：那两枚标签**看得见**
+//      （`checkVisibility()`），且它的字与 `aria-label` **逐字相同**——不然读屏念的
+//      与眼睛看到的会各走各的（判据 2：写下一条不变量，先问谁来执行它）。
 //   ⑥ **「进阶」默认收起，但收起不等于清空**：`table-profile-advanced` 一进页面
 //      `open=false`、里面两格没渲染；敲开之后超时与思考预算**还是今天的默认值**
 //      （`ModelProfile.initial`：240000 ms / off）。
@@ -161,6 +166,38 @@ export async function verifyQuickStart(lane) {
     console.log(
       `配桌收着（open=${await setupOpen(page)}）时那一行上：` +
         `${shown.map(([id, ok]) => `${id}${tick(ok)}`).join("　")} ${shutMark()}`,
+    );
+
+    // ⑦ 前两格的名目摆在页面上，且与 `aria-label` 逐字相同（票 143）。
+    const namedMark = markerSince(problems);
+    const labels = await page.evaluate(() =>
+      ["table-quick-provider", "table-quick-model"].map((testId) => {
+        const control = document.querySelector(`[data-testid="${testId}"]`);
+        const wrap = control?.closest("label") ?? null;
+        const label = wrap?.querySelector(".label") ?? null;
+        return {
+          testId,
+          shown: label?.checkVisibility() ?? false,
+          text: label?.textContent?.trim() ?? null,
+          aria: control?.getAttribute("aria-label") ?? null,
+        };
+      }),
+    );
+    for (const one of labels) {
+      if (!one.shown) {
+        problems.push(
+          `[data-testid="${one.testId}"] 那一格在页面上没有名字（标签${one.text === null ? "根本不在" : "画不出来"}）：` +
+            "那一格不空、占位符永远不显示，头一回来的人只看得到一个没有名目的框（票 143）",
+        );
+      } else if (one.text !== one.aria) {
+        problems.push(
+          `[data-testid="${one.testId}"] 眼睛看到的是「${one.text}」、读屏念的是「${one.aria}」：两侧分叉了（票 143）`,
+        );
+      }
+    }
+    console.log(
+      "前两格的名目摆在页面上、与 aria-label 逐字相同：" +
+        `${labels.map((one) => `${one.testId}「${one.text}」${tick(one.shown && one.text === one.aria)}`).join("　")} ${namedMark()}`,
     );
 
     // ③ key 只出现在两处。**整页数**，不是只数那一行。

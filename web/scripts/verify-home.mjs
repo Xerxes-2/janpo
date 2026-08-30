@@ -250,26 +250,75 @@ async function opsShape(page) {
 }
 
 /**
- * **这一页说了多少话**（票 120）。
+ * **这一屏说了多少散文**（票 120 立下，票 143 把量点挪到散文上）。
  *
- * 主人量的那一屏：486 字，其中 345 字是解释性散文——**七成**。而在此之前
- * 我造的每一条闸门量的都是几何（牌越不越界、气泡压不压牌、缩放改不改结构、
- * 一屏装不装得下），**没有一条问「这一页说了多少话」**。
+ * 主人量的那一屏：486 字，其中 345 字是解释性散文——**七成**。在此之前我造的每一条闸门
+ * 量的都是几何（牌越不越界、气泡压不压牌、一屏装不装得下），**没有一条问「这一页说了多少话」**。
+ * ∴ 文字只会单调增加：每加一个功能配一句解释，每句解释都有它当时的道理，而没有任何东西
+ * 在反方向拉。这一条就是那个反方向的力。
  *
- * ∴ 文字只会单调增加：每加一个功能就配一句解释，每句解释都有它当时的道理，
- * 而没有任何东西在反方向拉。这一条就是那个反方向的力。
+ * **票 143 改的是「数什么」，不是「许多少」。** 票 120 那 168 是对着一屏散文砍出来的；
+ * 到票 138 落地时那一屏**一句散文都没有**——122 字全是控件名（座位 0…3 / 上帝视角 /
+ * 导出牌谱）与牌桌上的数（25000 / 第 1 巡 / 东1局 0 本场）。闸门于是开始产生反效果：
+ * 票 138 为了挤进 168，把一行式开桌前两格的名目藏进了 `aria-label`，而那两格都不空、
+ * 占位符永远不显示 ⇒ 头一回来的人看到两个没有名字的框。**量点落错了地方**
+ * （判据「量点要落在被关心的那件事上」）。主人裁：可以重定，
+ * 「核心目的是**人读起来怎么样，会不会信息过载**」。
  *
- * 量法：落地那一屏**看得见的**文字（`<details>` 收着的不算——那正是我们要它去的地方；
- * 牌面上的字不算，那是牌不是话）。上限按屏分开定：主持人那一页要摆四席绑定，
- * 天然比首页多。
+ * ## 口径（写死在这里，改口径就得改这一段）
  *
- * **报出量到了几处**：0 处就是这条闸门自己坏了（选择器扇空集），不是页面干净。
+ * 一段看得见的文字算**散文**，除非它是下面几样之一：
+ *
+ *   1. **牌面上的字**（`.tile`）——那是牌，不是话；
+ *   2. **牌桌上的数**（`[data-testid="table-board"]` 与记分板 `table-roster` 里的一切）
+ *      ——自风、点数、巡目、剩余摸牌，人扫一眼取一个数就走，不成段；
+ *   2'. **读数**（含数字且不超过 `NAME_MAX` 字，例如时间轴上那句「第 0 手・东1局」），
+ *      外加右轨那一行「上一手是谁打了什么」（`table-latest`）——牌桌外面也有读数，
+ *      ∴ 这一条不看它在哪，只看它是不是一个读数。**它是每帧都在变的**（回放一走就换一句），
+ *      不是常驻的说明文字；把它算进预算的话这道闸门的数会跟着帧跳，
+ *      而一条数会自己跳的闸门迟早以「重跑一遍就绿」收场（判据 16）。
+ *      代价记在这里：引擎给的那句兜底理由跟着躲过去了——**但它不是页面文案，
+ *      加不进散文**。含数字那一条**仍旧钉着字数**：一段带数字的长句是话，照数；
+ *   3. **控件名**（最近的 `button / a / select / option / summary / label / [role=button]`
+ *      祖先里的文字，且**不超过 `NAME_MAX` 字**）——「座位 0」「导出牌谱」「provider」
+ *      是界面本身。**那条字数限制是防漏的**：一枚 30 字的按钮里装的不是名字，是话，照数；
+ *   4. **收在 `<details>` 里的**（那正是我们要它去的地方）、**画不出来的**（高 < 2px）；
+ *   5. **页脚**（法律要求的归属，另有一条上限）。
+ *
+ * 剩下的就是散文：`.intro` 那几句、`quick-note`、右轨那一行状态话。
+ *
+ * ## 它报什么
+ *
+ * **逐段报出数到了哪几句**，不许只报一个总数——报一个数的话，哪天它数错了对象没人看得出来，
+ * 而那正是票 143 在修的毛病。同时报「一共扫过几段可见文字、其中几段按控件名／牌桌数放行」：
+ * 扫到 0 段就是这条闸门自己坏了（选择器扇空集），不是页面干净。
  */
-async function wordProblems(page, where, limit) {
-  const seen = await page.evaluate(() => {
-    let total = 0;
+const NAME_MAX = 12;
+
+/** 页脚另有一条上限：那几十字是法律要求的归属（MIT 外链 + Apache-2.0 §4(b)），不进正文预算。 */
+const FOOT_LIMIT = 60;
+
+/** 一叠文字段一共多少字。 */
+const chars = (segments) => segments.reduce((sum, one) => sum + one.text.length, 0);
+
+/**
+ * 在页面里按上面那份口径量一遍。返回散文逐段、总字数、以及两类放行的账。
+ * **闸门与阴性对照共用这一个函数、同一张页面、同一个量点**（判据 21）。
+ */
+function measureProse(page, nameMax) {
+  return page.evaluate((nameMax) => {
+    const prose = [];
     let foot = 0;
-    let blocks = 0;
+    let visible = 0;
+    const waived = { board: [], readout: [], name: [] };
+    /** 这一段在哪：最近的一枚 testId，没有就退到 class 或标签名。 */
+    const at = (host) => {
+      const marked = host.closest("[data-testid]");
+      if (marked !== null) return marked.dataset.testid;
+      const named =
+        host.className && typeof host.className === "string" ? host.className.trim() : "";
+      return named !== "" ? `.${named.split(/\s+/)[0]}` : host.tagName.toLowerCase();
+    };
     const walk = (el) => {
       for (const node of el.childNodes) {
         if (node.nodeType === 3) {
@@ -277,48 +326,197 @@ async function wordProblems(page, where, limit) {
           if (text.length < 4) continue;
           const host = node.parentElement;
           if (host === null) continue;
-          // 牌面上的字是牌，不是话（`.tile` 拿 `color: transparent` 藏着它）。
+          // ① 牌面上的字是牌，不是话（`.tile` 拿 `color: transparent` 藏着它）。
           if (host.closest(".tile") !== null) continue;
-          // 席位那一列（记分板，票 124）也不是话：它是**固定四行的数据块**
-          // ——一行一席，各摆自风、这一席是谁、多少分。散文的害处是单调增长，
-          // 而它长不了：`verify-board` 的 `checkRoster` 钉着「必须四行」，
-          // 且每一格都要与那一席名牌上的同一个字段逐字相等，塞不进一句解释。
-          // **散文那两条上限（112 / 168）一分没动**：这里只是不把数据算成话。
-          if (host.closest('[data-testid="table-roster"]') !== null) continue;
-          // 页脚**另算**：那 118 字是法律要求的（MIT 外链 + Apache-2.0 §4(b) 的归属），
-          // 不是废话，混进正文预算只会逼人去砍不该砍的。但它也不许野蛮生长，
-          // ∴ 它有自己那一条上限（下面 `footer` 那一格）。
+          // ⑤ 页脚另算（`FOOT_LIMIT`）：混进正文预算只会逼人去砍不该砍的。
           if (host.closest('[data-testid="site-footer"]') !== null) {
             foot += text.length;
             continue;
           }
-          // 收在抽屉里的不算：那正是我们要它去的地方。
+          // ④ 收在抽屉里的、画不出来的都不算。
           const folded = host.closest("details");
           if (folded !== null && !folded.open) continue;
           if (host.getBoundingClientRect().height < 2) continue;
-          total += text.length;
-          blocks += 1;
+          visible += 1;
+          // ② 牌桌上的数与记分板：数据块，不是话。记分板长不了——`verify-board` 的
+          // `checkRoster` 钉着「必须四行」、每一格与名牌上的同一字段逐字相等，塞不进一句解释。
+          if (
+            host.closest('[data-testid="table-board"]') !== null ||
+            host.closest('[data-testid="table-roster"]') !== null
+          ) {
+            waived.board.push({ text, at: at(host) });
+            continue;
+          }
+          // ②' 牌桌外面的读数：时间轴那句「第 0 手・东1局」（短、带数字），
+          // 与右轨那一行「上一手：座位 N …」（每帧换一句，不是常驻说明）。
+          // 长句不在此列（含数字那一条钉着 `nameMax`）。
+          if (
+            host.closest('[data-testid="table-latest"]') !== null ||
+            (/\d/.test(text) && text.length <= nameMax)
+          ) {
+            waived.readout.push({ text, at: at(host) });
+            continue;
+          }
+          // ③ 控件名（短的才算名字；长的是话，照数）。
+          const control = host.closest(
+            'button, a, select, option, summary, label, [role="button"]',
+          );
+          if (control !== null && text.length <= nameMax) {
+            waived.name.push({ text, at: at(host) });
+            continue;
+          }
+          prose.push({ text, at: at(host) });
         } else if (node.nodeType === 1) walk(node);
       }
     };
     walk(document.body);
-    return { total, foot, blocks };
-  });
-  if (seen.blocks === 0) return [`${where} 一处文字都没量到：这条字数闸门自己坏了（不是页面干净）`];
+    return {
+      prose,
+      foot,
+      visible,
+      waived,
+      total: prose.reduce((sum, one) => sum + one.text.length, 0),
+    };
+  }, nameMax);
+}
+
+/**
+ * 这一屏的散文闸门。上限**由实测定**（票 143 在改动之后逐段量的：首页 111 字、
+ * `?table=1` 45 字，逐段的账见调用点那一段注释），留的余量写在调用点上。
+ *
+ * **它不自己量**：那一份 `seen` 由调用点量一次，闸门与对照共用同一份
+ * ——牌桌那一屏是活的，量两遍就可能是两帧（判据 21：共用同一个量点）。
+ */
+function wordProblems(where, limit, seen) {
+  if (seen.visible === 0)
+    return [`${where} 一处可见文字都没量到：这条闸门自己坏了（不是页面干净）`];
   const said = [];
   if (seen.total > limit)
     said.push(
-      `${where} 落地那一屏摆了 ${seen.total} 字（上限 ${limit}）：` +
-        "又开始说废话了——能收进 title / 抽屉的就别常驻（票 120）",
+      `${where} 落地那一屏摆了 ${seen.total} 字散文（上限 ${limit}）：` +
+        "又开始说废话了——能收进 title / 抽屉的就别常驻（票 120/143）\n" +
+        seen.prose
+          .map((one) => `      ${one.at}：「${one.text}」（${one.text.length} 字）`)
+          .join("\n"),
     );
-  if (seen.foot > 60)
+  if (seen.foot > FOOT_LIMIT)
     said.push(
-      `${where} 页脚摆了 ${seen.foot} 字（上限 60）：只挂链接·许可·归属，别写散文（票 121）`,
+      `${where} 页脚摆了 ${seen.foot} 字（上限 ${FOOT_LIMIT}）：只挂链接·许可·归属，别写散文（票 121）`,
     );
-  if (said.length === 0)
+  if (said.length === 0) {
     console.log(
-      `${where} 说了 ${seen.total} 字 ✓（上限 ${limit}，页脚另计 ${seen.foot}，量到 ${seen.blocks} 处）`,
+      `${where} 说了 ${seen.total} 字散文 ✓（上限 ${limit}，页脚另计 ${seen.foot}；` +
+        `扫过 ${seen.visible} 段可见文字，其中控件名 ${chars(seen.waived.name)} 字、` +
+        `牌桌上的数 ${chars(seen.waived.board)} 字、牌桌外的读数 ${chars(seen.waived.readout)} 字按口径放行）`,
     );
+    // **逐段报出数到了哪几句**（票 143）：只报一个总数的话，哪天它数错了对象没人看得出来。
+    for (const one of seen.prose) {
+      console.log(`    ${one.at}：「${one.text}」（${one.text.length} 字）`);
+    }
+    // **被放行的那几段也逐段报**：数错对象的另一半是「把一句话当成了控件名／读数」，
+    // 只印一个总数的话，那一半照样没人看得出来。
+    for (const [kind, segments] of [
+      ["控件名", seen.waived.name],
+      ["读数", seen.waived.readout],
+      ["牌桌", seen.waived.board],
+    ]) {
+      if (segments.length > 0) {
+        console.log(`    （放行·${kind}）${segments.map((one) => `「${one.text}」`).join("")}`);
+      }
+    }
+  }
+  return said;
+}
+
+/**
+ * **这道闸门还咬得动吗**（票 143 的阴性对照 + 阳性对照，判据 1 / 20 / 21）。
+ *
+ * 重定上限最容易变成「造了一条永远绿的摆设」，那比原来那道数错对象的闸门更坏。
+ * ∴ 每一趟都在**同一张页面、同一个 `measureProse`、同一个量点**上把两半都试一遍：
+ *
+ *   - **阳性**：往那一屏塞一段真散文（一个 `<p>`，不在牌桌里、不在控件里、不在抽屉里）
+ *     ⇒ 总数必须涨满那一段的字数，且**必须超过上限**（闸门当场红）；
+ *   - **阴性**：改塞一枚短名字的按钮 + 一格牌桌上的数 ⇒ 总数必须**一分不动**
+ *     （否则说明口径又开始把控件名当话数了）。
+ *
+ * 阴性那半句自己证明不了任何事（判据 21：它在一张空页面上永远成立），
+ * ∴ 两半共用同一次注入路径，先看阳性那半句红。
+ */
+async function proseProbeProblems(page, where, limit, baseline) {
+  const said = [];
+  const inject = (html) =>
+    page.evaluate((html) => {
+      const host = document.querySelector(".page") ?? document.body;
+      const box = document.createElement("div");
+      box.id = "prose-probe";
+      box.innerHTML = html;
+      host.append(box);
+    }, html);
+  const clear = () =>
+    page.evaluate(() => {
+      document.querySelector("#prose-probe")?.remove();
+    });
+
+  // 阳性：一段真散文（57 字，稳稳越过余量）。**它里面故意有一个数字**：
+  // 「含数字且不超过 `NAME_MAX` 字」那条读数豁免的**上界**因此也被证了一遍
+  // ——一段带数字的长句是话，照数（那句注释于是有了执行体，判据 2）。
+  const essay =
+    "这一段是闸门自己塞进去的第 1 段散文：它不是控件名，也不是牌桌上的数，" +
+    "而是成段的说明文字，正是这条上限要拦的东西。";
+  await inject(`<p>${essay}</p>`);
+  const loud = await measureProse(page, NAME_MAX);
+  await clear();
+  const grew = loud.total - baseline.total;
+  if (grew !== essay.length) {
+    said.push(
+      `${where} 往那一屏塞了 ${essay.length} 字散文，闸门只多数出 ${grew} 字：` +
+        "这条口径漏掉了真散文（票 143 的阳性对照）",
+    );
+  }
+  if (loud.total <= limit) {
+    said.push(
+      `${where} 塞进 ${essay.length} 字散文之后才 ${loud.total} 字、仍在上限 ${limit} 之内：` +
+        "这道闸门咬不动了——重定上限不许把它变成一条永远绿的摆设（票 143）",
+    );
+  }
+
+  // 阳性之二：**同一段散文塞进一枚 `<button>` 里**。控件那条豁免钉着 `NAME_MAX`，
+  // 一枚长按钮里装的不是名字、是话，∴ 照数不误。
+  // 没有这一条的话，把 `NAME_MAX` 调大就能让任何散文躲进一个 `<a>` 里而闸门全绿
+  // ——那正是「造了一条永远绿的摆设」的另一种走法（实测：这一条不在时，
+  // 把 `NAME_MAX` 从 12 调到 200，整趟仍旧全绿）。
+  await inject(`<button type="button">${essay}</button>`);
+  const dressed = await measureProse(page, NAME_MAX);
+  await clear();
+  if (dressed.total - baseline.total !== essay.length) {
+    said.push(
+      `${where} 把那 ${essay.length} 字散文塞进一枚按钮里之后只多数出 ${dressed.total - baseline.total} 字：` +
+        "控件那条豁免变成了藏散文的口袋（票 143 的阳性对照之二）",
+    );
+  }
+
+  // 阴性：一枚短名字的控件 + 一格牌桌上的数，一分都不许算进散文。
+  await inject(
+    '<button type="button">导出牌谱</button>' +
+      "<span>第 7 手・东2局</span>" +
+      '<div data-testid="table-board"><span>东1局 0 本场</span><span>25000</span><span>宝牌指示牌</span></div>',
+  );
+  const quiet = await measureProse(page, NAME_MAX);
+  await clear();
+  if (quiet.total !== baseline.total) {
+    said.push(
+      `${where} 塞进一枚按钮、一句读数与两格牌桌上的数之后，散文从 ${baseline.total} 字变成 ${quiet.total} 字：` +
+        "口径又把界面本身当成话数了（票 143 的阴性对照）",
+    );
+  }
+
+  if (said.length === 0) {
+    console.log(
+      `${where} 那道散文闸门咬得动 ✓（塞 ${essay.length} 字散文：${baseline.total} → ${loud.total} 字，` +
+        `越过上限 ${limit} 当场红；同一段塞进一枚按钮里仍旧照数：${dressed.total} 字；` +
+        `塞一枚按钮、一句读数与两格牌桌数：${quiet.total} 字，一分没动）`,
+    );
+  }
   return said;
 }
 
@@ -1299,13 +1497,40 @@ export async function verifyHome(lane) {
     oneScreen = await oneScreenProblems(lane, url);
     missing.push(...oneScreen.said);
 
-    // ⑬ 这一页说了多少话（票 120）——落地那一屏，抽屉里的不算。
+    // ⑬ 这一屏说了多少**散文**（票 120 立、票 143 重定量点）——落地那一屏，抽屉里的不算。
+    //
+    // **两条上限都是实测出来的，不是拍的**（票 143 在改动之后逐段量的）：
+    //
+    //   - 首页 **111** 字＝开场那两句 24+29、终局那句复盘指路 58 ⇒ 上限 **125**（余 14）；
+    //   - `?table=1` **45** 字＝key 去向那一句 ⇒ 上限 **60**（余 15）。
+    //
+    // 控件名、牌桌上的数与读数不进这份预算——口径写在 `measureProse` 上面那一段。
+    // **这两个数与票 120 那 112/168 不可比**：那两条数的是整屏可见文字（控件名与牌桌上的数
+    // 占了七八成），这两条只数散文。`?table=1` 那一屏的散文预算实际上是**收紧**的。
+    //
+    // **`waitForSelector` 那一行是这一票量出来的账**：从前不等牌桌，首页量到的是
+    // 「正在取那一局……」那一帧，∴ 首页那 58 字的复盘指路话**一次都没被数到过**
+    // （判据 20：量点要停在那件事该发生的那一刻）。它是新口径下如假包换的散文，
+    // **砍不砍是票 120/121 的地盘，这一票只改「怎么数」不改「说多少」**
+    // ——∴ 首页那条上限得先容得下它，这笔账写进了报告交调度器裁。
+    //
+    // **每一屏都跟着跑一遍阳性 + 阴性对照**（`proseProbeProblems`）：重定上限最容易变成
+    // 「造了一条永远绿的摆设」，而那比原来那道数错对象的闸门更坏。
     {
       const at = await lane.newPage({ viewport: ONE_SCREEN });
-      await at.goto(`${url}/`, { waitUntil: "load" });
-      missing.push(...(await wordProblems(at, "首页", 112)));
-      await at.goto(`${url}/?table=1`, { waitUntil: "load" });
-      missing.push(...(await wordProblems(at, "?table=1", 168)));
+      for (const [where, path, limit] of [
+        ["首页", "/", 125],
+        ["?table=1", "/?table=1", 60],
+      ]) {
+        await at.goto(`${url}${path}`, { waitUntil: "load" });
+        // 落地那一屏 = 牌桌画出来之后那一屏。不等的话首页量到的是「正在取那一局……」
+        // 那一帧（判据 20：量点要停在那件事该发生的那一刻，不是碰上哪一帧算哪一帧）。
+        await at.waitForSelector('[data-testid="table-board"]', { timeout: 15000 });
+        // **量一次，闸门与对照共用**（判据 21：同一张页面、同一个量点、同一帧）。
+        const seen = await measureProse(at, NAME_MAX);
+        missing.push(...wordProblems(where, limit, seen));
+        missing.push(...(await proseProbeProblems(at, where, limit, seen)));
+      }
       await at.close();
     }
 
