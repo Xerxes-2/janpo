@@ -121,9 +121,21 @@ function readBoard(page) {
           label: text(hand.querySelector(".row-label")),
           faces: hand.querySelectorAll("[data-pai]").length,
           backs: hand.querySelectorAll(".tile.back").length,
-          // 牌背画得出来吗（票 32）：边框色与牌背图（票 80 起是 Back.svg，从前是斜纹底）缺一样就是一块看不见的牌。
-          backInk: back === null ? null : getComputedStyle(back).borderTopColor,
-          backPattern: back === null ? null : getComputedStyle(back).backgroundImage,
+          // 牌背看得出是牌背吗（票 32 的意图，牌桌救援 票 2 改成意图级）：
+          // 读牌背与牌面各自的**底色**，对比度在 Node 侧算。从前钉的是
+          // 「边框色不许透明 + background-image 不许是 none」——那锁死的是
+          // 「必须拿背景图画牌背」这条实现手段，换成纯色 + 内阴影就当场红。
+          // 牌面那一头用一枚探针元素从同一份样式表里现取（同下面赤五那一套的做法）。
+          backFill: back === null ? null : getComputedStyle(back).backgroundColor,
+          faceFill: (() => {
+            if (back === null) return null;
+            const probe = document.createElement("span");
+            probe.className = "tile";
+            back.parentElement.append(probe);
+            const fill = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return fill;
+          })(),
           // 这一排牌**每一张画在哪儿、多大**（票 82 起读真坐标）：一手牌是不是一条线、
           // 刚摸那张有没有摆开、左右两家的牌有没有真的转 90°，三条断言都读它。
           // 从前只读 `.tile.drawn` 的 `margin-left`——那个数在竖排那两家恒为 0，
@@ -224,12 +236,27 @@ function readBoard(page) {
 }
 
 /**
- * 这个颜色等于没画吗。**两种写法都认**：浏览器把 `color-mix()` 算出来的是
- * `color(srgb 0 0 0 / 0)`，而普通颜色是 `rgba(0, 0, 0, 0)`——只认后一种的话，
- * 票 32 那个病根（牌背吃 `currentcolor`，而它是透明的）会从这道闸门下面滑过去。
+ * 两个 CSS 颜色的 WCAG 对比度（牌桌救援 票 2）。认 `rgb(…)` / `rgba(…)`——
+ * `getComputedStyle` 吐出来的就是这两种。解析不动（或者透明到看不见）回 null，
+ * 调用侧把 null 当「读不出颜色」报出来——闸门不许静默空转。
  */
-function invisible(color) {
-  return color === null || color === "transparent" || /(,\s*0\)|\/\s*0\))$/.test(color.trim());
+function contrastRatio(a, b) {
+  const luminance = (color) => {
+    const match = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\s*\)$/.exec(
+      (color ?? "").trim(),
+    );
+    if (match === null) return null;
+    if (match[4] !== undefined && Number.parseFloat(match[4]) < 0.99) return null;
+    const channel = (raw) => {
+      const unit = Number(raw) / 255;
+      return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(match[1]) + 0.7152 * channel(match[2]) + 0.0722 * channel(match[3]);
+  };
+  const one = luminance(a);
+  const two = luminance(b);
+  if (one === null || two === null) return null;
+  return (Math.max(one, two) + 0.05) / (Math.min(one, two) + 0.05);
 }
 
 /** 四家画在哪个格子里（`data-`）以及**真的画在哪儿**（元素中心的坐标）。 */
@@ -296,11 +323,19 @@ function checkHands(shot, problems) {
         problems.push(`${where}是他家的，却露出了 ${seat.hand.faces} 张牌面`);
       // 「DOM 里有、眼睛里没有」——票 32 那次缺陷的形状。一张牌背也没画时不报这一条：
       // 那是上面那条的事（一件事只报一遍，红的时候才看得出到底丢了什么）。
+      // **断言的是意图**（牌桌救援 票 2；判据 24）：牌背与牌面的底色对比 ≥ 3:1
+      // ——「牌背看得出是牌背」这条视觉约定本身。拿什么画（背景图、纯色、内阴影）随便换。
       if (seat.hand.backs > 0) {
-        if (invisible(seat.hand.backInk))
-          problems.push(`${where}的牌背是透明的（边框色 ${seat.hand.backInk}）：画了等于没画`);
-        if (seat.hand.backPattern === null || seat.hand.backPattern === "none")
-          problems.push(`${where}的牌背没有牌背图：与明牌一眼分不开`);
+        const ratio = contrastRatio(seat.hand.backFill, seat.hand.faceFill);
+        if (ratio === null)
+          problems.push(
+            `${where}的牌背底色读不出来（牌背 ${seat.hand.backFill} / 牌面 ${seat.hand.faceFill}）：` +
+              "透明或解析不动的底色就是一块看不见的牌",
+          );
+        else if (ratio < 3)
+          problems.push(
+            `${where}的牌背与牌面底色对比只有 ${ratio.toFixed(2)}:1（下限 3:1）：与明牌一眼分不开`,
+          );
       }
     } else {
       if (seat.hand.faces !== count)
