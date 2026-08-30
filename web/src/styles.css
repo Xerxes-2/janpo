@@ -40,7 +40,7 @@
    **这两个数是量出来的，不是拍的**：设计高每多 1 rem，1280×800 下的牌就小 1.7%。
    ────────────────────────────────────────────────────────────── */
 html {
-  font-size: min(calc(100vw / 62), calc(100vh / 61.5));
+  font-size: min(calc(100vw / 76), calc(100vh / 56));
 }
 
 /* 舞台之内不许有文档滚动——长卷死了，「操作条要不要吸底」那场争论也就失去了对象。 */
@@ -73,6 +73,7 @@ body {
      票 119 接手固定舞台时**只换这两个变量**，几何一个字不动。 */
   --board: 30rem;
   --plate: 10rem;
+  --rail: 13rem;
 
   --tile-w: 1.75rem;
   --tile-h: 2.35rem;
@@ -354,23 +355,11 @@ input[type="range"] {
 }
 
 .naki-legend {
-  /* **摆进牌桌左边距**（票 119）：那一侧有 176 px 空着，只有一张竖向居中的名牌。
-     它是图例不是正文流——占着纵向那 38 px 是白花的，而舞台要把整页塞进一屏。 */
-  position: absolute;
-  /* **相对居中的牌桌定位**，不是相对 `.board` 的左边（票 119）。
-     `.board` 的宽由内容撑着（实测 1280×800 上是 885 px，比它的 max-width 还宽），
-     `left: 0` 会把图例顶到视口最左、字被裁掉——**闸门没抓到，是看图看出来的**。 */
-  left: 50%;
-  margin-left: calc(var(--board) / -2 - 10.6rem);
-  bottom: 0.5rem;
-  width: 10rem;
+  /* 左轨最下那一句（票 118）：在流里，不再绝对定位。 */
   font-size: 0.7rem;
   line-height: 1.45;
-  text-align: left;
-  /* 静态说明文字，没人点它。自家名牌（带气泡）从牌桌下沿探下来时，
-     不写这一条它会**拦住气泡的点击**——playwright 报 `intercepts pointer events`。 */
-  pointer-events: none;
   opacity: 0.7;
+  margin: 0.2rem 0 0;
 }
 
 .zones {
@@ -1592,7 +1581,50 @@ input[type="range"] {
    两者会叠上——而这一刻**复盘才是要看的那件事**，气泡说的是刚打完那一手。
    不写这一条时下家的气泡会拦住「看全部」那枚开关（playwright 报
    `intercepts pointer events`）。票 118 把气泡改成点开的浮层之后这一条可以重估。 */
-[data-testid="table-review"] {
+/* 同理，全文面板（票 86）也盖在气泡上面：它是点了气泡才出现的那一层，
+   而点开它的那枚气泡就在旁边——不写这一条时「收起」那枚按钮被气泡拦住。 */
+[data-testid="table-review"],
+[data-testid="table-bubble-detail"] {
   position: relative;
   z-index: 2;
+}
+
+/* ── 三列（票 118）────────────────────────────────────────────────
+   左轨 = 怎么走（操作、视角、危险度）　中间 = 牌桌　右轨 = 怎么看（复盘）
+
+   为什么是三列而不是竖着堆：票 119 装上固定舞台之后，纵向每多 1 rem，
+   1280×800 下的牌就小 1.7%——而横向本来大片空着。摆成三列**同时**把空白填上、
+   把纵向堆叠变短，牌因此大回去。∴ 主人那句「两边大片空白有些别扭」与
+   「牌变小了」是同一件事的两面。
+   ───────────────────────────────────────────────────────────── */
+.table-frame {
+  display: grid;
+  /* 中栏要**把名牌算进去**：左右两家的名牌浮在牌桌外各 --plate 宽，
+     中栏只按牌桌取宽的话它们会压到两条轨道上（实测座位 3 盖住了视角那一排按钮）。
+     绝对定位的东西不占位，∴ 得在这里替它们把位子留出来。 */
+  grid-template-columns: var(--rail) calc(var(--board) + var(--plate) * 2 + 1.5rem) var(--rail);
+  gap: 0.6rem;
+  align-items: start;
+  justify-content: center;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: var(--rail);
+}
+
+/* 左轨里的操作块：从横着一排改成竖着一列，按钮各占满轨宽。 */
+.rail-left .ops {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.rail-left .ops .controls {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
 }

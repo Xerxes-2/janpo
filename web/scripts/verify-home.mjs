@@ -217,6 +217,10 @@ async function opsShape(page) {
       return {
         top: Math.round(rect.top + window.scrollY),
         bottom: Math.round(rect.bottom + window.scrollY),
+        // 左右也要（票 118）：三列之后操作条与牌桌是**并排**的，
+        // 把它们分开的那个轴变成了横轴。
+        left: Math.round(rect.left + window.scrollX),
+        right: Math.round(rect.right + window.scrollX),
       };
     };
     const ops = document.querySelector('[data-testid="table-ops"]');
@@ -239,7 +243,7 @@ async function opsShape(page) {
  * **操作控件贴着牌桌**（票 83 的第一条）。四条断言，两屏各量一遍：
  *
  *   ① 那一块真的在（两屏共用同一套装配，不是只给主持人那一页做了一份）；
- *   ② 它在牌桌**上方**；
+ *   ② 它**挨着**牌桌（票 118 之后是并排在左，从前是摞在上面）；
  *   ③ 两者之间不允许再塞东西（空隔 ≤ `OPS_TO_BOARD_MAX_PX`）——票 83 之前这一段是
  *      **1136 px** 的配桌表单，按一下单步要把视线甩回去；
  *   ④ **不做视口吸底**（调度器裁的）：吸底会盖住牌桌下沿，而那正是自家手牌那一排。
@@ -254,12 +258,26 @@ function opsProblems(shape, where, wantsSetup) {
   }
   if (shape.board === null) return said; // 牌桌没摆出来是别的断言的事
 
-  const gap = shape.board.top - shape.ops.bottom;
-  if (gap < 0) {
-    said.push(
-      `${where} 的操作条落到了牌桌下面（操作条 ${shape.ops.top}→${shape.ops.bottom}、牌桌 ${shape.board.top}）`,
-    );
-  } else if (gap > OPS_TO_BOARD_MAX_PX) {
+  // **量的是「隔了多远」，不是「谁在谁上面」**（票 118）。
+  //
+  // 票 83 立这一条时操作条摞在牌桌上面，∴ 当时写成 `board.top - ops.bottom`。
+  // 票 118 把它挪到牌桌左边并排——那一句 `gap < 0` 于是当场报「落到了牌桌下面」，
+  // 而实际上**它挨得比从前更近**。旧写法把「摞在上面」这个当时的实现细节
+  // 焊进了断言里，真正要守的是**视线要走多远**。
+  //
+  // ∴ 改成两个矩形的间距：竖着排就量竖的、并排就量横的，取那个真正把它们分开的轴。
+  // 相交（并排时常有）算 0。
+  const vertical = Math.max(shape.board.top - shape.ops.bottom, shape.ops.top - shape.board.bottom);
+  const horizontal = Math.max(
+    shape.board.left - shape.ops.right,
+    shape.ops.left - shape.board.right,
+  );
+  // **取真正把它们分开的那段距离**。头一版写 `min(vertical, horizontal)`——
+  // 并排时纵向是重叠的（负数），min 取到它，`max(0, 负)` 恒等于 0，
+  // **这条断言当场变成空的**：把左轨和牌桌拉开 6rem 都不报。阴性对照逮到的。
+  // 各轴先夹到非负（重叠算 0），再取斜边：竖排时等于竖的间距，并排时等于横的。
+  const gap = Math.round(Math.hypot(Math.max(0, vertical), Math.max(0, horizontal)));
+  if (gap > OPS_TO_BOARD_MAX_PX) {
     said.push(
       `${where} 的操作条与牌桌之间隔了 ${gap} px（上限 ${OPS_TO_BOARD_MAX_PX} px）：` +
         "中间又塞进了东西，按一下就看不见结果了（票 83）",

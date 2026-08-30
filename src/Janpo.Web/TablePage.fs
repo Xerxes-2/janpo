@@ -176,10 +176,39 @@ module TablePage =
                 @ setup
                 // 时间轴上那几枚标记（票 105）跟着控制条一起下去：**它们与复盘那一列同源**
                 // （同一次 `Review.focused`），因此不会出现「轴上标一批、列里摆另一批」。
-                @ [ TablePanel.ops model review.Marks dispatch; board model dispatch ]
-                // 复盘那一块（票 90）：**只在终局后出现**，判据在 `Review.shown` 里。
-                // 摆在牌桌**下面**：点一条标注就是把牌桌摆回那一手，两件东西要在同一屏上（票 83 同一条标准）。
-                @ review.Panel
+                // **三列**（票 118）：操作在左轨、牌桌居中、复盘在右轨。
+                //
+                // 从前这三块是竖着堆的，于是页面成了纵向长条——票 119 装上固定舞台之后
+                // 那条长条直接换成了牌的尺寸（牌 28→22.8 px），而横向大片空着。
+                // 摆成三列同时办两件事：**把两侧的空白填上**，并且**把纵向堆叠变短**，
+                // 根字号跟着涨、牌就大回去。
+                //
+                // 复盘仍与牌桌同屏（票 83 那条标准）——只是从「下面」改成了「右边」。
+                @ [
+                    Html.div [
+                        prop.className "table-frame"
+                        prop.children [
+                            Html.div [
+                                prop.key "rail-left"
+                                prop.className "rail rail-left"
+                                prop.children [
+                                    TablePanel.ops model review.Marks dispatch
+                                    // 副露那一句参照系（票 51/82）摆在左轨最下（票 118）：
+                                    // 票 117 把它移出桌心时挂在牌桌左边距上、绝对定位，
+                                    // 三列之后那个位置正压在页脚上。左轨本来就是它该在的地方——
+                                    // 它是「怎么读这张牌桌」的说明，与操作同属一列。
+                                    TableBoard.nakiLegendLine ()
+                                ]
+                            ]
+                            board model dispatch
+                            Html.div [
+                                prop.key "rail-right"
+                                prop.className "rail rail-right"
+                                prop.children review.Panel
+                            ]
+                        ]
+                    ]
+                ]
             )
         ]
 
