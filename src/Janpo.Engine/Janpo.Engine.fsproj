@@ -98,6 +98,9 @@
   <ItemGroup>
     <Compile Include="Paifu.fs" />
     <Compile Include="Replay.fs" />
+    <!-- 终局记分卡的逐席聚合（票 133）：牌谱本身答得出的那几格（和了 / 放铳 /
+         兜底 / 重试 / 按席的 token）。**纯函数、不存第二份数**，牌谱格式一个字没动。 -->
+    <Compile Include="Scorecard.fs" />
   </ItemGroup>
 
   <!-- 跑批（M0 验收）：一批种子跑到底，逐手验不变量、逐场数覆盖率。CLI 与 CI 共用它。 -->

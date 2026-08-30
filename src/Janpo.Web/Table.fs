@@ -474,6 +474,23 @@ module Table =
     let paifu (roster: Roster) (table: Table) : Paifu =
         Paifu.create (Game.ruleset table.Game) (events roster table) table.Decisions table.Prompting
 
+    /// 这一桌的**逐席记分**（票 133）：终局记分卡上那几格里，牌谱本身答得出的那些。
+    ///
+    /// **不问配桌**（因此回放那一侧也调得动，Live 与回放同一条路）：记分卡上唯一要问配桌的
+    /// 是「选手 · 档」那一列，而那一列在渲染层（`TableState.scorecardPlayers`）。
+    /// 这里因此不拼 `start_game`——那条事件的 `names` 才是要配桌的那一样，
+    /// 而记分卡一个字都不读它。
+    ///
+    /// **它就是 `Scorecard.ofPaifu` 的同一段代码**（`Scorecard.tally`），不是第二份实现。
+    let scorecard (table: Table) : SeatTally list =
+        let current =
+            if GameState.isEnded table.State then
+                []
+            else
+                GameState.events table.State
+
+        Scorecard.tally (Game.ruleset table.Game) (Game.events table.Game @ current) table.Decisions
+
     // ---- 回放（票 71） ----
 
     /// 牌谱开头那条 `start_game` 里那一列名字（mjai 的 `names`），按座位升序。

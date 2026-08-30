@@ -35,6 +35,7 @@ import { verifyPlayback } from "./verify-playback.mjs";
 import { verifyQuickStart } from "./verify-quickstart.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
 import { verifyReview } from "./verify-review.mjs";
+import { verifyScorecard } from "./verify-scorecard.mjs";
 import { verifySeats } from "./verify-seats.mjs";
 import { verifySetup } from "./verify-setup.mjs";
 import { verifyShare } from "./verify-share.mjs";
@@ -77,6 +78,25 @@ async function strippedProof(lane) {
     return failure("反向自证没过：闸门是红了，但不是因为审计那三样（红的原因见下）。", lines);
 
   console.log(`没抹干净的载荷被闸门当场逮住：${caught}`);
+  return [];
+}
+
+/**
+ * 记分卡那一道的反向自证（票 133，与票 34 / 票 77 那两道同一种写法）：`--poison` 把那把
+ * 假 key 拌进复制出来的那段记分卡文本，于是「记分卡文本里搜不到 key」**必须**当场红，
+ * **且必须是因为那把 key**。两种失法各报各的话。
+ */
+async function scorecardKeyProof(lane) {
+  const failures = await verifyScorecard(lane, { poison: true });
+  const lines = failures.flatMap((each) => each.lines);
+  const caught = lines.find((line) => line.includes("里出现了 API key"));
+
+  if (failures.length === 0)
+    return failure("反向自证没过：拌了 key 的记分卡文本竟然过了闸门——那条断言等于没有。", []);
+  if (caught === undefined)
+    return failure("反向自证没过：闸门是红了，但不是因为那把 key（红的原因见下）。", lines);
+
+  console.log(`拌了 key 的记分卡文本被闸门当场逮住：${caught}`);
   return [];
 }
 
@@ -294,6 +314,25 @@ const gates = [
     name: "复盘：对局中一条都没有，终局后每一手都有，那几个数与引擎逐字相同",
     how: "node scripts/verify-review.mjs",
     run: (lane) => verifyReview(lane),
+  },
+  // 票 133：**终局记分卡**。语料是首页那份 Demo 牌谱（拖一下时间轴就到终局）。
+  // 阴性与阳性钉在同一条轴的同一次拖动上（判据 20/21）：第 0 帧那一块整个不在 DOM 里，
+  // 末帧四行齐；每一行的九个 `data-*` 与引擎另一条路算的（`ScorecardCheck.tally`：
+  // `Replay.ofPaifu`，页面那侧走 `Table.replay` 的帧）逐格对拍；和了 / 放铳再加一个
+  // **第三锚点**——闸门自己照事件流数一遍（自摸时 mjai 把 `target` 写成和了者自己）。
+  // 「选手 · 档」那一列在回放上恒是「牌谱没记」（牌谱里没有档位，留白会被读成 bot）。
+  // 最后点「复制记分卡」读**真剪贴板**：那段文本与屏幕上那张表逐格相同，且搜不到 key。
+  {
+    name: "终局记分卡：还没终局时整块不在、终局后四行齐、逐格与引擎相同、文本里没有 key",
+    how: "node scripts/verify-scorecard.mjs",
+    run: (lane) => verifyScorecard(lane),
+  },
+  // 票 133 的反向自证（被它按红的是上面那一趟的最后一条）：把那把假 key 拌进记分卡文本，
+  // 「记分卡文本里搜不到 key」必须当场红。理由与拌 key 那一趟逐字相同。
+  {
+    name: "反向自证：拌了 key 的记分卡文本必须让那道闸门变红",
+    how: "node scripts/verify-scorecard.mjs --poison（它单跑时**该**以 1 退出）",
+    run: scorecardKeyProof,
   },
 ];
 

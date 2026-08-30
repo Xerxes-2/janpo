@@ -749,6 +749,146 @@ module TableBoard =
             )
         ]
 
+    // ---- 视图：终局记分卡（票 133） ----
+
+    /// 记分卡上一行那几个 `data-*`。**闸门读的就是它们**：无头闸门拿每一格与引擎
+    /// 直接算的那一份（`ScorecardCheck.tally`）逐格对拍，同 `verify-review` 的形状。
+    ///
+    /// **搬的是数与 wire 值，不是那句中文**：中文是渲染（ADR-0001），措辞一改闸门就红，
+    /// 而闸门该守的是「这一格说的数对不对」（判据 24）。因此「选手 · 档」那一格
+    /// **四样都上**：`data-player-source` 是四态的 wire 值（`tiered` / `no-tier` /
+    /// `tier-unrecorded` / `unrecorded`，措辞怎么改都不动它）、`data-player-name` 与
+    /// `data-player-tier` 是两半各自的字（前者与名牌逐字相同），`data-player` 是人读的那句话。
+    let private scorecardHooks (row: ScorecardRow) = [
+        prop.custom ("data-seat", string (Seat.index row.Seat))
+        prop.custom ("data-player-source", ScorecardPlayer.toWire row.Player)
+        // **身份与档位各上一格**：回放那一屏身份格与名牌上那一句逐字相同（两处画的都是
+        // `start_game` 那一列 `names`），而档位那半段只有 Live 答得出。
+        prop.custom ("data-player-name", ScorecardPlayer.nameSaid row.Player)
+        prop.custom ("data-player-tier", ScorecardPlayer.tierSaid row.Player)
+        prop.custom ("data-player", ScorecardPlayer.toDisplay row.Player)
+        prop.custom ("data-juni", string row.Juni)
+        prop.custom ("data-score", string row.Score)
+        prop.custom ("data-hora", string row.Tally.Hora)
+        // **`hora-targeted` 而不是 `houjuu`**：`CONTEXT.md` 里没有「放铳」的罗马字词条，
+        // 而改术语表要单票授权（AGENTS.md 硬约束 5）。这里只复合引擎里已有的两个词
+        // （`Hora` + `Hora.Target`）；提案见 `DECISIONS.md` 133-2。
+        prop.custom ("data-hora-targeted", string row.Tally.HoraTargeted)
+        prop.custom ("data-fallbacks", string row.Tally.Fallbacks)
+        prop.custom ("data-retries", string row.Tally.Retries)
+        prop.custom ("data-asked", string row.Tally.Asked)
+        prop.custom ("data-input", string (Usage.promptTokens row.Tally.Usage))
+        prop.custom ("data-output", string row.Tally.Usage.Output)
+    ]
+
+    /// 账单上那几笔**花了钱、没落子**的问话（票 108/110）：它们**不在这张表里**。
+    ///
+    /// 理由是那几次问话根本不在牌谱里（裁决 110：那笔账不进牌谱），而这张表的每一格
+    /// 都是牌谱的聚合。于是四行相加会小于牌桌那条账单行——**差额要当场说出来**，
+    /// 别让同一屏上两个 tok 数并排站着不解释（票 39）。回放那一侧恒是空表。
+    /// **差额与那句话都在 `ScorecardView` 里算**（`voidedGap` / `voidedSaid`）：
+    /// 摆在这里的话，「四行相加 ≤ 账单行」这条不变量就没有任何东西执行得了（判据 2）。
+    let private scorecardVoids (table: Table) (rows: ScorecardRow list) =
+        let counted = table |> Table.paidVoids |> List.length
+        let gap = ScorecardView.voidedGap (Table.usage table) rows
+
+        if counted = 0 then
+            []
+        else
+            [
+                Html.p [
+                    prop.key "voids"
+                    prop.className "intro"
+                    prop.testId "table-scorecard-voids"
+                    prop.custom ("data-void-asks", string counted)
+                    prop.custom ("data-void-input", string (Usage.promptTokens gap))
+                    prop.custom ("data-void-output", string gap.Output)
+                    prop.text (ScorecardView.voidedSaid counted gap)
+                ]
+            ]
+
+    /// 「复制记分卡」那一下的下场（票 133）。**不许静静地没复制上**（同票 78 那条）。
+    let private scorecardNote (model: TableModel) =
+        match model.ScorecardCopy with
+        | None -> []
+        | Some outcome ->
+            let wire, said =
+                match outcome with
+                | Ok chars -> "copied", $"已复制（{chars} 字符）。"
+                | Error reason -> "failed", $"记分卡没写进剪贴板：{reason}"
+
+            [
+                Html.p [
+                    prop.key "copy-note"
+                    prop.className "intro"
+                    prop.testId "table-scorecard-note"
+                    prop.custom ("data-scorecard-copy", wire)
+                    prop.text said
+                ]
+            ]
+
+    /// 终局记分卡：一席一行，四家逐列可比（票 133）。
+    ///
+    /// **还没终局时整块不在 DOM 里**（`TableState.scorecard` 那时是空表）：
+    /// 一张空表比没有更糟——它声称有结论而每一格都是 0。
+    let private scorecardPanel (model: TableModel) (dispatch: TableMsg -> unit) (table: Table) =
+        match TableState.scorecard model table with
+        | [] -> []
+        | rows ->
+            let head =
+                Html.tr [
+                    prop.key "head"
+                    prop.children [
+                        for header in ScorecardView.headers -> Html.th [ prop.key header; prop.text header ]
+                    ]
+                ]
+
+            let body =
+                rows
+                |> List.map (fun row ->
+                    Html.tr [
+                        prop.key $"seat-{Seat.index row.Seat}"
+                        prop.testId $"scorecard-{Seat.index row.Seat}"
+                        yield! scorecardHooks row
+                        // key 用列号：那几格的字重得厉害（四家的兜底都是「0」），
+                        // 拿内容当 key 会撞。
+                        prop.children (
+                            ScorecardView.cells row
+                            |> List.mapi (fun column cell -> Html.td [ prop.key (string column); prop.text cell ])
+                        )
+                    ])
+
+            [
+                Html.section [
+                    prop.key "scorecard"
+                    prop.className "settlement scorecard"
+                    prop.testId "table-scorecard"
+                    prop.custom ("data-rows", string (List.length rows))
+                    prop.children (
+                        [
+                            Html.h3 [ prop.key "title"; prop.text "记分卡" ]
+                            Html.table [
+                                prop.key "table"
+                                prop.children [
+                                    Html.thead [ prop.key "thead"; prop.children [ head ] ]
+                                    Html.tbody [ prop.key "tbody"; prop.children body ]
+                                ]
+                            ]
+                        ]
+                        @ scorecardVoids table rows
+                        @ [
+                            Html.button [
+                                prop.key "copy"
+                                prop.testId "table-scorecard-copy"
+                                prop.onClick (fun _ -> dispatch ScorecardCopied)
+                                prop.text "复制记分卡"
+                            ]
+                        ]
+                        @ scorecardNote model
+                    )
+                ]
+            ]
+
     // ---- 视图：危险度（票 25） ----
 
     /// 这一手能把谁的危险度摆出来：**只摆手牌本来就看得见的那家**。
@@ -1068,5 +1208,8 @@ module TableBoard =
                     @ danger
                     @ settlement
                     @ result
+                    // 终局记分卡（票 133）：紧接在精算那一句后面——那一句说的是顺位，
+                    // 这张表说的是「这一场谁打得怎么样」，两者是同一个结论的两半。
+                    @ scorecardPanel model dispatch table
                 )
             ]

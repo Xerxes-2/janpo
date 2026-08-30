@@ -541,19 +541,46 @@ module SeatingPlan =
     ///
     /// **它不是 `names`**（那一份恒是 `provider/model`，上牌谱）：档案名是本机的私人叫法，
     /// 只活在这一页上（`ModelProfile.Name` 那条术语）。
+    /// 名牌上「这一席是谁」的那半句（本机的私人叫法）。
+    let private plateWho (seating: SeatingPlan) (binding: SeatBinding) : string =
+        match binding.Choice with
+        | SeatChoice.Bot kind -> Bot.toDisplay kind
+        | SeatChoice.Human -> humanToDisplay
+        | SeatChoice.Baseline -> baselineToDisplay
+        | SeatChoice.Profile name ->
+            match tryProfile name seating with
+            | Some profile -> profile.Name
+            // 引的那份档案被删了：这一席**真的**退回了均匀随机（`playerOf` 同一条），
+            // 名牌就要跟着说实话——写着模型名而实际在打的是 bot 是句假话。
+            | None -> Bot.toDisplay Bot.Uniform
+
+    /// 名牌上**写不写档位**，写的话是哪一档。**「写不写」这条判据只有这一处**：
+    /// 名牌（`nameplates`）与终局记分卡（票 133 的「选手 · 档」）读的都是它。
+    ///
+    /// bot 席与强 AI 基线席是 None：它们不走 prompt，那一格对它们没意义，
+    /// 写上去只会让人以为它在生效。引的档案被删了的那一席同理（它真的退回了 bot）。
+    let private plateTier (seating: SeatingPlan) (binding: SeatBinding) : string option =
+        match binding.Choice with
+        | SeatChoice.Bot _
+        | SeatChoice.Baseline -> None
+        | SeatChoice.Human -> Some(ScaffoldTier.toDisplay binding.Tier)
+        | SeatChoice.Profile name ->
+            tryProfile name seating
+            |> Option.map (fun _ -> ScaffoldTier.toDisplay binding.Tier)
+
     let nameplates (seating: SeatingPlan) : string list =
         seating.Seats
         |> List.map (fun binding ->
-            match binding.Choice with
-            | SeatChoice.Bot kind -> Bot.toDisplay kind
-            | SeatChoice.Human -> $"{humanToDisplay}・{ScaffoldTier.toDisplay binding.Tier}"
-            | SeatChoice.Baseline -> baselineToDisplay
-            | SeatChoice.Profile name ->
-                match tryProfile name seating with
-                | Some profile -> $"{profile.Name}・{ScaffoldTier.toDisplay binding.Tier}"
-                // 引的那份档案被删了：这一席**真的**退回了均匀随机（`playerOf` 同一条），
-                // 名牌就要跟着说实话——写着模型名而实际在打的是 bot 是句假话。
-                | None -> Bot.toDisplay Bot.Uniform)
+            match plateTier seating binding with
+            | Some tier -> $"{plateWho seating binding}・{tier}"
+            | None -> plateWho seating binding)
+
+    /// 各席**名牌上那半句档位**，按座位升序；这一席不写档位时是 None（票 133）。
+    ///
+    /// **它与 `nameplates` 是同一条判据**（两者都由 `plateTier` 出），因此记分卡上
+    /// 「选手 · 档」那一格的后半段与名牌上那半句**不可能漂**。
+    let tiers (seating: SeatingPlan) : string option list =
+        seating.Seats |> List.map (plateTier seating)
 
     /// 四家全是自带 bot 时状态线上那句话。**同一种 bot 坐满时仍旧是「四家都是……的选手」**
     /// （票 42 那句话一字未改），混着坐时逐席报——写一句「四家都是随机选手」

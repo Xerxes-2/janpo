@@ -60,6 +60,9 @@ module TablePage =
     /// 名牌上那一句「这一席是谁在打」（票 82）。实现与理由见 `TableState.nameplates`。
     let nameplates (model: TableModel) : string list = TableState.nameplates model
 
+    /// 终局记分卡那几行（票 133）；还没终局就是空表。实现与理由见 `TableState.scorecard`。
+    let scorecard (model: TableModel) (table: Table) : ScorecardRow list = TableState.scorecard model table
+
     /// 人格与模板改过了、但要等下一局才发得出去吗。实现与理由见 `TableState.renderingPending`。
     let renderingPending (model: TableModel) : bool = TableState.renderingPending model
 

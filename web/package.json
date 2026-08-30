@@ -36,7 +36,8 @@
     "verify:setup": "node scripts/verify-setup.mjs",
     "verify:share": "node scripts/verify-share.mjs",
     "verify:toolsearch": "node scripts/verify-toolsearch.mjs",
-    "verify:review": "node scripts/verify-review.mjs"
+    "verify:review": "node scripts/verify-review.mjs",
+    "verify:scorecard": "node scripts/verify-scorecard.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.84.2",

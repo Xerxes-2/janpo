@@ -262,6 +262,57 @@ export async function verifyExport(lane, options = {}) {
             `最后一局的结算面板写着「${await readText("table-renchan")}」，而没有下一局了`,
           );
         }
+
+        // 终局记分卡（票 133）：**Live 那一桌也有一张**，而它的「选手 · 档」那一列
+        // **与名牌同源**（`TableState.nameplates`，不许第二份判据）。
+        // 记分卡自己那几个数由 `verify-scorecard.mjs` 逐格对拍——那一趟跑的是回放，
+        // 这里只守住 Live 这一半：表在、四行齐，「选手 · 档」那一格的**两半各自对得上**
+        // （身份 = 导出牌谱里那一列 `names`，档位 = 名牌上那半句）。
+        const scorecard = await page.evaluate(() => {
+          const rows = [...document.querySelectorAll('[data-testid^="scorecard-"]')];
+          return rows.map((row) => ({
+            seat: row.getAttribute("data-seat"),
+            player: row.getAttribute("data-player"),
+            source: row.getAttribute("data-player-source"),
+            name: row.getAttribute("data-player-name"),
+            tier: row.getAttribute("data-player-tier"),
+          }));
+        });
+        console.log(
+          `记分卡上扇到 ${scorecard.length} 行：${scorecard.map((row) => row.player).join(" / ")}`,
+        );
+        if (scorecard.length !== 4) {
+          problems.push(`终局那一屏的记分卡只扇到 ${scorecard.length} 行，四家该有 4 行`);
+        }
+        const names = JSON.parse(text).events?.[0]?.names ?? [];
+        for (const row of scorecard) {
+          const plate = await page
+            .getByTestId(`seat-${row.seat}-player`)
+            .getAttribute("data-player");
+
+          // ① 身份那半格 = **导出的那份牌谱里那一列 `names`**（`start_game`）。
+          //    本机那个私人档案名不上记分卡：记分卡是要被带走的东西。
+          if (row.name !== names[row.seat]) {
+            problems.push(
+              `座位 ${row.seat} 的记分卡身份格写着「${row.name}」，而牌谱里那一列 names 是「${names[row.seat]}」`,
+            );
+          }
+          // ② 档位那半格 = **名牌上那半句**（同一条判据，`SeatingPlan.tiers`）：
+          //    名牌带「・」的那几席写档位，不带的（bot / 强 AI 基线）那一格就该是空的。
+          const suffix = plate.includes("・") ? plate.slice(plate.indexOf("・") + 1) : "";
+          if (row.tier !== suffix) {
+            problems.push(
+              `座位 ${row.seat} 的记分卡档位那半格是「${row.tier}」，而名牌上那半句是「${suffix}」：那半段该与名牌同源`,
+            );
+          }
+          // ③ wire 值分得出「这一席没有档位」与「牌谱没记档位」——Live 那一桌只会是前两种。
+          const wanted = suffix === "" ? "no-tier" : "tiered";
+          if (row.source !== wanted) {
+            problems.push(
+              `座位 ${row.seat} 的记分卡来源是「${row.source}」，名牌是「${plate}」时该是「${wanted}」`,
+            );
+          }
+        }
       }
       if (report.events < 10) problems.push(`只导出了 ${report.events} 条事件，这一桌根本没走动`);
       if (withLlm && report.decisions === 0) problems.push("一席交给了模型，却一条决策记录都没有");

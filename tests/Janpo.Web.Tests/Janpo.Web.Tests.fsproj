@@ -17,6 +17,9 @@
     <Compile Include="PlaybackTests.fs" />
     <Compile Include="TableTests.fs" />
     <Compile Include="BoardTests.fs" />
+    <!-- 终局记分卡在页面这一侧（票 133）：两条路给出同一份逐席记分、四行对得上号、
+         屏幕上那张表与复制出去那段文字是同一份数。 -->
+    <Compile Include="ScorecardViewTests.fs" />
     <!-- 一份牌谱摆成逐帧的牌桌（票 71）：首页 Demo 回放的地基。 -->
     <Compile Include="ReplayTableTests.fs" />
     <!-- 回放的时间轴（票 75）：游标动得对不对（拖、步进、跳局、两头与幂等）。 -->

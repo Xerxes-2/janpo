@@ -116,6 +116,8 @@
   <ItemGroup>
     <Compile Include="PaifuTests.fs" />
     <Compile Include="ReplayTests.fs" />
+    <!-- 终局记分卡的逐席聚合（票 133）。 -->
+    <Compile Include="ScorecardTests.fs" />
   </ItemGroup>
 
   <!-- M0 验收跑批（票 14）：一批种子跑到底，逐手验不变量、逐场数覆盖率。 -->

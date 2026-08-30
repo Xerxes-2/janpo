@@ -46,6 +46,10 @@
     <Compile Include="Playback.fs" />
     <Compile Include="Table.fs" />
     <Compile Include="Board.fs" />
+    <!-- 终局记分卡的装配与那段纯文本（票 133）：把牌桌投影、终局精算与引擎那份逐席聚合
+         摆成一张四行的表。排在 `Board.fs` 后面（要 `SeatView`）、`TableState.fs` 前面
+         （「选手 · 档」那一列的取值器在那儿）。**这一层一个数都不算**。 -->
+    <Compile Include="ScorecardView.fs" />
     <Compile Include="Tracer.fs" />
     <Compile Include="Golden.fs" />
     <Compile Include="PaifuCheck.fs" />
@@ -53,6 +57,10 @@
          ——它不在页面里，只给 `web/scripts/verify-review.mjs` 在浏览器里 `import`。
          排在 `HumanSeat.fs` 后面（要 `HumanSeat.kind`）、页面那几块前面（它不用它们）。 -->
     <Compile Include="ReviewCheck.fs" />
+    <!-- 终局记分卡那几个数的无头锚点（票 133）：与 `PaifuCheck.fs` / `ReviewCheck.fs`
+         同一种东西——它不在页面里，只给 `web/scripts/verify-scorecard.mjs` 在浏览器里
+         `import`。排在 `ScorecardView.fs` 后面（同一票的两半），页面那几块前面。 -->
+    <Compile Include="ScorecardCheck.fs" />
     <Compile Include="Share.fs" />
     <!-- 首页那份 Demo Paifu（票 71）：F# 调 TS 的第三处（ADR-0005），只传字符串。 -->
     <Compile Include="Demo.fs" />

@@ -2301,6 +2301,51 @@ input[type="range"] {
   box-shadow: inset 0 -2px 0 var(--indigo);
 }
 
+/* ---- 终局记分卡（票 133） ---------------------------------------------------
+   一席一行、四家逐列可比的那张表。它套在 `.settlement` 里（与终局精算同一种纸），
+   这里只管表本身：等宽的数、窄屏时表自己横向滚，**页面不许横向滚**（判据 24 那条
+   「不溢出」是保证，用什么手段不是）。 */
+
+.scorecard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.scorecard th,
+.scorecard td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* 数那几列用等宽：四家上下对着读，比例字宽会让位数对不齐。 */
+.scorecard td:nth-child(n + 3) {
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard th {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.scorecard tr:last-child td {
+  border-bottom: none;
+}
+
+/* 「选手 · 档」那一格是唯一会长的一格（`provider/model・档位`）：**让它折行**，
+   而不是把后面那几列挤出视野。数那几列仍旧不折（折了就对不齐上下四家）。 */
+.scorecard td:nth-child(2) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 折了行还是装不下时表自己滚，而不是把整页顶宽。 */
+.scorecard {
+  overflow-x: auto;
+}
+
 /* —— 一行式开桌（票 138）：`provider · 模型 · key ·〔开打〕` ——
 
    开桌的最短路径从前是七步（自己开一桌 → 配桌 → 新建档案 → provider → 模型 → key →

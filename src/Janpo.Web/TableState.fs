@@ -538,6 +538,14 @@ type TableModel = {
     /// 人挑错文件是常事，原样播着、旁边说一句原因就够（`Failed` 是给「除它没有
     /// 别的可摆」的首页 Demo 与分享链接留的）。导入入口只在回放那一页，Live 恒为 None。
     ImportFault: string option
+    /// 「复制记分卡」最近一次的下场（票 133）：进了剪贴板几个字符，或者为什么没写上；
+    /// 一次都没点过、或者刚点下去还在写是 None。
+    ///
+    /// **它在 `TableModel` 上而不是 `LiveTable` 上**（与 `Shared` 的分别）：
+    /// 记分卡回放那一屏同样有，而分享链接只有主持人那一桌才有。
+    ///
+    /// **不许静静地没复制上**（同票 78 那条）：人会拿着一段不存在的文字去贴。
+    ScorecardCopy: Result<int, string> option
 }
 
 /// 牌桌上能发生的事。**一步一 Msg**：`Advanced` 与 `Ticked` 各推进一手，
@@ -611,6 +619,11 @@ type TableMsg =
     /// 剪贴板那一趟回来了（票 78）：载荷多少字符，或者为什么没写上。
     /// 超不超阈值在 update 里判（纯的，dotnet 侧的用例才够得着），Cmd 那侧只报字符数。
     | ShareSettled of result: Result<int, string>
+    /// 把终局记分卡那张表出成一段纯文本写进剪贴板（票 133）。
+    /// **两种来源都发得出**（回放那一屏同样有这一枚），与 `Shared` 不同。
+    | ScorecardCopied
+    /// 记分卡那一趟剪贴板回来了（票 133）：写进去几个字符，或者为什么没写上。
+    | ScorecardCopySettled of result: Result<int, string>
     /// hash 里那段分享载荷解完了（票 78）。与 `DemoLoaded` 同形：**它不会不来**，
     /// 读不动也是一个值（`Error` 带着「载荷读不动：」或「牌谱读不动：」打头的
     /// 中文原因，票 77 分好的两层）——带载荷打开的那一屏因此永不白屏。
@@ -1125,6 +1138,22 @@ module TableState =
             (Table.paifu roster table |> Share.toPayload)
                 .``then``(copied)
                 .catch (fun error -> dispatch (ShareSettled(Error $"载荷编不出来（{error}）")))
+            |> ignore)
+
+    /// 复制记分卡（票 133）：终局那张表 → 一段纯文本 → 剪贴板。
+    ///
+    /// **文本由 `ScorecardView.toText` 出**，与屏幕上那张表读同一份 `ScorecardRow`：
+    /// 两处各拼一遍就会漂，而这一票要的正是「复制出去的那段与屏幕上那张说同一件事」。
+    ///
+    /// **写完才算数**（同 `shareCmd`）：写不进去经 `ScorecardCopySettled` 回一句中文，
+    /// 静静地没复制上，人会拿着一段不存在的文字去贴。
+    let private scorecardCmd (rows: ScorecardRow list) : Cmd<TableMsg> =
+        Cmd.ofEffect (fun dispatch ->
+            let text = ScorecardView.toText rows
+
+            (writeClipboard text)
+                .``then``(fun () -> dispatch (ScorecardCopySettled(Ok text.Length)))
+                .catch (fun error -> dispatch (ScorecardCopySettled(Error $"浏览器不让写剪贴板（{error}）")))
             |> ignore)
 
     /// 剪贴板那一趟的回执 → 页面上那句话的三态（票 78）。**阈值判在这里**（纯的），
@@ -1961,6 +1990,64 @@ module TableState =
         | Some seat -> Viewpoint.Seated seat
         | None -> model.Viewpoint
 
+    /// 记分卡里「这一席是谁」的**唯一来源**：牌谱开头那条 `start_game` 的 `names`
+    /// （恒是 `provider/model`，`Roster.playerName`）。
+    ///
+    /// **回放那一屏也有**（票 133 的边界由调度器松过一次）：那一列就是回放名牌画的那一份
+    /// （`Table.names`），因此同一屏上两处逐字相同。**Live 取的是配桌那一份**——
+    /// 它正是这一桌导出牌谱时会写进 `start_game` 的那一列，不是本机那个私人档案名。
+    ///
+    /// **绝不去解析 `DecisionRecord.Output`**：那是 provider 的原始回执，F# 不解释它
+    /// （`Paifu.fs` 那条注释）。身份只从这一处来。
+    let private scorecardNames (model: TableModel) : string list =
+        match model.Source with
+        | Source.Live _ -> rosterOf model |> Option.map Roster.names |> Option.defaultValue []
+        | Source.Replay(ReplayTable.Ready(_, _, names)) -> names
+        | Source.Replay ReplayTable.Loading
+        | Source.Replay(ReplayTable.Failed _) -> []
+
+    /// 记分卡里**档位**那半格。**与名牌那半句同源**（`SeatingPlan.tiers`），不许第二份判据：
+    /// bot 席与强 AI 基线席没有档位（写上去会让人以为它在生效），
+    /// 而回放那一屏**牌谱压根没记**——两件事在页面上是两句不同的话。
+    let private scorecardTiers (model: TableModel) : ScorecardTier list =
+        match model.Source with
+        | Source.Replay _ -> Seat.all model.Ruleset |> List.map (fun _ -> ScorecardTier.Unrecorded)
+        | Source.Live live ->
+            let tiers = SeatingPlan.tiers live.Seating
+
+            Seat.all model.Ruleset
+            |> List.map (fun seat ->
+                match Seat.tryItem seat tiers with
+                | Some(Some said) -> ScorecardTier.Set said
+                | Some None
+                | None -> ScorecardTier.NotApplicable)
+
+    /// 记分卡上「选手 · 档」那一列（票 133）：**身份与档位各自来自它自己那一处**。
+    ///
+    /// 身份那一格缺失（v1 老牌谱、`names` 短了一截、或那一格是空串）才整格退回
+    /// `Unknown`——留白会被读成「这一席是 bot」，那是句假话。
+    let private scorecardPlayers (model: TableModel) : ScorecardPlayer list =
+        let names = scorecardNames model
+
+        scorecardTiers model
+        |> List.mapi (fun index tier ->
+            match List.tryItem index names with
+            | Some name when name <> "" -> ScorecardPlayer.Named(name, tier)
+            | Some _
+            | None -> ScorecardPlayer.Unknown)
+
+    /// 终局记分卡那几行（票 133）；**还没终局就是空表**——空表就是「整块不在 DOM 里」
+    /// （同复盘那一块在对局中的规矩：给不出结论时不摆一张空表）。
+    ///
+    /// **它是记分卡唯一的那份数**：屏幕上那张表与「复制记分卡」出去的那段纯文本读的都是它，
+    /// 两处各拼一遍必然漂。收 `table` 而不是自己去问 `shown`，是为了与牌桌那一格
+    /// **画的是同一帧**（气泡摊开时牌桌摆的是那一手的快照，结算与精算面板同此）。
+    let scorecard (model: TableModel) (table: Table) : ScorecardRow list =
+        match Board.ofTable (viewpoint model) table, Board.final table with
+        | Some board, Some final ->
+            ScorecardView.rows board.Seats (scorecardPlayers model) final.Result (Table.scorecard table)
+        | _ -> []
+
     /// 曳光弹那一块（`?dev=1`，票 35）此刻给不给开（票 87 堵 22-A）。
     ///
     /// **真人在座、对局还没打完时一律不给**：那一块把原始 mjai 事件印在**同一张文档**里，
@@ -2347,6 +2434,8 @@ module TableState =
             ReviewFiltered = true
             // 导入入口不在这一页（票 78），这一格恒为 None。
             ImportFault = None
+            // 还没点过「复制记分卡」（票 133）。
+            ScorecardCopy = None
         },
         Cmd.batch [ loading; winding ]
 
@@ -2370,6 +2459,8 @@ module TableState =
             ReviewFiltered = true
             // 还没导过任何东西（票 78）。
             ImportFault = None
+            // 还没点过「复制记分卡」（票 133）。
+            ScorecardCopy = None
         },
         demoCmd
 
@@ -2451,6 +2542,8 @@ module TableState =
         | Exported
         | Shared
         | ShareSettled _
+        | ScorecardCopied
+        | ScorecardCopySettled _
         | ImportPicked _ -> false
 
     /// **每一条消息之后把倒计时重新推一遍**（票 89）。
@@ -2614,6 +2707,24 @@ module TableState =
                         Shared = Some(settledShare result)
                 },
                 Cmd.none)
+        | ScorecardCopied ->
+            // **两种来源同一条路**（票 133）：记分卡读的是牌桌那一格此刻画着的那一帧，
+            // 而那一帧由 `shown` 给出——回放与 Live 因此不必各写一遍。
+            // 还没终局时 `scorecard` 是空表，按钮那时也不在 DOM 里。
+            match shown model with
+            | Shown.Loading
+            | Shown.Fault _ -> model, Cmd.none
+            | Shown.Board table ->
+                match scorecard model table with
+                | [] -> model, Cmd.none
+                // 上一次的下场先撤下来：新的一次正在路上，旧话留着会两头打架（同 `Shared`）。
+                | rows -> { model with ScorecardCopy = None }, scorecardCmd rows
+        | ScorecardCopySettled result ->
+            {
+                model with
+                    ScorecardCopy = Some result
+            },
+            Cmd.none
         | Exported ->
             model
             |> onLive (fun ruleset live ->
