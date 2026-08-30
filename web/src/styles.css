@@ -76,11 +76,23 @@ body {
   /* 牌桌边长的上限（牌桌救援 票 1；票 123 从 30rem 抬到 44rem）：
      30rem 那一版在 1920×1080 上把牌桌钉死在 480 px，而纵向本来能给到 792
      ——主人截图里那一屏正是这么空的。三个分支各答一件事，一个数都不是倒推的。 */
-  --board-max: 44rem;
-  --board: min(var(--board-max), calc(100vh - 18rem), calc(100vw - 52rem));
-  --plate: 9rem;
-  --rail: 13rem;
-  --rail-right: 16rem;
+  --board-max: 52rem;
+  /* **横向那一支由真实占位现算**（票 131）：两条轨道 + 左右两张名牌 + 页边距，
+     一项不落。从前写的是一个 52rem 的常数——轨道一旦跟着视口伸缩，那个数当场作废，
+     而它作废的方式是牌桌悄悄探出视口（判据 24：别把倒推出来的数焊进布局）。
+     纵向那 18rem 是名牌上下各 5rem、顶栏与页脚各约 2rem、页边距 1.5rem 的合计。 */
+  --board: min(
+    var(--board-max),
+    calc(100vh - 18rem),
+    calc(100vw - var(--rail) - var(--rail-right) - var(--plate) * 2 - 4rem)
+  );
+  /* 名牌与两条轨道**跟着屏走**（票 131，主人点的）：小屏收到够用就行，
+     大屏放开——长模型名（`deepseek/deepseek-v4-flash`）在 16rem 的右轨里
+     才不必截断。上下界都是量出来的：左轨 12rem 时「上帝视角」四个字仍不折行，
+     右轨 14rem 时记分板四行仍摆得下「风 名 点数」。 */
+  --plate: clamp(8rem, 9vw, 11rem);
+  --rail: clamp(12rem, 13vw, 16rem);
+  --rail-right: clamp(14rem, 16vw, 20rem);
   /* 三栏整框的宽度：两条轨道 + 牌桌 + 左右两张名牌 + 一点余量。
      **配桌那一行与它同宽同居中**，两者的左边缘因此严丝合缝（票 129）。 */
   --frame-w: calc(var(--rail) + var(--rail-right) + var(--board) + var(--plate) * 2 + 2.7rem);
@@ -1950,7 +1962,7 @@ input[type="range"] {
        加上四张名牌 10rem、页脚与页边距 ≈ 4rem，一共 33rem——按三栏那档的 18rem 算，
        1100×800 上牌桌底边探出视口 7 px（自查时量到的，而闸门那四个视口正好跳过了
        这一段：1280 走三栏，390 那档由横向定尺寸）。 */
-    --board: min(var(--board-max), calc(100vh - 33rem), calc(100vw - 21.5rem));
+    --board: min(var(--board-max), calc(100vh - 33rem), calc(100vw - var(--plate) * 2 - 3.5rem));
   }
 
   .table-frame {
