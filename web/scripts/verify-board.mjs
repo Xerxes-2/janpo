@@ -173,6 +173,12 @@ function readBoard(page) {
         naki: {
           data: naki.getAttribute("data-naki-count"),
           groups: naki.querySelectorAll("[data-naki]").length,
+          // 副露那几张画在哪儿（票 132）：四条边首尾相接，我这条边的右端就是
+          // 下一家手牌的起点——**跨席相交**因此是一件量得出来的事。
+          tiles: [...naki.querySelectorAll(".tile")].map((tile) => {
+            const rect = tile.getBoundingClientRect();
+            return { l: rect.left, r: rect.right, t: rect.top, b: rect.bottom };
+          }),
         },
       };
     });
@@ -365,6 +371,8 @@ function checkHands(shot, problems) {
   // 刚摸那张摆得离手牌远一点（票 22）。它是七种记号里占「间距」那一维的那一个。
   // **量的是画出来的间距**（票 82）：它与「牌摆成一行还是一列」一起在下面那个函数里。
   for (const seat of shot.seats) checkHandLine(seat, problems);
+  // 一家的牌不许压到另一家的牌上（票 132）。
+  checkNoCrossSeatOverlap(shot, problems);
   // 轮到谁：框住那张名牌（票 122）。
   tebanFrames += 1;
   problems.push(...tebanProblems(shot.seats));
@@ -376,6 +384,55 @@ function checkHands(shot, problems) {
     problems.push(
       `亮着手牌的是座位 ${revealed[0].seat}，可它画在「${revealed[0].position}」那个方位上`,
     );
+}
+
+/**
+ * ①''' **一家的牌不许压到另一家的牌上**（票 132，主人报的：
+ * 「当前 UI 设计在副露时，副露会和右边哪家的手牌重叠」）。
+ *
+ * 四条边首尾相接：我这条边的**右端**摆副露，而下一家的手牌正是从**同一个角**起步的。
+ * 贴着角摆时两者必然相交——实测座位 2 的副露与座位 3 的手牌重叠 46×62 px，
+ * 正好一张牌。治法是让副露从角上让开一张牌的高度（`styles.css`），
+ * 而这一条守着它别再长回去。
+ *
+ * **量的是牌本身的外接框**，不是那一排的容器：容器是满宽的（`inset: 0` 那一层里
+ * 绝对定位的一行），拿它去问「有没有压上」永远是「压上了」。
+ *
+ * 覆盖到几组副露由语料说了算（种子 9 那一局能摆出两组）：这一条**不敢声称**
+ * 四组副露那种极端也验过——它只保证「验到的那几帧里没有相交」。
+ */
+function checkNoCrossSeatOverlap(shot, problems) {
+  const box = (tiles) =>
+    tiles.length === 0
+      ? null
+      : {
+          l: Math.min(...tiles.map((t) => t.l ?? t.x - t.w / 2)),
+          r: Math.max(...tiles.map((t) => t.r ?? t.x + t.w / 2)),
+          t: Math.min(...tiles.map((t) => t.t ?? t.y - t.h / 2)),
+          b: Math.max(...tiles.map((t) => t.b ?? t.y + t.h / 2)),
+        };
+
+  const rows = [];
+  for (const seat of shot.seats) {
+    const hand = box(seat.hand.tiles);
+    if (hand !== null) rows.push({ seat: seat.seat, pos: seat.position, kind: "手牌", ...hand });
+    const naki = box(seat.naki.tiles);
+    if (naki !== null) rows.push({ seat: seat.seat, pos: seat.position, kind: "副露", ...naki });
+  }
+
+  for (let i = 0; i < rows.length; i += 1)
+    for (let j = i + 1; j < rows.length; j += 1) {
+      const a = rows[i];
+      const b = rows[j];
+      if (a.seat === b.seat) continue;
+      const ox = Math.min(a.r, b.r) - Math.max(a.l, b.l);
+      const oy = Math.min(a.b, b.b) - Math.max(a.t, b.t);
+      if (ox > 1 && oy > 1)
+        problems.push(
+          `座位 ${a.seat}（${a.pos}）的${a.kind}压在座位 ${b.seat}（${b.pos}）的${b.kind}上` +
+            `（重叠 ${Math.round(ox)}×${Math.round(oy)} px）：四条边在角上撞车了`,
+        );
+    }
 }
 
 /**
