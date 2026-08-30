@@ -1663,6 +1663,16 @@ input[type="range"] {
   margin: 0;
 }
 
+/* 组标题（倍速 / 视角 / 跳到）独占一行、小字重标（牌桌救援 票 3）：
+   它挤在组里时第一排只装得下两枚按钮，整组折得参差。 */
+.rail-left .ops .controls > .label {
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
 /* ── 气泡：收起是药丸，展开是浮层（票 118，主人点的）─────────────────
    「收起状态就只有小气泡，里面是 thinking... 之类的就行」「准许覆盖其他元素」。
 
@@ -1828,4 +1838,123 @@ input[type="range"] {
   top: 50%;
   left: 0.3rem;
   translate: 0 -50%;
+}
+
+/* ── 按钮分级（牌桌救援 票 3，设计稿 1b 之二）────────────────────────
+   病灶是**没有层级也没有分组**：「播放」和「复制分享链接」长得一模一样，
+   `1× 2× 4× 8×` 是四个独立的盒子、折行时把 `8×` 甩到下一排。改成四级：
+
+     一级＝主操作（播放）：整条轨道只有这一枚是填色的。
+     二级＝常用（单步 / 下一局 / 从头再放 / 上一步 / 下一步）：素框，两枚半行并排。
+     单选组（倍速 / 视角 / 跳到局号）：共用一个外框、内部发丝线分隔，
+       选中态用 `inset 0 -2px` 下边线 + 淡底——不用整块填色，填色会和一级撞级。
+     三级＝偶尔用（导出牌谱 / 复制分享链接）：退成链接，不再和「播放」抢眼。
+
+   全是 CSS：DOM 与 F# 一个字不动，闸门按 testId 点按钮照旧点得到。 */
+
+/* 一级：播放。 */
+.rail-left .ops button[data-testid="table-play"] {
+  flex: 1 1 100%;
+  padding: 0.55rem 0;
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: var(--paper-raised);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.rail-left .ops button[data-testid="table-play"]:hover:enabled {
+  background: color-mix(in srgb, var(--ink) 18%, var(--indigo));
+  border-color: color-mix(in srgb, var(--ink) 18%, var(--indigo));
+}
+
+/* 二级：半行一枚，两枚正好一排（单步｜下一局，上一步｜下一步）。 */
+.rail-left .ops button[data-testid="table-step"],
+.rail-left .ops button[data-testid="table-next"],
+.rail-left .ops button[data-testid="table-restart"],
+.rail-left .ops button[data-testid="table-back"],
+.rail-left .ops button[data-testid="table-forward"] {
+  flex: 1 1 40%;
+  padding: 0.4rem 0;
+}
+
+/* 灰着的二级：虚线描边、不填底——「现在按不动」与「素框可按」隔一眼分得开。 */
+.rail-left .ops .controls button:disabled:not([data-testid="table-play"]) {
+  border-style: dashed;
+  background: none;
+}
+
+/* 三级：链接的衣服。纸面上「可点」靠下划线说（同 a 那一条的分工）。 */
+.rail-left .ops button[data-testid="table-export"],
+.rail-left .ops button[data-testid="table-share"] {
+  flex: 1 1 100%;
+  padding: 0.15rem 0;
+  background: none;
+  border: 0;
+  color: var(--indigo);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.rail-left .ops button[data-testid="table-export"]:hover:enabled,
+.rail-left .ops button[data-testid="table-share"]:hover:enabled {
+  color: var(--vermilion);
+}
+
+/* ── 单选组：倍速 / 视角（含危险度那一枚）/ 跳到局号 ──
+   同组相邻的两枚拿负边距把 gap 吃掉、边框叠成一条发丝线；
+   端头的圆角由「组头 / 组尾」那两条补回来。 */
+.rail-left .ops button[data-testid^="table-speed-"],
+.rail-left .ops button[data-testid^="table-view-"],
+.rail-left .ops button[data-testid^="table-kyoku-"],
+.rail-left .ops button[data-testid="table-danger"] {
+  flex: 1 1 0;
+  padding: 0.3rem 0;
+  border-radius: 0;
+  background: var(--paper-raised);
+}
+
+.rail-left .ops button[data-testid^="table-view-"],
+.rail-left .ops button[data-testid="table-danger"] {
+  flex: 1 1 28%;
+}
+
+.rail-left .ops button[data-testid^="table-kyoku-"] {
+  flex: 1 1 28%;
+}
+
+.rail-left .ops button[data-testid^="table-speed-"] + button[data-testid^="table-speed-"],
+.rail-left .ops button[data-testid^="table-view-"] + button[data-testid^="table-view-"],
+.rail-left .ops button[data-testid^="table-view-"] + button[data-testid="table-danger"],
+.rail-left .ops button[data-testid^="table-kyoku-"] + button[data-testid^="table-kyoku-"] {
+  margin-left: calc(-0.25rem - 1px);
+}
+
+.rail-left .ops :not(button[data-testid^="table-speed-"]) + button[data-testid^="table-speed-"],
+.rail-left .ops :not(button[data-testid^="table-view-"]) + button[data-testid^="table-view-"],
+.rail-left .ops :not(button[data-testid^="table-kyoku-"]) + button[data-testid^="table-kyoku-"] {
+  border-radius: 0.3rem 0 0 0.3rem;
+}
+
+.rail-left
+  .ops
+  button[data-testid^="table-speed-"]:not(:has(+ button[data-testid^="table-speed-"])),
+.rail-left .ops button[data-testid="table-danger"],
+.rail-left
+  .ops
+  button[data-testid^="table-view-"]:not(
+    :has(+ button[data-testid^="table-view-"], + button[data-testid="table-danger"])
+  ),
+.rail-left
+  .ops
+  button[data-testid^="table-kyoku-"]:not(:has(+ button[data-testid^="table-kyoku-"])) {
+  border-radius: 0 0.3rem 0.3rem 0;
+}
+
+/* 选中态：下边线 + 淡底，不整块填色（那会和一级撞级）。摆在上面那些之后压过它们。 */
+.rail-left .ops .controls button.picked {
+  background: color-mix(in srgb, var(--indigo) 14%, var(--paper-raised));
+  border-color: var(--line-strong);
+  box-shadow: inset 0 -2px 0 var(--indigo);
 }
