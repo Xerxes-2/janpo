@@ -29,6 +29,7 @@
     "verify:inbound": "node scripts/verify-inbound.mjs",
     "verify:invariants": "node scripts/verify-invariants.mjs",
     "verify:export": "node scripts/verify-export.mjs",
+    "verify:quickstart": "node scripts/verify-quickstart.mjs",
     "verify:redaction": "node scripts/verify-redaction.mjs",
     "verify:seats": "node scripts/verify-seats.mjs",
     "verify:stale-ask": "node scripts/verify-stale-ask.mjs",

@@ -165,7 +165,8 @@ module TablePage =
         let setup =
             live
             |> Option.toList
-            |> List.map (fun live -> TablePanel.setup model live dispatch)
+            // **两块**（票 138）：一行式开桌那一行 + 配桌那一枚折叠，两块都是 `.page` 的直接孩子。
+            |> List.collect (fun live -> TablePanel.setup model live dispatch)
 
         Html.div [
             prop.className "page table-page"

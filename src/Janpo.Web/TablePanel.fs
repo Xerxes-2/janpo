@@ -833,21 +833,40 @@ module TablePanel =
                                 profile.ApiKey
                                 (edited ProfileField.ApiKey)
                                 dispatch
-                            textField
-                                "table-profile-timeout"
-                                "number"
-                                "超时 (ms)"
-                                (ModelProfile.field ProfileField.TimeoutMs profile)
-                                (edited ProfileField.TimeoutMs)
-                                dispatch
-                            selectField
-                                "table-profile-thinking"
-                                "思考预算"
-                                (ModelProfile.field ProfileField.Thinking profile)
-                                (Thinking.all
-                                 |> List.map (fun level -> Thinking.toWire level, Thinking.toDisplay level, true))
-                                (edited ProfileField.Thinking)
-                                dispatch
+                            // 超时与思考预算收进「进阶」（票 138），**默认收起**：
+                            // 一份档案要填得动只需要 provider・模型・key 三格，
+                            // 那两格是调参用的，摆在面上只是把「填哪几格才开得了桌」这件事说糊。
+                            // **收起不等于清空**：这个 `details` 与票 83 给 `panelNote` 立的那副写法一样
+                            // ——不进 model、不添消息、不碰 localStorage，两格的值原样存着
+                            // （`table-profile-advanced` 那道闸门量的正是这一条）。
+                            Html.details [
+                                prop.key "profile-advanced"
+                                prop.className "profile-advanced"
+                                prop.children [
+                                    Html.summary [ prop.testId "table-profile-advanced"; prop.text "进阶：超时・思考预算" ]
+                                    Html.div [
+                                        prop.className "controls"
+                                        prop.children [
+                                            textField
+                                                "table-profile-timeout"
+                                                "number"
+                                                "超时 (ms)"
+                                                (ModelProfile.field ProfileField.TimeoutMs profile)
+                                                (edited ProfileField.TimeoutMs)
+                                                dispatch
+                                            selectField
+                                                "table-profile-thinking"
+                                                "思考预算"
+                                                (ModelProfile.field ProfileField.Thinking profile)
+                                                (Thinking.all
+                                                 |> List.map (fun level ->
+                                                     Thinking.toWire level, Thinking.toDisplay level, true))
+                                                (edited ProfileField.Thinking)
+                                                dispatch
+                                        ]
+                                    ]
+                                ]
+                            ]
                         ]
                     ]
                 ]
@@ -1034,11 +1053,99 @@ module TablePanel =
             ]
         ]
 
-    /// 「配这一桌」那一整块（票 83）：规则三项 + 种子与重开一排，四席绑定与模型档案库一块。
+    /// **key 那一格旁边那句话**（票 138）。**一字不改地抄 `README.md` 那一行**
+    /// （「怎么用」那一节里的第一条）：同一件事今天在仓库里已经有三种说法
+    /// （README、`docs/host/custom-endpoint.md`、上面那段 `panelNote`），
+    /// 再自编第四种就是让人在需要它的那一秒读到一句与文档对不上的话。
+    ///
+    /// **它不进 `panelNote`**：那一段是查阅用的、收在折叠里，而这一句要在
+    /// **人正把 key 敲进去的那一秒**在他眼前（票 138 的原话：「需要它的那一秒它不在」）。
+    ///
+    /// **是 README 那一行的一截，不是整行**：它就贴在 key 那一格右边，主语已经在旁边了，
+    /// 再复述一遍「key」只是噪音。**逐字仍是那一行的子串**（`verify-quickstart` 的 ⑤
+    /// 现读 `README.md` 比一遍），因此这件事仍旧只有一个说法。
+    let internal keyNote = "只写进你这台浏览器的 localStorage，请求由你的浏览器直接发给 provider"
+
+    /// **开桌的第一步**（票 138）：`provider · 模型 · key ·〔开打〕` 一行，按下就开出一桌。
+    ///
+    /// 在它之前最短路径是七步（自己开一桌 → 配桌 → 新建档案 → provider → 模型 → key →
+    /// 把某席拨给档案 → 播放）。这一行把它压成一步：**三格填完按一下**，
+    /// 〔开打〕替人做完「绑座位 0」与「播放」。
+    ///
+    /// **它在配桌那一枚折叠的外面、上面**：折叠默认收起（票 116），
+    /// 摆在里面的话「一步」立刻又变成两步。
+    ///
+    /// **这三格填的就是档案编辑处开着的那一份**（`QuickEdited` 那条消息上写着理由）：
+    /// key 在界面上仍旧只出现在两处（这一行与 `table-profile-key`），而且**是同一个值**
+    /// ——两处各存一份的话「同一把 key 坐三席只填一次」（票 73 的硬判据）就成了空话。
+    ///
+    /// **baseUrl 不在这一行**（票 30 的判据照旧）：官方那几家根本不看它，
+    /// 自定义端点那一档要连 CORS 与 mixed content 一起说清，那是档案编辑处的事。
+    let private quickStart (live: LiveTable) (dispatch: TableMsg -> unit) =
+        // 库空了（人把档案全删了）也照画：`QuickEdited` / `QuickStarted` 那一刻会补一份，
+        // 摆一行灰掉的框只会让人以为这条路要先去别处开通。
+        let profile =
+            SeatingPlan.profileAt live.Editing live.Seating
+            |> Option.defaultValue ModelProfile.initial
+
+        // 这一行的三格**名目走 `aria-label` 与 `placeholder`，不摆一枚常驻的标签**（票 120 的判据：
+        // 「能收进 title / 抽屉的就别常驻」）。两个理由，一个是量出来的：
+        //
+        //  - 一整条顶栏只有一行的高度，三枚标签 + 三个框会把〔开打〕挤下去；
+        //  - `?table=1` 那一屏的字数上限是 168（票 120 的闸门，`verify-home` 的 ⑬）。
+        //    **那一屏今天一句散文都没有**——122 字全是控件名与牌桌上的数。
+        //    三枚标签 15 字 + 下面那句 45 字，摆全就是 182，当场红。
+        //    名目进属性之后是 167：**上限一分没动**，而人看得见的名目一个都没少
+        //    （占位符就写在框里，读屏读的是 `aria-label`）。
+        let field (testId: string) (kind: string) (name: string) (value: string) (which: ProfileField) =
+            Html.input [
+                prop.key testId
+                prop.testId testId
+                prop.type' kind
+                prop.ariaLabel name
+                prop.placeholder name
+                prop.value value
+                prop.onChange (fun (value: string) -> dispatch (QuickEdited(which, value)))
+            ]
+
+        Html.div [
+            prop.className "controls quick-start"
+            prop.testId "table-quick-start"
+            prop.children [
+                Html.select [
+                    prop.key "table-quick-provider"
+                    prop.testId "table-quick-provider"
+                    prop.ariaLabel "provider"
+                    prop.value profile.Provider
+                    prop.onChange (fun (value: string) -> dispatch (QuickEdited(ProfileField.Provider, value)))
+                    prop.children [
+                        for name in ModelProfile.providers ->
+                            Html.option [
+                                prop.key name
+                                prop.value name
+                                prop.text (ModelProfile.providerToDisplay name)
+                            ]
+                    ]
+                ]
+                field "table-quick-model" "text" "模型" profile.Model ProfileField.Model
+                field "table-quick-key" "password" "API key" profile.ApiKey ProfileField.ApiKey
+                // **就地那一行小字**（票 138）：它紧跟在 key 那一格右边，不在折叠里、不在页脚。
+                Html.span [
+                    prop.key "quick-key-note"
+                    prop.className "quick-note"
+                    prop.testId "table-quick-key-note"
+                    prop.text keyNote
+                ]
+                button "table-quick-play" false "开打" QuickStarted dispatch
+            ]
+        ]
+
+    /// 「配这一桌」那两块（票 83 + 票 138）：**一行式开桌那一行**，
+    /// 与规则三项 + 种子与重开一排、四席绑定与模型档案库那一枚折叠。
     ///
     /// **只属于 Live**（回放没有配桌，`TableState.rosterOf` 就是这么说的）。
     ///
-    /// **默认收起（票 116）**。票 83 把它收到页面上半、并量出了病：
+    /// **折叠默认收起（票 116）**。票 83 把它收到页面上半、并量出了病：
     /// 收起前 `?table=1` 打开那一刻牌桌顶边在 810 px、视口 800
     /// ⇒ **一像素牌桌都看不见**，而 810 里 528 px（65%）是这一块。
     /// 它**开局前用一次**，不该占着整个第一屏。
@@ -1052,6 +1159,9 @@ module TablePanel =
     /// 摘要里摆的是**拨到的那一份**（与里面那三排按钮一致），
     /// 因此得把 `rulesPending` 也带出来：拨好了还没按「重开」时，
     /// 摘要上那几个值并不是这一桌真在按的（同 `table-rules` 那一格的判据）。
+    ///
+    /// **它返回的是两块而不是一块**（票 138）：一行式开桌那一行在折叠**外面、上面**
+    /// ——折叠默认收起，摆进去的话「一步」当场又变回两步。
     let internal setup (model: TableModel) (live: LiveTable) (dispatch: TableMsg -> unit) =
         let pending = TableState.rulesPending model
 
@@ -1065,24 +1175,30 @@ module TablePanel =
                 $"种子 {seed}"
             ]
 
-        Html.details [
-            prop.className "setup"
-            prop.testId "table-setup"
-            prop.children [
-                Html.summary [
-                    prop.testId "table-setup-summary"
-                    prop.children [
-                        Html.span [ prop.key "label"; prop.className "label"; prop.text "配桌" ]
-                        Html.span [
-                            prop.key "digest"
-                            prop.className "setup-digest"
-                            prop.testId "table-setup-digest"
-                            prop.custom ("data-rules-pending", (if pending then "true" else "false"))
-                            prop.text (if pending then $"{digest}（拨好了，未重开）" else digest)
+        [
+            // **一行式开桌在配桌那一枚折叠之上**（票 138）：折叠默认收起，
+            // 摆进去的话「一步」当场又变回两步。两块都是 `.page` 的直接孩子，
+            // 因此顶栏那份宽度（`styles.css` 的 `.page > .setup`）两块各自拿一份。
+            quickStart live dispatch
+            Html.details [
+                prop.className "setup"
+                prop.testId "table-setup"
+                prop.children [
+                    Html.summary [
+                        prop.testId "table-setup-summary"
+                        prop.children [
+                            Html.span [ prop.key "label"; prop.className "label"; prop.text "配桌" ]
+                            Html.span [
+                                prop.key "digest"
+                                prop.className "setup-digest"
+                                prop.testId "table-setup-digest"
+                                prop.custom ("data-rules-pending", (if pending then "true" else "false"))
+                                prop.text (if pending then $"{digest}（拨好了，未重开）" else digest)
+                            ]
                         ]
                     ]
+                    rulesRow model live dispatch
+                    llmPanel model live dispatch
                 ]
-                rulesRow model live dispatch
-                llmPanel model live dispatch
             ]
         ]

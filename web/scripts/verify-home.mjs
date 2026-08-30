@@ -89,6 +89,17 @@ const HOST_TEST_IDS = [
   // 摘要行本体与它上面那串值。首页没有配桌，这两枚也就不该在。
   "table-setup-summary",
   "table-setup-digest",
+  // 一行式开桌那一行（票 138）：它在配桌那一枚折叠**外面**，因此首页上尤其不该漏
+  // ——摆在折叠里的东西还有折叠替它挡一层，这一行没有。
+  // key 那一格与它旁边那句小字一并盯上：**首页上一个 key 输入框都不许有**。
+  "table-quick-start",
+  "table-quick-provider",
+  "table-quick-model",
+  "table-quick-key",
+  "table-quick-key-note",
+  "table-quick-play",
+  // 档案编辑处那一枚「进阶」（票 138）：超时与思考预算收进去之后新长出来的那一枚。
+  "table-profile-advanced",
 ];
 
 /** 隔多久采第二次手数。1 秒够 2× 播三四手（`TableState.demoSpeed`），也不至于让 CI 变慢。 */

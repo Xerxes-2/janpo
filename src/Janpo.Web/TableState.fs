@@ -589,6 +589,17 @@ type TableMsg =
     | ProfileDeleted of index: int
     /// 改开着那一份档案的一个字段。
     | ProfileEdited of field: ProfileField * value: string
+    /// 一行式开桌那一行上改一格（票 138）：provider / 模型 / key。
+    ///
+    /// **它改的就是编辑处开着的那一份档案**（`ProfileEdited` 改的同一份），
+    /// 不是另存一份草稿——两处填的必须是同一个值，否则「key 在界面上只出现在两处」
+    /// 就成了「同一件事有两个说法」（票 73 的硬判据）。
+    /// 与 `ProfileEdited` 的唯一分别：**库空着时它先补一份档案**
+    /// （那一行在配桌收着时也点得到，而那时人看不见「新建档案」那一枚）。
+    | QuickEdited of field: ProfileField * value: string
+    /// 一行式开桌那一枚〔开打〕（票 138）：把编辑处那份档案绑到座位 0（库空着就先补一份），
+    /// 其余三席原样留着（默认是自带 bot），**并当场开播**。
+    | QuickStarted
     /// 拨配桌上那三项规则开关（票 72）。**拨完不当场生效**：
     /// 它只改「下一桌」那一份，要按「重开」才换得掉规则（与种子同一条路）。
     | RulePicked of rule: RuleChoice
@@ -2410,6 +2421,8 @@ module TableState =
         | DemoLoaded _
         | SharedLoaded _
         | ImportLoaded _
+        // 一行式开桌那一枚（票 138）：它绑完座位当场开播，牌桌因此挪了一下。
+        | QuickStarted
         | Answered _ -> true
         | HumanPlayed _
         // 强 AI 基线那一手同样把牌桌挪了一下（票 92）；拉完那一刻也会接着推（`resume`）。
@@ -2433,6 +2446,7 @@ module TableState =
         | ProfileAdded
         | ProfileDeleted _
         | ProfileEdited _
+        | QuickEdited _
         | RulePicked _
         | Exported
         | Shared
@@ -2459,9 +2473,22 @@ module TableState =
             },
             Cmd.batch [ cmd; winding ]
 
+    /// 一行式开桌那一行改的是**哪一份档案**（票 138）：编辑处开着的那一份。
+    ///
+    /// **只有一种情形它不是原样返回**：库空了（人把档案全删了）。那时先补一份
+    /// ——那一行在配桌收着时也点得到，而「新建档案」那一枚在收着的配桌里，人看不见。
+    /// 因此这一行永远有一份可填的档案，而它与档案编辑处填的**是同一份**。
+    let private quickTarget (live: LiveTable) : SeatingPlan * int =
+        match SeatingPlan.profileAt live.Editing live.Seating with
+        | Some _ -> live.Seating, live.Editing
+        | None ->
+            match SeatingPlan.profileAt 0 live.Seating with
+            | Some _ -> live.Seating, 0
+            | None -> SeatingPlan.addProfile live.Seating, 0
+
     /// 一条消息推一步。**倒计时不在这里启停**（票 89）：它由外面那层 `update`
     /// 每条消息重新推一遍（`clocked`）——这一层因此一条新分支都不必知道时限的存在。
-    let private stepped (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
+    let rec private stepped (message: TableMsg) (model: TableModel) : TableModel * Cmd<TableMsg> =
         match message with
         | SeedEdited seed -> model |> onLive (fun _ live -> { live with SeedText = seed }, Cmd.none)
         | Restarted ->
@@ -2702,6 +2729,53 @@ module TableState =
             |> onLive (fun _ live ->
                 let seating = live.Seating |> SeatingPlan.editProfile live.Editing field value
                 { live with Seating = seating }, save (fun () -> Store.writeSeating seating))
+        // 一行式开桌那一行上的一格（票 138）。**它与 `ProfileEdited` 写的是同一份档案**：
+        // 两处只有一个值，因此不存在「谁覆盖谁」。
+        | QuickEdited(field, value) ->
+            model
+            |> onLive (fun _ live ->
+                let target, editing = quickTarget live
+                let seating = target |> SeatingPlan.editProfile editing field value
+
+                {
+                    live with
+                        Seating = seating
+                        Editing = editing
+                },
+                save (fun () -> Store.writeSeating seating))
+        // 〔开打〕（票 138）：**七步压成一步**——建档案（库空着才建）、绑座位 0、开播。
+        //
+        // **绑座位那一步不另写一遍**（复用 `SeatBound` 那一支）：撤票、拉基线资产、
+        // 归零那一席的 Agent 状态、落 localStorage——那几件事只许有一份实现，
+        // 在这里抄第二遍就是又一份会漂的判据。
+        //
+        // **先把播放状态拨成「在播」再绑**：`SeatBound` 末尾那道 `roused`
+        // 按 `model.Playback.Playing` 续定时器（票 111 的阴性对照量的正是「停着的桌不许凭空开动」），
+        // 因此这一票要的「按下去就开始走」由这里显式拨，而不是去松那条判据。
+        | QuickStarted ->
+            match model.Source with
+            | Source.Replay _ -> model, Cmd.none
+            | Source.Live live ->
+                let target, editing = quickTarget live
+
+                match SeatingPlan.profileAt editing target with
+                | None -> model, Cmd.none
+                | Some profile ->
+                    let primed = {
+                        model with
+                            Source =
+                                Source.Live {
+                                    live with
+                                        Seating = target
+                                        Editing = editing
+                                }
+                            Playback = Playback.resumed true model.Playback
+                    }
+
+                    let bound, cmd =
+                        stepped (SeatBound(Seat.first, SeatChoice.Profile profile.Name)) primed
+
+                    bound, Cmd.batch [ save (fun () -> Store.writeSeating target); cmd ]
         // **只拨下一桌那一份**（票 72）：牌桌正在按的那份规则集（`model.Ruleset`）
         // 只有 `Restarted` 动得了。拨到的值当场落 localStorage，下次打开还在。
         | RulePicked rule ->

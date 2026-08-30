@@ -2300,3 +2300,70 @@ input[type="range"] {
   border-color: var(--line-strong);
   box-shadow: inset 0 -2px 0 var(--indigo);
 }
+
+/* —— 一行式开桌（票 138）：`provider · 模型 · key ·〔开打〕` ——
+
+   开桌的最短路径从前是七步（自己开一桌 → 配桌 → 新建档案 → provider → 模型 → key →
+   把某席拨给档案 → 播放）。这一行把它压成一步，因此**它必须在配桌那一枚折叠外面**：
+   折叠默认收起（票 116），摆进去的话「一步」当场又变回两步。
+
+   **这一整段是新起的、自成一块**（票 138 与票 139 同批在动 `styles.css`）：
+   它一条既有规则都不改写，`--board` / `--tile-w` / `--rail` 那几段一个字没碰。
+
+   形状跟着配桌那条顶栏走（票 130 的 `.page > .setup`）：与三栏同宽同居中、
+   一条发丝线收底，于是两行接成一整条顶栏，下面三栏的上边缘照旧齐平。 */
+.page > .quick-start {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--frame-w);
+  margin: 0 auto;
+  padding: 0.45rem 0.85rem;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--line);
+  /* `.controls` 那份 `margin: 1.5rem 0` 会在顶栏两行之间劈出一道缝：这一条按 0 收掉。 */
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block: 0;
+}
+
+/* 三格都靠占位符与 `aria-label` 报名目，不摆常驻标签（理由写在 `TablePanel.quickStart` 上：
+   一行摆不下，且 `?table=1` 那一屏的字数上限一分未动）。因此把框放宽些——
+   占位符本身就是名目，8rem 装不下「deepseek-v4-flash」这样的真名。 */
+.quick-start input {
+  width: 11rem;
+}
+
+.quick-start select {
+  padding: 0.35rem 0.5rem;
+}
+
+/* key 那一格右边**就地**那一行小字（票 138 的原话：「需要它的那一秒它不在」）。
+   它是说明不是控件，因此比控件小一号、淡一档；窄窗口下它自己换行，
+   **不把〔开打〕挤出去**（`min-width` 让它先缩后换）。 */
+.quick-start .quick-note {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  flex: 1 1 14rem;
+  min-width: 10rem;
+}
+
+/* 〔开打〕是这一行的出口，摆在最右：一行里只有它是「按下去会发生事情」的那一枚。 */
+.quick-start button[data-testid="table-quick-play"] {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+/* 档案编辑处那一枚「进阶」（票 138）：超时与思考预算收进去，默认收起。
+   写法与票 83 给 `panelNote` 立的那一副同源——不进 model、不添消息、不碰 localStorage，
+   **收起不等于清空**，两格的值原样存着。 */
+.profile-advanced > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.profile-advanced > summary:hover {
+  color: var(--indigo);
+}

@@ -32,6 +32,7 @@ import { verifyHome } from "./verify-home.mjs";
 import { verifyHuman } from "./verify-human.mjs";
 import { verifyInbound } from "./verify-inbound.mjs";
 import { verifyPlayback } from "./verify-playback.mjs";
+import { verifyQuickStart } from "./verify-quickstart.mjs";
 import { verifyRedaction } from "./verify-redaction.mjs";
 import { verifyReview } from "./verify-review.mjs";
 import { verifySeats } from "./verify-seats.mjs";
@@ -193,6 +194,18 @@ const gates = [
     name: "配桌那三项规则开关：拨得动、按重开才生效、牌谱里的 ruleset 跟着变",
     how: "node scripts/verify-setup.mjs",
     run: (lane) => verifySetup(lane),
+  },
+  // 票 138（评审 P1-E）：**开桌的第一步从七步压到一步**。配桌那一枚折叠**全程收着**，
+  // 只在它上面那一行里填 provider / 模型 / key，按一下〔开打〕——座位 0 绑上那份档案、
+  // 其余三席原样留 bot、牌桌当场走起来（隔 2.5 秒采两次四家的河，张数得涨；
+  // 按之前在**同一个量点**上先量一遍「停着的桌不许凭空开动」，判据 20/21）。
+  // 顺带守住票 73 那条硬判据：整页 `input[type=password]` 恰好两个，
+  // 且那两处填的**是同一个值**；key 去向那句小字与 README 逐字相同；
+  // 「进阶」默认收起而两格的值原样存着。
+  {
+    name: "一行式开桌：配桌收着填三格、按一下就开出一桌（key 只在那两处，且是同一个值）",
+    how: "node scripts/verify-quickstart.mjs",
+    run: (lane) => verifyQuickStart(lane),
   },
   // 票 73：**四 LLM 同桌**。两个本地假端点（一个答话、一个固定回 401），
   // 一份档案坐两席、两席人格各不同，第三席引用那份坏 key 的档案，座位 3 是 bot。
