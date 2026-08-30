@@ -74,7 +74,7 @@ module ScorecardPlayer =
 ///
 /// **它是三处的汇合，不是第四份数**：
 ///
-/// - 席位 · 风来自牌桌那个投影（`BoardView.Seats`）；
+/// - 席位来自牌桌那个投影（`BoardView.Seats`）；**只取座位号，不取风**（票 145）；
 /// - 顺位 · 终点来自终局精算（`GameResult`，`Board.final` 已经取好）；
 /// - 和 · 铳 / 兜底 / 重试 / tok 来自引擎那份逐席聚合（`Scorecard.tally`，判据 11）；
 /// - **选手 · 档**：身份来自牌谱开头那一列 `names`（回放的名牌画的就是它），
@@ -82,9 +82,11 @@ module ScorecardPlayer =
 ///   `TableState.scorecardPlayers`。
 type ScorecardRow = {
     /// 这一行是哪一席。
+    ///
+    /// **这一行只认座位号，不带风**（票 145）：风每一局都在转，而这张表是**整场**的结论。
+    /// 133 那一版在这里还带着末局自风，于是东风战打完之后最左那一格写着「座位 0 南」
+    /// ——而座位 0 是起家、开局的东家。**要方位的人看牌桌，不看记分卡。**
     Seat: Seat
-    /// 自风。**取最后一局那一份**：它就是牌桌此刻画着的那个（同一屏上只许有一种说法，票 39）。
-    Jikaze: Kaze
     /// 「选手 · 档」那一格：身份取牌谱的 `start_game.names`，档位只有 Live 答得出。
     Player: ScorecardPlayer
     /// 顺位，1 起。
@@ -124,7 +126,6 @@ module ScorecardView =
             | Some player, Some juni, Some score, Some tally ->
                 Some {
                     Seat = view.Seat
-                    Jikaze = view.Jikaze
                     Player = player
                     Juni = juni
                     Score = score
@@ -156,9 +157,9 @@ module ScorecardView =
 
     // ---- 渲染层的单向出口（ADR-0001） ----
 
-    /// 「席位 · 风」那一格。
-    let seatSaid (row: ScorecardRow) : string =
-        $"座位 {Seat.index row.Seat} {Kaze.toDisplay row.Jikaze}"
+    /// 「席位」那一格。**一个风字都没有**（票 145）：这张表的四行是**四个选手**，
+    /// 不是四个方位；而它是要被贴出去的东西，贴出去之后没人能纠正。
+    let seatSaid (row: ScorecardRow) : string = $"座位 {Seat.index row.Seat}"
 
     /// 「顺位 · 终点」那一格。
     let placeSaid (row: ScorecardRow) : string = $"{row.Juni} 位 · {row.Score}"
@@ -178,7 +179,7 @@ module ScorecardView =
         + "——它们不在牌谱里，因此也不在这张表里；牌桌那条账单行报的是花掉的总额。"
 
     /// 表头那几格，与 `cells` 一一对应。
-    let headers: string list = [ "席位 · 风"; "选手 · 档"; "顺位 · 终点"; "和 · 铳"; "兜底"; "重试"; "输入 · 输出 tok" ]
+    let headers: string list = [ "席位"; "选手 · 档"; "顺位 · 终点"; "和 · 铳"; "兜底"; "重试"; "输入 · 输出 tok" ]
 
     /// 一行那几格，与 `headers` 一一对应。**纯文本与 DOM 读的是同一份**：
     /// 两处各拼一遍就会漂，而「复制出来的那段与屏幕上那张表说的是同一件事」正是这一票要的。

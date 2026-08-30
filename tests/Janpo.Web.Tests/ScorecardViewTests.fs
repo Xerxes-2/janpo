@@ -76,10 +76,9 @@ module ScorecardViewTests =
         |> List.mapi (fun index tier ->
             ScorecardPlayer.Named($"deepseek/model-{index}", ScorecardTier.Set(ScaffoldTier.toDisplay tier)))
 
-    /// 一份手捏的记分卡：四席、四个不同的顺位与终点。
-    let private rows () : ScorecardRow list =
-        let table = played 1177
-
+    /// 这一桌的四行记分卡。**收一个 `Table`**：用例常常还要拿同一桌的别的东西
+    /// （末局自风、终局精算），各跑一遍 `played` 的话两边量的就不是同一个对象了。
+    let private rowsOf (table: Table) : ScorecardRow list =
         let seats =
             match Board.ofTable Viewpoint.God table with
             | Some board -> board.Seats
@@ -91,6 +90,9 @@ module ScorecardViewTests =
             | None -> failwith "这一场应当已经终局"
 
         ScorecardView.rows seats (players ()) result (Table.scorecard table)
+
+    /// 一份手捏的记分卡：四席、四个不同的顺位与终点。
+    let private rows () : ScorecardRow list = rowsOf (played 1177)
 
     [<Fact>]
     let ``四行按座位对得上号，顺位与终点取自终局精算`` () =
@@ -151,6 +153,70 @@ module ScorecardViewTests =
 
         for index, row in List.indexed rows do
             Assert.Equal<string list>(ScorecardView.cells row, split (List.item (index + 3) lines))
+
+    /// 四个风字，外加「风」这个字自己（票 145）。**表头与格子是同一件事的两半**：
+    /// 只改一处的话，另一处会留着旧说法。
+    let private windSaid = [ "东"; "南"; "西"; "北"; "风" ]
+
+    [<Fact>]
+    let ``最左那一列只写席位，一个风字都没有`` () =
+        // **风每一局都在转，而这张表是整场的结论**（票 145）：133 那一版在这一格里
+        // 带着末局自风，于是东风战打完之后最左那一格写着「座位 0 南」——而座位 0
+        // 是起家、开局的东家。这张表是要被贴出去的，贴出去之后没人能纠正。
+        let table = played 1177
+
+        let seats =
+            match Board.ofTable Viewpoint.God table with
+            | Some board -> board.Seats
+            | None -> failwith "上帝视角应当摆得出牌桌"
+
+        // **非退化守卫**（判据 3，不是判据 21 的阳性对照——它修前修后都绿）：
+        // 这一场末局的自风**确实已经转过了**，∴ 133 那一版在这份 fixture 上真的会
+        // 写出一个误导人的字。没有这一句的话，下面那几条可能只是在一张
+        // 「风恰好还没转」的表上成立——那时写不写风本来就没区别。
+        // 真正的阳性对照在浏览器闸门里：③ 把第 0 格逐字钉成「座位 N」，破坏时红 4 条。
+        Assert.NotEqual<Kaze list>(
+            [ Kaze.Ton; Kaze.Nan; Kaze.Shaa; Kaze.Pei ],
+            seats |> List.map (fun view -> view.Jikaze)
+        )
+
+        // **同一桌**：上面那几席与下面这四行量的是同一个对象。
+        let rows = rowsOf table
+        Assert.Equal(4, List.length rows)
+
+        // 那一格逐字就是座位号，**后面不许跟任何东西**。
+        for row in rows do
+            Assert.Equal($"座位 {Seat.index row.Seat}", ScorecardView.seatSaid row)
+            Assert.Equal(ScorecardView.seatSaid row, List.head (ScorecardView.cells row))
+
+        // 表头那一格与四行那一格，各自一个风字都没有。
+        let leftmost =
+            List.head ScorecardView.headers
+            :: (rows |> List.map (fun row -> List.head (ScorecardView.cells row)))
+
+        for said in leftmost do
+            for wind in windSaid do
+                Assert.DoesNotContain(wind, said)
+
+    [<Fact>]
+    let ``复制出去那段文本的最左一列同样没有风`` () =
+        // **两处同源，但两处都要核**：贴出去的是这一段文本，而它一旦贴出去就改不了了。
+        // 上面那条只核屏幕上那张表；两处一起写错时，只核一处的断言一声不响。
+        let text = ScorecardView.toText (rows ())
+
+        let leftmost =
+            text.Split('\n')
+            |> List.ofArray
+            |> List.filter (fun line -> line.StartsWith "|")
+            |> List.map (fun line -> (line.Split('|') |> Array.item 1).Trim())
+            |> List.filter (fun cell -> cell <> "---")
+
+        // 表头一行 + 四行（分隔那一行的「---」已经滤掉）。
+        Assert.Equal(5, List.length leftmost)
+
+        for said in leftmost do
+            for wind in windSaid do
+                Assert.DoesNotContain(wind, said)
 
     [<Fact>]
     let ``表头与每一行的格数相同`` () =

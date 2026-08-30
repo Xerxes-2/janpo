@@ -23,11 +23,14 @@ type SeatTally =
         /// 和了几次：事件流里 `Hora.Actor` 指着这一席的那几条。**自摸与荣和都算**
         /// （`Hora` 这个词本来就含两者，CONTEXT.md）；双响时两家各记各的。
         Hora: int
-        /// **被荣和几次**（给人看时那一列叫「放铳」）：`Hora.Target` 指着这一席、
-        /// 而和了的是**别人**的那几条。
+        /// **被荣和几次**，也就是 `Houjuu`（放铳，CONTEXT.md）：`Hora.Target` 指着这一席、
+        /// 而和了的是**别人**的那几条。给人看时那一列写「铳」。
         ///
         /// **自摸不算**：mjai 的约定是自摸时 `Target` 等于 `Actor`（见 `Hora.Target`），
         /// 不减掉的话每次自摸都会给自己记一笔放铳。
+        ///
+        /// **名字为什么还不是 `Houjuu`**：票 145 只被授权收那个词条，改名是另一张票
+        /// （它要连着 wire `hora_targeted` 与 `data-hora-targeted` 一起动；提案见 DECISIONS 145-2）。
         HoraTargeted: int
         /// 兜底代打了几手：这一席的记录里 `Fallback` 不是 None 的条数
         /// （`DecisionRecord.Fallback` 那条注释：**「是否兜底」就是它是不是 None**）。

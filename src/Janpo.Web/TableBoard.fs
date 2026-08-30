@@ -770,9 +770,9 @@ module TableBoard =
         prop.custom ("data-juni", string row.Juni)
         prop.custom ("data-score", string row.Score)
         prop.custom ("data-hora", string row.Tally.Hora)
-        // **`hora-targeted` 而不是 `houjuu`**：`CONTEXT.md` 里没有「放铳」的罗马字词条，
-        // 而改术语表要单票授权（AGENTS.md 硬约束 5）。这里只复合引擎里已有的两个词
-        // （`Hora` + `Hora.Target`）；提案见 `DECISIONS.md` 133-2。
+        // **`hora-targeted` 而不是 `houjuu`**：票 145 已经把 `Houjuu`（放铳）收进 `CONTEXT.md`，
+        // 但那一次授权**只到词条本身**——把这个钩子连同 `SeatTally.HoraTargeted` 一起改名
+        // 是另一张票的事（提案见 `DECISIONS.md` 145-2）。
         prop.custom ("data-hora-targeted", string row.Tally.HoraTargeted)
         prop.custom ("data-fallbacks", string row.Tally.Fallbacks)
         prop.custom ("data-retries", string row.Tally.Retries)

@@ -65,6 +65,27 @@ const TIER_UNRECORDED = "tier-unrecorded";
 /** 档位那半格上回放该写的那句话（F# 侧 `ScorecardPlayer.tierSaid`）。 */
 const TIER_SAID = "档位牌谱没记";
 
+/**
+ * 四个风字（票 145）。**记分卡最左那一列里一个都不许出现**。
+ *
+ * 理由不是措辞好看：风**每一局都在转**，而记分卡是**整场**的结论。
+ * 133 那一版取的是末局自风，东风战里座位 0 是起家（开局的东家），
+ * 打完之后那一格却写着「座位 0 南」——而这张表是要被贴出去的，
+ * 贴出去之后没人能纠正。
+ *
+ * **它断言的是「人看得见的那个保证」，不是某个措辞**（判据 24）：表头改叫别的、
+ * 席位那一格换个说法，**这一条**都不该红；只要哪一天有人把一个转着的风塞回最左那一列，
+ * 它必须当场红。（措辞由 ③ 那一条管——那一格的字面就是人看见的东西，
+ * 它逐字钉着 `座位 N`。两条各管一半，别把它们的职责混起来读。）
+ */
+const KAZE_SAID = ["东", "南", "西", "北", "风"];
+
+/** 这一段字里出现了哪几个风字（一个都没有时是空数组）。**「风」这个字自己也算**：
+ * 表头上那半句（「席位 · 风」）与格子里那个转着的风是同一件事的两半，只改一处就会留着旧说法。 */
+function windsIn(said) {
+  return KAZE_SAID.filter((kaze) => said.includes(kaze));
+}
+
 /** 页面上那张表逐格要核的那几项（`data-*` 的名字就是这几个）。 */
 const COLUMNS = [
   "juni",
@@ -161,6 +182,7 @@ function shownRows(page) {
     return {
       present: true,
       declared: Number.parseInt(section.getAttribute("data-rows") ?? "-1", 10),
+      headers: [...section.querySelectorAll("thead th")].map((cell) => cell.textContent.trim()),
       rows,
     };
   });
@@ -317,7 +339,9 @@ export async function verifyScorecard(lane, options = {}) {
     // 这一条把**看得见的那一格**钉回它自己那个数——判据 24 意义上的「用户可见保证」。
     const visibleMark = markerSince(problems);
     const visible = [
-      { at: 0, said: "席位", want: (data) => `座位 ${data.seat} `, prefix: true },
+      // **逐字相等，不是前缀**（票 145）：这一格如今只写席位，
+      // 前缀比法会放过任何跟在后面的东西——而 133 跟在后面的正是那个转着的风。
+      { at: 0, said: "席位", want: (data) => `座位 ${data.seat}` },
       { at: 1, said: "选手 · 档", want: (data) => data.player },
       // 那一格看得见的字就是两半拼起来的（档位那半为空时只有身份）。
 
@@ -342,7 +366,7 @@ export async function verifyScorecard(lane, options = {}) {
         looked += 1;
         const shownCell = row.cells[column.at] ?? "";
         const wanted = column.want(row.data);
-        const ok = column.prefix ? shownCell.startsWith(wanted) : shownCell === wanted;
+        const ok = shownCell === wanted;
         if (!ok) {
           problems.push(
             `座位 ${row.data.seat} 第 ${column.at} 格（${column.said}）看着是「${shownCell}」，而这一行的数是「${wanted}」`,
@@ -352,6 +376,41 @@ export async function verifyScorecard(lane, options = {}) {
     }
     console.log(`${visibleMark()} 看得见的那几格与 data-* 对得上（核过 ${looked} 格）`);
     if (looked === 0) problems.push("一格都没核上：看得见的那几格与 data-* 的对拍在空转");
+
+    // ---- ③c 最左那一列里一个风字都没有（票 145） ----
+
+    // 风每一局都在转，而这张表是**整场**的结论：写一个瞬时的风是误导，
+    // 而它正好摆在最左那一列、是人读这张表的第一眼。
+    // 表头与四行各核一遍——只改一处的话另一处会留着旧说法。
+    const windMark = markerSince(problems);
+    console.log(`表头那几格：${shown.headers.join(" / ")}`);
+    if (shown.headers.length !== (shown.rows[0]?.cells.length ?? 0)) {
+      problems.push(
+        `表头有 ${shown.headers.length} 格，而一行是 ${shown.rows[0]?.cells.length ?? 0} 格：对不上号就核不了「哪一格是最左那一列」`,
+      );
+    }
+
+    const noWind = (said, at) => {
+      const winds = windsIn(at);
+      if (winds.length === 0) return;
+      problems.push(
+        `记分卡最左那一列 ${said} 那一格写着「${at}」，里面有风字（${winds.join("")}）：` +
+          "风每一局都在转，而这张表是整场的结论",
+      );
+    };
+
+    // 表头那一格**恒有一格**，∴ 它不进下面那个「扇到 0 个就红」的计数——
+    // 把一个恒 ≥ 1 的数拿去与 0 比，兜底就成了走不到的死代码（判据 12）。
+    noWind("表头", shown.headers[0] ?? "");
+
+    let windless = 0;
+    for (const row of shown.rows) {
+      windless += 1;
+      noWind(`座位 ${row.data.seat}`, row.cells[0] ?? "");
+    }
+    console.log(`${windMark()} 最左那一列（表头 + ${shown.rows.length} 行）一个风字都没有`);
+    // 这一条**真走得到**：`shown.rows` 空掉时它就是 0（那时表头那一格照样核过了）。
+    if (windless === 0) problems.push("最左那一列一行都没核上：那条「不许写风」在空转");
 
     // ---- ④ 第三锚点：那七列由闸门照规则自己数一遍（判据 6） ----
 
@@ -496,6 +555,36 @@ export async function verifyScorecard(lane, options = {}) {
     }
     console.log(`${copyMark()} 文本里逐格核过 ${checked} 格`);
     if (checked === 0) problems.push("文本里一格都没核上：这条断言在空转");
+
+    // ---- ⑥b 复制出去那段文本的最左一列，同样一个风字都没有（票 145） ----
+
+    // **两处同源，但两处都要核**：贴出去的是这一段文本，而它一旦贴出去就再也改不了。
+    // 上面那条逐格对拍只保证「文本与屏幕一致」——两处一起写错时它一声不响。
+    const textWindMark = markerSince(problems);
+    let textCells = 0;
+    for (const line of lines) {
+      const written = split(line);
+      // 抬头那一行（「janpo 记分卡」）与分隔那一行不是表格的格子。
+      if (written.length !== shown.headers.length) continue;
+      if (written[0] === "---") continue;
+      textCells += 1;
+      const winds = windsIn(written[0]);
+      if (winds.length > 0) {
+        problems.push(
+          `复制出去那段文本最左一列的「${written[0]}」里有风字（${winds.join("")}）：` +
+            "贴出去之后没人能纠正它",
+        );
+      }
+    }
+    console.log(`${textWindMark()} 复制出去那段文本最左一列核过 ${textCells} 格，一个风字都没有`);
+    // 表头一行 + 四行 = 5 格。少了就说明**文本的列数与屏幕上那张表对不上**，
+    // 上面那个 `continue` 会把整段跳空——**把真因说出来**，别只报一句「在空转」。
+    if (textCells !== 1 + shown.rows.length) {
+      problems.push(
+        `文本最左一列只核到 ${textCells} 格，该是 ${1 + shown.rows.length} 格（表头 + ${shown.rows.length} 行）：` +
+          `切出来的格数与屏幕上那张表的 ${shown.headers.length} 列对不上，整段被跳过了`,
+      );
+    }
 
     // ---- ⑦ 那段文本里绝不能出现 API key（票 34 的形状） ----
 
