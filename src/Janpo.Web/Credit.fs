@@ -107,9 +107,12 @@ module Credit =
         | BaselineStatus.Loading ->
             $"正在取{SeatingPlan.baselineToDisplay}那份资产（{baselineBadge}；座位 {seats}）："
             + "第一次要下几 MB，之后走浏览器缓存。"
-        | BaselineStatus.Ready bytes ->
-            $"{SeatingPlan.baselineToDisplay}已就位（{baselineBadge}；座位 {seats}，{Baseline.bytesToDisplay bytes}）。"
-            + "它不会说话：没有思考气泡，也没有 token 账单。"
+        | BaselineStatus.Ready _ ->
+            // 就位之后**只说「谁在哪几席」**（票 121，主人裁的）。
+            // 上游是谁、什么许可、多大——都在页脚那条「第三方组件声明」里，
+            // 不必每一局都在牌桌边复述一遍。「它不会说话」也删了：
+            // 那三席不冒气泡、不记 token，**看得见就不用说**。
+            $"{SeatingPlan.baselineToDisplay}：座位 {seats}（许可与出处见页脚）"
         | BaselineStatus.Unavailable reason ->
             $"{SeatingPlan.baselineToDisplay}用不了：{reason}　座位 {seats} 已退回「{Bot.toDisplay Bot.Opinionated}」的自带 bot，"
             + $"其余席照常打完这一局——本来要取的是 {baselineNamed}（{licence}）。"

@@ -1716,3 +1716,53 @@ input[type="range"] {
 .board-legend[open] > summary {
   opacity: 0.85;
 }
+
+/* ── 桌心那四盏灯（票 121，雀魂的做法）──────────────────────────
+   轮到谁，哪一盏亮。它顶掉的是「轮到你出牌了（座位 N）：…」那 60 字——
+   **看得见就不用说**，而且它对四家都成立，不只对真人那一席。
+   灯的方位跟着席区同一个 `Board.position` 走，∴ 灯指的方向就是人的方向。
+   ────────────────────────────────────────────────────────── */
+.lamps {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.lamp {
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+/* 灭着的灯是**看得见的空位**，不是不画：四盏都在，人才读得出「现在是那一盏」。 */
+.lamp[data-lit="on"] {
+  border-color: var(--vermilion);
+  background: var(--vermilion);
+}
+
+.lamp[data-lamp-position="self"] {
+  bottom: 0.3rem;
+  left: 50%;
+  translate: -50% 0;
+}
+
+.lamp[data-lamp-position="toimen"] {
+  top: 0.3rem;
+  left: 50%;
+  translate: -50% 0;
+}
+
+.lamp[data-lamp-position="shimocha"] {
+  top: 50%;
+  right: 0.3rem;
+  translate: 0 -50%;
+}
+
+.lamp[data-lamp-position="kamicha"] {
+  top: 50%;
+  left: 0.3rem;
+  translate: 0 -50%;
+}

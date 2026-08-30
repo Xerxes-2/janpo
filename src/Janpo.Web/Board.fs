@@ -306,6 +306,33 @@ module Board =
     /// 副露里横放那张落第几格拿**副露方**当 `anchor`（票 51，见 `takenSlot`）。
     /// 参照系是参数而不是隐含的全局，因此两者不可能混到一起——票 40 那个错的形状就是
     /// 「参照系从调用点隐含地拿」。
+    /// 此刻**该谁打**（票 121：桌心那四盏灯）。
+    ///
+    /// **是推导，不是新字段**——`BoardView` 不多一格要人同步维护的状态。
+    /// 「手上有几张」本来就在 `HandView` 里，而**多出来那一张就是手番的定义**：
+    /// 一手 13 张（每副露少 3 张），摸进／吃碰之后多一张。
+    ///
+    /// **两半走同一条尺**：张数 mod 3 = 2。13→1、14→2；一副露 10→1、11→2。
+    /// 头一版给亮着的那一半单开一支「看 `drawn`」，走五手就全灭了——
+    /// 上帝视角下四家都是 `Revealed`，而 `drawn` 只在摸切那一瞬有值。
+    /// **同一个问题分两支答，就会有一支答错。**
+    ///
+    /// 灯**会有全灭的时候**，那不是坏了：刚打完、下家还没摸的那一帧，
+    /// 确实没人手上多着牌。∴ 闸门问的是「至多一盏」而不是「恰好一盏」——
+    /// 后者会逼我在没人该动的时候随便点一盏，那才是撒谎。
+    let teban (board: BoardView) : Seat option =
+        board.Seats
+        |> List.tryFind (fun view ->
+            let count =
+                match view.Hand with
+                // `hand` **本来就含刚摸那张**，`drawn` 只是「哪一张是它」的记号。
+                // 头一版在这里又加了一次 1，开局那一帧 14→15 就灭了。
+                | HandView.Revealed(hand, _) -> List.length hand
+                | HandView.Concealed count -> count
+
+            count % 3 = 2)
+        |> Option.map (fun view -> view.Seat)
+
     let position (ruleset: Ruleset) (anchor: Seat) (seat: Seat) : Position =
         match Seat.distanceFrom ruleset anchor seat with
         | 0 -> Position.Self

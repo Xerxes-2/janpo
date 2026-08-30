@@ -67,14 +67,28 @@ module BaselineCreditTests =
         Assert.Contains("座位 1", said)
 
     [<Fact>]
-    let ``它就位那一句里有它的名字，而「它不会说话」那半句一个字没少`` () =
+    let ``它就位那一句只说谁坐哪几席，并指得出归属在哪（票 121）`` () =
         let said = Credit.baselineSaid (BaselineStatus.Ready 6039832) "0、2"
 
-        containsAll facts said "就位那一句"
-        Assert.Contains(Baseline.bytesToDisplay 6039832, said)
-        // 票 92 的要害：这一席不会说话。加了署名不许把它挤掉。
-        Assert.Contains("没有思考气泡", said)
-        Assert.Contains("token 账单", said)
+        // **就位之后不再复述来源**（票 121，主人裁的）：上游是谁、什么许可、多大，
+        // 都在页脚那条「第三方组件声明」里，不必每一局都在牌桌边说一遍。
+        Assert.Contains(SeatingPlan.baselineToDisplay, said)
+        Assert.Contains("座位 0、2", said)
+        // **但归属不许因为改版面就消失**：这一句得指得出它在哪。
+        Assert.Contains("页脚", said)
+
+    [<Fact>]
+    let ``归属仍有执行者：页脚那条声明的名与去处都还在（Apache-2.0 §4(b)）`` () =
+        // 上一条把三个事实（Akagi / native_bot / Apache-2.0）从牌桌边那句里撤了，
+        // **撤掉的覆盖率必须有人接手**——接手的是页脚那条链接与它指的那份声明。
+        // 没有这一条的话，「归属在页脚」会退化成一句谁都没查过的空话。
+        Assert.False(System.String.IsNullOrWhiteSpace Credit.thirdPartyText)
+
+        let readme =
+            System.IO.Path.Combine(__SOURCE_DIRECTORY__, "../../web/public/third-party/README.md")
+
+        Assert.True(System.IO.File.Exists readme, $"页脚指的那份声明不在：{readme}")
+        containsAll facts (System.IO.File.ReadAllText readme) "页脚那份声明"
 
     [<Fact>]
     let ``降级那一句语义不许退化：原因、退回了谁、其余席照常打完，三件事都还在`` () =

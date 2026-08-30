@@ -295,8 +295,10 @@ async function wordProblems(page, where, limit) {
       `${where} 落地那一屏摆了 ${seen.total} 字（上限 ${limit}）：` +
         "又开始说废话了——能收进 title / 抽屉的就别常驻（票 120）",
     );
-  if (seen.foot > 200)
-    said.push(`${where} 页脚摆了 ${seen.foot} 字（上限 200）：法律要求的那几句也不许野蛮生长`);
+  if (seen.foot > 60)
+    said.push(
+      `${where} 页脚摆了 ${seen.foot} 字（上限 60）：只挂链接·许可·归属，别写散文（票 121）`,
+    );
   if (said.length === 0)
     console.log(
       `${where} 说了 ${seen.total} 字 ✓（上限 ${limit}，页脚另计 ${seen.foot}，量到 ${seen.blocks} 处）`,
@@ -1012,9 +1014,9 @@ export async function verifyHome(lane) {
     {
       const at = await lane.newPage({ viewport: ONE_SCREEN });
       await at.goto(`${url}/`, { waitUntil: "load" });
-      missing.push(...(await wordProblems(at, "首页", 120)));
+      missing.push(...(await wordProblems(at, "首页", 112)));
       await at.goto(`${url}/?table=1`, { waitUntil: "load" });
-      missing.push(...(await wordProblems(at, "?table=1", 185)));
+      missing.push(...(await wordProblems(at, "?table=1", 168)));
       await at.close();
     }
 

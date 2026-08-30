@@ -63,6 +63,18 @@ const NAKI_CORPUS = [
 /** 走到覆盖清单齐为止的手数上限。 */
 const NAKI_BUDGET = 110;
 
+/** 那四盏灯验过几帧——**0 帧就是这条闸门空转了**，不是灯没毛病。 */
+let lampFrames = 0;
+
+/**
+ * 灯亮过哪几席。
+ *
+ * **头一版没有这一格，阴性对照就打不中**：把推导改成「永远亮在座位 0」之后闸门照旧全绿，
+ * 因为验到的两帧碰巧都是座位 0 该动。一条只在一个座位上验过的「灯指对人」断言，
+ * 证明不了它认得别的座位。
+ */
+const lampSeatsSeen = new Set();
+
 /**
  * 把牌桌上人能看见的东西**连同它的 `data-`** 一起读回来。
  *
@@ -173,7 +185,6 @@ function readBoard(page) {
       seats,
       center: {
         anchor: attr(field("table-center"), "data-anchor"),
-        frame: text(field("table-anchor")),
         kyokuText: text(field("table-kyoku")),
         bakaze: attr(field("table-kyoku"), "data-bakaze"),
         kyoku: attr(field("table-kyoku"), "data-kyoku"),
@@ -194,6 +205,18 @@ function readBoard(page) {
         image: akaStyle === null ? null : akaStyle.backgroundImage,
         plain: plainOfAka,
       },
+      // 桌心那四盏灯（票 121）。
+      // **数画出来的，不是 DOM 里有的**：头一版数 `querySelectorAll` 的长度，
+      // 把灭着的灯 `display: none` 掉照样报 4 盏——阴性对照打中了却不报，
+      // 因为那条断言问的是「DOM 里有几个」而不是「人看得见几盏」。
+      // 票 32 那次缺陷是同一形状（DOM 里有、眼睛里没有）。
+      lamps: [...document.querySelectorAll(".lamp")]
+        .filter((lamp) => lamp.getBoundingClientRect().height > 0)
+        .map((lamp) => ({
+          seat: Number(lamp.dataset.lampSeat),
+          lit: lamp.dataset.lit === "on",
+          position: lamp.dataset.lampPosition,
+        })),
       bound: attr(field("table-agent"), "data-seats"),
       agent: text(field("table-agent")),
     };
@@ -290,6 +313,14 @@ function checkHands(shot, problems) {
   // 刚摸那张摆得离手牌远一点（票 22）。它是七种记号里占「间距」那一维的那一个。
   // **量的是画出来的间距**（票 82）：它与「牌摆成一行还是一列」一起在下面那个函数里。
   for (const seat of shot.seats) checkHandLine(seat, problems);
+  // 桌心那四盏灯（票 121）。
+  lampFrames += 1;
+  problems.push(
+    ...lampProblems(
+      shot.seats.map((seat) => ({ seat: seat.seat, handCount: Number(seat.hand.data) })),
+      shot.lamps,
+    ),
+  );
 
   const revealed = shot.seats.filter((seat) => seat.hand.hidden === "false");
   if (revealed.length !== 1)
@@ -722,6 +753,51 @@ async function checkNakiPositions(page, problems) {
 // ---- 跑 ----
 
 /** 牌桌那一道（票 44 + 票 51）。返回的是失败清单（空 = 绿）。 */
+/**
+ * 桌心那四盏灯（票 121，主人指的雀魂做法）：**轮到谁，哪一盏亮**。
+ *
+ * 它顶掉的是「轮到你出牌了（座位 N）：…」那 60 字——看得见就不用说。
+ *
+ * 问的是**至多一盏**而不是「恰好一盏」：刚打完、下家还没摸的那一帧确实没人该动，
+ * 逼它恒亮一盏就是逼我在没人该动的时候随便点一盏——那才是撒谎。
+ *
+ * 三条：
+ *   ① 四盏都在（灭着的是**看得见的空位**，人才读得出「现在是那一盏」）
+ *   ② 至多一盏亮
+ *   ③ **亮的那一盏 = 手上多着一张的那一家**（张数 mod 3 = 2）。
+ *      没有③的话，一盏永远亮在座位 0 上的灯照样过①②。
+ *
+ * 报出走了几帧：0 帧就是这条闸门空转了。
+ */
+export function lampProblems(seats, lamps) {
+  const said = [];
+  for (const lamp of lamps) if (lamp.lit) lampSeatsSeen.add(lamp.seat);
+  if (lamps.length !== 4) {
+    said.push(`桌心只有 ${lamps.length} 盏灯（该有 4 盏）：灭着的也得画出来`);
+    return said;
+  }
+  const lit = lamps.filter((lamp) => lamp.lit);
+  if (lit.length > 1)
+    said.push(`桌心同时亮了 ${lit.length} 盏灯（${lit.map((l) => l.seat).join("、")}）：至多一盏`);
+
+  const holding = seats.filter((seat) => seat.handCount % 3 === 2);
+  if (holding.length > 1)
+    said.push(
+      `同时有 ${holding.length} 家手上多着一张：${holding.map((s) => `座位 ${s.seat} ${s.handCount} 张`).join("、")}`,
+    );
+
+  if (lit.length === 1 && holding.length === 1 && lit[0].seat !== holding[0].seat)
+    said.push(
+      `灯亮在座位 ${lit[0].seat} 上，可手上多着一张的是座位 ${holding[0].seat}` +
+        `（${holding[0].handCount} 张）：灯指错人了`,
+    );
+  if (lit.length === 0 && holding.length === 1)
+    said.push(`座位 ${holding[0].seat} 手上多着一张（${holding[0].handCount} 张），可四盏灯全灭着`);
+  if (lit.length === 1 && holding.length === 0)
+    said.push(`灯亮在座位 ${lit[0].seat} 上，可四家手上都没多着牌`);
+  return said;
+}
+
 export async function verifyBoard(lane) {
   const url = await lane.previewUrl();
   const page = await lane.newPage({ viewport: { width: 1180, height: 1200 } });
@@ -812,6 +888,21 @@ export async function verifyBoard(lane) {
     checkJunme(shot, later, stepped, problems);
     checkScores(later, total, problems);
 
+    // 桌心那四盏灯（票 121）：**连走几手，逼它换席**。
+    // 只在一处验的话，一盏永远亮在座位 0 上的灯照样全绿（阴性对照打不中才发现）。
+    await page.getByTestId("table-view-god").click();
+    for (let step = 0; step < 12; step += 1) {
+      const shot = await readBoard(page);
+      lampFrames += 1;
+      problems.push(
+        ...lampProblems(
+          shot.seats.map((seat) => ({ seat: seat.seat, handCount: Number(seat.hand.data) })),
+          shot.lamps,
+        ),
+      );
+      if (!(await stepOnce(page))) break;
+    }
+
     // **竖排那两家的牌面只有上帝视角摆得出来**（坐着看时他家整排是牌背）：
     // 「一列不换列」「转了 90°」「刚摸那张纵向摆开」这三条因此在上帝视角上再核一遍。
     // 走几手是为了让**左右两家真的轮到手**——刚摸那张一次只在一家手里，
@@ -820,6 +911,13 @@ export async function verifyBoard(lane) {
     for (let step = 0; step < DRAWN_HUNT && sidewaysDrawn === 0; step += 1) {
       const godShot = await readBoard(page);
       for (const seat of godShot.seats) checkHandLine(seat, problems);
+      lampFrames += 1;
+      problems.push(
+        ...lampProblems(
+          godShot.seats.map((seat) => ({ seat: seat.seat, handCount: Number(seat.hand.data) })),
+          godShot.lamps,
+        ),
+      );
       sidewaysDrawn += godShot.seats.filter(
         (seat) =>
           (seat.position === "kamicha" || seat.position === "shimocha") &&
@@ -843,7 +941,11 @@ export async function verifyBoard(lane) {
   }
 
   if (pageProblems.length > 0) return failure("页面报了错：", pageProblems);
+  if (lampFrames === 0) return failure("桌心那四盏灯一帧都没验到：", ["这条闸门空转了（票 121）"]);
   if (problems.length > 0) return failure("牌桌上少了该给人看的东西：", problems);
+  console.log(
+    `桌心那四盏灯 ✓（验了 ${lampFrames} 帧，亮过座位 ${[...lampSeatsSeen].sort().join("、")}）`,
+  );
 
   const kawa = shot.seats.reduce(
     (sum, seat) => ({

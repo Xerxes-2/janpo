@@ -63,12 +63,14 @@ let Bar () =
         prop.className "site-footer"
         prop.testId "site-footer"
         prop.children [
-            Html.span "源码、现在做到哪一步、以及页面里提到的那几份文档，都在 "
-            link repoUrl "GitHub 上的 Xerxes-2/janpo"
-            Html.span "。按 "
-            link licenseUrl "MIT 许可"
-            Html.span $"放出。{copyright}。强 AI 基线那份产物含第三方 Apache-2.0 代码与内嵌权重，归属与许可见 "
+            // **只挂链接、许可、归属**（票 121，主人裁的）：
+            // 「源码、现在做到哪一步、以及页面里提到的那几份文档，都在…」那一串散文，
+            // 链接自己就说得清。法律要的是**归属在**，不是**归属长**——
+            // MIT 与 Apache-2.0 §4(b) 要的都是「谁的、什么许可、去哪看」这三件事。
+            link repoUrl "Xerxes-2/janpo"
+            Html.span "・"
+            link licenseUrl "MIT"
+            Html.span $"・{copyright}・"
             link (thirdPartyUrl ()) Credit.thirdPartyText
-            Html.span "。"
         ]
     ]

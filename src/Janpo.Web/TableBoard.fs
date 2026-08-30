@@ -491,7 +491,42 @@ module TableBoard =
     ///
     /// **方位的参照系写在这里**（M1 传下来的第六条：相对方位必须显式声明参照系）：
     /// 牌桌上写着「下家」的那家到底是谁的下家，读者不必自己猜。
-    let private tableCenter (settled: bool) (board: BoardView) =
+    /// 桌心那四盏灯（票 121，主人指的雀魂做法）：**轮到谁，哪一盏亮**。
+    ///
+    /// 这四盏灯顶掉的是「轮到你出牌了（座位 N）：…」那 60 字——
+    /// **看得见就不用说**，而且它对四家都成立，不只对真人那一席。
+    ///
+    /// 灯的位置跟着那一席在屏幕上的方位走（与席区同一个 `Board.position`），
+    /// ∴ 灯指的方向就是人的方向，不需要再写一句话解释。
+    let private lamps (seating: Seating) (board: BoardView) =
+        let lit = Board.teban board
+
+        Html.div [
+            prop.key "lamps"
+            prop.className "lamps"
+            prop.testId "table-lamps"
+            prop.custom ("data-lamp-lit", lit |> Option.map (Seat.index >> string) |> Option.defaultValue "")
+            prop.children [
+                for view in board.Seats do
+                    let index = Seat.index view.Seat
+                    let on = lit = Some view.Seat
+
+                    Html.span [
+                        prop.key $"lamp-{index}"
+                        prop.className "lamp"
+                        prop.testId $"table-lamp-{index}"
+                        prop.custom ("data-lamp-seat", index)
+                        prop.custom ("data-lit", (if on then "on" else "off"))
+                        prop.custom (
+                            "data-lamp-position",
+                            Position.toWire (Board.position seating.Ruleset seating.Anchor view.Seat)
+                        )
+                        prop.title (if on then $"轮到座位 {index}" else $"座位 {index}")
+                    ]
+            ]
+        ]
+
+    let private tableCenter (seating: Seating) (settled: bool) (board: BoardView) =
         // 立直棒是「供托 N 根」那个数字的实物画法，一根都没时**整个字段不画**（同下面的里宝牌）：
         // 否则只剩一枚「立直棒」标签后面空着，看着像掉了东西（票 32 扫同类隐形时收的）。
         let bou =
@@ -531,23 +566,24 @@ module TableBoard =
         // 参照系那一句。`data-anchor` 是它给机器看的那一半：闸门拿它与四家真画在哪个格子里对。
         let anchor = Board.anchor board
 
-        // 副露那一行的参照系（票 51）。它与上面那句不是同一个参照系，因此必须各说各的：
-        // 牌桌布局以**看牌桌的那个人**为准，副露里的左中右以**副露方自己**为准。
-        // M1 传下来的第六条（相对方位必须显式声明参照系）在这里就是这一句——
-        // 牌桌上不再写「来自X」之后，读者靠它才知道横放那张的位置该怎么读。
-        // 票 82 给它接了后半句：左右两家的牌侧着摆之后，**那一排在屏幕上是竖的**。
-        // 不接这一句的话，读者拿「最左」去对一列牌会当场读错来源。
-        let frame =
-            match board.Viewer with
-            | Some seat -> $"坐在座位 {Seat.index seat}：自家在下、下家在右、对家在上、上家在左"
-            | None -> $"上帝视角：以起家（座位 {Seat.index anchor}）为下方"
-
+        // 「坐在座位 0：自家在下、下家在右、对家在上、上家在左」**删了**（票 121，主人裁的）。
+        //
+        // 那是麻将的普适约定，等于印一句「上方是上」。真正有信息量的只有「谁在下方」，
+        // 而**四张名牌自己就写着**：下方那张写着「座位 0・东家」。
+        //
+        // M1 第六条（相对方位必须显式声明参照系）没被绕过——**名牌逐个标注位置，
+        // 比一句概括更强**：读者不必把「下家在右」在脑子里套一遍，直接读那一张就是。
+        // 参照系那一格给机器看的那一半（`data-anchor`）一格没动。
+        //
+        // 副露里的左中右是**另一个**参照系（以副露方自己为准），它仍要显式声明——
+        // 那一句在「怎么读这张牌桌」那个抽屉里（票 120）。
         Html.div [
             prop.className "table-center"
             prop.testId "table-center"
             prop.custom ("data-anchor", Seat.index anchor)
             prop.children (
                 [
+                    lamps seating board
                     field
                         [
                             prop.custom ("data-bakaze", Kaze.toDisplay board.Bakaze)
@@ -567,14 +603,7 @@ module TableBoard =
                 ]
                 @ ura
                 @ bou
-                @ [
-                    Html.p [
-                        prop.key "anchor"
-                        prop.className "table-anchor"
-                        prop.testId "table-anchor"
-                        prop.text frame
-                    ]
-                ]
+
             )
         ]
 
@@ -935,7 +964,7 @@ module TableBoard =
                                                 for view in board.Seats ->
                                                     seatZone seating (playAt view.Seat) dispatch view
                                             ]
-                                            @ [ tableCenter (Option.isSome settled) board ]
+                                            @ [ tableCenter seating (Option.isSome settled) board ]
                                         )
                                     ]
                                 ]
