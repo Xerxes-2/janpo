@@ -131,3 +131,21 @@ export async function openSetup(page) {
   if (!(await setup.evaluate((el) => el.open)))
     throw new Error("配桌那一枚折叠点不开：点了摘要行之后 details.open 仍是 false");
 }
+
+/**
+ * 点开一席的气泡（票 118）。
+ *
+ * 收起态是原生 `<details>`，里面那枚 `seat-N-bubble` 按钮先得露出来才点得着。
+ * **幂等**——已经开着就什么都不做：无脑再点一次会把它**点收**，
+ * 而下一句 `.click()` 会卡到超时（verify-home 与 verify-inbound 各栽过一次）。
+ * 点了还是没开就当场抛：静默跳过会让下游断言空转。
+ */
+export async function openBubble(page, seat) {
+  const shell = page.getByTestId(`seat-${seat}-bubble-shell`);
+  if ((await shell.count()) === 0) throw new Error(`座位 ${seat} 没有气泡壳，点不开`);
+  if (await shell.evaluate((node) => node.hasAttribute("open"))) return;
+  await page.getByTestId(`seat-${seat}-bubble-pill`).click();
+  await shell.evaluate((node) => {
+    if (!node.hasAttribute("open")) throw new Error(`座位 ${seat} 点了药丸，气泡还是没开`);
+  });
+}

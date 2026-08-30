@@ -27,7 +27,7 @@
 import { readFileSync } from "node:fs";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { hostPage, retryOnReload } from "./serve.mjs";
-import { openSetup, stepTurns } from "./table-drive.mjs";
+import { openBubble, openSetup, stepTurns } from "./table-drive.mjs";
 
 /** 拌进「带决策记录」那份牌谱的 thinking：一段只可能出现在审计数据里的字串。 */
 const THINKING = "先数向听：这手牌 2 向听，切 9 万最不亏——INBOUND-THINKING-MARK";
@@ -465,6 +465,8 @@ export async function verifyInbound(lane) {
         }
 
         // **thinking 全文在点开那一屏里**：「导入没丢推理」这件事从此由它钉着。
+        // 收起态是 `<details>`（票 118），先把那一席的气泡点开。
+        await openBubble(home, 1);
         await bubble.click();
         const gotPanel = await settles(
           home,

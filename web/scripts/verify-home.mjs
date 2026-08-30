@@ -39,7 +39,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
-import { openSetup, stepTurns } from "./table-drive.mjs";
+import { openBubble, openSetup, stepTurns } from "./table-drive.mjs";
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -851,6 +851,7 @@ export async function verifyHome(lane) {
     }
 
     for (const how of ["bubble-close", "table-play"]) {
+      await openBubble(page, oldest.seat);
       await page.getByTestId(`seat-${oldest.seat}-bubble`).click();
       const opened = await settles(
         page,

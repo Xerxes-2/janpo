@@ -60,37 +60,66 @@ module ThinkingBubble =
             else
                 []
 
-        Html.button (
-            [
-                prop.key "bubble"
-                prop.className $"bubble {wire}"
-                prop.testId $"seat-{Seat.index seat}-bubble"
-                prop.custom ("data-bubble", wire)
-                // 那一手的手序：闸门拿它与牌谱里那一条记录对得上（人读的是气泡里的字）。
-                prop.custom ("data-bubble-turn", turn |> Option.map string |> Option.defaultValue "")
-                prop.disabled (Option.isNone turn)
-                prop.title hint
-                prop.onClick (fun _ -> turn |> Option.iter (fun turn -> dispatch (RecordOpened(Some turn))))
-            ]
-            @ waiting
-            @ [
-                prop.children (
-                    [
-                        Html.span [
-                            prop.key "who"
-                            prop.className "bubble-who"
-                            prop.text (Bubble.toLabel state)
+        // **收起态是一枚小药丸，展开态才是那句话**（票 118，主人点的）。
+        //
+        // 走原生 `<details>`：**不新增 model 状态、不加消息**——「哪一席的气泡开着」
+        // 是纯粹的看的状态，不该进牌谱、不该进分享链接、也不该让 `Playback` 多一代。
+        // 点 `<summary>` 开、再点收，两个方向都是浏览器给的。
+        //
+        // 常驻的那一半（药丸）**不许压牌**；展开的那一半准许盖住牌桌（主人明许），
+        // ∴ 它绝对定位、不挤占任何元素。这两件事各有一条断言守着
+        // （`web/scripts/verify-bubbles.mjs`）。
+        let inner =
+            Html.button (
+                [
+                    prop.key "bubble"
+                    prop.className $"bubble {wire}"
+                    prop.testId $"seat-{Seat.index seat}-bubble"
+                    prop.custom ("data-bubble", wire)
+                    // 那一手的手序：闸门拿它与牌谱里那一条记录对得上（人读的是气泡里的字）。
+                    prop.custom ("data-bubble-turn", turn |> Option.map string |> Option.defaultValue "")
+                    prop.disabled (Option.isNone turn)
+                    prop.title hint
+                    prop.onClick (fun _ -> turn |> Option.iter (fun turn -> dispatch (RecordOpened(Some turn))))
+                ]
+                @ waiting
+                @ [
+                    prop.children (
+                        [
+                            Html.span [
+                                prop.key "who"
+                                prop.className "bubble-who"
+                                prop.text (Bubble.toLabel state)
+                            ]
+                            Html.span [
+                                prop.key "said"
+                                prop.className "bubble-said"
+                                prop.text (Bubble.toDisplay state)
+                            ]
                         ]
-                        Html.span [
-                            prop.key "said"
-                            prop.className "bubble-said"
-                            prop.text (Bubble.toDisplay state)
-                        ]
-                    ]
-                    @ more
-                )
+                        @ more
+                    )
+                ]
+            )
+
+        Html.details [
+            prop.key "bubble-shell"
+            prop.className $"bubble-shell {wire}"
+            prop.testId $"seat-{Seat.index seat}-bubble-shell"
+            // `data-bubble` **只在里层那一枚上**：同一件机器可读的事实不该有两处。
+            // 壳上也放一份时，闸门 `querySelector('[data-bubble="thinking"]')` 会先撞到壳，
+            // 而已等秒数在里层——当场报「没有已等秒数」。画法走 className 就够。
+            prop.children [
+                Html.summary [
+                    prop.key "pill"
+                    prop.className "bubble-pill"
+                    prop.testId $"seat-{Seat.index seat}-bubble-pill"
+                    prop.title (Bubble.toLabel state + "：点开看这一手说了什么")
+                    prop.text (Bubble.toLabel state)
+                ]
+                inner
             ]
-        )
+        ]
 
     /// 这一席此刻的气泡，没有就是一行都不画（bot 席、分享链接那种棋谱）。
     let internal at (dispatch: TableMsg -> unit) (seat: Seat) (state: Bubble option) : ReactElement list =

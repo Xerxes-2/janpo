@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 import { failure, isEntry, runStandalone } from "./browser-lane.mjs";
 import { plantSeating, profileChoice } from "./seating.mjs";
 import { hostPage } from "./serve.mjs";
-import { openSetup } from "./table-drive.mjs";
+import { openBubble, openSetup } from "./table-drive.mjs";
 
 /** 四个座位。 */
 const Seats = [0, 1, 2, 3];
@@ -175,11 +175,22 @@ async function bubbleAt(page, index) {
 }
 
 /**
- * 气泡与牌 / 河 / 副露 / 牌桌中央的矩形有没有相交（票面：**气泡不许挡住牌与河**）。
+ * 气泡的几何（票 118 改契约）。
  *
- * **读的是真坐标**，不是「我们没写 position: absolute」——后者是承诺，前者是事实。
+ * **撤掉的那一条**：「气泡不许与牌 / 河 / 副露 / 牌桌中央相交」。
+ * 主人明许气泡覆盖其他元素 ⇒ 展开的那一半盖住牌桌是**对的**，再守它就是守错了东西。
+ *
+ * **顶上来的三条**（覆盖率不能凭空消失）：
+ *   ① **收起态（药丸）不许压牌**。它是常驻的——让一枚一直挂着的东西永久盖住一张牌
+ *      是白占。撤掉的那条真正保住的东西就在这里。
+ *   ② **收起态尺寸有上限**。没有它，「收起」可以退化成什么都不收，而
+ *      「点得开、点得收」照样全绿（判据 60 那个坑）。上限按**牌宽的倍数**算，
+ *      不写死 px——固定舞台会缩放（票 119）。
+ *   ③ **展开的浮层要挨着它自己那枚药丸**。这一条接替原先的「气泡得画在那一席的框里」：
+ *      浮层现在绝对定位、本来就该探出那个框，但**一个飞到页面角上的浮层与谁都不相交**，
+ *      没有这一条的话下面全绿。
  */
-async function overlaps(page) {
+async function bubbleGeometry(page) {
   return await page.evaluate(() => {
     const hit = (a, b) =>
       a.left < b.right - 0.5 &&
@@ -188,34 +199,61 @@ async function overlaps(page) {
       b.top < a.bottom - 0.5;
     const found = [];
 
-    for (const bubble of document.querySelectorAll('[data-testid$="-bubble"]')) {
-      const box = bubble.getBoundingClientRect();
+    const tile = document.querySelector(".zone .tile")?.getBoundingClientRect();
+    const unit = tile && tile.width > 0 ? tile.width : 0;
+    if (unit === 0) return ["一张牌都没量到：这一程的几何断言全都空转了"];
+
+    const pills = [...document.querySelectorAll('[data-testid$="-bubble-pill"]')];
+    if (pills.length === 0) return found; // 这一屏本来就没有气泡（bot 席、访客牌谱）
+
+    for (const pill of pills) {
+      const box = pill.getBoundingClientRect();
       if (box.width === 0 || box.height === 0) {
-        found.push(`${bubble.dataset.testid} 的矩形是空的：它其实没画出来`);
+        found.push(`${pill.dataset.testid} 的矩形是空的：它其实没画出来`);
         continue;
       }
-      // **气泡是那一席的**：它得画在那一席的框里。没有这一条的话，一个飞到页面角上的气泡
-      // 与谁都不相交，下面那一圈照样绿（`position: absolute` 那种改坏法实测就是这样）。
-      const seat = bubble.closest(".seat")?.getBoundingClientRect();
-      if (
-        seat === undefined ||
-        box.left < seat.left - 0.5 ||
-        box.right > seat.right + 0.5 ||
-        box.top < seat.top - 0.5 ||
-        box.bottom > seat.bottom + 0.5
-      ) {
-        found.push(`${bubble.dataset.testid} 画到那一席的框外面去了`);
-      }
-      const targets = [
+
+      // ② 收起态得**小**。4×牌宽 / 2×牌高 是「一枚药丸」的量级，
+      //    展开态那种 22rem 宽的卡片过不了这一关。
+      if (box.width > unit * 4)
+        found.push(
+          `${pill.dataset.testid} 收起时宽 ${Math.round(box.width)} px，` +
+            `超过 4 张牌宽（${Math.round(unit * 4)} px）：那不叫收起`,
+        );
+      if (box.height > tile.height * 2)
+        found.push(
+          `${pill.dataset.testid} 收起时高 ${Math.round(box.height)} px，` +
+            `超过 2 张牌高（${Math.round(tile.height * 2)} px）：那不叫收起`,
+        );
+
+      // ① 收起态不许压牌。
+      const shell = pill.closest(".bubble-shell");
+      for (const target of [
         ...document.querySelectorAll(".tiles"),
         ...document.querySelectorAll('[data-testid="table-center"]'),
-      ];
-      for (const target of targets) {
-        if (bubble.contains(target) || target.contains(bubble)) continue;
-        if (hit(box, target.getBoundingClientRect())) {
+      ]) {
+        if (shell?.contains(target) || target.contains(pill)) continue;
+        if (hit(box, target.getBoundingClientRect()))
           found.push(
-            `${bubble.dataset.testid} 压在 ${target.dataset.testid ?? target.className} 上了`,
+            `${pill.dataset.testid}（收起态）压在 ${target.dataset.testid ?? target.className} 上了：` +
+              "常驻的那一半不许占着牌",
           );
+      }
+
+      // ③ 开着的浮层要挨着它自己那枚药丸。
+      if (shell?.hasAttribute("open")) {
+        const pop = shell.querySelector('[data-testid$="-bubble"]')?.getBoundingClientRect();
+        if (pop === undefined || pop.width === 0)
+          found.push(`${pill.dataset.testid} 开着，可它的浮层没画出来`);
+        else {
+          const dx = Math.max(0, box.left - pop.right, pop.left - box.right);
+          const dy = Math.max(0, box.top - pop.bottom, pop.top - box.bottom);
+          const gap = Math.round(Math.hypot(dx, dy));
+          if (gap > unit * 2)
+            found.push(
+              `${pill.dataset.testid} 的浮层离它自己那枚药丸 ${gap} px（上限 ${Math.round(unit * 2)} px）：` +
+                "它飘走了，人看不出这句话是谁说的",
+            );
         }
       }
     }
@@ -504,13 +542,40 @@ async function fourSeatsLane(lane, pageOrigin, options) {
     }
 
     // ---- ② 挡不住牌与河 ----
-    const covered = await overlaps(page);
+    // **点得开、点得收**（票 118，主人点的两个方向）：四席各走一个来回。
+    // 只验「点得开」的话，一个开了收不回去的气泡照样全绿——而它会一直盖着牌桌。
+    let toggled = 0;
+    for (const seat of Seats) {
+      if ((await page.getByTestId(`seat-${seat}-bubble-shell`).count()) === 0) continue;
+      toggled += 1;
+      const shell = page.getByTestId(`seat-${seat}-bubble-shell`);
+      const pill = page.getByTestId(`seat-${seat}-bubble-pill`);
+      const openOf = async () => await shell.evaluate((node) => node.hasAttribute("open"));
+      // **先问，再归位**。头一版反过来写（先「若开着就点收」再问「是不是开着的」），
+      // 那一问永远为假——阴性对照（让它一开局就带 open）打不中才发现。
+      if (await openOf()) {
+        missing.push(`座位 ${seat} 的气泡一开始就是开着的：收起态才该是常态`);
+        await pill.click();
+      }
+      await pill.click();
+      if (!(await openOf())) missing.push(`座位 ${seat} 的气泡点不开（点了药丸没反应）`);
+      const openGeometry = await bubbleGeometry(page);
+      missing.push(...openGeometry);
+      await pill.click();
+      if (await openOf()) missing.push(`座位 ${seat} 的气泡点不收（开了就收不回去）`);
+    }
+    // **报出走了几席**：0 就是这一圈空转了（判据：闸门要报执行次数）。
+    if (toggled === 0) missing.push("「点得开、点得收」这一圈一席都没走到：它空转了");
+    else console.log(`气泡点得开也点得收 ✓（${toggled} 席各走了一个来回）`);
+
+    const covered = await bubbleGeometry(page);
     for (const each of covered) missing.push(each);
 
     // ---- ③ 点得开：全文面板 + 那一手的局面快照（与票 76 同一套断言，点座位 0 的） ----
     const spoke = await bubbleAt(page, 0);
     const beforeOpen = await boardDigest(page);
     const liveKawa = await kawaTotal(page);
+    await openBubble(page, 0);
     await page.getByTestId("seat-0-bubble").click();
     await settles(
       page,
@@ -691,7 +756,7 @@ async function fourSeatsLane(lane, pageOrigin, options) {
       }
     }
 
-    const coveredAgain = await overlaps(page);
+    const coveredAgain = await bubbleGeometry(page);
     for (const each of coveredAgain) missing.push(`（兜底那一屏）${each}`);
 
     if (shoot !== null) {

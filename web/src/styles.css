@@ -40,7 +40,7 @@
    **这两个数是量出来的，不是拍的**：设计高每多 1 rem，1280×800 下的牌就小 1.7%。
    ────────────────────────────────────────────────────────────── */
 html {
-  font-size: min(calc(100vw / 76), calc(100vh / 56));
+  font-size: min(calc(100vw / 76), calc(100vh / 53));
 }
 
 /* 舞台之内不许有文档滚动——长卷死了，「操作条要不要吸底」那场争论也就失去了对象。 */
@@ -346,7 +346,7 @@ input[type="range"] {
   /* 上下各留一张名牌的高。名牌里可能是 `deepseek/deepseek-v4-flash` 这样的长名，
      留窄了它会顶到上面那排视角按钮上去——**不是压住，是拦住点击**
      （playwright 报 `intercepts pointer events`，头一版就这么坏的）。 */
-  margin: 2.7rem auto 5rem;
+  margin: 2.4rem auto 2.6rem;
 }
 
 /* 副露图例（票 117）：摆在牌桌外沿，不占桌心。 */
@@ -445,7 +445,7 @@ input[type="range"] {
      窄了折三四行、名牌就高出下方留白、探到页脚上去（页脚里那枚 MIT 链接会拦住点击）。
      铺到 76rem 时那一句一行放得下，名牌只有一行高——**横向本来就有大把空地**
      （页面 1280、牌桌 480，两侧各 400）。 */
-  max-width: min(76rem, 96vw);
+  max-width: min(34rem, 96vw);
 }
 
 .plates .seat[data-seat-position="self"] > .seat-head,
@@ -1627,4 +1627,81 @@ input[type="range"] {
   flex-wrap: wrap;
   gap: 0.25rem;
   margin: 0;
+}
+
+/* ── 气泡：收起是药丸，展开是浮层（票 118，主人点的）─────────────────
+   「收起状态就只有小气泡，里面是 thinking... 之类的就行」「准许覆盖其他元素」。
+
+   常驻的那一半（药丸）**不许压牌**——让一枚一直挂着的东西永久盖住一张牌是白占。
+   展开的那一半准许盖住牌桌，∴ 它 `position: absolute`、**不挤占任何元素**。
+   ──────────────────────────────────────────────────────────────── */
+/* 名牌卡片整体不接事件（票 117：它探出牌桌、会拦住按钮），
+   ∴ 气泡这一支得自己把事件接回来——**药丸也算**（票 118 把可点的那一处从
+   气泡本体换成了药丸）。 */
+.bubble-shell,
+.bubble-pill {
+  pointer-events: auto;
+}
+
+.bubble-shell {
+  position: relative;
+}
+
+/* 收起态：一枚小药丸。**尺寸有上限**（闸门第③条守着）——没有上限的话
+   「收起」可以退化成什么都不收，而「点得开、点得收」照样全绿。 */
+.bubble-pill {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--paper-shade);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+/* 浏览器默认给 `<summary>` 一枚三角，去掉它之后那一行就看不出可点——
+   票 116 踩过一次（摘要行看不出可点，闸门全绿，是看图看出来的）。
+   ∴ 自画一枚，随开合翻向。 */
+.bubble-pill::-webkit-details-marker {
+  display: none;
+}
+
+.bubble-pill::after {
+  content: " ▸";
+  opacity: 0.55;
+}
+
+.bubble-shell[open] > .bubble-pill::after {
+  content: " ▾";
+}
+
+.bubble-shell[open] > .bubble-pill {
+  border-color: var(--line-strong);
+}
+
+/* 展开态：浮层。绝对定位 ⇒ 开合不推动任何元素。 */
+.bubble-shell > .bubble {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  left: 0;
+  z-index: 3;
+  width: max-content;
+  max-width: 22rem;
+  text-align: left;
+}
+
+/* **自家那一席往上展开**：它的名牌在牌桌下沿，往下展开会撞到页脚
+   （实测浮层落在 742→790，而页脚从 786 起）。往上正好盖在牌桌上——主人许了。 */
+.seat[data-seat-position="self"] .bubble-shell > .bubble {
+  top: auto;
+  bottom: calc(100% + 0.2rem);
+}
+
+/* 药丸靠右的两席（下家在右轨一侧），浮层往左展开，免得溢出视口。 */
+.seat[data-seat-position="shimocha"] .bubble-shell > .bubble {
+  left: auto;
+  right: 0;
 }
