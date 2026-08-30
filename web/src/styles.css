@@ -1305,14 +1305,15 @@ input[type="range"] {
   margin: 0 0 0.75rem;
 }
 
-/* 「配这一桌」那一行**与左轨接成一条**（票 129，主人裁的「配桌挪到左轨」）：
-   它与三栏同宽同居中，而摘要那一行只占轨宽、穿着轨道的底色与右边线——
-   于是它读起来就是轨道的第一行。
+/* 「配这一桌」是**横跨整框的一条顶栏**（票 130，主人裁的：
+   「不如做成一排显式的顶栏了，现在这个样子左栏上面突出来一块很丑」）。
 
-   **它仍在页面这一层、不进轨道那一列**：展开的那一屏是四席绑定加模型档案库，
-   13rem 宽的轨道里摆不下；试过做成浮层，它把轨道与牌桌一起盖住，
-   底下的按钮全点不到（verify-board 当场红）。∴ 收起时看着在轨里，
-   展开时照旧在流里把下面推开。 */
+   票 129 那一版让它只占轨宽、与左轨接成一条——结果左栏顶上凸出一块，
+   三栏的上边缘参差不齐。顶栏则与三栏同宽同居中、一条发丝线收底，
+   下面三栏的上边缘因此齐平。
+
+   **展开的那一屏仍在流里**：它是四席绑定加模型档案库，做成浮层会盖住
+   轨道与牌桌，底下的按钮全点不到（verify-board 当场红）。 */
 .page > .setup {
   width: 100%;
   max-width: var(--frame-w);
@@ -1321,10 +1322,11 @@ input[type="range"] {
 
 .page > .setup > summary {
   box-sizing: border-box;
-  width: var(--rail);
-  padding: 0.5rem 0.85rem;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0.45rem 0.85rem;
   background: var(--paper-raised);
-  border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
 
