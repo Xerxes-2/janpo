@@ -100,10 +100,11 @@ module TablePanel =
             prop.testId "table-share-note"
             prop.custom ("data-share", live.Shared |> Option.map ShareOutcome.toWire |> Option.defaultValue "")
             prop.custom ("data-share-chars", chars)
-            prop.text (
-                "「复制分享链接」出的地址只带棋谱——模型的推理与 prompt 不上 URL；要给人完整推理，用「导出牌谱」的 JSON 文件（对方从首页的「导入牌谱 JSON」能看）。"
-                + said
-            )
+            // 那 85 字的注意事项**收进 `title`**（票 120，主人裁的）：它是「按下去会怎样」，
+            // 不是「此刻是什么」——常驻在版面上只是噪音。票 78 要的「一直可及」由 `title` 兑现，
+            // 机器可读那两格（`data-share` / `data-share-chars`）一格没动。
+            prop.title "「复制分享链接」出的地址只带棋谱——模型的推理与 prompt 不上 URL；要给人完整推理，用「导出牌谱」的 JSON 文件（对方从首页的「导入牌谱 JSON」能看）。"
+            prop.text said
         ]
 
     /// 主持人那一页的控制条（`?table=1`）：单步 / 下一局 / 导出牌谱 / 复制分享链接
@@ -365,11 +366,7 @@ module TablePanel =
 
         let pending = TableState.rulesPending model
 
-        let said =
-            if pending then
-                "拨好了：按「重开」才开出新的一桌（不半场换规则）。"
-            else
-                "这一桌就是按这三项开的。"
+        let said = if pending then "拨好了：按「重开」才开出新的一桌（不半场换规则）。" else ""
 
         let label (key: string) (text: string) =
             Html.span [ prop.key key; prop.className "label"; prop.text text ]
@@ -453,7 +450,9 @@ module TablePanel =
                     prop.className "rendering pending"
                     prop.testId "table-view-locked"
                     prop.custom ("data-view-locked", Seat.index seat)
-                    prop.text $"视角锁在座位 {Seat.index seat}（你自己）：桌边坐着真人，上帝视角与别席视角在这一页上不存在——终局后它们回来。"
+                    // 长句收进 `title`（票 120）：版面上留「为什么那两枚按钮按不动」那一句就够。
+                    prop.title $"桌边坐着真人，上帝视角与别席视角在这一页上不存在——终局后它们回来。"
+                    prop.text $"视角锁在座位 {Seat.index seat}"
                 ]
         ]
 
@@ -684,14 +683,14 @@ module TablePanel =
                         prop.children [
                             areaField
                                 $"table-seat-{index}-persona"
-                                "人格（一局内不变）"
+                                "人格"
                                 "留空＝没有人格。例：你是一位以防守见长的雀士，宁可少和一把也不点炮。"
                                 (SeatBinding.field SeatField.Persona binding)
                                 (fun value -> SeatEdited(seat, SeatField.Persona, value))
                                 dispatch
                             areaField
                                 $"table-seat-{index}-template"
-                                "模板（一局内不变）"
+                                "模板"
                                 "留空＝默认模板。一段 JSON：{\"id\":\"我的\",\"labels\":{\"history\":\"【回放】\"}}"
                                 (SeatBinding.field SeatField.Template binding)
                                 (fun value -> SeatEdited(seat, SeatField.Template, value))
@@ -879,8 +878,10 @@ module TablePanel =
 
         let said =
             match version with
-            | Some version -> $"最近一手的渲染版本：{version}"
-            | None -> "渲染版本：这一桌还没发出去过一次问话"
+            // 渲染版本是**开发者要看的**，不是主人要看的（票 120）：收进 `title`，
+            // 机器可读那一格（`data-render-version`）一格没动，闸门照旧读得到。
+            | Some version -> $"渲染 {version}"
+            | None -> ""
 
         let pending = TableState.renderingPending model
 

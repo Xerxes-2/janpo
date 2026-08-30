@@ -1705,3 +1705,14 @@ input[type="range"] {
   left: auto;
   right: 0;
 }
+
+/* 「怎么读这张牌桌」那个抽屉（票 120）：看一次就够的图例，不常驻版面。 */
+.board-legend > summary {
+  font-size: 0.72rem;
+  opacity: 0.62;
+  cursor: pointer;
+}
+
+.board-legend[open] > summary {
+  opacity: 0.85;
+}

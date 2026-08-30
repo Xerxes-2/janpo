@@ -588,11 +588,27 @@ module TableBoard =
     /// 那个前提是错的：后半句在**任何**四家围坐的布局里都成立（上家那一层转了 90°，
     /// 他的副露行在屏幕上就是竖的），几何不会让它自证；前半句是 M1 第六条要求的
     /// 参照系声明（相对方位必须显式声明参照系），更不能删。
+    /// 「怎么读这张牌桌」——**收进一个点开的抽屉**（票 120，主人裁的）。
+    ///
+    /// 里面这几件都是**看一次就够**的图例：副露方位的参照系（票 51／M1 第六条要求
+    /// 显式声明，∴ 只能收不能删）、摸切的虚线、坐下去之后他家暗牌就不存在。
+    /// 常驻在版面上时它们是噪音——每一局都在那里，而人只读第一次。
     let internal nakiLegendLine () =
-        Html.p [
-            prop.className "naki-legend"
-            prop.testId "table-naki-legend"
-            prop.text nakiLegend
+        Html.details [
+            prop.className "board-legend"
+            prop.testId "table-legend"
+            prop.children [
+                Html.summary [ prop.testId "table-legend-open"; prop.text "怎么读这张牌桌" ]
+                Html.p [
+                    prop.className "naki-legend"
+                    prop.testId "table-naki-legend"
+                    prop.text nakiLegend
+                ]
+                Html.p [
+                    prop.className "naki-legend"
+                    prop.text "虚线描边的牌是摸切。坐到某一席之后，他家的暗牌在页面拿到的数据里根本不存在——「模型看到的和你一样多」就是这么验的。"
+                ]
+            ]
         ]
 
     /// 点数授受一行：按座位升序的增减。

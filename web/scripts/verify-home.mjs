@@ -240,6 +240,71 @@ async function opsShape(page) {
 }
 
 /**
+ * **这一页说了多少话**（票 120）。
+ *
+ * 主人量的那一屏：486 字，其中 345 字是解释性散文——**七成**。而在此之前
+ * 我造的每一条闸门量的都是几何（牌越不越界、气泡压不压牌、缩放改不改结构、
+ * 一屏装不装得下），**没有一条问「这一页说了多少话」**。
+ *
+ * ∴ 文字只会单调增加：每加一个功能就配一句解释，每句解释都有它当时的道理，
+ * 而没有任何东西在反方向拉。这一条就是那个反方向的力。
+ *
+ * 量法：落地那一屏**看得见的**文字（`<details>` 收着的不算——那正是我们要它去的地方；
+ * 牌面上的字不算，那是牌不是话）。上限按屏分开定：主持人那一页要摆四席绑定，
+ * 天然比首页多。
+ *
+ * **报出量到了几处**：0 处就是这条闸门自己坏了（选择器扇空集），不是页面干净。
+ */
+async function wordProblems(page, where, limit) {
+  const seen = await page.evaluate(() => {
+    let total = 0;
+    let foot = 0;
+    let blocks = 0;
+    const walk = (el) => {
+      for (const node of el.childNodes) {
+        if (node.nodeType === 3) {
+          const text = node.textContent.trim();
+          if (text.length < 4) continue;
+          const host = node.parentElement;
+          if (host === null) continue;
+          // 牌面上的字是牌，不是话（`.tile` 拿 `color: transparent` 藏着它）。
+          if (host.closest(".tile") !== null) continue;
+          // 页脚**另算**：那 118 字是法律要求的（MIT 外链 + Apache-2.0 §4(b) 的归属），
+          // 不是废话，混进正文预算只会逼人去砍不该砍的。但它也不许野蛮生长，
+          // ∴ 它有自己那一条上限（下面 `footer` 那一格）。
+          if (host.closest('[data-testid="site-footer"]') !== null) {
+            foot += text.length;
+            continue;
+          }
+          // 收在抽屉里的不算：那正是我们要它去的地方。
+          const folded = host.closest("details");
+          if (folded !== null && !folded.open) continue;
+          if (host.getBoundingClientRect().height < 2) continue;
+          total += text.length;
+          blocks += 1;
+        } else if (node.nodeType === 1) walk(node);
+      }
+    };
+    walk(document.body);
+    return { total, foot, blocks };
+  });
+  if (seen.blocks === 0) return [`${where} 一处文字都没量到：这条字数闸门自己坏了（不是页面干净）`];
+  const said = [];
+  if (seen.total > limit)
+    said.push(
+      `${where} 落地那一屏摆了 ${seen.total} 字（上限 ${limit}）：` +
+        "又开始说废话了——能收进 title / 抽屉的就别常驻（票 120）",
+    );
+  if (seen.foot > 200)
+    said.push(`${where} 页脚摆了 ${seen.foot} 字（上限 200）：法律要求的那几句也不许野蛮生长`);
+  if (said.length === 0)
+    console.log(
+      `${where} 说了 ${seen.total} 字 ✓（上限 ${limit}，页脚另计 ${seen.foot}，量到 ${seen.blocks} 处）`,
+    );
+  return said;
+}
+
+/**
  * **操作控件贴着牌桌**（票 83 的第一条）。四条断言，两屏各量一遍：
  *
  *   ① 那一块真的在（两屏共用同一套装配，不是只给主持人那一页做了一份）；
@@ -942,6 +1007,16 @@ export async function verifyHome(lane) {
     // ⑪ 一屏（票 82 兑现票 83 那 150 px）：另开一页量，因为它要一个写死的视口。
     oneScreen = await oneScreenProblems(lane, url);
     missing.push(...oneScreen.said);
+
+    // ⑬ 这一页说了多少话（票 120）——落地那一屏，抽屉里的不算。
+    {
+      const at = await lane.newPage({ viewport: ONE_SCREEN });
+      await at.goto(`${url}/`, { waitUntil: "load" });
+      missing.push(...(await wordProblems(at, "首页", 120)));
+      await at.goto(`${url}/?table=1`, { waitUntil: "load" });
+      missing.push(...(await wordProblems(at, "?table=1", 185)));
+      await at.close();
+    }
 
     // ⑫ 固定舞台（票 119）：缩放不重排、长卷死掉。
     stage = await stageProblems(lane, url);

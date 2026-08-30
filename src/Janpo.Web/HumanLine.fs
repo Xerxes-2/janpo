@@ -83,9 +83,11 @@ module HumanLine =
                     | count -> $"　这一手还能宣言 {count} 条，按钮在牌桌下面。"
 
                 "waiting",
-                $"轮到你出牌了（座位 {index}）：点自己手里的一张就打出去，能点的那几张由引擎给的合法动作集定（此刻 {playable} 条）。"
-                + ticking clock false
-                + also
+                // **「该你了」三个字**（票 120，主人裁的）。
+                // 「点自己手里的一张就打出去」是教学、「此刻 N 条」是给开发者看的、
+                // 「不限时，整桌等着你」是安抚——能点的那几张**本来就看得见**。
+                // 机器可读那一格（`data-human-playable`）一格没动。
+                $"该你了（座位 {index}）" + ticking clock false + also
         | None, Some _ -> "watching", $"你坐在座位 {index}：轮到别人，看着就好。"
         | None, None -> "settled", $"这一场打完了（你坐的是座位 {index}）：视角与思考气泡都解锁了，四家的牌与推理现在都看得了。"
 
