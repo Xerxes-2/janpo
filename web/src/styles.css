@@ -1311,6 +1311,9 @@ input[type="range"] {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  /* **居中**（票 125，主人点的）：它是整页最上面那一行，而牌桌居中、
+     两条轨道左右对称——只有它靠在左边缘上，读起来像掉出了版心。 */
+  justify-content: center;
   gap: 0.4rem;
   padding: 0.15rem 0;
 }
@@ -1874,7 +1877,11 @@ input[type="range"] {
   :root {
     /* 横向那一支只让路给名牌与页边距（21.5rem = 2×--plate + 1.5rem + 2rem）：
        轨道已经摞下去了，不再占宽。 */
-    --board: min(var(--board-max), calc(100vh - 18rem), calc(100vw - 21.5rem));
+    /* 纵向预留比三栏那档大得多（票 125）：两条轨道摞成上下两行，各占 9rem，
+       加上四张名牌 10rem、页脚与页边距 ≈ 4rem，一共 33rem——按三栏那档的 18rem 算，
+       1100×800 上牌桌底边探出视口 7 px（自查时量到的，而闸门那四个视口正好跳过了
+       这一段：1280 走三栏，390 那档由横向定尺寸）。 */
+    --board: min(var(--board-max), calc(100vh - 33rem), calc(100vw - 21.5rem));
   }
 
   .table-frame {
@@ -1923,7 +1930,7 @@ input[type="range"] {
 }
 
 /* 「该你了」那三个字（票 123）：整页唯一的大字。 */
-.human-call {
+.human-headline {
   display: block;
   font-family: var(--font-serif);
   font-size: 1.5rem;

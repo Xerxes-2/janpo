@@ -155,7 +155,7 @@ module HumanLine =
                     prop.children [
                         // **两截，一个字没多没少**：拼起来就是从前那一句。
                         if call <> "" then
-                            Html.span [ prop.key "call"; prop.className "human-call"; prop.text call ]
+                            Html.span [ prop.key "call"; prop.className "human-headline"; prop.text call ]
                         Html.span [
                             prop.key "note"
                             prop.className "human-note"
