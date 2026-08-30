@@ -63,17 +63,17 @@ const NAKI_CORPUS = [
 /** 走到覆盖清单齐为止的手数上限。 */
 const NAKI_BUDGET = 110;
 
-/** 那四盏灯验过几帧——**0 帧就是这条闸门空转了**，不是灯没毛病。 */
-let lampFrames = 0;
+/** 「轮到谁」验过几帧——**0 帧就是这条闸门空转了**，不是它没毛病。 */
+let tebanFrames = 0;
 
 /**
- * 灯亮过哪几席。
+ * 框亮过哪几席。
  *
- * **头一版没有这一格，阴性对照就打不中**：把推导改成「永远亮在座位 0」之后闸门照旧全绿，
- * 因为验到的两帧碰巧都是座位 0 该动。一条只在一个座位上验过的「灯指对人」断言，
+ * **头一版没有这一格，阴性对照就打不中**：把推导改成「永远框住座位 0」之后闸门照旧全绿，
+ * 因为验到的两帧碰巧都是座位 0 该动。一条只在一个座位上验过的「框对了人」断言，
  * 证明不了它认得别的座位。
  */
-const lampSeatsSeen = new Set();
+const tebanSeatsSeen = new Set();
 
 /**
  * 把牌桌上人能看见的东西**连同它的 `data-`** 一起读回来。
@@ -104,11 +104,19 @@ function readBoard(page) {
       const tegiri = kawa.querySelector('[data-tsumogiri="false"]');
 
       const player = pick("player");
+      const plateStyle = getComputedStyle(plate);
 
       return {
         seat,
         position: node.getAttribute("data-seat-position"),
         riichi: node.getAttribute("data-riichi"),
+        // 轮到谁（票 122 顶掉票 121 那四盏灯）：名牌上那圈朱红。
+        // **两样一起读**：`data-teban` 是机器那一半，两个计算色是「人看得见没有」那一半
+        // ——票 32 那次缺陷的形状正是「DOM 里有、眼睛里没有」。
+        teban: plate.getAttribute("data-teban"),
+        plateInk: plateStyle.borderTopColor,
+        plateFill: plateStyle.backgroundColor,
+        plateShown: plate.getBoundingClientRect().height > 0,
         // 名牌上「这一席是谁在打」（票 82）：人读的是那几个字，`data-player` 是同一件事
         // 给机器看的那一半。
         player: { text: text(player), data: attr(player, "data-player") },
@@ -222,13 +230,6 @@ function readBoard(page) {
       // 把灭着的灯 `display: none` 掉照样报 4 盏——阴性对照打中了却不报，
       // 因为那条断言问的是「DOM 里有几个」而不是「人看得见几盏」。
       // 票 32 那次缺陷是同一形状（DOM 里有、眼睛里没有）。
-      lamps: [...document.querySelectorAll(".lamp")]
-        .filter((lamp) => lamp.getBoundingClientRect().height > 0)
-        .map((lamp) => ({
-          seat: Number(lamp.dataset.lampSeat),
-          lit: lamp.dataset.lit === "on",
-          position: lamp.dataset.lampPosition,
-        })),
       bound: attr(field("table-agent"), "data-seats"),
       agent: text(field("table-agent")),
     };
@@ -348,14 +349,9 @@ function checkHands(shot, problems) {
   // 刚摸那张摆得离手牌远一点（票 22）。它是七种记号里占「间距」那一维的那一个。
   // **量的是画出来的间距**（票 82）：它与「牌摆成一行还是一列」一起在下面那个函数里。
   for (const seat of shot.seats) checkHandLine(seat, problems);
-  // 桌心那四盏灯（票 121）。
-  lampFrames += 1;
-  problems.push(
-    ...lampProblems(
-      shot.seats.map((seat) => ({ seat: seat.seat, handCount: Number(seat.hand.data) })),
-      shot.lamps,
-    ),
-  );
+  // 轮到谁：框住那张名牌（票 122）。
+  tebanFrames += 1;
+  problems.push(...tebanProblems(shot.seats));
 
   const revealed = shot.seats.filter((seat) => seat.hand.hidden === "false");
   if (revealed.length !== 1)
@@ -789,47 +785,82 @@ async function checkNakiPositions(page, problems) {
 
 /** 牌桌那一道（票 44 + 票 51）。返回的是失败清单（空 = 绿）。 */
 /**
- * 桌心那四盏灯（票 121，主人指的雀魂做法）：**轮到谁，哪一盏亮**。
+ * 轮到谁：**框住那张名牌**（票 122 顶掉票 121 那四盏灯，主人裁的
+ * 「用名字框红圈的方式表示到谁了比现在用红点优雅」）。
  *
- * 它顶掉的是「轮到你出牌了（座位 N）：…」那 60 字——看得见就不用说。
+ * 问的是**至多一家**而不是「恰好一家」：刚打完、下家还没摸的那一帧确实没人该动，
+ * 逼它恒框一家就是逼我在没人该动的时候随便框一张——那才是撒谎。
  *
- * 问的是**至多一盏**而不是「恰好一盏」：刚打完、下家还没摸的那一帧确实没人该动，
- * 逼它恒亮一盏就是逼我在没人该动的时候随便点一盏——那才是撒谎。
- *
- * 三条：
- *   ① 四盏都在（灭着的是**看得见的空位**，人才读得出「现在是那一盏」）
- *   ② 至多一盏亮
- *   ③ **亮的那一盏 = 手上多着一张的那一家**（张数 mod 3 = 2）。
- *      没有③的话，一盏永远亮在座位 0 上的灯照样过①②。
+ * 四条：
+ *   ① 四张名牌都读得到 `data-teban`（`on` / `off` 二者之一）；
+ *   ② 至多一家是 `on`；
+ *   ③ **框住的那一家 = 手上多着一张的那一家**（张数 mod 3 = 2）。
+ *      没有③的话，一个永远框住座位 0 的实现照样过①②；
+ *   ④ **人看得见**：框住那张的边框色与底色，至少一样与其余三张不同。
+ *      没有④的话，`data-teban` 写对了而 CSS 一条没生效照样全绿
+ *      ——票 32 那次缺陷正是这个形状（DOM 里有、眼睛里没有）。
  *
  * 报出走了几帧：0 帧就是这条闸门空转了。
  */
-export function lampProblems(seats, lamps) {
+export function tebanProblems(seats) {
   const said = [];
-  for (const lamp of lamps) if (lamp.lit) lampSeatsSeen.add(lamp.seat);
-  if (lamps.length !== 4) {
-    said.push(`桌心只有 ${lamps.length} 盏灯（该有 4 盏）：灭着的也得画出来`);
+  for (const seat of seats) if (seat.teban === "on") tebanSeatsSeen.add(seat.seat);
+
+  if (seats.length !== 4) {
+    said.push(`只读到 ${seats.length} 张名牌（该有 4 张）：「轮到谁」无从量起`);
     return said;
   }
-  const lit = lamps.filter((lamp) => lamp.lit);
-  if (lit.length > 1)
-    said.push(`桌心同时亮了 ${lit.length} 盏灯（${lit.map((l) => l.seat).join("、")}）：至多一盏`);
+  const bad = seats.filter((seat) => seat.teban !== "on" && seat.teban !== "off");
+  if (bad.length > 0) {
+    said.push(
+      `${bad.length} 张名牌没写 data-teban（座位 ${bad.map((s) => s.seat).join("、")}）：` +
+        "「轮到谁」这件事没有机器可读的那一半",
+    );
+    return said;
+  }
 
-  const holding = seats.filter((seat) => seat.handCount % 3 === 2);
+  const on = seats.filter((seat) => seat.teban === "on");
+  if (on.length > 1)
+    said.push(`同时框住了 ${on.length} 家（${on.map((s) => s.seat).join("、")}）：至多一家`);
+
+  // 张数读的是那一排牌自己的 `data-hand-count`（`seat.hand.data`）。
+  // **别去读快照上不存在的字段**：`Number(undefined)` 是 NaN，于是 `holding` 恒空、
+  // ③ 与它下面那两条当场变成空断言——本票重写这一段时正是这么坏的，
+  // 而闸门自己把它逮了出来（判据 22：假绿比假红更危险）。
+  const count = (seat) => Number(seat.hand.data);
+  const holding = seats.filter((seat) => count(seat) % 3 === 2);
   if (holding.length > 1)
     said.push(
-      `同时有 ${holding.length} 家手上多着一张：${holding.map((s) => `座位 ${s.seat} ${s.handCount} 张`).join("、")}`,
+      `同时有 ${holding.length} 家手上多着一张：${holding
+        .map((s) => `座位 ${s.seat} ${count(s)} 张`)
+        .join("、")}`,
     );
 
-  if (lit.length === 1 && holding.length === 1 && lit[0].seat !== holding[0].seat)
+  if (on.length === 1 && holding.length === 1 && on[0].seat !== holding[0].seat)
     said.push(
-      `灯亮在座位 ${lit[0].seat} 上，可手上多着一张的是座位 ${holding[0].seat}` +
-        `（${holding[0].handCount} 张）：灯指错人了`,
+      `框住的是座位 ${on[0].seat}，可手上多着一张的是座位 ${holding[0].seat}` +
+        `（${count(holding[0])} 张）：框错人了`,
     );
-  if (lit.length === 0 && holding.length === 1)
-    said.push(`座位 ${holding[0].seat} 手上多着一张（${holding[0].handCount} 张），可四盏灯全灭着`);
-  if (lit.length === 1 && holding.length === 0)
-    said.push(`灯亮在座位 ${lit[0].seat} 上，可四家手上都没多着牌`);
+  if (on.length === 0 && holding.length === 1)
+    said.push(
+      `座位 ${holding[0].seat} 手上多着一张（${count(holding[0])} 张），可四张名牌都没框起来`,
+    );
+  if (on.length === 1 && holding.length === 0)
+    said.push(`框住了座位 ${on[0].seat}，可四家手上都没多着牌`);
+
+  // ④ 人看得见：框住那张与其余三张至少有一处画得不一样。
+  if (on.length === 1) {
+    const lit = on[0];
+    const others = seats.filter((seat) => seat.teban === "off");
+    if (!lit.plateShown) said.push(`框住的座位 ${lit.seat} 那张名牌根本没画出来（高度为 0）`);
+    else if (
+      others.every((seat) => seat.plateInk === lit.plateInk && seat.plateFill === lit.plateFill)
+    )
+      said.push(
+        `座位 ${lit.seat} 写着 data-teban="on"，可它那张名牌与其余三张画得一模一样` +
+          `（边框 ${lit.plateInk}、底色 ${lit.plateFill}）：画了等于没画`,
+      );
+  }
   return said;
 }
 
@@ -923,18 +954,13 @@ export async function verifyBoard(lane) {
     checkJunme(shot, later, stepped, problems);
     checkScores(later, total, problems);
 
-    // 桌心那四盏灯（票 121）：**连走几手，逼它换席**。
-    // 只在一处验的话，一盏永远亮在座位 0 上的灯照样全绿（阴性对照打不中才发现）。
+    // 轮到谁（票 122）：**连走几手，逼它换席**。
+    // 只在一处验的话，一个永远框住座位 0 的实现照样全绿（阴性对照打不中才发现）。
     await page.getByTestId("table-view-god").click();
     for (let step = 0; step < 12; step += 1) {
       const shot = await readBoard(page);
-      lampFrames += 1;
-      problems.push(
-        ...lampProblems(
-          shot.seats.map((seat) => ({ seat: seat.seat, handCount: Number(seat.hand.data) })),
-          shot.lamps,
-        ),
-      );
+      tebanFrames += 1;
+      problems.push(...tebanProblems(shot.seats));
       if (!(await stepOnce(page))) break;
     }
 
@@ -946,13 +972,8 @@ export async function verifyBoard(lane) {
     for (let step = 0; step < DRAWN_HUNT && sidewaysDrawn === 0; step += 1) {
       const godShot = await readBoard(page);
       for (const seat of godShot.seats) checkHandLine(seat, problems);
-      lampFrames += 1;
-      problems.push(
-        ...lampProblems(
-          godShot.seats.map((seat) => ({ seat: seat.seat, handCount: Number(seat.hand.data) })),
-          godShot.lamps,
-        ),
-      );
+      tebanFrames += 1;
+      problems.push(...tebanProblems(godShot.seats));
       sidewaysDrawn += godShot.seats.filter(
         (seat) =>
           (seat.position === "kamicha" || seat.position === "shimocha") &&
@@ -976,10 +997,10 @@ export async function verifyBoard(lane) {
   }
 
   if (pageProblems.length > 0) return failure("页面报了错：", pageProblems);
-  if (lampFrames === 0) return failure("桌心那四盏灯一帧都没验到：", ["这条闸门空转了（票 121）"]);
+  if (tebanFrames === 0) return failure("「轮到谁」一帧都没验到：", ["这条闸门空转了（票 122）"]);
   if (problems.length > 0) return failure("牌桌上少了该给人看的东西：", problems);
   console.log(
-    `桌心那四盏灯 ✓（验了 ${lampFrames} 帧，亮过座位 ${[...lampSeatsSeen].sort().join("、")}）`,
+    `轮到谁：名牌框着他 ✓（验了 ${tebanFrames} 帧，框过座位 ${[...tebanSeatsSeen].sort().join("、")}）`,
   );
 
   const kawa = shot.seats.reduce(

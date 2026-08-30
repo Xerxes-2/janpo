@@ -17,6 +17,9 @@ type Seating = {
     Anchor: Seat
     /// 亲：那枚「亲」标签。
     Oya: Seat
+    /// 此刻轮到谁（`Board.teban`）；没人该动时是 None（刚打完、下家还没摸的那一瞬）。
+    /// **名牌上那圈朱红读的就是它**（票 122 顶掉票 121 那四盏灯）。
+    Teban: Seat option
     /// 名牌上那一句「这一席是谁在打」（票 82），按座位升序：
     /// Live 是档案名 + 脚手架档位（bot 席是「均匀随机」/「有主见」），回放是牌谱里的 `provider/model`。
     /// **判据不在这一层**（`TableState.nameplates`）：这里只把算好的那一句画到名牌上。
@@ -351,6 +354,11 @@ module TableBoard =
             prop.custom ("data-seat", index)
             prop.custom ("data-seat-position", Position.toWire position)
             prop.custom ("data-riichi", riichiWire view.Riichi)
+            // 轮到谁（票 122）：**框住那张名牌**，而不是另点一枚记号。
+            // 名牌上本来就写着这一席是谁，圈住它就把「轮到谁」说完了；
+            // 票 121 那四盏灯是同一件事的第二套编号（同票 86 记过的那一族）。
+            // 人读的是那圈朱红，闸门读这一格——两头对不上就是错。
+            prop.custom ("data-teban", (if seating.Teban = Some view.Seat then "on" else "off"))
             prop.children (
                 [
                     Html.div [
@@ -491,42 +499,12 @@ module TableBoard =
     ///
     /// **方位的参照系写在这里**（M1 传下来的第六条：相对方位必须显式声明参照系）：
     /// 牌桌上写着「下家」的那家到底是谁的下家，读者不必自己猜。
-    /// 桌心那四盏灯（票 121，主人指的雀魂做法）：**轮到谁，哪一盏亮**。
     ///
-    /// 这四盏灯顶掉的是「轮到你出牌了（座位 N）：…」那 60 字——
-    /// **看得见就不用说**，而且它对四家都成立，不只对真人那一席。
-    ///
-    /// 灯的位置跟着那一席在屏幕上的方位走（与席区同一个 `Board.position`），
-    /// ∴ 灯指的方向就是人的方向，不需要再写一句话解释。
-    let private lamps (seating: Seating) (board: BoardView) =
-        let lit = Board.teban board
-
-        Html.div [
-            prop.key "lamps"
-            prop.className "lamps"
-            prop.testId "table-lamps"
-            prop.custom ("data-lamp-lit", lit |> Option.map (Seat.index >> string) |> Option.defaultValue "")
-            prop.children [
-                for view in board.Seats do
-                    let index = Seat.index view.Seat
-                    let on = lit = Some view.Seat
-
-                    Html.span [
-                        prop.key $"lamp-{index}"
-                        prop.className "lamp"
-                        prop.testId $"table-lamp-{index}"
-                        prop.custom ("data-lamp-seat", index)
-                        prop.custom ("data-lit", (if on then "on" else "off"))
-                        prop.custom (
-                            "data-lamp-position",
-                            Position.toWire (Board.position seating.Ruleset seating.Anchor view.Seat)
-                        )
-                        prop.title (if on then $"轮到座位 {index}" else $"座位 {index}")
-                    ]
-            ]
-        ]
-
-    let private tableCenter (seating: Seating) (settled: bool) (board: BoardView) =
+    /// **桌心那四盏灯撤了**（票 122，主人裁的：「用名字框红圈的方式表示到谁了
+    /// 比现在用红点优雅」）。它们与名牌说的是同一件事，而名牌上本来就写着这一席是谁
+    /// ——框住它就说完了，另点一枚红点是同一件事的第二套编号（票 86 记过同一族）。
+    /// 「轮到谁」这条语义一分没丢：它挪到了名牌自己的 `data-teban` 上（`seatPlate`）。
+    let private tableCenter (settled: bool) (board: BoardView) =
         // 立直棒是「供托 N 根」那个数字的实物画法，一根都没时**整个字段不画**（同下面的里宝牌）：
         // 否则只剩一枚「立直棒」标签后面空着，看着像掉了东西（票 32 扫同类隐形时收的）。
         let bou =
@@ -583,7 +561,6 @@ module TableBoard =
             prop.custom ("data-anchor", Seat.index anchor)
             prop.children (
                 [
-                    lamps seating board
                     field
                         [
                             prop.custom ("data-bakaze", Kaze.toDisplay board.Bakaze)
@@ -894,6 +871,7 @@ module TableBoard =
                 Viewer = board.Viewer
                 Anchor = Board.anchor board
                 Oya = (GameState.context table.State).Oya
+                Teban = Board.teban board
                 Nameplates = TableState.nameplates model
             }
 
@@ -964,7 +942,7 @@ module TableBoard =
                                                 for view in board.Seats ->
                                                     seatZone seating (playAt view.Seat) dispatch view
                                             ]
-                                            @ [ tableCenter seating (Option.isSome settled) board ]
+                                            @ [ tableCenter (Option.isSome settled) board ]
                                         )
                                     ]
                                 ]
