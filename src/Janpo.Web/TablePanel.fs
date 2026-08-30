@@ -127,18 +127,40 @@ module TablePanel =
                             playButton model dispatch
                             button "table-step" (not running) "单步" Advanced dispatch
                             button "table-next" (not ended) "下一局" KyokuAdvanced dispatch
-                            // 牌谱随时导得出来，不必等终局：打到一半的事件流同样 fold 得回去。
-                            button "table-export" (Result.isError live.Table) "导出牌谱" Exported dispatch
-                            // 导出与分享是一对（票 78）：一个带全量，一个只带棋谱进 hash。
-                            button "table-share" (Result.isError live.Table) "复制分享链接" Shared dispatch
                             Html.span [ prop.key "speed-label"; prop.className "label"; prop.text "倍速" ]
                         ]
                         @ speeds model dispatch
                     )
                 ]
-                shareLine live
             ]
         ]
+
+    /// 三级操作（票 126，照设计稿 1a 的左轨）：**导出牌谱 / 复制分享链接沉到轨道最下**。
+    ///
+    /// 票 3 把它们退成了链接的样子（不再与「播放」抢眼），但它们**仍夹在「下一局」与「倍速」
+    /// 之间**——一排里同时摆着一级、二级与三级，层级只做了一半。设计稿把三级操作
+    /// 单独摆在轨道底部，与常用的那几枚隔开一整段留白。
+    ///
+    /// **DOM 顺序跟着视觉走**（不拿 `order` 硬掰）：读屏与键盘走的是 DOM，
+    /// 拿 CSS 把它们挪到底部会让两者对不上。
+    ///
+    /// 分享那句分工说明（票 78）跟着搬：它说的是「刚按下去的那一枚出了什么」。
+    let private tertiary (model: TableModel) (dispatch: TableMsg -> unit) =
+        match TableState.live model with
+        | None -> []
+        | Some live -> [
+            Html.div [
+                prop.key "tertiary"
+                prop.className "controls ops-tertiary"
+                prop.children [
+                    // 牌谱随时导得出来，不必等终局：打到一半的事件流同样 fold 得回去。
+                    button "table-export" (Result.isError live.Table) "导出牌谱" Exported dispatch
+                    // 导出与分享是一对（票 78）：一个带全量，一个只带棋谱进 hash。
+                    button "table-share" (Result.isError live.Table) "复制分享链接" Shared dispatch
+                    shareLine live
+                ]
+            ]
+          ]
 
     /// 时间轴上那几枚**复盘标记**（票 105）：值得看的那几手各落在轴上哪一点。
     ///
@@ -486,7 +508,10 @@ module TablePanel =
         Html.div [
             prop.className "ops"
             prop.testId "table-ops"
-            prop.children [ controls model marks dispatch; viewpoints model dispatch ]
+            prop.children (
+                [ controls model marks dispatch; viewpoints model dispatch ]
+                @ tertiary model dispatch
+            )
         ]
 
     // ---- 视图：四席绑定与模型档案（票 73） ----

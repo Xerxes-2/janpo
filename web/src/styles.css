@@ -81,6 +81,9 @@ body {
   --plate: 9rem;
   --rail: 13rem;
   --rail-right: 16rem;
+  /* 三栏整框的宽度：两条轨道 + 牌桌 + 左右两张名牌 + 一点余量。
+     **配桌那一行与它同宽同居中**，两者的左边缘因此严丝合缝（票 129）。 */
+  --frame-w: calc(var(--rail) + var(--rail-right) + var(--board) + var(--plate) * 2 + 2.7rem);
 
   /* 牌跟着牌桌走（牌桌救援 票 1）：牌桌按视口现算之后，牌写死 rem 的话
      小一号的桌上四席的牌会互相压住（verify-human 逮到的：kamicha 的牌背
@@ -1302,6 +1305,36 @@ input[type="range"] {
   margin: 0 0 0.75rem;
 }
 
+/* 「配这一桌」那一行**与左轨接成一条**（票 129，主人裁的「配桌挪到左轨」）：
+   它与三栏同宽同居中，而摘要那一行只占轨宽、穿着轨道的底色与右边线——
+   于是它读起来就是轨道的第一行。
+
+   **它仍在页面这一层、不进轨道那一列**：展开的那一屏是四席绑定加模型档案库，
+   13rem 宽的轨道里摆不下；试过做成浮层，它把轨道与牌桌一起盖住，
+   底下的按钮全点不到（verify-board 当场红）。∴ 收起时看着在轨里，
+   展开时照旧在流里把下面推开。 */
+.page > .setup {
+  width: 100%;
+  max-width: var(--frame-w);
+  margin: 0 auto;
+}
+
+.page > .setup > summary {
+  box-sizing: border-box;
+  width: var(--rail);
+  padding: 0.5rem 0.85rem;
+  background: var(--paper-raised);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+/* 展开的那一屏自己封顶、自己滚：不封顶的话它会把牌桌那一行挤到近乎零高，
+   轨道里的「播放」得靠内部滚动才点得到（票 127 逮到的那一条）。 */
+.page > .setup[open] {
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
 /* 配桌默认收起（票 116）：收起前它占着第一屏 528 px 里的全部，
    而 `?table=1` 打开那一刻牌桌顶边在 810 px、视口 800 ⇒ 一像素牌桌都看不见。
    摘要行按票 83 给 `.panel-note > summary` 立的那副写法，但**不压小、不减淡**：
@@ -1311,11 +1344,23 @@ input[type="range"] {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  /* **居中**（票 125，主人点的）：它是整页最上面那一行，而牌桌居中、
-     两条轨道左右对称——只有它靠在左边缘上，读起来像掉出了版心。 */
-  justify-content: center;
+  /* **左轨最上那一行**（票 129，主人裁的：「配桌我仔细想了下左轨更好看统一」，
+     也正是设计稿 1a 的画法）：名目靠左、拨到的那几个值靠右，一条发丝线收底。
+     票 125 那版把它居中摆在页顶、票 127 又给它描了一圈边，都是它还在页顶时的事。 */
+  justify-content: space-between;
   gap: 0.4rem;
-  padding: 0.15rem 0;
+  padding: 0.2rem 0;
+}
+
+.setup > summary:hover .label {
+  color: var(--indigo);
+}
+
+/* 「配桌」两个字是主语，摘要是下款：从前两截同一个分量，一眼扫不出哪个是按钮名。 */
+.setup > summary .label {
+  font-weight: 700;
+  color: var(--ink);
+  opacity: 1;
 }
 
 /* 展开记号。**给 summary 设 display 会把浏览器默认那枚三角去掉**，
@@ -1697,18 +1742,10 @@ input[type="range"] {
   /* **整框收到内容宽并居中**（票 123）：不收的话两条轨道被 1fr 顶到屏幕两边，
      宽屏上左轨右缘与牌桌左缘隔着 472 px（实测 1920×1080），看着像三块不相干的东西。
      这个宽度就是三栏各自要的：两条轨道 + 牌桌 + 左右两张名牌 + 两道缝。 */
-  max-width: calc(
-    var(--rail) +
-    var(--rail-right) +
-    var(--board) +
-    var(--plate) *
-    2 +
-    1.5rem +
-    1.2rem
-  );
+  max-width: var(--frame-w);
   margin: 0 auto;
   width: 100%;
-  gap: 0.6rem;
+  gap: 0;
   align-items: stretch;
   justify-content: center;
   flex: 1 1 auto;
@@ -1719,20 +1756,31 @@ input[type="range"] {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  /* **卡片只包住内容**（票 123）：拉到底的话，一张只装了六枚按钮的卡片会空着大半屏。
-     长出一屏的内容（复盘一列几十条）仍在卡片里自己滚，不长成文档滚动。 */
-  align-self: start;
-  max-height: 100%;
+  /* **两条轨道贯通整列**（票 126，照设计稿 1a：它们是两根轨，不是两张便签）。
+     票 123 一度让它们只包住内容，结果所有元素挤在最上面、下面空着大半屏——
+     真正该治的是**里面怎么分布**（次级操作沉到底），而不是把轨道缩短。
+     长出一屏的内容（复盘一列几十条）在轨道里自己滚，不长成文档滚动。 */
   min-height: 0;
   overflow-y: auto;
   /* **两条轨道各是一张纸卡**（牌桌救援 票 5）：把「操作」与「复盘」从牌桌上剥开。
      它答得出「它分开了什么」——左轨是怎么走这一桌，右轨是怎么看，中间是牌桌本身。
      牌桌因此也自动居中：两边各占一条实宽，而不是靠留白凑。 */
   box-sizing: border-box;
-  padding: 0.5rem 0.6rem;
+  /* **通栏而不是卡片**（票 128，照渲染出来的设计稿）：两条轨道是页面的两根轨，
+     纸色底、只用一条发丝线与中栏分开、不留缝也不描四边——
+     圆角卡片会让它们读成「浮在纸上的两张便签」。 */
+  padding: 0.75rem 0.85rem;
   background: var(--paper-raised);
-  border: 1px solid var(--line);
-  border-radius: 0.3rem;
+  border: 0;
+  border-radius: 0;
+}
+
+.rail-left {
+  border-right: 1px solid var(--line);
+}
+
+.rail-right {
+  border-left: 1px solid var(--line);
 }
 
 /* 空着的轨道不画卡片（右轨在对局中是空的：复盘要等终局）。
@@ -1763,11 +1811,30 @@ input[type="range"] {
   flex-direction: column;
   align-items: stretch;
   gap: 0.3rem;
+  /* 占满轨道：下面那条 `margin-top: auto` 才有地方把三级操作推到底。
+     **但不许缩到比内容还矮**（`flex-shrink: 0`）：轨道被配桌面板压短时，
+     缩过头的 `.ops` 会让按钮溢出自己的盒子，而排在后面的「怎么读这张牌桌」
+     正好盖在它们上面、把点击全拦下（闸门报 legend-open intercepts）。
+     轨道本身有 `overflow-y: auto`，装不下时它滚，不必让 `.ops` 让步。 */
+  flex: 1 0 auto;
+}
+
+/* 三级操作沉到轨道最下（票 126）：与常用的那几枚隔开一整段留白，
+   层级因此看得见——从前它们夹在「下一局」与「倍速」之间，一排里三个层级混着。
+   **选择器要压得过 `.rail-left .ops .controls` 那条 `margin: 0`**（同为三级特异性、
+   而它写在后面）：写成两级的话这条 `margin-top: auto` 一点作用都没有——
+   头一版就是这么坏的，链接仍旧贴在「视角」下面。 */
+.rail-left .ops .controls.ops-tertiary {
+  margin-top: auto;
 }
 
 .rail-left .ops .controls {
   flex-wrap: wrap;
-  gap: 0.25rem;
+  /* **横向不留缝、纵向留**（票 128）：单选组靠「贴在一起 + 边线相叠」成型，
+     从前是拿负边距把缝吃掉的——六枚视角折成两行时，第二行头一枚被那条负边距
+     拽出轨道、当场被 `overflow` 裁掉，闸门点不到它（`table-view-3` 等了 30 秒）。 */
+  column-gap: 0;
+  row-gap: 0.25rem;
   margin: 0;
 }
 
@@ -2006,6 +2073,37 @@ input[type="range"] {
   border-top: 0;
 }
 
+/* ── 左右两家的名牌只留座位与方位（票 129，主人裁的「名牌保持精简」）──────
+   名字与点数在右轨那张记分板上逐行写着，而 `checkRoster` 逐行守着它们**画出来了**
+   （高度 > 0、且与牌桌上那份 `data-score` 逐字相同）——在牌桌两侧再写一遍，
+   只会把两张卡片撑成三行、把牌桌挤窄。
+
+   **用 clip 而不是删**（同 `.zone .row-label` 那一条，票 117 立的写法）：
+   textContent 照旧读得到、读屏照旧念得出，牌桌那几条闸门一个字不必改。 */
+.seat[data-seat-position="kamicha"] .seat-player,
+.seat[data-seat-position="kamicha"] .seat-score,
+.seat[data-seat-position="kamicha"] .seat-junme,
+.seat[data-seat-position="shimocha"] .seat-player,
+.seat[data-seat-position="shimocha"] .seat-score,
+.seat[data-seat-position="shimocha"] .seat-junme {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 剩下的两样排成一行，卡片因此收成一枚 chip。 */
+.plates .seat[data-seat-position="kamicha"],
+.plates .seat[data-seat-position="shimocha"] {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: max-content;
+  max-width: var(--plate);
+}
+
 /* ── 轮到谁：框住那张名牌（票 122，主人裁的）────────────────────────
    「用名字框红圈的方式表示到谁了比现在用红点优雅」。
 
@@ -2056,7 +2154,10 @@ input[type="range"] {
 .rail-left .ops button[data-testid="table-restart"],
 .rail-left .ops button[data-testid="table-back"],
 .rail-left .ops button[data-testid="table-forward"] {
-  flex: 1 1 40%;
+  /* 等宽两列（票 128，照设计稿）：`1 1 40%` 会随字数长短伸缩，
+     两枚因此一宽一窄——设计稿那两枚一样宽。 */
+  flex: 1 1 0;
+  min-width: 50%;
   padding: 0.4rem 0;
 }
 
@@ -2097,20 +2198,24 @@ input[type="range"] {
   background: var(--paper-raised);
 }
 
+/* 视角是 **3 列两行**（票 128，照设计稿）：六枚挤成一排时每枚只剩三十来像素，
+   「上帝视角」那四个字要折两行。 */
 .rail-left .ops button[data-testid^="table-view-"],
 .rail-left .ops button[data-testid="table-danger"] {
-  flex: 1 1 28%;
+  flex: 0 0 calc(33.333% + 0.7px);
 }
 
 .rail-left .ops button[data-testid^="table-kyoku-"] {
   flex: 1 1 28%;
 }
 
+/* 相邻两枚的边线叠成一条发丝线。**只收 1 px**（不再吃缝）：
+   折行时第一枚顶多左移一个像素，不会被轨道裁掉。 */
 .rail-left .ops button[data-testid^="table-speed-"] + button[data-testid^="table-speed-"],
 .rail-left .ops button[data-testid^="table-view-"] + button[data-testid^="table-view-"],
 .rail-left .ops button[data-testid^="table-view-"] + button[data-testid="table-danger"],
 .rail-left .ops button[data-testid^="table-kyoku-"] + button[data-testid^="table-kyoku-"] {
-  margin-left: calc(-0.25rem - 1px);
+  margin-left: -1px;
 }
 
 .rail-left .ops :not(button[data-testid^="table-speed-"]) + button[data-testid^="table-speed-"],
