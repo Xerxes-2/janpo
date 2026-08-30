@@ -823,13 +823,20 @@ module TableBoard =
 
     // ---- 视图：整页 ----
 
-    let internal tableBody (model: TableModel) (dispatch: TableMsg -> unit) (table: Table) =
-        // **读的是 `TableState.viewpoint` 而不是 `model.Viewpoint`**（票 87）：
-        // 真人在座、对局还没打完时，这一屏锁死他自家那一席——于是他家的暗牌
-        // **在拿到的数据里就不存在**（`MaskedSeat` 里没有手牌字段），而不是渲染时不画。
-        match Board.ofTable (TableState.viewpoint model) table with
-        | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
-        | Some board ->
+    /// 右轨那一块「状态」（票 123，主人裁的：「按照设计稿这些内容不应该塞右栏里面吗」；
+    /// 设计稿 1a 的第三栏本来就叫状态）：**轮不轮到你 / 四席在做什么 / 上一手走了什么 / 账单**。
+    ///
+    /// 这几行从前排在 `tableBody` 的最前面，于是它们贴着中栏的左边线——
+    /// 宽屏上离牌桌几百像素（实测 1920×1080 隔着 400 多），读起来与牌桌不像一件事。
+    ///
+    /// **一条判据都没搬**：这里仍旧只把 `TableState` 算好的那几样画出来，
+    /// 视角那道闸门（`TableState.reveals`）与从前是同一个，`data-*` 一格没动。
+    /// 牌桌没摆出来（还在拉 / 出了事）时它一行都不画：那两态由中栏那一格自己说。
+    let internal statusRail (model: TableModel) : ReactElement list =
+        match TableState.shown model with
+        | Shown.Loading
+        | Shown.Fault _ -> []
+        | Shown.Board table ->
             // 兜底代打的那一手要看得出来（票 23）：不许静默替换。
             // `data-fallback` 给无头验收读（断电演习数的就是它）。
             let latest =
@@ -845,6 +852,115 @@ module TableBoard =
 
                     $"上一手：座位 {who} {Action.toDisplay turn.Action}{mark}"
 
+            // Agent 层那一行只属于 Live（票 71）：回放里没有在飞的问话，
+            // 而那一局的选手是当时坐那一桌的人。后一行（token 账单）两种来源共用。
+            //
+            // **视角那道闸门从这里传进去**（票 81）：与气泡读的是同一个 `TableState.reveals`，
+            // 视图这一层不再写第二份判据。
+            let agent =
+                TableState.live model
+                |> Option.toList
+                |> List.map (fun live ->
+                    AgentLine.agentLine (TableState.reveals model) (TableState.seatNames model) live table)
+
+            // 席位 = **记分板**（票 124，主人点的：「那个四行除了席位表还兼具记分板的作用吧」）。
+            //
+            // 四家的点数是拿来**互相比**的：谁领先、谁掉到三万以下、谁被击飞过一次，
+            // 全是「四个数摆在一起才读得出」的事——而四张名牌散在牌桌四角，
+            // 要比就得把视线在四个角之间来回甩。∴ 这一列纵向对齐、等宽数字。
+            //
+            // **它不是名牌的副本**：名牌答「这一席是谁、坐在屏幕的哪一边」（方位是它的要害），
+            // 这一列答「四家此刻各有多少分」（对齐是它的要害）。两处的数同源
+            // （`board.Seats` 的 `Score`，与名牌上那个 `data-score` 是同一个字段），
+            // 闸门逐行核两处相等——对不上就是错。
+            let roster =
+                match Board.ofTable (TableState.viewpoint model) table with
+                | None -> []
+                | Some board ->
+                    let names = TableState.nameplates model
+
+                    [
+                        Html.div [
+                            prop.key "roster"
+                            prop.className "roster"
+                            prop.testId "table-roster"
+                            // 四家合起来那一句（票 124 从状态行收过来）：
+                            // 「四家都是均匀随机的选手」这类概括**是查阅用的**，
+                            // 四行逐行写着的才是要看的。回放没有配桌，那时不挂。
+                            match TableState.live model with
+                            | Some live -> prop.title (SeatingPlan.botsToDisplay live.Seating)
+                            | None -> prop.title ""
+                            prop.children (
+                                Html.div [ prop.key "title"; prop.className "rail-title"; prop.text "席位" ]
+                                :: [
+                                    for view in board.Seats do
+                                        let index = Seat.index view.Seat
+
+                                        let who = names |> List.tryItem index |> Option.defaultValue ""
+
+                                        Html.div [
+                                            prop.key index
+                                            prop.className (
+                                                if Some view.Seat = board.Viewer then
+                                                    "roster-row roster-self"
+                                                else
+                                                    "roster-row"
+                                            )
+                                            prop.testId $"roster-{index}"
+                                            prop.custom ("data-roster-seat", index)
+                                            prop.custom ("data-roster-name", who)
+                                            prop.custom ("data-roster-score", view.Score)
+                                            prop.children [
+                                                Html.span [
+                                                    prop.key "kaze"
+                                                    prop.className "roster-kaze"
+                                                    prop.text (Kaze.toDisplay view.Jikaze)
+                                                ]
+                                                Html.span [
+                                                    prop.key "who"
+                                                    prop.className "roster-name"
+                                                    prop.text who
+                                                ]
+                                                Html.span [
+                                                    prop.key "score"
+                                                    prop.className "roster-score"
+                                                    prop.text (string view.Score)
+                                                ]
+                                            ]
+                                        ]
+                                ]
+                            )
+                        ]
+                    ]
+
+            // 真人坐席那一行（票 87）**排在最前面**：坐在桌边的人最先要知道的就是
+            // 「轮不轮到我」与「平台刚才替我过了什么」。没有真人时它一行都不画。
+            HumanLine.at model
+            @ roster
+            @ agent
+            // 强 AI 基线那一行（票 92）：接在 Agent 那一行后面——它说的是**资产**，
+            // 不是那一席在想什么（它不会说话）。这一桌没选它时一行都不画。
+            @ BaselineLine.at model
+            @ AgentLine.usageLine model table
+            // 一条决策记录都没有的牌谱：**说一句为什么没有气泡**（票 76）。
+            @ ThinkingBubble.note model
+            @ [
+                Html.p [
+                    prop.key "latest"
+                    prop.className "latest"
+                    prop.testId "table-latest"
+                    prop.custom ("data-fallback", AgentLine.fallenBack table.Latest)
+                    prop.text latest
+                ]
+            ]
+
+    let internal tableBody (model: TableModel) (dispatch: TableMsg -> unit) (table: Table) =
+        // **读的是 `TableState.viewpoint` 而不是 `model.Viewpoint`**（票 87）：
+        // 真人在座、对局还没打完时，这一屏锁死他自家那一席——于是他家的暗牌
+        // **在拿到的数据里就不存在**（`MaskedSeat` 里没有手牌字段），而不是渲染时不画。
+        match Board.ofTable (TableState.viewpoint model) table with
+        | None -> Html.p [ prop.className "error"; prop.text "这个视角没有牌桌" ]
+        | Some board ->
             let fault =
                 table.Fault
                 |> Option.toList
@@ -875,40 +991,16 @@ module TableBoard =
                 Nameplates = TableState.nameplates model
             }
 
-            // Agent 层那一行只属于 Live（票 71）：回放里没有在飞的问话，
-            // 而那一局的选手是当时坐那一桌的人。后一行（token 账单）两种来源共用。
-            //
-            // **视角那道闸门从这里传进去**（票 81）：与气泡读的是同一个 `TableState.reveals`，
-            // 视图这一层不再写第二份判据。
-            let agent =
-                TableState.live model
-                |> Option.toList
-                |> List.map (fun live ->
-                    AgentLine.agentLine (TableState.reveals model) (TableState.seatNames model) live table)
+            // 那几行状态字**搬去了右轨**（票 123，主人裁的：「按照设计稿这些内容
+            // 不应该塞右栏里面吗」）。它们从前浮在牌桌左上角、贴着中栏的左边线，
+            // 在宽屏上离牌桌几百像素——而设计稿 1a 的右轨本来就是「状态」那一栏。
+            // **这一层因此只剩牌桌本身与紧贴它的那几块**（那一排响应按钮、辅助、结算）。
+            // 那一块的装配在 `statusRail`。
 
             Html.div [
                 prop.testId "table-board"
                 prop.children (
                     [
-                        Html.p [
-                            prop.key "latest"
-                            prop.className "latest"
-                            prop.testId "table-latest"
-                            prop.custom ("data-fallback", AgentLine.fallenBack table.Latest)
-                            prop.text latest
-                        ]
-                    ]
-                    // 真人坐席那一行（票 87）：**排在最前面**——坐在桌边的人最先要知道的就是
-                    // “轮不轮到我”与“平台刚才替我过了什么”。没有真人时它一行都不画。
-                    @ HumanLine.at model
-                    @ agent
-                    // 强 AI 基线那一行（票 92）：接在 Agent 那一行后面——它说的是**资产**，
-                    // 不是那一席在想什么（它不会说话）。这一桌没选它时一行都不画。
-                    @ BaselineLine.at model
-                    @ AgentLine.usageLine model table
-                    // 一条决策记录都没有的牌谱：**说一句为什么没有气泡**（票 76）。
-                    @ ThinkingBubble.note model
-                    @ [
                         // 真牌桌（票 44）：四家围着中央坐。**DOM 仍然按座位升序**（`seat-N` 那几个
                         // 钩子与既有闸门因此稳定），画到哪个方位由 `data-seat-position` 定——
                         // 它跟着观测视角转，而不是跟着座位号走。

@@ -230,6 +230,22 @@ function readBoard(page) {
       // 把灭着的灯 `display: none` 掉照样报 4 盏——阴性对照打中了却不报，
       // 因为那条断言问的是「DOM 里有几个」而不是「人看得见几盏」。
       // 票 32 那次缺陷是同一形状（DOM 里有、眼睛里没有）。
+      // 席位那一列 = 记分板（票 124）：人读的是这四行，机器读 `data-roster-*`。
+      roster: [...document.querySelectorAll('[data-testid="table-roster"] [data-roster-seat]')].map(
+        (row) => ({
+          seat: Number(row.getAttribute("data-roster-seat")),
+          name: {
+            text: text(row.querySelector(".roster-name")),
+            data: attr(row, "data-roster-name"),
+          },
+          score: {
+            text: text(row.querySelector(".roster-score")),
+            data: attr(row, "data-roster-score"),
+          },
+          kaze: text(row.querySelector(".roster-kaze")),
+          shown: row.getBoundingClientRect().height > 0,
+        }),
+      ),
       bound: attr(field("table-agent"), "data-seats"),
       agent: text(field("table-agent")),
     };
@@ -446,6 +462,46 @@ function checkHandLine(seat, problems) {
  * 模型席那一半（档案名 + 脚手架档位）由 `verify-seats` 核，回放那一半（`provider/model`）
  * 由 `verify-home` 核——**三种来源各有各的闸门**。
  */
+/**
+ * 席位那一列 = **记分板**（票 124，主人点的：「那个四行除了席位表还兼具记分板的作用吧」）。
+ *
+ * 它与四张名牌不是同一件事：名牌答「这一席是谁、坐在屏幕的哪一边」，
+ * 这一列答「四家此刻各有多少分」——四个数摆在一起才比得出谁领先。
+ * **但两处的数必须是同一个**（它们同源于 `board.Seats` 的 `Score`）：
+ *
+ *   ① 四行都在、都画得出来（0 行就是这条闸门空转了）；
+ *   ② 每一行的名字与那一席名牌上的逐字相同（也就与 `want` 相同）；
+ *   ③ **每一行的点数与那一席名牌上的 `data-score` 相等**——两处渲染同一个数，
+ *      对不上就是页面上出现了两种说法（票 39 立的那条：只许有一种说法）；
+ *   ④ 人读的那几个字与 `data-roster-*` 相等（同名牌那一条的形状）。
+ */
+function checkRoster(shot, want, problems) {
+  if (shot.roster.length !== 4) {
+    problems.push(`席位那一列只有 ${shot.roster.length} 行（该有 4 行）：记分板没画出来`);
+    return;
+  }
+  for (const row of shot.roster) {
+    const where = `席位那一列的座位 ${row.seat}`;
+    const plate = shot.seats.find((seat) => seat.seat === row.seat);
+    if (!row.shown) problems.push(`${where}那一行没画出来（高度为 0）`);
+    if (row.name.text !== row.name.data)
+      problems.push(`${where}写着「${row.name.text}」，data-roster-name 却是「${row.name.data}」`);
+    else if (row.name.text !== want)
+      problems.push(`${where}写着「${row.name.text}」，可这一席坐的是「${want}」`);
+    if (row.score.text !== row.score.data)
+      problems.push(
+        `${where}的点数写着「${row.score.text}」，data-roster-score 却是「${row.score.data}」`,
+      );
+    else if (plate !== undefined && row.score.data !== plate.score.data)
+      problems.push(
+        `${where}记着 ${row.score.data} 点，可牌桌上那张名牌记着 ${plate.score.data} 点：` +
+          "同一个数在页面上有了两种说法",
+      );
+    if (row.kaze === null || row.kaze === "")
+      problems.push(`${where}那一行没写自风（东/南/西/北）`);
+  }
+}
+
 function checkNameplates(shot, want, problems) {
   for (const seat of shot.seats) {
     const where = `座位 ${seat.seat} 的名牌`;
@@ -929,11 +985,14 @@ export async function verifyBoard(lane) {
     // 四席逐个核（票 73：从前那个全局开关只报一个名字，现在四席各报各的）。
     if (shot.bound !== "opinionated,opinionated,opinionated,opinionated")
       problems.push(`四席都该是「有主见」那一档，data-seats 却是「${shot.bound}」`);
-    if (!shot.agent.includes("有主见"))
-      problems.push(`状态行写着「${shot.agent}」，可其余座位坐的是「有主见」那一档`);
+    // 从前这里还有一条 `shot.agent.includes("有主见")`——**它是三条里最弱的一条**
+    // （整句里含某个词），而同一件事上面那条 `data-seats` 与下面 `checkNameplates` /
+    // `checkRoster` 都在**逐席**核。票 124 把那句散文撤了（谁坐哪一席由席位那一列写着），
+    // 于是这条也一并撤掉：**它的意图没丢，只是改由更硬的三条执行**。
 
     checkHands(shot, problems);
     checkNameplates(shot, "有主见", problems);
+    checkRoster(shot, "有主见", problems);
     checkKawa(shot, problems);
 
     const groups = await readNakiGroups(page);
@@ -1033,6 +1092,11 @@ export async function verifyBoard(lane) {
   console.log(`  （上帝视角里）竖排那两家刚摸的牌也摆开了 ✓（轮到 ${sidewaysDrawn} 家）`);
   console.log(
     `  名牌 ✓（${shot.seats.map((seat) => `座位 ${seat.seat} ${seat.player.text}`).join("、")}）`,
+  );
+  console.log(
+    `  席位那一列（记分板）✓（${shot.roster
+      .map((row) => `${row.kaze} ${row.name.text} ${row.score.text}`)
+      .join("、")}，逐行与名牌上那个 data-score 相等）`,
   );
   console.log(
     `  河 ✓（共 ${kawa.tsumogiri + kawa.tegiri} 张：摸切 ${kawa.tsumogiri} 虚线、手切 ${kawa.tegiri} 实线）`,

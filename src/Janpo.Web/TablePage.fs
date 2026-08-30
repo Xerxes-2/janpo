@@ -204,10 +204,15 @@ module TablePage =
                                 ]
                             ]
                             board model dispatch
+                            // 右轨 = **状态 + 复盘**（票 123，主人裁的，照设计稿 1a 的第三栏）：
+                            // 「轮不轮到你 / 四席在做什么 / 上一手走了什么 / 账单」那几行
+                            // 从前排在牌桌那一格的最前面，于是它们贴着中栏左边线、
+                            // 在宽屏上离牌桌几百像素——而它们说的正是「这一桌此刻怎么了」，
+                            // 与复盘同属「怎么看」这一栏。
                             Html.div [
                                 prop.key "rail-right"
                                 prop.className "rail rail-right"
-                                prop.children review.Panel
+                                prop.children (TableBoard.statusRail model @ review.Panel)
                             ]
                         ]
                     ]

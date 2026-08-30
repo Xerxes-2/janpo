@@ -55,7 +55,11 @@ module HumanLine =
             let deadline = if responding then "自动过" else "自动摸切"
             $"还剩 {HumanClock.remaining clock} 秒（共 {clock.Limit} 秒，到点{deadline}）。"
 
-    let private said (model: TableModel) (seat: Seat) (turn: DecisionPackage option) : string * string =
+    /// 返回 (状态名, **抬头**, 其余). 抬头只有「该你了」那一态有——设计稿 1b 的纪律是
+    /// **一屏只许一个大字**，而这一屏的答案就是那三个字；其余几态一律小字一行。
+    /// **两截拼起来与从前逐字相同**（`at` 把它们按序画成两个 span）：
+    /// 闸门读的整段 textContent 因此一个字都没变。
+    let private said (model: TableModel) (seat: Seat) (turn: DecisionPackage option) : string * string * string =
         let index = Seat.index seat
         let clock = TableState.humanClock model
 
@@ -68,12 +72,14 @@ module HumanLine =
             // 有「过」= 他家打出了一张，正在等他要不要鸣 / 荣和（`Action.None` 那段注释）。
             | Some _ ->
                 "respond",
+                "",
                 $"他家打出了一张，等你（座位 {index}）：牌桌下面那一排就是你此刻做得了的（{calls} 条），不要就按「过」。"
                 + ticking clock true
             | None when HumanSeat.declaringRiichi package ->
                 // 立直是两段（`Action.Riichi` 那段注释）：宣言之后这一手还要选宣言牌，
                 // 而**能打哪几张仍旧只由合法动作集说了算**——引擎那一集里只剩「打完仍听牌」的。
                 "reach",
+                "",
                 $"立直宣言了（座位 {index}）：现在选宣言牌——点得动的那 {playable} 张是引擎给的那一集（打完仍听牌的才在里面）。"
                 + ticking clock false
             | None ->
@@ -87,9 +93,10 @@ module HumanLine =
                 // 「点自己手里的一张就打出去」是教学、「此刻 N 条」是给开发者看的、
                 // 「不限时，整桌等着你」是安抚——能点的那几张**本来就看得见**。
                 // 机器可读那一格（`data-human-playable`）一格没动。
-                $"该你了（座位 {index}）" + ticking clock false + also
-        | None, Some _ -> "watching", $"你坐在座位 {index}：轮到别人，看着就好。"
-        | None, None -> "settled", $"这一场打完了（你坐的是座位 {index}）：视角与思考气泡都解锁了，四家的牌与推理现在都看得了。"
+                "该你了",
+                $"（座位 {index}）" + ticking clock false + also
+        | None, Some _ -> "watching", "", $"你坐在座位 {index}：轮到别人，看着就好。"
+        | None, None -> "settled", "", $"这一场打完了（你坐的是座位 {index}）：视角与思考气泡都解锁了，四家的牌与推理现在都看得了。"
 
     /// 真人坐席那一行；这一桌没有真人时是空表。
     ///
@@ -117,7 +124,7 @@ module HumanLine =
             let counted (count: DecisionPackage -> int) : int =
                 turn |> Option.map count |> Option.defaultValue 0
 
-            let state, sentence = said model seat turn
+            let state, call, note = said model seat turn
 
             let pressed = passes |> List.filter HumanPass.pressed |> List.length
 
@@ -145,7 +152,16 @@ module HumanLine =
                         |> Option.map (HumanClock.remaining >> string)
                         |> Option.defaultValue ""
                     )
-                    prop.text (sentence + passed passes)
+                    prop.children [
+                        // **两截，一个字没多没少**：拼起来就是从前那一句。
+                        if call <> "" then
+                            Html.span [ prop.key "call"; prop.className "human-call"; prop.text call ]
+                        Html.span [
+                            prop.key "note"
+                            prop.className "human-note"
+                            prop.text (note + passed passes)
+                        ]
+                    ]
                 ]
             ]
 

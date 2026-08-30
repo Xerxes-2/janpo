@@ -78,9 +78,10 @@ module AgentLine =
     /// 「别席说了但你这个视角看不见」在页面上长得一模一样，而 escape hatch（上帝视角那一按）
     /// 就在旁边。**只在真有话被挡下时才提**：四家都是 bot 的那一桌没有任何话被掩蔽。
     ///
-    /// 没有模型坐席时那一句要说清楚**是哪一种自带 bot**（票 42 之后就不只一种了）：
-    /// 杆子拨到「有主见」时牌桌上会出立直与供托，而行里还写着「四家都是随机选手」就是句错话。
-    /// 措辞只有一份真源（`SeatingPlan.botsToDisplay`，它又只读 `Bot.toDisplay`，与面板上那些控件同字）。
+    /// **没有模型坐席时这一行不说话**（票 124）：「谁坐哪一席」由右轨那一列席位逐行写着，
+    /// 在这里再摊成一句散文就是同一件事的第二套编号。那句概括收进了席位那一列的 `title`，
+    /// 措辞仍旧只有一份真源（`SeatingPlan.botsToDisplay`，它又只读 `Bot.toDisplay`，
+    /// 与面板上那些控件同字）——票 42 那条「混着坐时逐席报」因此一字未改。
     let internal agentLine (reveals: Seat -> bool) (names: string list) (live: LiveTable) (table: Table) =
         // 在飞的那几席：一句合说（同一轮里它们是一起被问出去的，秒数取最久的那一席）。
         // **先按视角分两堆**：看得见的进那句话，看不见的只计数（下面那句提示读它）。
@@ -119,7 +120,12 @@ module AgentLine =
 
         let state, text =
             match Option.toList asking @ latest with
-            | [] when List.isEmpty (SeatingPlan.llmSeats live.Seating) -> "idle", SeatingPlan.botsToDisplay live.Seating
+            // 四家全是自带 bot（或真人 / 强 AI）时**这一行不说话**（票 124）：
+            // 「谁坐哪一席」由右轨那一列席位逐行写着，而这一行从前把它又摊成一句散文
+            // ——同一件事的第二套编号（票 86 记过同一族）。那句话没丢，收进了
+            // 席位那一列的 `title`（票 120 收 85 字进 title 的同一副写法）。
+            // 元素与它那几格 `data-*` 一个没动：闸门读的是那些，不是这句话。
+            | [] when List.isEmpty (SeatingPlan.llmSeats live.Seating) -> "idle", ""
             | [] when hushed > 0 -> "idle", "这个视角下没有要说的"
             | [] -> "idle", "模型座位已就位，还没轮到它"
             | said ->

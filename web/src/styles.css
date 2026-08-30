@@ -32,7 +32,12 @@
    闸门（verify-home 的 stage 那一段）只断言**用户看得见的保证**：
    无文档滚动、内容不被裁、牌桌完整可见——不再断言任何具体数字或缩放比。 */
 html,
-body {
+body,
+/* 挂载点（`web/index.html` 的 `<div id="janpo-root">`）**也得在这条链上**：
+   `height: 100%` 是按父节点的高算的，而它默认是 auto——高度链断在这里的话，
+   下面那些 `flex: 1` 全部落空：实测 1920×1080 上整页只长到 695 px，
+   页脚吊在半空、底下 385 px 空着（主人截图里那一屏）。 */
+#janpo-root {
   height: 100%;
 }
 
@@ -68,7 +73,11 @@ body {
      真布局（牌桌救援 票 1）里牌桌一边按视口现算，三个分支各答一件事：
      30rem 是它该有的上限（再大牌就傻大），100vh 那支给状态行·名牌·页脚让路，
      100vw 那支给两条轨道（29rem）、左右名牌（2×--plate + 1.5rem）与缝隙让路。 */
-  --board: min(30rem, calc(100vh - 18rem), calc(100vw - 52rem));
+  /* 牌桌边长的上限（牌桌救援 票 1；票 123 从 30rem 抬到 44rem）：
+     30rem 那一版在 1920×1080 上把牌桌钉死在 480 px，而纵向本来能给到 792
+     ——主人截图里那一屏正是这么空的。三个分支各答一件事，一个数都不是倒推的。 */
+  --board-max: 44rem;
+  --board: min(var(--board-max), calc(100vh - 18rem), calc(100vw - 52rem));
   --plate: 9rem;
   --rail: 13rem;
   --rail-right: 16rem;
@@ -369,7 +378,9 @@ input[type="range"] {
   /* 上下各留一张名牌的高。名牌里可能是 `deepseek/deepseek-v4-flash` 这样的长名，
      留窄了它会顶到上面那排视角按钮上去——**不是压住，是拦住点击**
      （playwright 报 `intercepts pointer events`，头一版就这么坏的）。 */
-  margin: 2.4rem auto 2.6rem;
+  /* 上下各留一张名牌的高（票 123 从 2.4/2.6rem 抬到 5rem）：中栏现在会裁掉溢出的东西，
+     而 2.4rem＝38 px 装不下一张 46 px 的名牌——上面那张当场被切掉一截。 */
+  margin: 5rem auto;
   /* **桌面凹一层**（牌桌救援 票 5，设计稿 1b 之三）：牌桌是一块比纸凹下去的方桌，
      内嵌双环是桌沿那道压边。这条边界一说就把整页说清了——**牌局在框里、操作在框外**，
      它答得出「它分开了什么」（判据 24 那一族：每个边框都要答得出这一问）。 */
@@ -439,6 +450,10 @@ input[type="range"] {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  /* **连内边距与边框一起算进 --plate**（票 123）：content-box 时它实宽 162 px
+     而不是 144，于是左右两张各比中栏留的那一圈多探出 18 px、当场被裁
+     （中栏现在会裁掉溢出的东西）。`--plate` 本来就该是「一张名牌占多宽」。 */
+  box-sizing: border-box;
   width: var(--plate);
   border: 1px solid var(--line);
   border-radius: 0.5rem;
@@ -1676,6 +1691,20 @@ input[type="range"] {
      左右两家的名牌浮在牌桌外各 --plate 宽——它们不占位，∴ `--board` 的
      100vw 那个分支替它们把位子留了出来（见 :root），中栏因此装得下牌桌加名牌。 */
   grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail-right);
+  /* **整框收到内容宽并居中**（票 123）：不收的话两条轨道被 1fr 顶到屏幕两边，
+     宽屏上左轨右缘与牌桌左缘隔着 472 px（实测 1920×1080），看着像三块不相干的东西。
+     这个宽度就是三栏各自要的：两条轨道 + 牌桌 + 左右两张名牌 + 两道缝。 */
+  max-width: calc(
+    var(--rail) +
+    var(--rail-right) +
+    var(--board) +
+    var(--plate) *
+    2 +
+    1.5rem +
+    1.2rem
+  );
+  margin: 0 auto;
+  width: 100%;
   gap: 0.6rem;
   align-items: stretch;
   justify-content: center;
@@ -1687,7 +1716,10 @@ input[type="range"] {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  /* 长出一屏的内容（复盘一列几十条）在轨道里自己滚，不长成文档滚动。 */
+  /* **卡片只包住内容**（票 123）：拉到底的话，一张只装了六枚按钮的卡片会空着大半屏。
+     长出一屏的内容（复盘一列几十条）仍在卡片里自己滚，不长成文档滚动。 */
+  align-self: start;
+  max-height: 100%;
   min-height: 0;
   overflow-y: auto;
   /* **两条轨道各是一张纸卡**（牌桌救援 票 5）：把「操作」与「复盘」从牌桌上剥开。
@@ -1708,8 +1740,16 @@ input[type="range"] {
   border: 0;
 }
 
-/* 中栏同理：结算、终局精算与危险度接在牌桌下面，长了就在这一栏里滚。 */
+/* 中栏：结算、终局精算与危险度接在牌桌下面，长了就在这一栏里滚。
+   **左右各留一圈名牌宽**（票 123）：`overflow-y: auto` 会把横向一并夹住
+   （CSS 规定一轴非 visible 时另一轴也不是），而左右两家的名牌是探出牌桌的
+   绝对定位元素——不留这一圈，「座位 3・北家」那张当场被裁掉一截（实测 1920×1080）。
+   留了之后它们落在**内边距里**（裁剪发生在 padding box 的边上），一张都不缺。 */
 .table-frame > [data-testid="table-board"] {
+  box-sizing: border-box;
+  /* 留的是**名牌宽 + 它贴着牌桌那 0.5rem**：只留 --plate 时四张各还探出 8 px
+     （实测三张被裁），而且横向会多出一条滚动条。 */
+  padding: 0 calc(var(--plate) + 0.5rem);
   min-height: 0;
   overflow-y: auto;
 }
@@ -1834,7 +1874,7 @@ input[type="range"] {
   :root {
     /* 横向那一支只让路给名牌与页边距（21.5rem = 2×--plate + 1.5rem + 2rem）：
        轨道已经摞下去了，不再占宽。 */
-    --board: min(30rem, calc(100vh - 18rem), calc(100vw - 21.5rem));
+    --board: min(var(--board-max), calc(100vh - 18rem), calc(100vw - 21.5rem));
   }
 
   .table-frame {
@@ -1853,6 +1893,110 @@ input[type="range"] {
   html {
     font-size: min(calc(100vw / 30), 1rem);
   }
+}
+
+/* ── 右轨 = 状态栏（票 123，照设计稿 1a 的第三栏）─────────────────────
+   「轮不轮到你 / 四席在做什么 / 上一手走了什么 / 账单」那几行搬进右轨之后，
+   要有层级才读得成一栏，而不是四句并排的散文（设计稿 1b 之一）：
+
+     **一屏只许一个大字**——这一屏的答案是「该你了」，其余一律降到 0.72rem；
+     每行之间一条发丝线，各说各的一件事。 */
+.rail-right > .agent,
+.rail-right > .latest {
+  margin: 0;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  opacity: 1;
+  color: var(--ink-soft);
+}
+
+/* 真人那一行是这一栏的抬头：不描线、朱红淡底，与下面那几行分开。 */
+.rail-right > .human-line {
+  margin: 0 -0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  border-left: 3px solid var(--vermilion);
+  background: var(--vermilion-wash);
+  color: var(--ink);
+}
+
+/* 「该你了」那三个字（票 123）：整页唯一的大字。 */
+.human-call {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--vermilion);
+}
+
+.human-note {
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* ── 席位 = 记分板（票 124，主人点的）─────────────────────────────
+   四家的点数是拿来**互相比**的：一列纵向对齐、等宽数字，扫一眼就读得出谁领先。
+   名牌答的是另一问（这一席是谁、坐在屏幕哪一边），∴ 两处并存不算重复。 */
+.roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.rail-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  margin-bottom: 0.2rem;
+}
+
+.roster-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin: 0 -0.3rem;
+  padding: 0.12rem 0.3rem;
+  border-radius: 2px;
+  font-size: 0.74rem;
+}
+
+.roster-kaze {
+  width: 1.1rem;
+  color: var(--ink-soft);
+}
+
+/* 长名（`deepseek/deepseek-v4-flash`）不许把点数挤出这一列：它自己截断。 */
+.roster-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.roster-score {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 观测者自家那一行：与名牌上那圈同一个记号语言（朱红），但只描一条边线
+   ——整行填色会与「轮到谁」那圈撞级。 */
+.roster-self {
+  background: color-mix(in srgb, var(--vermilion) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--vermilion);
+  font-weight: 700;
+}
+
+/* 头一行不描线（它上面就是轨道的边）。 */
+.rail-right > :first-child {
+  border-top: 0;
 }
 
 /* ── 轮到谁：框住那张名牌（票 122，主人裁的）────────────────────────

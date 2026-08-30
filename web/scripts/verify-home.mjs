@@ -264,6 +264,12 @@ async function wordProblems(page, where, limit) {
           if (host === null) continue;
           // 牌面上的字是牌，不是话（`.tile` 拿 `color: transparent` 藏着它）。
           if (host.closest(".tile") !== null) continue;
+          // 席位那一列（记分板，票 124）也不是话：它是**固定四行的数据块**
+          // ——一行一席，各摆自风、这一席是谁、多少分。散文的害处是单调增长，
+          // 而它长不了：`verify-board` 的 `checkRoster` 钉着「必须四行」，
+          // 且每一格都要与那一席名牌上的同一个字段逐字相等，塞不进一句解释。
+          // **散文那两条上限（112 / 168）一分没动**：这里只是不把数据算成话。
+          if (host.closest('[data-testid="table-roster"]') !== null) continue;
           // 页脚**另算**：那 118 字是法律要求的（MIT 外链 + Apache-2.0 §4(b) 的归属），
           // 不是废话，混进正文预算只会逼人去砍不该砍的。但它也不许野蛮生长，
           // ∴ 它有自己那一条上限（下面 `footer` 那一格）。
