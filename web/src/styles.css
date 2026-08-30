@@ -370,6 +370,16 @@ input[type="range"] {
      留窄了它会顶到上面那排视角按钮上去——**不是压住，是拦住点击**
      （playwright 报 `intercepts pointer events`，头一版就这么坏的）。 */
   margin: 2.4rem auto 2.6rem;
+  /* **桌面凹一层**（牌桌救援 票 5，设计稿 1b 之三）：牌桌是一块比纸凹下去的方桌，
+     内嵌双环是桌沿那道压边。这条边界一说就把整页说清了——**牌局在框里、操作在框外**，
+     它答得出「它分开了什么」（判据 24 那一族：每个边框都要答得出这一问）。 */
+  box-sizing: border-box;
+  background: var(--paper-shade);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.25rem;
+  box-shadow:
+    inset 0 0 0 0.5rem var(--paper),
+    inset 0 0 0 calc(0.5rem + 1px) color-mix(in srgb, var(--ink) 14%, transparent);
 }
 
 /* 副露图例（票 117）：摆在牌桌外沿，不占桌心。 */
@@ -586,22 +596,61 @@ input[type="range"] {
    **各项横着排、放不下才换行**（票 82）：新几何下它在中间那一列里，宽度是一整手牌
    （约 500px）而不再是三分之一。竖着排的话桌心会把上下两家推开两百多像素，
    而那正是票 83 交下来的那一屏要省的。 */
+/* 盘心只留会变的数（牌桌救援 票 5，设计稿 1a 的画法）：一列窄卡，
+   场况一行大字居中，其余各项「名目靠左、数靠右」一项一行。
+   从前是横排放不下才换行——盘心变窄之后它会竖着叠到二百多像素高、压进河里。 */
 .table-center {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: calc(var(--board) * 0.34);
+  width: calc(var(--board) * 0.31);
+  box-sizing: border-box;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.2rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 0.5rem 0.6rem;
+  /* 比桌面（--paper-shade）抬回纸面一层：它是摆在桌心的一块牌，不是桌面的一部分。 */
+  background: var(--paper);
+}
+
+.table-center > .field {
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+}
+
+.table-center > .field .label {
+  min-width: 0;
+  font-size: 0.68rem;
+}
+
+/* 场况那一行：宋体大字居中——盘心唯一的抬头。「场况」两个字收进无障碍树
+   （值本身就写着「东1局 0 本场」，再挂名目是同一件事的第二遍）。 */
+.table-center > .field:has([data-testid="table-kyoku"]) {
   justify-content: center;
-  border: 1px solid var(--line-strong);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.8rem;
-  text-align: center;
-  background: var(--paper-shade);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  padding-bottom: 0.3rem;
+}
+
+.table-center > .field:has([data-testid="table-kyoku"]) > .label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.table-center [data-testid="table-kyoku"] {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 /* 方位的参照系（M1 第六条：相对方位必须显式声明参照系）。小字、淡色：它是脚注不是场况。
@@ -1641,6 +1690,22 @@ input[type="range"] {
   /* 长出一屏的内容（复盘一列几十条）在轨道里自己滚，不长成文档滚动。 */
   min-height: 0;
   overflow-y: auto;
+  /* **两条轨道各是一张纸卡**（牌桌救援 票 5）：把「操作」与「复盘」从牌桌上剥开。
+     它答得出「它分开了什么」——左轨是怎么走这一桌，右轨是怎么看，中间是牌桌本身。
+     牌桌因此也自动居中：两边各占一条实宽，而不是靠留白凑。 */
+  box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+}
+
+/* 空着的轨道不画卡片（右轨在对局中是空的：复盘要等终局）。
+   **格子仍旧占着那一列**——不占的话复盘一出现牌桌就会横着跳一下。 */
+.rail:empty {
+  padding: 0;
+  background: none;
+  border: 0;
 }
 
 /* 中栏同理：结算、终局精算与危险度接在牌桌下面，长了就在这一栏里滚。 */
@@ -1810,6 +1875,11 @@ input[type="range"] {
   background: var(--paper);
 }
 
+/* 四盏灯**坐在盘心那块卡片的外沿**（牌桌救援 票 5）：贴边摆时上下两盏正压在
+   「场况」与「宝牌指示牌」那两行字上（实测灯 318→328、场况那一行 321→351）。
+   挪出去之后它们摆在桌面上、各指一家，与卡片里的字彻底不相交；
+   −0.45rem 是量出来的：再往外一点左右两盏就贴上左右两家的河了（各留 6.6 px）。 */
+
 /* 灭着的灯是**看得见的空位**，不是不画：四盏都在，人才读得出「现在是那一盏」。 */
 .lamp[data-lit="on"] {
   border-color: var(--vermilion);
@@ -1817,26 +1887,26 @@ input[type="range"] {
 }
 
 .lamp[data-lamp-position="self"] {
-  bottom: 0.3rem;
+  bottom: -0.45rem;
   left: 50%;
   translate: -50% 0;
 }
 
 .lamp[data-lamp-position="toimen"] {
-  top: 0.3rem;
+  top: -0.45rem;
   left: 50%;
   translate: -50% 0;
 }
 
 .lamp[data-lamp-position="shimocha"] {
   top: 50%;
-  right: 0.3rem;
+  right: -0.45rem;
   translate: 0 -50%;
 }
 
 .lamp[data-lamp-position="kamicha"] {
   top: 50%;
-  left: 0.3rem;
+  left: -0.45rem;
   translate: 0 -50%;
 }
 
