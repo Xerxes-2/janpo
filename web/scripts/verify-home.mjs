@@ -136,7 +136,7 @@ const ONE_SCREEN_TURNS = 32;
  */
 const BOARD_TOP_MAX_PX = 420;
 
-/** 固定舞台（票 119）：要在这几个视口上都装得下，且**结构不因为缩放而改变**。
+/** 真布局（牌桌救援 票 1）：要在这几个视口上都装得下。
     1366×768 是 16:9 那一档（最矮），390×844 是手机竖屏（缩到能看不能读，主人已裁）。 */
 const STAGE_VIEWPORTS = [
   { width: 1280, height: 800 },
@@ -144,11 +144,6 @@ const STAGE_VIEWPORTS = [
   { width: 1366, height: 768 },
   { width: 390, height: 844 },
 ];
-
-/** 缩放对不对，看**根字号**：样式表里 204 个尺寸写的是 `rem`，全跟着它走。
-    两个视口之间牌宽的比，必须与根字号的比对得上——**对不上就说明有尺寸没走 `rem`**，
-    那正是「结构因为缩放而改变」的前兆。0.02 是取整与发丝线留的余量。 */
-const SCALE_TOLERANCE = 0.02;
 
 /**
  * 主持人那一页抬头那段说明的高度上限（票 82）。一行正文在这一页上是 27 px，
@@ -377,15 +372,18 @@ function opsProblems(shape, where, wantsSetup) {
  * 两条都读**真坐标**，因此几何一退化当场就红——票 83 立那条 40 px 时用的是同一个办法。
  */
 /**
- * 固定舞台（票 119）：**长卷死掉**这件事得有东西守着。
+ * 真布局（牌桌救援 票 1）：**长卷死掉、牌桌完整可见**——这两件用户看得见的保证得有东西守着。
  *
- * 三条，都不是同义反复：
+ * 三条，都是意图级（判据 19：闸门只许断言用户看得见的保证，不许断言实现手段）：
  *   ① 任何视口上都**没有文档滚动**（横纵都算）——这是整票的目的。
- *   ② 内容高不超过视口高——`body { overflow: hidden }` 会把溢出**裁掉**而不是让人滚，
+ *   ② 内容高宽不超过视口——`body { overflow: hidden }` 会把溢出**裁掉**而不是让人滚，
  *      光看「有没有滚动条」会漏掉「看不见」这种更坏的情形。
- *   ③ **牌宽与根字号同比例缩放**。①② 只说「装得下」，装得下的办法可以是重排
- *      （媒体查询把三列变一列也装得下）——而主人要的是**结构不变**。
- *      ③ 才是那句话的执行者。
+ *   ③ **牌桌完整落在视口里**：装得下的办法可以是把牌桌挤出画面（那时①②照旧绿），
+ *      而这一页存在的意义就是那张牌桌。
+ *
+ * 票 119 那条「牌宽与根字号同比例缩放」**删了**（设计稿「牌桌救援」1c 分诊）：
+ * 它断言的是「必须拿根字号缩放来实现」这个手段——76 与 53 那两个魔法数正是它逼出来的。
+ * 「同一个 DOM、不因视口重排」如今由真布局的 grid 保证，闸门只问结果。
  */
 async function stageProblems(lane, url) {
   const said = [];
@@ -401,16 +399,18 @@ async function stageProblems(lane, url) {
         const doc = document.documentElement;
         const tile = document.querySelector(".zone .tile");
         const board = document.querySelector('[data-testid="table-seats"]');
-        // **只量宽度由 CSS 的 `rem` 定死的东西**。`.ops`、`.page` 那种盒子的宽
-        // 由内容撑着（实测 `.page` 在 1280×800 上是 885 px，而它的 `max-width: 52rem`
-        // 只有 676 px——min-content 顶开了上限），拿它们去问「缩放有没有改结构」
-        // 会得到假红。头两版分别错在 `.ops` 与 `.page` 上。
+        const boardRect = board ? board.getBoundingClientRect() : null;
         return {
-          root: Number.parseFloat(getComputedStyle(doc).fontSize),
           tile: tile ? tile.getBoundingClientRect().width : 0,
-          // **多量几处**：只量牌的话，「牌桌写死 px 而牌照旧缩放」这种坏法逃得掉
-          //（阴性对照第一版就没打中——那说明这条断言比我声称的弱）。
-          board: board ? board.getBoundingClientRect().width : 0,
+          board:
+            boardRect === null
+              ? null
+              : {
+                  top: boardRect.top,
+                  left: boardRect.left,
+                  right: boardRect.right,
+                  bottom: boardRect.bottom,
+                },
 
           scrollY: doc.scrollHeight > window.innerHeight + 1,
           scrollX: doc.scrollWidth > window.innerWidth + 1,
@@ -423,50 +423,42 @@ async function stageProblems(lane, url) {
         };
       });
       const at = `${viewport.width}×${viewport.height}`;
-      if (shot.scrollY) said.push(`固定舞台：${at} 里出现了纵向文档滚动——长卷没死`);
-      if (shot.scrollX) said.push(`固定舞台：${at} 里出现了横向文档滚动`);
+      if (shot.scrollY) said.push(`真布局：${at} 里出现了纵向文档滚动——长卷没死`);
+      if (shot.scrollX) said.push(`真布局：${at} 里出现了横向文档滚动`);
       if (shot.contentH > viewport.height)
         said.push(
-          `固定舞台：${at} 里内容高 ${shot.contentH} px 超过视口 ${viewport.height} px——` +
+          `真布局：${at} 里内容高 ${shot.contentH} px 超过视口 ${viewport.height} px——` +
             `body 上那条 overflow:hidden 会把超出的部分裁掉，人连滚都滚不到`,
         );
       if (shot.contentW > viewport.width)
         said.push(
-          `固定舞台：${at} 里内容宽 ${shot.contentW} px 超过视口 ${viewport.width} px——` +
+          `真布局：${at} 里内容宽 ${shot.contentW} px 超过视口 ${viewport.width} px——` +
             `body 上那条 overflow:hidden 会把右边裁掉`,
         );
-      if (shot.tile <= 0) said.push(`固定舞台：${at} 里一张牌都没量到（闸门空转了）`);
+      if (shot.tile <= 0) said.push(`真布局：${at} 里一张牌都没量到（闸门空转了）`);
+      if (shot.board === null) said.push(`真布局：${at} 里没有牌桌（[data-testid="table-seats"]）`);
+      else {
+        const out = [
+          shot.board.top < 0 && "上",
+          shot.board.left < 0 && "左",
+          shot.board.right > viewport.width + 1 && "右",
+          shot.board.bottom > viewport.height + 1 && "下",
+        ].filter(Boolean);
+        if (out.length > 0)
+          said.push(
+            `真布局：${at} 里牌桌探出了视口的${out.join("、")}边` +
+              `（牌桌 ${Math.round(shot.board.left)},${Math.round(shot.board.top)} → ` +
+              `${Math.round(shot.board.right)},${Math.round(shot.board.bottom)}）——牌桌必须完整可见`,
+          );
+      }
       seen.push({ at, ...shot });
     } finally {
       await page.close();
     }
   }
 
-  // ③ 结构不变：任取两个视口，**每一处量到的尺寸**的比都要与根字号的比对得上。
-  const MEASURED = [
-    ["牌宽", "tile"],
-    ["牌桌", "board"],
-  ];
-  for (let index = 1; index < seen.length; index += 1) {
-    const a = seen[0];
-    const b = seen[index];
-    const wanted = b.root / a.root;
-    for (const [said_, key] of MEASURED) {
-      if (a[key] <= 0 || b[key] <= 0) {
-        said.push(`固定舞台：${said_}在 ${a.at} 或 ${b.at} 上量不到（闸门空转了）`);
-        continue;
-      }
-      const got = b[key] / a[key];
-      if (Math.abs(got - wanted) > SCALE_TOLERANCE)
-        said.push(
-          `固定舞台：从 ${a.at} 到 ${b.at}，根字号缩了 ${wanted.toFixed(3)} 倍而${said_}缩了 ` +
-            `${got.toFixed(3)} 倍——这一处没跟着根字号走，缩放改了结构`,
-        );
-    }
-  }
-
   if (seen.length !== STAGE_VIEWPORTS.length)
-    said.push(`固定舞台：只量到 ${seen.length} 个视口，该有 ${STAGE_VIEWPORTS.length} 个`);
+    said.push(`真布局：只量到 ${seen.length} 个视口，该有 ${STAGE_VIEWPORTS.length} 个`);
   return { said, seen };
 }
 
@@ -1020,7 +1012,7 @@ export async function verifyHome(lane) {
       await at.close();
     }
 
-    // ⑫ 固定舞台（票 119）：缩放不重排、长卷死掉。
+    // ⑫ 真布局（牌桌救援 票 1）：长卷死掉、牌桌完整可见。
     stage = await stageProblems(lane, url);
     missing.push(...stage.said);
 
@@ -1071,8 +1063,8 @@ export async function verifyHome(lane) {
         `${oneScreen.shot.board.bottom - oneScreen.shot.ops.top} px；抬头一段 ${oneScreen.shot.intro.height} px）`,
     );
     console.log(
-      `固定舞台 ✓（缩放不重排、无文档滚动）：${stage.seen
-        .map((one) => `${one.at} 根字号 ${one.root.toFixed(2)}px 牌宽 ${one.tile.toFixed(1)}px`)
+      `真布局 ✓（无文档滚动、牌桌完整可见）：${stage.seen
+        .map((one) => `${one.at} 牌宽 ${one.tile.toFixed(1)}px`)
         .join("　")}`,
     );
     console.log("页脚里有回仓库的外链与许可（MIT）✓");

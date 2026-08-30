@@ -21,31 +21,26 @@
    - verify-bubbles：气泡与牌排、牌桌中央的矩形不许相交，且画在那一席的框里；
    - naki-marks：副露槽位从左往右、加杠那张叠在横放那张上面、sr-only 那句看不见。 */
 
-/* ── 固定舞台（票 119）─────────────────────────────────────────────
-   主人的意见①后半句：**「布局可以妥协成结构不因为缩放而改变」**。
+/* ── 真布局（设计稿「牌桌救援」票 1，顶掉票 119 的固定舞台）──────────
+   票 119 拿 `html { font-size: min(100vw/76, 100vh/53) }` 缩放根字号伪装自适应：
+   76 与 53 是「实测自然高度」倒推出来的魔法数，任何布局改动都会让它们当场作废，
+   而 `body { overflow: hidden }` 会把溢出**裁掉**而不是报错——头号病灶。
 
-   做法：**只缩放根字号**。样式表里 204 个尺寸写的是 `rem`，它们全都跟着根字号走；
-   53 个 `px` 几乎全是 `1px solid` 的发丝线——**那些正是不该跟着缩放的东西**
-   （缩了会糊）。∴ 一条规则管全部，DOM 与其余 CSS **一个字不动**。
-
-   `100vw / 62` 是长度÷数值、仍是长度：视口 992 px 宽时它正好等于 16px。
-   两个方向取小者，于是**宽高哪边先到头就由哪边定**，长卷因此死掉。
-
-   62 = 舞台设计宽 992 px ÷ 16。60.5 = 设计高：`?table=1` 走 32 手、含页脚的实测
-   自然高度是 928 px（58 rem），**外加约 25 px 不跟着缩放的发丝线**——
-   十几条 `1px solid` 竖着叠起来就是这个数。头一版按 58 写，结果每个桌面视口都还差
-   25 px 溢出（而 `body { overflow: hidden }` 会把它**裁掉**而不是让人滚，更坏）。
-   ∴ 取 61.5。这个数是**闸门逼出来的**：我的临时探针量到 795 px 说装得下，
-   而闸门按真实驱动路径（开配桌→收起→走 32 手）量到 804 px——探针量的是另一个状态。
-   **这两个数是量出来的，不是拍的**：设计高每多 1 rem，1280×800 下的牌就小 1.7%。
-   ────────────────────────────────────────────────────────────── */
-html {
-  font-size: min(calc(100vw / 76), calc(100vh / 53));
+   现在是**真布局**：页面是一个占满视口的壳（html/body 100%），三栏由 grid 定，
+   牌桌一边由 `--board` 里那几个 min() 分支按视口现算——**没有一个数字是倒推的**，
+   每个分支都答得出「它给谁让路」（竖着给状态行与页脚，横着给两条轨道与名牌）。
+   闸门（verify-home 的 stage 那一段）只断言**用户看得见的保证**：
+   无文档滚动、内容不被裁、牌桌完整可见——不再断言任何具体数字或缩放比。 */
+html,
+body {
+  height: 100%;
 }
 
-/* 舞台之内不许有文档滚动——长卷死了，「操作条要不要吸底」那场争论也就失去了对象。 */
+/* 壳之内不许有文档滚动——长卷死了，「操作条要不要吸底」那场争论也就失去了对象。
+   长出一屏的内容（结算、复盘、曳光弹）各自在自己那一栏里滚（见 `.rail` 与牌桌那一格）。 */
 body {
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 :root {
@@ -69,14 +64,21 @@ body {
   /* —— 牌 —— */
   /* 高:宽 = 2.35:1.75 ≈ 4:3，与 SVG 的 viewBox（300×400）同比：contain 时不留怪边。
      旋转 90° 的横放牌两侧各探出 (高−宽)/2 = 0.3rem，`.tile.taken` 的 margin 就是这个数。 */
-  /* 牌桌本体（票 117）：656px 的方桌，四席绕盘心转。名牌卡片摆在四边，各占 --plate。
-     票 119 接手固定舞台时**只换这两个变量**，几何一个字不动。 */
-  --board: 30rem;
-  --plate: 10rem;
+  /* 牌桌本体（票 117）：方桌，四席绕盘心转。名牌卡片摆在四边，各占 --plate。
+     真布局（牌桌救援 票 1）里牌桌一边按视口现算，三个分支各答一件事：
+     30rem 是它该有的上限（再大牌就傻大），100vh 那支给状态行·名牌·页脚让路，
+     100vw 那支给两条轨道（29rem）、左右名牌（2×--plate + 1.5rem）与缝隙让路。 */
+  --board: min(30rem, calc(100vh - 18rem), calc(100vw - 52rem));
+  --plate: 9rem;
   --rail: 13rem;
+  --rail-right: 16rem;
 
-  --tile-w: 1.75rem;
-  --tile-h: 2.35rem;
+  /* 牌跟着牌桌走（牌桌救援 票 1）：牌桌按视口现算之后，牌写死 rem 的话
+     小一号的桌上四席的牌会互相压住（verify-human 逮到的：kamicha 的牌背
+     拦住自家手牌的点击）。0.0583 与 0.0783 就是 1.75/30 与 2.35/30——
+     牌桌满 30rem 时它们与从前逐像素相同。 */
+  --tile-w: calc(var(--board) * 0.0583);
+  --tile-h: calc(var(--board) * 0.0783);
   --tile-face: #fdfaf3; /* 象牙白牌面 */
   --tile-edge: #b6a98f;
 
@@ -95,14 +97,32 @@ body {
 
 body {
   margin: 0;
-  padding: 2rem 1.5rem;
+  padding: 0.75rem 1rem;
   background: var(--paper);
   color: var(--ink);
+}
+
+/* 壳与页各占满一屏、竖着分行：正文（页）占剩余的一整格，页脚贴底。
+   `min-height: 0` 那两条是 flex 的例行公事：不写的话孩子按内容撑、壳跟着长，
+   文档滚动就回来了。 */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .page {
   max-width: 52rem;
   margin: 0 auto;
+}
+
+/* 摆在基础 `.page` 之后：摆前面比它特异性高，biome 的 noDescendingSpecificity 会拦。 */
+.shell > .page {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* 门面那一行留宋体（票 117）：正文换黑体是为了读，而这一行不是拿来读的。 */
@@ -293,13 +313,16 @@ input[type="range"] {
 
 /* —— 牌桌 —— */
 
-.shell {
-  max-width: 68rem;
-  margin: 0 auto;
-}
+/* `.shell` 的 68rem 上限删了（牌桌救援 票 1）：三栏 grid 自己管宽度，
+   再包一层上限只会把名牌挤到轨道上。 */
 
 .table-page {
   max-width: none;
+  /* 占满整行（牌桌救援 票 1）：`.page` 那对 auto 边距会把三栏 grid 收成内容宽，
+     左右两家的名牌（绝对定位、不占位）就浮到轨道上、拦住轨道里的按钮。 */
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .field {
@@ -866,7 +889,8 @@ input[type="range"] {
    （(--tile-h − --tile-w)/2 = 0.3rem），行高（`.naki`）也相应抬高。 */
 .tile.taken {
   transform: rotate(90deg);
-  margin: 0 0.3rem;
+  /* 转过来后两侧探出的正是 (高−宽)/2；牌的尺寸跟着牌桌走了，这一条也得跟着。 */
+  margin: 0 calc((var(--tile-h) - var(--tile-w)) / 2);
 }
 
 /* 加杠后加上去的那张前面那枚「＋」：牌谱文字记法里的 `中中中＋中`。
@@ -1599,20 +1623,30 @@ input[type="range"] {
    ───────────────────────────────────────────────────────────── */
 .table-frame {
   display: grid;
-  /* 中栏要**把名牌算进去**：左右两家的名牌浮在牌桌外各 --plate 宽，
-     中栏只按牌桌取宽的话它们会压到两条轨道上（实测座位 3 盖住了视角那一排按钮）。
-     绝对定位的东西不占位，∴ 得在这里替它们把位子留出来。 */
-  grid-template-columns: var(--rail) calc(var(--board) + var(--plate) * 2 + 1.5rem) var(--rail);
+  /* 真布局（牌桌救援 票 1）：左右轨道各占定宽，中栏吃剩下的一整格。
+     左右两家的名牌浮在牌桌外各 --plate 宽——它们不占位，∴ `--board` 的
+     100vw 那个分支替它们把位子留了出来（见 :root），中栏因此装得下牌桌加名牌。 */
+  grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail-right);
   gap: 0.6rem;
-  align-items: start;
+  align-items: stretch;
   justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .rail {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  width: var(--rail);
+  /* 长出一屏的内容（复盘一列几十条）在轨道里自己滚，不长成文档滚动。 */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 中栏同理：结算、终局精算与危险度接在牌桌下面，长了就在这一栏里滚。 */
+.table-frame > [data-testid="table-board"] {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* 左轨里的操作块：从横着一排改成竖着一列，按钮各占满轨宽。 */
@@ -1715,6 +1749,35 @@ input[type="range"] {
 
 .board-legend[open] > summary {
   opacity: 0.85;
+}
+
+/* ── 窄视口（牌桌救援 票 1）────────────────────────────────────
+   两条轨道并排要 29rem，加上牌桌与名牌，70rem 以下摆不开——那时三栏摞成一列：
+   操作在上、牌桌居中、复盘在下，两条轨道各自限高、在自己格里滚。
+   闸门对每个视口只问同三件事：无文档滚动、内容不被裁、牌桌完整可见。 */
+@media (max-width: 69.99rem) {
+  :root {
+    /* 横向那一支只让路给名牌与页边距（21.5rem = 2×--plate + 1.5rem + 2rem）：
+       轨道已经摞下去了，不再占宽。 */
+    --board: min(30rem, calc(100vh - 18rem), calc(100vw - 21.5rem));
+  }
+
+  .table-frame {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .rail {
+    max-height: 9rem;
+  }
+}
+
+/* 手机竖屏：380px 里连一张 16px 字号的名牌都摆不开，这一档**缩到能看不能读**
+   （主人票 119 时已裁）。缩的只是根字号，且只在这一档——桌面视口全是真布局。 */
+@media (max-width: 29.99rem) {
+  html {
+    font-size: min(calc(100vw / 30), 1rem);
+  }
 }
 
 /* ── 桌心那四盏灯（票 121，雀魂的做法）──────────────────────────
